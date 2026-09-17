@@ -103,11 +103,11 @@ export default function ForecastPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
               <TrendingUp className="w-7 h-7 text-[var(--cyan-400)]" />
               <span>แบบจำลองความน่าจะเป็นพอร์ต (Monte Carlo Forecast)</span>
             </h1>
@@ -118,7 +118,7 @@ export default function ForecastPage() {
         </div>
 
         {/* Input Parameters Controls */}
-        <div className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.36)] space-y-5">
+        <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] space-y-5">
           <h2 className="text-xs font-bold text-white uppercase tracking-wider">
             กำหนดตัวแปรการจำลอง (Simulation Parameters)
           </h2>

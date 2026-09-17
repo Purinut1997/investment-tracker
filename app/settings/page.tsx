@@ -101,10 +101,10 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 max-w-4xl">
+      <div className="space-y-8 max-w-4xl">
         {/* Header */}
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
             <Settings className="w-7 h-7 text-[var(--cyan-400)]" />
             <span>ตั้งค่าระบบ (Settings)</span>
           </h1>
@@ -132,7 +132,7 @@ export default function SettingsPage() {
 
         <form onSubmit={handleSaveSettings} className="space-y-6">
           {/* ─── SECTION 1: GEMINI AI CONFIGURATION ──────────────────── */}
-          <div className="card p-5 sm:p-6 space-y-5 border-cyan-500/25">
+          <div className="card p-6 sm:p-7 space-y-5 border-white/[0.08]">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-[var(--cyan-400)]">

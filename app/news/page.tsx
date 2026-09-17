@@ -34,11 +34,11 @@ export default function NewsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
               <Newspaper className="w-7 h-7 text-[var(--cyan-400)]" />
               <span>ข่าวสารการลงทุน & Weekly Digest</span>
             </h1>
@@ -57,7 +57,7 @@ export default function NewsPage() {
         </div>
 
         {/* Tab Switcher & Filter Toolbar */}
-        <div className="p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex border border-white/[0.08] rounded-xl p-1 bg-white/[0.02] self-start">
             <button
               onClick={() => {
