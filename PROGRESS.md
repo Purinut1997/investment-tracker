@@ -4,6 +4,10 @@ Last updated: 2026-09-17
 
 ## สถานะภาพรวม
 - **Phase ที่เสร็จสมบูรณ์**: Phase 0 ถึง Phase 8 ครบถ้วน 100%
+- **สถานะ Deployment**: ออนไลน์แล้วบน Vercel Production (`https://investment-tracker-three-sand.vercel.app`)
+- **Database**: เชื่อมต่อสดกับ Neon PostgreSQL (ap-southeast-1) พร้อม 20 ตารางและโมเดล AI
+- **Superadmin**: บัญชี `themikthemik4015@gmail.com` ได้รับสิทธิ์ Superadmin เรียบร้อย
+- **แผนงานปัจจุบัน**: อยู่ระหว่างเตรียมทำ [UI_REDESIGN_PLAN.md](./UI_REDESIGN_PLAN.md) เพื่อยกเครื่องหน้าตาเว็บและแอนิเมชันสู่ Luxury Fintech
 - **สถานะ Build**: `npm run build` ผ่าน 100% (45 Static/Dynamic routes)
 - **Unit Test**: `npm run test:tax` ผ่านทุกเงื่อนไข (FIFO Cost Basis, Thai SET Tax Exemption, Withholding Tax)
 
