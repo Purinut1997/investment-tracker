@@ -28,7 +28,6 @@ import {
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
-import { ThemeStyleSelector } from './ThemeStyleSelector'
 
 interface NavItem {
   label: string
@@ -317,7 +316,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <ThemeStyleSelector />
 
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400 text-xs font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live" />
@@ -345,7 +343,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </Link>
           <div className="flex items-center gap-1.5">
-            <ThemeStyleSelector />
             <button
               onClick={() => setQuickAddOpen(true)}
               className="p-2 rounded-xl bg-violet-500/15 text-[var(--violet)] border border-violet-500/25 text-xs font-semibold flex items-center gap-1"

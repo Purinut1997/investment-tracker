@@ -14,7 +14,9 @@ import {
   Loader2,
   Calendar,
   Layers,
-  HelpCircle
+  Search,
+  Wallet,
+  HelpCircle,
 } from 'lucide-react'
 
 interface QuickAddModalProps {

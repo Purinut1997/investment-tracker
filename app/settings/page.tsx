@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { signOut } from 'next-auth/react'
 import { AppShell } from '@/components/AppShell'
-import { ThemeStyleSelector } from '@/components/ThemeStyleSelector'
 import {
   Settings,
   Sparkles,
@@ -130,21 +129,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* ─── SECTION 0: THEME & STYLING CUSTOMIZATION ────────── */}
-        <div className="card p-5 sm:p-6 space-y-4">
-          <div className="flex items-center gap-2.5 pb-3 border-b border-[var(--border)]">
-            <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-[var(--violet)]">
-              <Palette className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-white">รูปแบบและธีมหน้าตาของระบบ (Theme Style)</h2>
-              <p className="text-xs text-[var(--text-muted)]">
-                เลือกบรรยากาศที่ชอบ — ไม่ชอบแข็งๆ สลับเป็นนุ่มนวล หรือเรียบหรูสไตล์ Minimal ได้ทันที
-              </p>
-            </div>
-          </div>
-          <ThemeStyleSelector variant="inline" />
-        </div>
 
         <form onSubmit={handleSaveSettings} className="space-y-6">
           {/* ─── SECTION 1: GEMINI AI CONFIGURATION ──────────────────── */}
