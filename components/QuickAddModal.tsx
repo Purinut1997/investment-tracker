@@ -1,0 +1,536 @@
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import useSWR, { mutate } from 'swr'
+import {
+  X,
+  Sparkles,
+  ArrowRight,
+  Check,
+  AlertCircle,
+  Upload,
+  FileText,
+  DollarSign,
+  Loader2,
+  Calendar,
+  Layers,
+  HelpCircle
+} from 'lucide-react'
+
+interface QuickAddModalProps {
+  onClose: () => void
+  onSuccess?: () => void
+}
+
+export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
+  const [tab, setTab] = useState<'ai' | 'manual'>('manual')
+  const [nlText, setNlText] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+
+  // Accounts list
+  const { data: accountsData } = useSWR('/api/accounts')
+  const accounts = accountsData?.accounts ?? []
+
+  // Manual Form State
+  const [formData, setFormData] = useState({
+    accountId: '',
+    ticker: '',
+    market: 'US' as 'US' | 'TH' | 'CRYPTO',
+    assetType: 'stock' as 'stock' | 'fund' | 'crypto' | 'bond' | 'gold',
+    assetName: '',
+    txnDate: new Date().toISOString().split('T')[0],
+    txnType: 'BUY' as 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'FEE',
+    quantity: '',
+    pricePerUnit: '',
+    fee: '0',
+    taxWithheld: '0',
+    note: '',
+  })
+
+  // Set default account when loaded
+  useEffect(() => {
+    if (accounts.length > 0 && !formData.accountId) {
+      setFormData((prev) => ({ ...prev, accountId: accounts[0].id }))
+    }
+  }, [accounts, formData.accountId])
+
+  // Computed total
+  const quantityNum = parseFloat(formData.quantity) || 0
+  const priceNum = parseFloat(formData.pricePerUnit) || 0
+  const feeNum = parseFloat(formData.fee) || 0
+  const taxNum = parseFloat(formData.taxWithheld) || 0
+  const totalAmount = (quantityNum * priceNum + feeNum - taxNum).toFixed(2)
+
+  // AI Parser Handler (Fallback rule-based parser if AI service route not yet active)
+  async function handleAIParse(e: React.FormEvent) {
+    e.preventDefault()
+    if (!nlText.trim()) return
+
+    setParsing(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/ai-advisor/quick-add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: nlText }),
+      })
+
+      if (res.ok) {
+        const parsed = await res.json()
+        if (parsed.ticker) {
+          setFormData((prev) => ({
+            ...prev,
+            ticker: parsed.ticker ?? prev.ticker,
+            txnType: parsed.txnType ?? prev.txnType,
+            quantity: parsed.quantity?.toString() ?? prev.quantity,
+            pricePerUnit: parsed.pricePerUnit?.toString() ?? prev.pricePerUnit,
+            fee: parsed.fee?.toString() ?? prev.fee,
+            note: parsed.note ?? nlText,
+          }))
+          setTab('manual')
+          setSuccessMsg('✨ AI แยกข้อมูลรายการสำเร็จ กรุณาตรวจสอบและกดบันทึก')
+          return
+        }
+      }
+
+      // Local heuristic fallback parser (e.g. "ซื้อ AAPL 10 หุ้น ที่ 150")
+      const lower = nlText.toLowerCase()
+      let type: any = 'BUY'
+      if (lower.includes('ขาย') || lower.includes('sell')) type = 'SELL'
+      else if (lower.includes('ปันผล') || lower.includes('dividend')) type = 'DIVIDEND'
+      else if (lower.includes('ฝาก') || lower.includes('deposit')) type = 'DEPOSIT'
+
+      // Match numbers and symbols
+      const words = nlText.split(/\s+/)
+      let foundTicker = ''
+      const numbers: number[] = []
+
+      for (const w of words) {
+        const num = parseFloat(w.replace(/,/g, ''))
+        if (!isNaN(num)) {
+          numbers.push(num)
+        } else if (/^[A-Za-z0-9.]{2,8}$/.test(w) && !['buy', 'sell', 'stock', 'usd', 'thb'].includes(w.toLowerCase())) {
+          foundTicker = w.toUpperCase()
+        }
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        txnType: type,
+        ticker: foundTicker || prev.ticker,
+        quantity: numbers[0]?.toString() || prev.quantity,
+        pricePerUnit: numbers[1]?.toString() || prev.pricePerUnit,
+        note: nlText,
+      }))
+
+      setTab('manual')
+      setSuccessMsg('ระบบแยกข้อมูลเบื้องต้นเรียบร้อย กรุณาตรวจสอบความถูกต้อง')
+    } catch (err: any) {
+      setError(err.message || 'ไม่สามารถวิเคราะห์ข้อความได้')
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  // Submit Transaction
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setSuccessMsg('')
+
+    if (!formData.accountId) {
+      setError('กรุณาเลือกบัญชีการลงทุน')
+      return
+    }
+    if (!formData.ticker.trim()) {
+      setError('กรุณาระบุ Ticker / ชื่อย่อสินทรัพย์')
+      return
+    }
+    if (quantityNum <= 0) {
+      setError('จำนวนต้องมากกว่า 0')
+      return
+    }
+    if (priceNum <= 0 && formData.txnType !== 'DIVIDEND') {
+      setError('ราคาต่อหน่วยต้องมากกว่า 0')
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      // Step 1: Ensure asset exists or create it
+      const assetRes = await fetch('/api/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker: formData.ticker.trim().toUpperCase(),
+          market: formData.market,
+          assetName: formData.assetName.trim() || formData.ticker.trim().toUpperCase(),
+          assetType: formData.assetType,
+          currency: formData.market === 'US' ? 'USD' : 'THB',
+        }),
+      })
+
+      if (!assetRes.ok) {
+        const errJson = await assetRes.json()
+        throw new Error(errJson.error || 'ไม่สามารถบันทึกข้อมูลสินทรัพย์ได้')
+      }
+
+      const assetData = await assetRes.json()
+
+      // Step 2: Create Transaction
+      const txnRes = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId: formData.accountId,
+          assetId: assetData.id,
+          txnDate: new Date(formData.txnDate).toISOString(),
+          txnType: formData.txnType,
+          quantity: quantityNum,
+          pricePerUnit: priceNum,
+          fee: feeNum,
+          taxWithheld: taxNum,
+          note: formData.note || undefined,
+          source: tab === 'ai' ? 'quick_add' : 'manual',
+        }),
+      })
+
+      if (!txnRes.ok) {
+        const errJson = await txnRes.json()
+        throw new Error(errJson.error || 'บันทึกธุรกรรมล้มเหลว')
+      }
+
+      // Revalidate SWR caches
+      mutate('/api/transactions')
+      mutate('/api/accounts')
+
+      if (onSuccess) onSuccess()
+      onClose()
+    } catch (err: any) {
+      setError(err.message || 'เกิดข้อผิดพลาดในการบันทึก')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+        {/* Modal Header */}
+        <div className="p-4 sm:p-5 border-b border-[var(--border)] flex items-center justify-between bg-[var(--bg-elevated)]/40">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-emerald-400 flex items-center justify-center text-black font-bold">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">บันทึกธุรกรรมด่วน</h2>
+              <p className="text-xs text-[var(--text-muted)]">Quick Add Transaction</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-elevated)] transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex border-b border-[var(--border)] bg-[var(--bg-base)]">
+          <button
+            type="button"
+            onClick={() => setTab('manual')}
+            className={`flex-1 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 border-b-2 transition-all ${
+              tab === 'manual'
+                ? 'border-[var(--cyan-400)] text-[var(--cyan-400)] bg-cyan-500/5'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>กรอกฟอร์มมาตรฐาน</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('ai')}
+            className={`flex-1 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 border-b-2 transition-all ${
+              tab === 'ai'
+                ? 'border-[var(--cyan-400)] text-[var(--cyan-400)] bg-cyan-500/5'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-[var(--cyan-400)]" />
+            <span>พิมพ์ข้อความ / AI สรุป</span>
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+          {error && (
+            <div className="alert alert-danger flex items-start gap-2 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="alert alert-success flex items-start gap-2 text-xs">
+              <Check className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+              <span>{successMsg}</span>
+            </div>
+          )}
+
+          {/* AI NLP TAB */}
+          {tab === 'ai' && (
+            <form onSubmit={handleAIParse} className="space-y-4">
+              <div>
+                <label className="label">
+                  พิมพ์ประโยคธุรกรรมตามธรรมชาติ (ภาษาไทยหรืออังกฤษ)
+                </label>
+                <textarea
+                  className="input min-h-[90px] text-sm"
+                  placeholder="เช่น: ซื้อ AAPL 5 หุ้น ที่ราคา 182.5 ดอลลาร์ ค่าธรรมเนียม 1 บัญชี Dime เมื่อวานนี้"
+                  value={nlText}
+                  onChange={(e) => setNlText(e.target.value)}
+                  disabled={parsing}
+                  autoFocus
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-xs text-[var(--text-secondary)] space-y-1">
+                <p className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+                  <HelpCircle className="w-3.5 h-3.5 text-[var(--cyan-400)]" />
+                  ตัวอย่างที่ระบบเข้าใจได้:
+                </p>
+                <p>• "ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2"</p>
+                <p>• "ขาย BTC 0.05 ราคา 65000 ใน Bitkub"</p>
+                <p>• "รับปันผล PTT 1500 บาท บัญชี InnovestX"</p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={parsing || !nlText.trim()}
+                className="btn btn-primary w-full py-3 flex items-center justify-center gap-2"
+              >
+                {parsing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>AI กำลังวิเคราะห์ข้อมูล...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>วิเคราะห์และเติมข้อมูลในฟอร์ม</span>
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* MANUAL FORM TAB */}
+          {tab === 'manual' && (
+            <form onSubmit={handleSubmit} id="manual-form" className="space-y-4">
+              {/* Account Selection */}
+              <div>
+                <label className="label">บัญชีการเงิน *</label>
+                {accounts.length === 0 ? (
+                  <div className="text-xs text-amber-400 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
+                    ยังไม่มีบัญชีการลงทุน กรุณาสร้างบัญชีที่หน้า /accounts ก่อน
+                  </div>
+                ) : (
+                  <select
+                    className="select text-sm"
+                    value={formData.accountId}
+                    onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+                    required
+                  >
+                    {accounts.map((acc: any) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.accountName} ({acc.accountType} — {acc.currency})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Transaction Type & Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">ประเภทรายการ *</label>
+                  <select
+                    className="select text-sm"
+                    value={formData.txnType}
+                    onChange={(e) => setFormData({ ...formData, txnType: e.target.value as any })}
+                  >
+                    <option value="BUY">🟢 ซื้อ (BUY)</option>
+                    <option value="SELL">🔴 ขาย (SELL)</option>
+                    <option value="DIVIDEND">💰 ปันผล (DIVIDEND)</option>
+                    <option value="DEPOSIT">📥 ฝากเงิน (DEPOSIT)</option>
+                    <option value="WITHDRAW">📤 ถอนเงิน (WITHDRAW)</option>
+                    <option value="FEE">🧾 ค่าธรรมเนียม (FEE)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">วันที่ทำรายการ *</label>
+                  <input
+                    type="date"
+                    className="input text-sm"
+                    value={formData.txnDate}
+                    onChange={(e) => setFormData({ ...formData, txnDate: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Ticker, Market & Asset Type */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-1">
+                  <label className="label">ตลาด</label>
+                  <select
+                    className="select text-xs"
+                    value={formData.market}
+                    onChange={(e) => setFormData({ ...formData, market: e.target.value as any })}
+                  >
+                    <option value="US">🇺🇸 หุ้น US</option>
+                    <option value="TH">🇹🇭 หุ้นไทย (SET)</option>
+                    <option value="CRYPTO">🪙 Crypto</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Ticker / สัญลักษณ์ *</label>
+                  <input
+                    type="text"
+                    className="input uppercase text-sm font-semibold"
+                    placeholder="เช่น AAPL, PTT, BTC"
+                    value={formData.ticker}
+                    onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase() })}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Quantity & Price */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">จำนวนหน่วย (Quantity) *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input text-sm"
+                    placeholder="0.00"
+                    value={formData.quantity}
+                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">ราคาต่อหน่วย (Price) *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input text-sm"
+                    placeholder="0.00"
+                    value={formData.pricePerUnit}
+                    onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Fee & Tax */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">ค่าคอม/ธรรมเนียม</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input text-sm"
+                    placeholder="0.00"
+                    value={formData.fee}
+                    onChange={(e) => setFormData({ ...formData, fee: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="label">ภาษีหัก ณ ที่จ่าย</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="input text-sm"
+                    placeholder="0.00"
+                    value={formData.taxWithheld}
+                    onChange={(e) => setFormData({ ...formData, taxWithheld: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Calculated Total Box */}
+              <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-500/25 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] text-[var(--text-muted)] font-medium">
+                    ยอดรวมคำนวณอัตโนมัติ (Total Amount)
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    (จำนวน × ราคา) + ค่าธรรมเนียม - ภาษี
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-bold text-[var(--cyan-400)] tabular-nums">
+                    {isNaN(Number(totalAmount)) ? '0.00' : Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Note */}
+              <div>
+                <label className="label">บันทึกเพิ่มเติม (Optional)</label>
+                <input
+                  type="text"
+                  className="input text-sm"
+                  placeholder="เช่น DCA ประจำเดือน, รับปันผลงวด 1"
+                  value={formData.note}
+                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                />
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        {tab === 'manual' && (
+          <div className="p-4 sm:p-5 border-t border-[var(--border)] bg-[var(--bg-elevated)]/40 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-ghost text-xs sm:text-sm py-2 px-4"
+              disabled={submitting}
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              form="manual-form"
+              disabled={submitting || accounts.length === 0}
+              className="btn btn-primary text-xs sm:text-sm py-2 px-5 flex items-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>กำลังบันทึก...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>บันทึกรายการ</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,483 @@
+// Investment Tracker — Prisma Schema (v5)
+// 20 tables: multi-user ready from day 1, every table filtered by userId
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// 1. User
+// ============================================================
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String?
+  avatarUrl      String?
+  passwordHash   String?   // null if Google-only
+  emailVerified  DateTime?
+  role           UserRole  @default(user)
+  status         UserStatus @default(active)
+  authProvider   String    @default("credentials") // "google" | "credentials" | "both"
+  sessionVersion Int       @default(0) // increment to invalidate all sessions
+  createdAt      DateTime  @default(now())
+
+  // Relations
+  settings             UserSettings?
+  accounts             InvestmentAccount[]
+  transactions         Transaction[]
+  editHistories        TransactionEditHistory[]
+  presets              InvestmentPreset[]
+  aiAdviceLogs         AiAdviceLog[]
+  auditLogs            AuditLog[]
+  watchlistItems       WatchlistItem[]
+  weeklyDigests        WeeklyDigest[]
+  allocationAlerts     AllocationAlert[]
+  passwordResetTokens  PasswordResetToken[]
+  emailVerifTokens     EmailVerificationToken[]
+
+  @@index([email])
+  @@index([role])
+}
+
+enum UserRole {
+  user
+  admin
+  superadmin
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+// ============================================================
+// 2. UserSettings
+// ============================================================
+model UserSettings {
+  userId                        String             @id
+  geminiApiKeyEncrypted         String?
+  aiEnabled                     Boolean            @default(false)
+  aiModelMode                   AiModelMode        @default(auto)
+  selectedAiModelId             String?
+  defaultRiskProfile            String?
+  theme                         String             @default("dark")
+  baseCurrency                  String             @default("THB")
+  weeklyDigestEnabled           Boolean            @default(true)
+  weeklyDigestDeliveryMethod    DigestDelivery     @default(in_app)
+  allocationAlertThresholdPercent Decimal          @default(5)
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @updatedAt
+
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selectedAiModel  AiModelOption? @relation(fields: [selectedAiModelId], references: [id])
+}
+
+enum AiModelMode {
+  auto
+  manual
+}
+
+enum DigestDelivery {
+  in_app
+  email
+  both
+}
+
+// ============================================================
+// 3. InvestmentAccount
+// ============================================================
+model InvestmentAccount {
+  id          String      @id @default(cuid())
+  userId      String
+  accountName String
+  accountType AccountType
+  currency    String      @default("THB")
+  createdAt   DateTime    @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  cashBalances CashBalance[]
+
+  @@index([userId])
+}
+
+enum AccountType {
+  brokerage
+  crypto_exchange
+  bank
+  cash
+}
+
+// ============================================================
+// 4. Asset
+// ============================================================
+model Asset {
+  id        String    @id @default(cuid())
+  ticker    String
+  assetName String
+  assetType AssetType
+  market    Market
+  exchange  String?
+  currency  String    @default("USD")
+
+  transactions  Transaction[]
+  priceHistory  PriceHistory[]
+  newsItems     NewsItem[]
+
+  @@unique([ticker, market])
+  @@index([ticker])
+}
+
+enum AssetType {
+  stock
+  fund
+  crypto
+  bond
+  gold
+}
+
+enum Market {
+  US
+  TH
+  CRYPTO
+}
+
+// ============================================================
+// 5. Transaction
+// ============================================================
+model Transaction {
+  id            String          @id @default(cuid())
+  userId        String
+  accountId     String
+  assetId       String
+  txnDate       DateTime        // stored UTC, display as Asia/Bangkok in UI
+  txnType       TxnType
+  quantity      Decimal
+  pricePerUnit  Decimal
+  fee           Decimal         @default(0)
+  taxWithheld   Decimal         @default(0)
+  totalAmount   Decimal
+  note          String?
+  source        TxnSource       @default(manual)
+  createdAt     DateTime        @default(now())
+
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account      InvestmentAccount        @relation(fields: [accountId], references: [id])
+  asset        Asset                    @relation(fields: [assetId], references: [id])
+  editHistory  TransactionEditHistory[]
+
+  @@index([userId, txnDate])
+  @@index([userId, assetId])
+}
+
+enum TxnType {
+  BUY
+  SELL
+  DIVIDEND
+  DEPOSIT
+  WITHDRAW
+  FEE
+}
+
+enum TxnSource {
+  manual
+  quick_add
+  quick_add_photo
+  csv_import
+}
+
+// ============================================================
+// 6. TransactionEditHistory
+// ============================================================
+model TransactionEditHistory {
+  id             String      @id @default(cuid())
+  transactionId  String
+  previousValues Json
+  editedByUserId String
+  editedAt       DateTime    @default(now())
+
+  transaction  Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  editedBy     User        @relation(fields: [editedByUserId], references: [id])
+
+  @@index([transactionId])
+}
+
+// ============================================================
+// 7. CashBalance
+// ============================================================
+model CashBalance {
+  id          String   @id @default(cuid())
+  accountId   String
+  balanceDate DateTime
+  cashAmount  Decimal
+
+  account InvestmentAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, balanceDate])
+  @@index([accountId])
+}
+
+// ============================================================
+// 8. PriceHistory
+// ============================================================
+model PriceHistory {
+  id             String   @id @default(cuid())
+  assetId        String
+  priceDate      DateTime
+  closePrice     Decimal
+  sourceProvider String
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, priceDate])
+  @@index([assetId, priceDate])
+}
+
+// ============================================================
+// 9. InvestmentPreset
+// ============================================================
+model InvestmentPreset {
+  id                  String   @id @default(cuid())
+  userId              String
+  presetName          String
+  riskProfile         String
+  targetAllocation    Json     // { assetType: percentage }
+  monthlyContribution Decimal
+  targetAmount        Decimal
+  targetDate          DateTime?
+  isDefault           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============================================================
+// 10. AiModelOption
+// ============================================================
+model AiModelOption {
+  id               String    @id @default(cuid())
+  provider         String    @default("gemini")
+  modelId          String    // e.g. "gemini-2.5-flash"
+  displayName      String
+  tier             AiModelTier
+  isActive         Boolean   @default(true)
+  isDefaultForAuto Boolean   @default(false)
+  sortOrder        Int       @default(0)
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  userSettings UserSettings[]
+
+  @@index([isActive, sortOrder])
+}
+
+enum AiModelTier {
+  free
+  paid_only
+  requires_billing
+}
+
+// ============================================================
+// 11. AiAdviceLog
+// ============================================================
+model AiAdviceLog {
+  id        String      @id @default(cuid())
+  userId    String
+  logType   AiLogType
+  prompt    String      @db.Text
+  response  String      @db.Text
+  modelUsed String
+  createdAt DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([logType])
+}
+
+enum AiLogType {
+  advisor
+  weekly_digest
+  forecast_explain
+  tax_explain
+  csv_mapping
+  quick_add_multimodal
+}
+
+// ============================================================
+// 12. AuditLog
+// ============================================================
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?  // nullable for system events (cron jobs)
+  action    String
+  detail    Json
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+// ============================================================
+// 13. WatchlistItem
+// ============================================================
+model WatchlistItem {
+  id          String        @id @default(cuid())
+  userId      String
+  itemType    WatchlistType
+  symbol      String
+  displayName String
+  addedAt     DateTime      @default(now())
+  sortOrder   Int           @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sortOrder])
+}
+
+enum WatchlistType {
+  forex
+  gold
+  crypto
+  stock
+  index
+}
+
+// ============================================================
+// 14. ExchangeRateHistory
+// ============================================================
+model ExchangeRateHistory {
+  id             String   @id @default(cuid())
+  baseCurrency   String
+  targetCurrency String
+  rate           Decimal
+  rateDate       DateTime
+
+  @@unique([baseCurrency, targetCurrency, rateDate])
+  @@index([baseCurrency, targetCurrency, rateDate])
+}
+
+// ============================================================
+// 15. LoginAttempt
+// ============================================================
+model LoginAttempt {
+  id          String   @id @default(cuid())
+  email       String
+  ipAddress   String
+  success     Boolean
+  attemptedAt DateTime @default(now())
+
+  @@index([email, attemptedAt])
+  @@index([ipAddress, attemptedAt])
+}
+
+// ============================================================
+// 16. PasswordResetToken
+// ============================================================
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}
+
+// ============================================================
+// 17. EmailVerificationToken
+// ============================================================
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}
+
+// ============================================================
+// 18. NewsItem
+// ============================================================
+model NewsItem {
+  id          String         @id @default(cuid())
+  symbol      String?        // null = general market news
+  assetId     String?        // optional relation to Asset
+  headline    String
+  summary     String?        @db.Text
+  sourceName  String
+  sourceUrl   String         @unique
+  publishedAt DateTime
+  sentiment   NewsSentiment?
+  fetchedAt   DateTime       @default(now())
+  createdAt   DateTime       @default(now())
+
+  asset Asset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([symbol, publishedAt])
+  @@index([assetId, publishedAt])
+  @@index([publishedAt])
+}
+
+enum NewsSentiment {
+  positive
+  negative
+  neutral
+}
+
+// ============================================================
+// 19. WeeklyDigest
+// ============================================================
+model WeeklyDigest {
+  id                   String         @id @default(cuid())
+  userId               String
+  weekOf               DateTime       // Monday of that week
+  portfolioSummaryText String         @db.Text
+  newsSummaryText      String?        @db.Text
+  healthScoreChange    Decimal?
+  generatedAt          DateTime       @default(now())
+  deliveredAt          DateTime?
+  deliveryMethod       DigestDelivery
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekOf])
+  @@index([userId, weekOf])
+}
+
+// ============================================================
+// 20. AllocationAlert
+// ============================================================
+model AllocationAlert {
+  id              String    @id @default(cuid())
+  userId          String
+  triggeredAt     DateTime  @default(now())
+  deviationDetail Json      // { assetType: { current: %, target: %, deviation: % } }
+  aiSummaryText   String?   @db.Text
+  acknowledged    Boolean   @default(false)
+  acknowledgedAt  DateTime?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, acknowledged])
+}
