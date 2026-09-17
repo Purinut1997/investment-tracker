@@ -1,6 +1,6 @@
 import React from 'react'
 import Link from 'next/link'
-import { Wallet, Plus, Target, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Wallet, Plus, Target, ArrowRight, CheckCircle2, Upload, LockKeyhole } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
 
 interface DashboardEmptyStateProps {
@@ -10,127 +10,88 @@ interface DashboardEmptyStateProps {
 }
 
 export function DashboardEmptyState({ hasAccounts, hasHoldings, hasPlans }: DashboardEmptyStateProps) {
-  // Step 1: Create Account
-  const step1Done = hasAccounts
-  const step1Active = !hasAccounts
+  const steps = [
+    {
+      done: hasAccounts,
+      title: 'สร้างบัญชีลงทุน',
+      description: 'เช่น บัญชีหุ้นไทย กองทุน หรือคริปโต',
+      icon: Wallet,
+      action: <Link href="/accounts" className="btn btn-primary text-sm px-5 py-2 w-full sm:w-auto">สร้างบัญชี <ArrowRight className="w-4 h-4" /></Link>,
+    },
+    {
+      done: hasHoldings,
+      title: 'เพิ่มรายการแรก',
+      description: 'บันทึกการซื้อขายหรือโอนสินทรัพย์',
+      icon: Plus,
+      action: (
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Link href="/transactions" className="btn text-sm px-4 py-2 flex-1 sm:flex-none justify-center bg-transparent text-[var(--text-secondary)] hover:text-white border border-white/10 rounded-xl"><Upload className="w-4 h-4" /> Import CSV</Link>
+          <Link href="/transactions" className="btn btn-primary text-sm px-4 py-2 flex-1 sm:flex-none justify-center"><Plus className="w-4 h-4" /> เพิ่มรายการ</Link>
+        </div>
+      ),
+    },
+    {
+      done: hasPlans,
+      title: 'ตั้งเป้าหมายและสัดส่วน',
+      description: 'กำหนดสัดส่วนเพื่อดูคำแนะนำการปรับพอร์ต',
+      icon: Target,
+      action: <Link href="/plans" className="btn btn-primary text-sm px-5 py-2 w-full sm:w-auto">ตั้งแผนการลงทุน <ArrowRight className="w-4 h-4" /></Link>,
+    },
+  ]
 
-  // Step 2: Add Transaction
-  const step2Done = hasHoldings
-  const step2Active = hasAccounts && !hasHoldings
-
-  // Step 3: Set Plan
-  const step3Done = hasPlans
-  const step3Active = hasAccounts && hasHoldings && !hasPlans
+  const activeIndex = steps.findIndex((step) => !step.done)
+  const completedCount = steps.filter((step) => step.done).length
 
   return (
     <AppShell>
-      <div className="flex flex-col items-center justify-center min-h-[70vh] w-full max-w-2xl mx-auto px-4">
-        
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-violet-500/20 to-indigo-500/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(124,58,237,0.15)]">
-            <Wallet className="w-8 h-8 text-violet-400" />
+      <div className="w-full max-w-4xl mx-auto py-4 sm:py-8">
+        <div className="grid lg:grid-cols-[0.86fr_1.14fr] gap-8 lg:gap-14 items-start">
+          <div className="pt-2 lg:pt-10">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--accent-soft)] border border-[var(--border-accent)] flex items-center justify-center mb-6">
+              <Wallet className="w-6 h-6 text-[var(--accent)]" />
+            </div>
+            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-[var(--accent)] mb-3">Investment Pro</p>
+            <h1 className="text-3xl sm:text-4xl font-semibold text-white tracking-tight leading-tight mb-4">เริ่มจัดการพอร์ตของคุณ</h1>
+            <p className="text-sm text-[var(--text-secondary)] max-w-md leading-relaxed">ตั้งค่าครั้งเดียว แล้วใช้พื้นที่นี้ติดตามมูลค่า ผลตอบแทน และแผนการลงทุนของคุณในมุมมองเดียว</p>
+            <div className="mt-8 pt-5 border-t border-white/[0.08] text-xs text-[var(--text-muted)] flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-[var(--positive)]" /> ข้อมูลของคุณจะถูกใช้เพื่อคำนวณพอร์ตส่วนตัว
+            </div>
           </div>
-          <h1 className="text-3xl font-black text-white tracking-tight mb-3">เริ่มสร้างพอร์ตของคุณ</h1>
-          <p className="text-zinc-400 text-sm max-w-md mx-auto leading-relaxed">
-            ยินดีต้อนรับสู่ Investment Pro ระบบจะช่วยคุณติดตาม วิเคราะห์ และจัดการความมั่งคั่งอย่างมืออาชีพ มาเริ่มตั้งค่าพอร์ตของคุณกันเถอะ
-          </p>
+
+          <div className="w-full space-y-3">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-sm font-semibold text-white">ตั้งค่าเริ่มต้น</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">ทำตาม 3 ขั้นตอนเพื่อปลดล็อก dashboard</p>
+              </div>
+              <span className="text-xs tabular-nums text-[var(--text-muted)]">{completedCount}/3</span>
+            </div>
+
+            {steps.map((step, index) => {
+              const isActive = index === activeIndex
+              const isLocked = activeIndex !== -1 && index > activeIndex
+              const Icon = step.icon
+              return (
+                <div key={step.title} className={`p-5 rounded-2xl border transition-colors duration-200 ${step.done ? 'bg-emerald-500/[0.04] border-emerald-500/20' : isActive ? 'bg-[var(--bg-elevated)] border-[var(--border-accent)]' : 'bg-[var(--bg-surface)] border-white/[0.06] opacity-55'}`}>
+                  <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${step.done ? 'bg-emerald-500/15 text-emerald-400' : isActive ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'bg-white/5 text-zinc-500'}`}>
+                        {step.done ? <CheckCircle2 className="w-5 h-5" /> : isLocked ? <LockKeyhole className="w-4 h-4" /> : <Icon className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <h3 className={`font-semibold ${step.done ? 'text-emerald-400' : isActive ? 'text-white' : 'text-zinc-400'}`}>{step.title}</h3>
+                        <p className="text-xs text-zinc-500 mt-1">{step.description}</p>
+                      </div>
+                    </div>
+                    {!step.done && isActive && step.action}
+                  </div>
+                </div>
+              )
+            })}
+
+            <div className="flex items-center gap-2 pt-3 text-[11px] text-[var(--text-muted)]"><LockKeyhole className="w-3.5 h-3.5" /> ขั้นตอนถัดไปจะเปิดใช้งานเมื่อข้อมูลพร้อม</div>
+          </div>
         </div>
-
-        {/* Steps */}
-        <div className="w-full space-y-4">
-          
-          {/* Step 1 */}
-          <div className={`p-5 rounded-2xl border transition-all duration-300 ${
-            step1Done ? 'bg-emerald-500/5 border-emerald-500/20' 
-            : step1Active ? 'bg-[#151821] border-violet-500/30 shadow-[0_4px_24px_rgba(124,58,237,0.1)] ring-1 ring-violet-500/20'
-            : 'bg-[#111319] border-white/5 opacity-50'
-          }`}>
-            <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                  step1Done ? 'bg-emerald-500/20 text-emerald-400' 
-                  : step1Active ? 'bg-violet-500/20 text-violet-400'
-                  : 'bg-white/5 text-zinc-500'
-                }`}>
-                  {step1Done ? <CheckCircle2 className="w-5 h-5" /> : <span className="font-bold">1</span>}
-                </div>
-                <div>
-                  <h3 className={`font-bold ${step1Done ? 'text-emerald-400' : step1Active ? 'text-white' : 'text-zinc-400'}`}>สร้างบัญชีลงทุน</h3>
-                  <p className="text-xs text-zinc-500 mt-1">ตั้งชื่อและระบุประเภทบัญชีที่ใช้ลงทุน เช่น บัญชีหุ้นไทย, คริปโต</p>
-                </div>
-              </div>
-              {!step1Done && step1Active && (
-                <Link href="/accounts" className="btn btn-primary text-sm px-5 py-2 w-full sm:w-auto shrink-0 shadow-[0_4px_16px_rgba(124,58,237,0.4)] hover:shadow-[0_4px_24px_rgba(124,58,237,0.6)]">
-                  สร้างบัญชี <ArrowRight className="w-4 h-4 ml-1.5 inline" />
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {/* Step 2 */}
-          <div className={`p-5 rounded-2xl border transition-all duration-300 ${
-            step2Done ? 'bg-emerald-500/5 border-emerald-500/20' 
-            : step2Active ? 'bg-[#151821] border-violet-500/30 shadow-[0_4px_24px_rgba(124,58,237,0.1)] ring-1 ring-violet-500/20'
-            : 'bg-[#111319] border-white/5 opacity-50'
-          }`}>
-            <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                  step2Done ? 'bg-emerald-500/20 text-emerald-400' 
-                  : step2Active ? 'bg-violet-500/20 text-violet-400'
-                  : 'bg-white/5 text-zinc-500'
-                }`}>
-                  {step2Done ? <CheckCircle2 className="w-5 h-5" /> : <span className="font-bold">2</span>}
-                </div>
-                <div>
-                  <h3 className={`font-bold ${step2Done ? 'text-emerald-400' : step2Active ? 'text-white' : 'text-zinc-400'}`}>เพิ่มธุรกรรมแรก</h3>
-                  <p className="text-xs text-zinc-500 mt-1">บันทึกการซื้อขาย หรือโอนสินทรัพย์ เพื่อให้ระบบคำนวณพอร์ต</p>
-                </div>
-              </div>
-              {!step2Done && step2Active && (
-                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                  <Link href="/transactions" className="btn text-sm px-4 py-2 flex-1 sm:flex-none justify-center bg-white/5 text-white hover:bg-white/10 border border-white/10 rounded-xl">
-                    Import CSV
-                  </Link>
-                  <Link href="/transactions" className="btn btn-primary text-sm px-4 py-2 flex-1 sm:flex-none justify-center shadow-[0_4px_16px_rgba(124,58,237,0.4)] hover:shadow-[0_4px_24px_rgba(124,58,237,0.6)]">
-                    <Plus className="w-4 h-4 mr-1.5 inline" /> เพิ่มรายการ
-                  </Link>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Step 3 */}
-          <div className={`p-5 rounded-2xl border transition-all duration-300 ${
-            step3Done ? 'bg-emerald-500/5 border-emerald-500/20' 
-            : step3Active ? 'bg-[#151821] border-violet-500/30 shadow-[0_4px_24px_rgba(124,58,237,0.1)] ring-1 ring-violet-500/20'
-            : 'bg-[#111319] border-white/5 opacity-50'
-          }`}>
-            <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                  step3Done ? 'bg-emerald-500/20 text-emerald-400' 
-                  : step3Active ? 'bg-violet-500/20 text-violet-400'
-                  : 'bg-white/5 text-zinc-500'
-                }`}>
-                  {step3Done ? <CheckCircle2 className="w-5 h-5" /> : <Target className="w-5 h-5" />}
-                </div>
-                <div>
-                  <h3 className={`font-bold ${step3Done ? 'text-emerald-400' : step3Active ? 'text-white' : 'text-zinc-400'}`}>ตั้งเป้าหมายและสัดส่วน</h3>
-                  <p className="text-xs text-zinc-500 mt-1">กำหนดสัดส่วนสินทรัพย์ที่ต้องการ เพื่อดูคำแนะนำ Rebalance</p>
-                </div>
-              </div>
-              {!step3Done && step3Active && (
-                <Link href="/plans" className="btn btn-primary text-sm px-5 py-2 w-full sm:w-auto shrink-0 shadow-[0_4px_16px_rgba(124,58,237,0.4)] hover:shadow-[0_4px_24px_rgba(124,58,237,0.6)]">
-                  ตั้งแผนการลงทุน <ArrowRight className="w-4 h-4 ml-1.5 inline" />
-                </Link>
-              )}
-            </div>
-          </div>
-
-        </div>
-
       </div>
     </AppShell>
   )

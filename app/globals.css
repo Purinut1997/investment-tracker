@@ -13,12 +13,16 @@
   /* Clean Professional Accent Palette */
   --violet: #818cf8;
   --violet-dim: rgba(129, 140, 248, 0.12);
+  --accent: #6d5ef7;
+  --accent-soft: rgba(109, 94, 247, 0.12);
   --cyan-400: #38bdf8;
   --cyan-dim: rgba(56, 189, 248, 0.12);
   --emerald-400: #34d399;
   --emerald-dim: rgba(52, 211, 153, 0.12);
+  --positive: #20c997;
   --rose-400: #f87171;
   --rose-dim: rgba(248, 113, 113, 0.12);
+  --negative: #f05d73;
   --amber-400: #fbbf24;
 
   /* Semantic aliases */
@@ -37,6 +41,7 @@
   --border-strong: rgba(255, 255, 255, 0.15);
   --border-violet: rgba(129, 140, 248, 0.25);
   --border-cyan: rgba(56, 189, 248, 0.22);
+  --border-accent: rgba(109, 94, 247, 0.32);
 
   /* Radii */
   --radius-sm: 8px;

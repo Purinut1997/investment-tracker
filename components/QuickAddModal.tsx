@@ -8,16 +8,35 @@ import {
   ArrowRight,
   Check,
   AlertCircle,
-  Upload,
-  FileText,
-  DollarSign,
   Loader2,
-  Calendar,
   Layers,
-  Search,
   Wallet,
   HelpCircle,
 } from 'lucide-react'
+
+type TransactionType = 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'FEE'
+type Market = 'US' | 'TH' | 'CRYPTO'
+type AssetType = 'stock' | 'fund' | 'crypto' | 'bond' | 'gold'
+
+interface Account {
+  id: string
+  accountName: string
+  accountType: string
+  currency: string
+}
+
+interface ParsedQuickAdd {
+  ticker?: string
+  txnType?: TransactionType
+  quantity?: number
+  pricePerUnit?: number
+  fee?: number
+  note?: string
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback
+}
 
 interface QuickAddModalProps {
   onClose: () => void
@@ -34,17 +53,17 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
   // Accounts list
   const { data: accountsData } = useSWR('/api/accounts')
-  const accounts = accountsData?.accounts ?? []
+  const accounts: Account[] = accountsData?.accounts ?? []
 
   // Manual Form State
   const [formData, setFormData] = useState({
     accountId: '',
     ticker: '',
-    market: 'US' as 'US' | 'TH' | 'CRYPTO',
-    assetType: 'stock' as 'stock' | 'fund' | 'crypto' | 'bond' | 'gold',
+    market: 'US' as Market,
+    assetType: 'stock' as AssetType,
     assetName: '',
     txnDate: new Date().toISOString().split('T')[0],
-    txnType: 'BUY' as 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'FEE',
+    txnType: 'BUY' as TransactionType,
     quantity: '',
     pricePerUnit: '',
     fee: '0',
@@ -52,12 +71,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
     note: '',
   })
 
-  // Set default account when loaded
-  useEffect(() => {
-    if (accounts.length > 0 && !formData.accountId) {
-      setFormData((prev) => ({ ...prev, accountId: accounts[0].id }))
-    }
-  }, [accounts, formData.accountId])
+  const accountId = formData.accountId || accounts[0]?.id || ''
 
   // Computed total
   const quantityNum = parseFloat(formData.quantity) || 0
@@ -96,7 +110,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
       })
 
       if (res.ok) {
-        const parsed = await res.json()
+        const parsed = (await res.json()) as ParsedQuickAdd
         if (parsed.ticker) {
           setFormData((prev) => ({
             ...prev,
@@ -115,7 +129,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
       // Local heuristic fallback parser (e.g. "ซื้อ AAPL 10 หุ้น ที่ 150")
       const lower = nlText.toLowerCase()
-      let type: any = 'BUY'
+      let type: TransactionType = 'BUY'
       if (lower.includes('ขาย') || lower.includes('sell')) type = 'SELL'
       else if (lower.includes('ปันผล') || lower.includes('dividend')) type = 'DIVIDEND'
       else if (lower.includes('ฝาก') || lower.includes('deposit')) type = 'DEPOSIT'
@@ -145,8 +159,8 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
       setTab('manual')
       setSuccessMsg('ระบบแยกข้อมูลเบื้องต้นเรียบร้อย กรุณาตรวจสอบความถูกต้อง')
-    } catch (err: any) {
-      setError(err.message || 'ไม่สามารถวิเคราะห์ข้อความได้')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'ไม่สามารถวิเคราะห์ข้อความได้'))
     } finally {
       setParsing(false)
     }
@@ -158,7 +172,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
     setError('')
     setSuccessMsg('')
 
-    if (!formData.accountId) {
+    if (!accountId) {
       setError('กรุณาเลือกบัญชีการลงทุน')
       return
     }
@@ -203,7 +217,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: formData.accountId,
+          accountId,
           assetId: assetData.id,
           txnDate: new Date(formData.txnDate).toISOString(),
           txnType: formData.txnType,
@@ -227,8 +241,8 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
       if (onSuccess) onSuccess()
       onClose()
-    } catch (err: any) {
-      setError(err.message || 'เกิดข้อผิดพลาดในการบันทึก')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึก'))
     } finally {
       setSubmitting(false)
     }
@@ -346,9 +360,9 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
                   <HelpCircle className="w-3.5 h-3.5 text-[var(--cyan-400)]" />
                   ตัวอย่างที่ระบบเข้าใจได้:
                 </p>
-                <p>• "ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2"</p>
-                <p>• "ขาย BTC 0.05 ราคา 65000 ใน Bitkub"</p>
-                <p>• "รับปันผล PTT 1500 บาท บัญชี InnovestX"</p>
+                <p>• &quot;ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2&quot;</p>
+                <p>• &quot;ขาย BTC 0.05 ราคา 65000 ใน Bitkub&quot;</p>
+                <p>• &quot;รับปันผล PTT 1500 บาท บัญชี InnovestX&quot;</p>
               </div>
 
               <button
@@ -384,11 +398,11 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
                 ) : (
                   <select
                     className="select text-sm"
-                    value={formData.accountId}
+                    value={accountId}
                     onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
                     required
                   >
-                    {accounts.map((acc: any) => (
+                    {accounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>
                         {acc.accountName} ({acc.accountType} — {acc.currency})
                       </option>
@@ -404,7 +418,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
                   <select
                     className="select text-sm"
                     value={formData.txnType}
-                    onChange={(e) => setFormData({ ...formData, txnType: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, txnType: e.target.value as TransactionType })}
                   >
                     <option value="BUY">🟢 ซื้อ (BUY)</option>
                     <option value="SELL">🔴 ขาย (SELL)</option>
@@ -433,7 +447,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
                   <select
                     className="select text-xs"
                     value={formData.market}
-                    onChange={(e) => setFormData({ ...formData, market: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, market: e.target.value as Market })}
                   >
                     <option value="US">🇺🇸 หุ้น US</option>
                     <option value="TH">🇹🇭 หุ้นไทย (SET)</option>

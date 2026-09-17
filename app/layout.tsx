@@ -36,8 +36,7 @@ export const viewport: Viewport = {
   themeColor: '#111111',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1, // Prevent double-tap zoom
-  userScalable: false,
+  userScalable: true,
 }
 
 import { Providers } from '@/components/Providers'
