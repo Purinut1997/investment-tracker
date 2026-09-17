@@ -104,7 +104,7 @@ function LoginForm() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 14px',
             border: '1px solid rgba(255, 255, 255, 0.2)',
-            boxShadow: '0 0 25px rgba(34, 211, 238, 0.3)',
+            
           }}>
             <img
               src="/logo.png?v=2"
