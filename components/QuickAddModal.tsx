@@ -253,23 +253,23 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#050609]/80 backdrop-blur-sm animate-in fade-in"
     >
-      <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-lg overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)] flex flex-col max-h-[92vh]">
+      <div className="bg-[#11141b] border border-white/[0.12] rounded-2xl sm:rounded-3xl w-full max-w-xl overflow-hidden shadow-[0_32px_96px_rgba(0,0,0,0.65)] flex flex-col max-h-[min(760px,calc(100dvh-24px))]">
         {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+        <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-white/[0.08] flex items-center justify-between bg-[#151821]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-violet-500 to-indigo-500 flex items-center justify-center text-white shadow-[0_0_18px_rgba(139,92,246,0.35)]">
+            <div className="w-10 h-10 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)] flex items-center justify-center text-[var(--accent)]">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-tight">บันทึกธุรกรรมด่วน</h2>
-              <p className="text-xs text-[var(--text-muted)]">Quick Add Transaction</p>
+              <h2 className="text-lg font-bold text-white tracking-tight leading-tight">บันทึกธุรกรรม</h2>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">เพิ่มรายการลงทุนเข้าสู่พอร์ต</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -295,13 +295,13 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
         ) : (
           <>
             {/* Tab Switcher */}
-        <div className="flex border-b border-white/[0.08] bg-black/20 p-1.5 gap-1.5 mx-4 sm:mx-6 mt-4 rounded-2xl">
+        <div className="flex bg-[#0b0d12] p-1 gap-1 mx-5 sm:mx-6 mt-5 rounded-xl border border-white/[0.07]">
           <button
             type="button"
             onClick={() => setTab('manual')}
-            className={`flex-1 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 rounded-xl transition-all ${
+            className={`flex-1 min-h-10 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 rounded-lg transition-all ${
               tab === 'manual'
-                ? 'bg-white/[0.1] text-white shadow-sm ring-1 ring-white/10'
+                ? 'bg-white/[0.1] text-white'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
             }`}
           >
@@ -311,9 +311,9 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
           <button
             type="button"
             onClick={() => setTab('ai')}
-            className={`flex-1 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 rounded-xl transition-all ${
+            className={`flex-1 min-h-10 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 rounded-lg transition-all ${
               tab === 'ai'
-                ? 'bg-white/[0.1] text-white shadow-sm ring-1 ring-white/10'
+                ? 'bg-white/[0.1] text-white'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
             }`}
           >
@@ -323,7 +323,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
         </div>
 
         {/* Modal Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+        <div className="px-5 py-5 sm:px-6 sm:py-6 overflow-y-auto flex-1 space-y-5">
           {error && (
             <div className="alert alert-danger flex items-start gap-2 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
@@ -387,7 +387,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
           {/* MANUAL FORM TAB */}
           {tab === 'manual' && (
-            <form onSubmit={handleSubmit} id="manual-form" className="space-y-4">
+            <form onSubmit={handleSubmit} id="manual-form" className="space-y-5">
               {/* Account Selection */}
               <div>
                 <label className="label">บัญชีการเงิน *</label>
@@ -412,7 +412,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
               </div>
 
               {/* Transaction Type & Date */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">ประเภทรายการ *</label>
                   <select
@@ -441,7 +441,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
               </div>
 
               {/* Ticker, Market & Asset Type */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="col-span-1">
                   <label className="label">ตลาด</label>
                   <select
@@ -454,7 +454,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
                     <option value="CRYPTO">🪙 Crypto</option>
                   </select>
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-1 sm:col-span-2">
                   <label className="label">Ticker / สัญลักษณ์ *</label>
                   <input
                     type="text"
@@ -468,7 +468,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
               </div>
 
               {/* Quantity & Price */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">จำนวนหน่วย (Quantity) *</label>
                   <input
@@ -496,7 +496,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
               </div>
 
               {/* Fee & Tax */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">ค่าคอม/ธรรมเนียม</label>
                   <input
@@ -522,7 +522,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
               </div>
 
               {/* Calculated Total Box */}
-              <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between">
+              <div className="p-4 rounded-xl bg-[#191d27] border border-white/[0.09] flex items-center justify-between gap-4">
                 <div>
                   <p className="text-[11px] text-[var(--text-muted)] font-medium">
                     ยอดรวมคำนวณอัตโนมัติ (Total Amount)
@@ -555,7 +555,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
         {/* Modal Footer */}
         {tab === 'manual' && (
-          <div className="p-4 sm:p-5 border-t border-white/[0.08] bg-white/[0.02] flex items-center justify-end gap-3">
+          <div className="px-5 py-4 sm:px-6 border-t border-white/[0.08] bg-[#151821] flex items-center justify-end gap-3 sticky bottom-0">
             <button
               type="button"
               onClick={onClose}
@@ -568,7 +568,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
               type="submit"
               form="manual-form"
               disabled={submitting || accounts.length === 0}
-              className="btn btn-primary text-xs sm:text-sm py-2 px-5 flex items-center gap-2"
+              className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2 min-w-[142px]"
             >
               {submitting ? (
                 <>

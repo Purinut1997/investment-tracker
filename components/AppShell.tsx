@@ -106,8 +106,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userName  = session?.user?.name || session?.user?.email?.split('@')[0] || 'นักลงทุน'
   const userEmail = session?.user?.email || ''
 
-  const sidebarW = collapsed ? 'w-[80px]' : 'w-[280px]'
-  const shellColumns = collapsed ? '80px minmax(0, 1fr)' : '280px minmax(0, 1fr)'
+  const sidebarW = collapsed ? 'w-[72px]' : 'w-[240px]'
+  const shellColumns = collapsed ? '72px minmax(0, 1fr)' : '240px minmax(0, 1fr)'
 
   return (
     <div
@@ -117,20 +117,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
       <aside
-        className={`hidden lg:flex flex-col border-r border-white/[0.05] bg-[#090b10] shrink-0 sticky top-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
+        className={`hidden lg:flex flex-col border-r border-white/[0.07] bg-[#0b0d12] shrink-0 sticky top-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
       >
         {/* Brand Header */}
-        <div className={`flex flex-col shrink-0 border-b border-white/[0.05] transition-all duration-300 p-4 gap-5`}>
+        <div className="flex flex-col shrink-0 border-b border-white/[0.07] transition-all duration-300 p-4 gap-5">
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
             <Link href="/dashboard" className="flex items-center gap-3 no-underline min-w-0">
-              <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-violet-600 to-indigo-600 p-2 shrink-0 flex items-center justify-center shadow-[0_0_24px_rgba(124,58,237,0.35)]">
+              <div className="w-10 h-10 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)] p-2 shrink-0 flex items-center justify-center">
                 <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain brightness-0 invert drop-shadow-md" />
               </div>
               {!collapsed && (
                 <div className="min-w-0 overflow-hidden">
-                  <div className="font-bold text-white text-[15px] tracking-tight flex items-center gap-1.5 whitespace-nowrap">
+                  <div className="font-extrabold text-white text-[15px] tracking-tight flex items-center gap-1.5 whitespace-nowrap">
                     Investment
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-white/10 text-white font-bold uppercase tracking-wider">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/10 text-white/70 font-bold uppercase tracking-wider">
                       Pro
                     </span>
                   </div>
@@ -150,7 +150,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {!collapsed && (
-            <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.025] border border-white/[0.07]">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-500/5 flex items-center justify-center border border-emerald-500/20 shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
                 <Wallet className="w-4 h-4 text-emerald-400" />
               </div>
@@ -175,11 +175,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto overflow-x-visible p-3 space-y-1.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        <div className="flex-1 overflow-y-auto overflow-x-visible p-3 space-y-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           {NAV_GROUPS.map((group, gIdx) => (
-            <div key={group.groupName} className="space-y-1.5">
+            <div key={group.groupName} className="space-y-1">
               {!collapsed && (
-                <p className={`px-3 ${gIdx === 0 ? 'pt-2' : 'pt-4 border-t border-white/[0.04] mt-2'} pb-1 text-[10px] font-bold tracking-[0.15em] text-zinc-500 uppercase`}>
+                <p className={`px-3 ${gIdx === 0 ? 'pt-2' : 'pt-4 border-t border-white/[0.05] mt-3'} pb-2 text-[10px] font-bold tracking-[0.14em] text-zinc-500 uppercase`}>
                   {group.groupName}
                 </p>
               )}
@@ -192,13 +192,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-3 rounded-2xl text-[14px] font-semibold transition-all duration-300 no-underline group relative ${
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200 no-underline group relative ${
                       active
-                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_4px_20px_-4px_rgba(124,58,237,0.5)] border border-white/10'
-                        : 'text-zinc-400 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                        ? 'bg-[var(--accent-soft)] text-white border border-[var(--border-accent)]'
+                        : 'text-zinc-400 hover:text-white hover:bg-white/[0.045] border border-transparent'
                     } ${collapsed ? 'justify-center w-12 h-12 px-0 mx-auto' : ''}`}
                   >
-                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-all duration-300 ${active ? 'text-white drop-shadow-md' : 'text-zinc-500 group-hover:text-violet-400'}`} />
+                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-colors duration-200 ${active ? 'text-[var(--accent)]' : 'text-zinc-500 group-hover:text-[var(--accent)]'}`} />
                     {!collapsed && (
                       <>
                         <span className="truncate">{item.label}</span>
@@ -262,7 +262,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* User Footer */}
-        <div className="p-4 border-t border-white/[0.05] shrink-0 bg-[#090b10]">
+        <div className="p-4 border-t border-white/[0.07] shrink-0 bg-[#0b0d12]">
           {collapsed ? (
             <div className="flex flex-col items-center gap-3">
               <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-violet-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-[0_0_15px_rgba(124,58,237,0.3)] ring-2 ring-white/10">
@@ -301,7 +301,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="min-w-0 flex flex-col pb-28 lg:pb-24 relative z-10">
 
         {/* Desktop Topbar */}
-        <header className="hidden lg:flex items-center justify-between px-6 lg:px-8 py-3.5 border-b border-white/[0.08] bg-[#0a0c10]/95 backdrop-blur-xl sticky top-0 z-30">
+        <header className="hidden lg:flex items-center justify-between px-8 py-3 border-b border-white/[0.07] bg-[#0b0d12]/95 backdrop-blur-xl sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCollapsed(!collapsed)}
@@ -444,7 +444,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8">
+        <main className="flex-1 w-full max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-10 py-8 sm:py-10">
           {children}
         </main>
       </div>
