@@ -1,18 +1,16 @@
 import type { Metadata, Viewport } from 'next'
-import { Bai_Jamjuree, Manrope } from 'next/font/google'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 
-const baiJamjuree = Bai_Jamjuree({
-  subsets: ['thai', 'latin'],
-  variable: '--font-thai',
-  weight: ['400', '500', '600', '700'],
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
   display: 'swap',
 })
 
-const manrope = Manrope({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  variable: '--font-english',
-  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-mono',
   display: 'swap',
 })
 
@@ -29,13 +27,18 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'th_TH',
     url: 'https://investmenttracker.app',
-    title: 'Investment Pro',
+    title: 'Investment PRO',
     description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
-    siteName: 'Investment Pro',
+    siteName: 'Investment PRO',
+  },
+  icons: {
+    icon: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png',
+    shortcut: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png',
+    apple: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Investment Pro',
+    title: 'Investment PRO',
     description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
   },
 }
@@ -55,7 +58,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="th" className={`${baiJamjuree.variable} ${manrope.variable}`} suppressHydrationWarning>
+    <html lang="th" className={`${inter.variable} ${jetbrainsMono.variable} font-sans`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -68,7 +71,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>
+      <body className="bg-slate-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-200 min-h-screen selection:bg-purple-500/30">
         <Providers>{children}</Providers>
       </body>
     </html>

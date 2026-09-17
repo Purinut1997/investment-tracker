@@ -35,18 +35,19 @@
   --red-400: #f87171;
   --red-500: #ef4444;
 
-  /* Typography — premium Thai and Latin pairing */
-  --font-ui: var(--font-english), var(--font-thai), sans-serif;
-  --text-primary: #ffffff;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+/* ─── Typography ─── */
+  --font-ui: var(--font-inter), sans-serif;
+  --font-mono: var(--font-mono), monospace;
+  --text-primary: #f1f5f9; /* slate-200 */
+  --text-secondary: #64748b; /* slate-500 */
+  --text-muted: #475569; /* slate-600 */
 
   /* Razor-sharp Borders */
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.15);
-  --border-violet: rgba(129, 140, 248, 0.25);
-  --border-cyan: rgba(56, 189, 248, 0.22);
-  --border-accent: rgba(109, 94, 247, 0.32);
+  --border-violet: rgba(168, 85, 247, 0.25); /* purple-500 */
+  --border-cyan: rgba(34, 211, 238, 0.22); /* cyan-400 */
+  --border-accent: rgba(168, 85, 247, 0.32);
 
   /* Radii */
   --radius-sm: 8px;
@@ -57,11 +58,11 @@
 
   /* Shadows */
   --shadow-card:
-    0 2px 12px -2px rgba(0, 0, 0, 0.6),
-    0 1px 0 0 rgba(255, 255, 255, 0.06) inset;
+    0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1),
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset;
   --shadow-dialog: 0 24px 64px -12px rgba(0, 0, 0, 0.85);
-  --shadow-violet: 0 0 20px rgba(129, 140, 248, 0.15);
-  --shadow-cyan: 0 0 20px rgba(56, 189, 248, 0.15);
+  --shadow-violet: 0 0 15px rgba(168, 85, 247, 0.4);
+  --shadow-cyan: 0 0 15px rgba(34, 211, 238, 0.4);
 }
 
 /* ─── Base Reset ───────────────────────────────────────────── */
@@ -82,12 +83,9 @@ html {
 
 body {
   font-family: var(--font-ui);
-  background: var(--bg-base);
-  color: var(--text-primary);
   line-height: 1.55;
   min-height: 100dvh;
   overflow-x: clip;
-  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 

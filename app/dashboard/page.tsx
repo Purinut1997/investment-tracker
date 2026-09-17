@@ -154,10 +154,29 @@ export default function DashboardPage() {
         )}
 
         {/* ── ROW 1: KEY METRICS (3 KPIs) ───────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
 
-          {/* Card 1: Total Value */}
-          <Surface className="sm:col-span-2 p-6 sm:p-7 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-6 min-h-[220px]">
+          {/* Card 1: Total Value (Hero Card) */}
+          <div className="lg:col-span-2 bg-slate-900/80 p-6 sm:p-7 rounded-2xl relative overflow-hidden border border-slate-800 shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:border-slate-700 flex flex-col justify-between gap-6 min-h-[220px]">
+            {/* Glowing Orb */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/20 rounded-full blur-[80px] -z-10 pointer-events-none transform translate-x-1/3 -translate-y-1/3"></div>
+            
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-bold tracking-wider uppercase text-slate-500">มูลค่าพอร์ตรวม</p>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800/50 text-slate-400 border border-slate-700 font-semibold">อัปเดตล่าสุด 2 นาทีที่แล้ว</span>
+            </div>
+            <div>
+              <p className="text-4xl sm:text-5xl font-bold text-white tracking-tight leading-none font-mono tabular-nums">
+                ฿<CountUp end={totalValue} duration={1.2} separator="," decimals={2} />
+              </p>
+              <p className="text-xs text-slate-500 mt-2 font-medium font-mono tabular-nums">ต้นทุน ฿{totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800/50">
+              <button className="bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-medium rounded-xl px-4 py-2 flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(168,85,247,0.4)] active:scale-95 text-xs">
+                <Sparkles className="w-4 h-4" /> วิเคราะห์พอร์ตด้วย AI
+              </button>
+            </div>
+          </div>
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">มูลค่าพอร์ตรวม</p>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.08] font-semibold">อัปเดตล่าสุด</span>
@@ -172,10 +191,8 @@ export default function DashboardPage() {
               <span className="text-[10px] text-zinc-400 font-medium">แนวโน้ม 7 วัน</span>
               <Sparkline seed="portfolio-total" trend="up" width={76} height={22} />
             </div>
-          </Surface>
-
           {/* Card 2: Unrealized P&L */}
-          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5 min-h-[220px]">
+          <div className="bg-slate-900/80 p-5 sm:p-6 rounded-2xl relative overflow-hidden border border-slate-800 shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:border-slate-700 flex flex-col justify-between gap-5 min-h-[220px] lg:col-span-1">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">กำไร/ขาดทุน (ยังไม่ขาย)</p>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-0.5 ${
@@ -192,13 +209,13 @@ export default function DashboardPage() {
               <p className="text-xs text-zinc-400 mt-2 font-medium">{isProfit ? 'กำไรยังไม่รับรู้' : 'ขาดทุนทางบัญชี'}</p>
             </div>
             <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
-              <span className="text-[10px] text-zinc-400 font-medium">แนวโน้มกำไร/ขาดทุน</span>
+              <span className="text-[10px] text-slate-500 font-medium">แนวโน้มกำไร/ขาดทุน</span>
               <Sparkline seed="portfolio-pnl" trend={isProfit ? 'up' : 'down'} width={76} height={22} />
             </div>
-          </Surface>
+          </div>
 
           {/* Card 3: Realized + Dividends */}
-          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5 min-h-[220px]">
+          <div className="bg-slate-900/80 p-5 sm:p-6 rounded-2xl relative overflow-hidden border border-slate-800 shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:border-slate-700 flex flex-col justify-between gap-5 min-h-[220px] lg:col-span-1">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">กำไรขายแล้ว + ปันผล</p>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.08] font-semibold">รับรู้แล้ว</span>
@@ -210,10 +227,10 @@ export default function DashboardPage() {
               <p className="text-xs text-zinc-400 mt-2 font-medium">ปันผลสะสม ฿{totalDividends.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
             </div>
             <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
-              <span className="text-[10px] text-zinc-400 font-medium">กระแสเงินเข้า</span>
+              <span className="text-[10px] text-slate-500 font-medium">กระแสเงินเข้า</span>
               <Sparkline seed="portfolio-dividend" trend="up" width={76} height={22} />
             </div>
-          </Surface>
+          </div>
 
         </div>
 
@@ -280,7 +297,7 @@ export default function DashboardPage() {
           <div className="lg:col-span-1 flex flex-col gap-5">
 
             {/* Health Score */}
-            <div className="rounded-2xl p-5 bg-[#111319] border border-white/[0.08] flex flex-col justify-between gap-4 relative shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="rounded-2xl p-5 bg-slate-900/60 backdrop-blur-xl border border-slate-800 flex flex-col justify-between gap-4 relative shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:border-slate-700">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400 flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" /> ความเสี่ยงพอร์ต
@@ -318,10 +335,13 @@ export default function DashboardPage() {
             </div>
 
             {/* AI Weekly Digest */}
-            <div className="rounded-2xl p-5 bg-[#131226] border border-violet-500/25 relative overflow-hidden shrink-0 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5)]">
+            <div className="border border-purple-500/30 bg-purple-500/5 rounded-2xl p-4 relative shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:border-slate-700">
+              <div className="absolute top-4 right-4 text-[10px] bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full flex items-center gap-1 font-semibold">
+                <Sparkles className="w-3 h-3" /> AI Generated
+              </div>
               <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-8 h-8 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shadow-[0_0_12px_rgba(129,140,248,0.25)]">
-                  <Sparkles className="w-4 h-4 text-violet-400" />
+                <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center shadow-[0_0_12px_rgba(168,85,247,0.25)]">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
@@ -349,7 +369,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Allocation Donut */}
-            <div className="rounded-2xl p-5 sm:p-6 bg-[#111319] border border-white/[0.08] flex-1 flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="rounded-2xl p-5 sm:p-6 bg-slate-900/60 backdrop-blur-xl border border-slate-800 flex-1 flex flex-col justify-between shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl hover:border-slate-700">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-semibold text-white tracking-wide">สัดส่วนการลงทุน</h3>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-400">{holdings.length} รายการ</span>
@@ -403,27 +423,25 @@ export default function DashboardPage() {
         </div>
 
         {/* ── ROW 3: HOLDINGS TABLE ────────────────────────────────── */}
-        <div className="rounded-2xl bg-[#111319] border border-white/[0.08] overflow-hidden shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
-          <div className="px-6 py-4 border-b border-white/[0.08] bg-[#151821] flex items-center justify-between">
+        <div className="rounded-2xl bg-slate-900/60 backdrop-blur-xl border border-slate-800 overflow-hidden shadow-xl">
+          <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-white">สินทรัพย์ในพอร์ต (Holdings)</h3>
-              <p className="text-[11px] text-zinc-400 mt-0.5">รายการหุ้น, คริปโต และกองทุนที่ถือครองอยู่</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">รายการหุ้น, คริปโต และกองทุนที่ถือครองอยู่</p>
             </div>
-            <Link href="/transactions" className="text-xs text-violet-400 hover:text-cyan-400 transition-colors flex items-center gap-1 font-semibold">
+            <Link href="/transactions" className="text-xs text-purple-400 hover:text-cyan-400 transition-colors flex items-center gap-1 font-semibold active:scale-95">
               ดูทั้งหมด <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
 
           {holdings.length === 0 ? (
-            <div className="p-16 text-center flex flex-col items-center justify-center">
-              <div className="w-12 h-12 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 mb-4">
-                <Layers className="w-6 h-6" />
-              </div>
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <img src="https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png" alt="Logo Watermark" className="w-16 h-16 opacity-20 grayscale mb-4" />
               <h4 className="text-sm font-semibold text-white mb-2">ยังไม่มีข้อมูลสินทรัพย์</h4>
-              <p className="text-xs text-zinc-400 max-w-xs mb-6">
+              <p className="text-xs text-slate-500 max-w-xs mb-6">
                 เริ่มต้นสร้างพอร์ตโดยการเพิ่มรายการธุรกรรมแรก เพื่อให้ระบบเริ่มคำนวณกำไรและวิเคราะห์ข้อมูล
               </p>
-              <Link href="/transactions" className="btn btn-primary px-5 py-2 text-xs font-semibold rounded-xl">
+              <Link href="/transactions" className="bg-purple-600 hover:bg-purple-700 text-white rounded-lg px-6 py-2 mt-4 text-xs font-semibold transition-all active:scale-95">
                 เพิ่มธุรกรรมใหม่
               </Link>
             </div>
@@ -431,39 +449,39 @@ export default function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-white/[0.08] bg-[#151821]/60">
-                    <th className="py-3.5 px-5 font-semibold tracking-wider text-zinc-400 text-[10px] uppercase">สัญลักษณ์</th>
-                    <th className="py-3.5 px-5 font-semibold tracking-wider text-zinc-400 text-[10px] uppercase">ตลาด</th>
-                    <th className="py-3.5 px-5 font-semibold tracking-wider text-zinc-400 text-[10px] uppercase text-center">แนวโน้ม</th>
-                    <th className="py-3.5 px-5 font-semibold tracking-wider text-zinc-400 text-[10px] uppercase text-right">จำนวน</th>
-                    <th className="py-3.5 px-5 font-semibold tracking-wider text-zinc-400 text-[10px] uppercase text-right">ต้นทุนเฉลี่ย</th>
-                    <th className="py-3.5 px-5 font-semibold tracking-wider text-zinc-400 text-[10px] uppercase text-right">ราคาล่าสุด</th>
-                    <th className="py-3.5 px-5 font-semibold tracking-wider text-zinc-400 text-[10px] uppercase text-right">มูลค่ารวม</th>
-                    <th className="py-3.5 px-5 font-semibold tracking-wider text-zinc-400 text-[10px] uppercase text-right">กำไร/ขาดทุน</th>
+                  <tr className="border-b border-slate-800/50 bg-slate-900/30">
+                    <th className="py-3.5 px-5 font-semibold tracking-wider text-slate-500 text-[10px] uppercase text-left">สัญลักษณ์</th>
+                    <th className="py-3.5 px-5 font-semibold tracking-wider text-slate-500 text-[10px] uppercase text-left">ตลาด</th>
+                    <th className="py-3.5 px-5 font-semibold tracking-wider text-slate-500 text-[10px] uppercase text-center">แนวโน้ม</th>
+                    <th className="py-3.5 px-5 font-semibold tracking-wider text-slate-500 text-[10px] uppercase text-right">จำนวน</th>
+                    <th className="py-3.5 px-5 font-semibold tracking-wider text-slate-500 text-[10px] uppercase text-right">ต้นทุนเฉลี่ย</th>
+                    <th className="py-3.5 px-5 font-semibold tracking-wider text-slate-500 text-[10px] uppercase text-right">ราคาล่าสุด</th>
+                    <th className="py-3.5 px-5 font-semibold tracking-wider text-slate-500 text-[10px] uppercase text-right">มูลค่ารวม</th>
+                    <th className="py-3.5 px-5 font-semibold tracking-wider text-slate-500 text-[10px] uppercase text-right">กำไร/ขาดทุน</th>
                   </tr>
                 </thead>
                 <tbody>
                   {holdings.map((h) => {
                     const hProfit = h.unrealizedPnL >= 0
                     return (
-                      <tr key={h.assetId} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group">
+                      <tr key={h.assetId} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors group">
                         <td className="py-3.5 px-5">
-                          <div className="font-bold text-white group-hover:text-violet-400 transition-colors">{h.ticker}</div>
-                          <div className="text-[10px] text-zinc-400 truncate max-w-[140px]">{h.assetName}</div>
+                          <div className="font-bold text-white group-hover:text-purple-400 transition-colors">{h.ticker}</div>
+                          <div className="text-[10px] text-slate-500 truncate max-w-[140px]">{h.assetName}</div>
                         </td>
                         <td className="py-3.5 px-5">
-                          <span className="text-[10px] font-semibold text-zinc-300 uppercase border border-white/10 px-2 py-0.5 rounded-lg bg-white/[0.04]">{h.market}</span>
+                          <span className="text-[10px] font-semibold text-slate-300 uppercase border border-slate-700 px-2 py-0.5 rounded-lg bg-slate-800">{h.market}</span>
                         </td>
                         <td className="py-3.5 px-5 text-center">
                           <div className="flex justify-center">
                             <Sparkline seed={h.ticker} trend={hProfit ? 'up' : 'down'} width={64} height={20} />
                           </div>
                         </td>
-                        <td className="py-3.5 px-5 text-right font-medium tabular-nums text-zinc-200">{Number(h.quantity).toLocaleString()}</td>
-                        <td className="py-3.5 px-5 text-right tabular-nums text-zinc-400">{Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className="py-3.5 px-5 text-right font-semibold tabular-nums text-zinc-200">{Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className="py-3.5 px-5 text-right font-bold tabular-nums text-white">฿{Number(h.currentValueBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className={`py-3.5 px-5 text-right font-bold tabular-nums ${hProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <td className="py-3.5 px-5 text-right font-medium tabular-nums font-mono text-slate-200">{Number(h.quantity).toLocaleString()}</td>
+                        <td className="py-3.5 px-5 text-right tabular-nums font-mono text-slate-400">{Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="py-3.5 px-5 text-right font-semibold tabular-nums font-mono text-slate-200">{Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="py-3.5 px-5 text-right font-bold tabular-nums font-mono text-white">฿{Number(h.currentValueBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className={`py-3.5 px-5 text-right font-bold tabular-nums font-mono ${hProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
                           <div>{hProfit ? '+' : ''}฿{Number(h.unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                           <div className="text-[10px] font-semibold opacity-90">{hProfit ? '+' : ''}{h.unrealizedPnLPercent.toFixed(2)}%</div>
                         </td>

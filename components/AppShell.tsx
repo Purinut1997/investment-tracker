@@ -113,28 +113,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="min-h-screen text-[var(--text-primary)] flex lg:grid relative overflow-x-clip"
-      style={{ background: 'var(--bg-base)', gridTemplateColumns: shellColumns }}
+      className="min-h-screen text-slate-200 flex lg:grid relative overflow-x-clip"
+      style={{ gridTemplateColumns: shellColumns }}
     >
 
       {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
       <aside
-        className={`hidden lg:flex flex-col border-r border-white/[0.07] bg-[#0b0d12] shrink-0 sticky top-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
+        className={`hidden lg:flex flex-col border-r border-slate-800 bg-slate-950/80 backdrop-blur-md shrink-0 sticky top-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
       >
         {/* Brand Header */}
-        <div className="flex flex-col shrink-0 border-b border-white/[0.07] transition-all duration-300 p-4 gap-5">
+        <div className="flex flex-col shrink-0 border-b border-slate-800 transition-all duration-300 p-4 gap-5">
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
             <Link href="/dashboard" className="flex items-center gap-3 no-underline min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)] p-2 shrink-0 flex items-center justify-center">
-                <Image src="/logo.png" alt="Investment Pro" width={40} height={40} className="w-full h-full object-contain brightness-0 invert" />
+              <div className="flex items-center justify-center">
+                <img src="https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png" alt="Investment PRO Logo" className="h-8 w-auto object-contain" />
               </div>
               {!collapsed && (
                 <div className="min-w-0 overflow-hidden">
-                  <div className="font-extrabold text-white text-[15px] tracking-tight flex items-center gap-1.5 whitespace-nowrap">
-                    Investment
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-white/10 text-white/70 font-bold uppercase tracking-wider">
-                      Pro
-                    </span>
+                  <div className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-cyan-400 whitespace-nowrap">
+                    Investment PRO
                   </div>
                 </div>
               )}
@@ -177,11 +174,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto overflow-x-visible p-3 space-y-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        <div className="flex-1 overflow-y-auto overflow-x-visible p-3 space-y-1 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
           {NAV_GROUPS.map((group, gIdx) => (
             <div key={group.groupName} className="space-y-1">
               {!collapsed && (
-                <p className={`px-3 ${gIdx === 0 ? 'pt-2' : 'pt-4 border-t border-white/[0.05] mt-3'} pb-2 text-[10px] font-bold tracking-[0.14em] text-zinc-500 uppercase`}>
+                <p className={`px-3 ${gIdx === 0 ? 'pt-2' : 'pt-4 border-t border-slate-800 mt-3'} mb-2 text-[10px] font-bold tracking-widest text-slate-600 uppercase`}>
                   {group.groupName}
                 </p>
               )}
@@ -194,13 +191,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200 no-underline group relative ${
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 no-underline group relative active:scale-95 border-l-4 ${
                       active
-                        ? 'bg-[var(--accent-soft)] text-white border border-[var(--border-accent)]'
-                        : 'text-zinc-400 hover:text-white hover:bg-white/[0.045] border border-transparent'
+                        ? 'bg-gradient-to-r from-purple-500/20 to-transparent border-purple-500 text-white'
+                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 border-transparent'
                     } ${collapsed ? 'justify-center w-12 h-12 px-0 mx-auto' : ''}`}
                   >
-                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-colors duration-200 ${active ? 'text-[var(--accent)]' : 'text-zinc-500 group-hover:text-[var(--accent)]'}`} />
+                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-colors duration-200 ${active ? 'text-purple-400' : 'text-slate-400 group-hover:text-purple-400'}`} />
                     {!collapsed && (
                       <>
                         <span className="truncate">{item.label}</span>
@@ -243,13 +240,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200 no-underline group relative ${
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all duration-200 no-underline group relative active:scale-95 border-l-4 ${
                       active
-                        ? 'bg-amber-500/[0.10] text-white border border-amber-500/25'
-                        : 'text-zinc-400 hover:text-white hover:bg-amber-500/5 border border-transparent'
+                        ? 'bg-amber-500/10 text-white border-amber-500'
+                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 border-transparent'
                     } ${collapsed ? 'justify-center w-12 h-12 px-0 mx-auto' : ''}`}
                   >
-                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-colors duration-200 ${active ? 'text-amber-400' : 'text-zinc-500 group-hover:text-amber-400'}`} />
+                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-colors duration-200 ${active ? 'text-amber-400' : 'text-slate-400 group-hover:text-amber-400'}`} />
                     {!collapsed && <span className="truncate">{item.label}</span>}
                     {collapsed && (
                       <span className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-semibold text-white bg-[#151821] border border-white/10 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl z-50">
@@ -264,32 +261,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* User Footer */}
-        <div className="p-4 border-t border-white/[0.07] shrink-0 bg-[#0b0d12]">
+        <div className="mt-auto p-4 border-t border-slate-800 shrink-0">
           {collapsed ? (
             <div className="flex flex-col items-center gap-3">
-              <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-violet-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-[0_0_15px_rgba(124,58,237,0.3)] ring-2 ring-white/10">
+              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 text-white font-bold flex items-center justify-center text-sm">
                 {userName.slice(0, 2).toUpperCase()}
               </div>
               <button
                 onClick={() => signOut({ callbackUrl: '/login' })}
-                className="p-2 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                className="p-2 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors active:scale-95"
                 title="ออกจากระบบ"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/[0.02] border border-white/[0.04] shadow-inner">
-              <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-violet-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shrink-0 shadow-[0_0_15px_rgba(124,58,237,0.3)] ring-2 ring-white/10">
+            <div className="bg-slate-900 rounded-xl p-3 border border-slate-800 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shrink-0 shadow-[0_0_15px_rgba(168,85,247,0.3)]">
                 {userName.slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-bold truncate text-white/90">{userName}</p>
-                <p className="text-[10px] text-zinc-500 truncate capitalize mt-0.5">{role}</p>
+                <p className="text-[13px] font-bold truncate text-slate-200">{userName}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] text-slate-500 truncate capitalize">{role}</span>
+                  <span className="bg-gradient-to-r from-amber-400 to-amber-600 text-[10px] text-black font-bold px-2 py-0.5 rounded-full">PRO</span>
+                </div>
               </div>
               <button
                 onClick={() => signOut({ callbackUrl: '/login' })}
-                className="p-2 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+                className="p-2 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0 active:scale-95"
                 title="ออกจากระบบ"
               >
                 <LogOut className="w-4 h-4" />
@@ -303,15 +303,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="min-w-0 flex flex-col pb-24 lg:pb-8 relative z-10">
 
         {/* Desktop Topbar */}
-        <header className="hidden lg:flex min-w-0 items-center justify-between gap-4 px-6 xl:px-8 py-3 border-b border-white/[0.07] bg-[#0b0d12]/95 backdrop-blur-xl sticky top-0 z-30">
+        <header className="hidden lg:flex min-w-0 items-center justify-between gap-4 px-6 xl:px-8 py-3 border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-30">
           <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={() => setCollapsed(!collapsed)}
               className="shrink-0 p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] border border-transparent hover:border-white/[0.08] transition-all flex items-center gap-2 text-xs"
               title={collapsed ? 'ขยายแถบเมนู (Sidebar)' : 'ย่อแถบเมนู (Sidebar)'}
             >
-              <PanelLeft className="w-4 h-4 text-violet-400" />
-              <span className="hidden xl:inline text-[var(--text-muted)] font-medium">
+              <PanelLeft className="w-4 h-4 text-purple-400" />
+              <span className="hidden xl:inline text-slate-500 font-medium">
                 {collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
               </span>
             </button>
@@ -328,7 +328,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <button
               onClick={() => setQuickAddOpen(true)}
-              className="btn btn-primary shrink-0 text-xs py-2 px-3 xl:px-4 flex items-center gap-1.5 rounded-xl"
+              className="bg-gradient-to-r from-purple-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-medium shrink-0 text-xs py-2 px-3 xl:px-4 flex items-center gap-1.5 rounded-xl transition-all shadow-[0_0_15px_rgba(168,85,247,0.4)] active:scale-95 hover:-translate-y-0.5"
             >
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden xl:inline">บันทึกธุรกรรม</span>
