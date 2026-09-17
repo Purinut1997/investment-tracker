@@ -61,8 +61,7 @@ function LoginForm() {
       return
     }
 
-    router.push(params.get('callbackUrl') ?? '/dashboard')
-    router.refresh()
+    window.location.href = params.get('callbackUrl') ?? '/dashboard'
   }
 
   async function handleGoogleLogin() {

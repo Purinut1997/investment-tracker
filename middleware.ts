@@ -26,10 +26,23 @@ export async function middleware(req: NextRequest) {
   if (isPublic) return NextResponse.next()
 
   // Verify JWT session token directly without bundling heavy Node/Prisma modules
-  const token = await getToken({
+  const isSecure =
+    req.nextUrl.protocol === 'https:' ||
+    req.headers.get('x-forwarded-proto') === 'https'
+
+  let token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
+    secureCookie: isSecure,
   })
+
+  if (!token) {
+    token = await getToken({
+      req,
+      secret: process.env.NEXTAUTH_SECRET,
+      secureCookie: !isSecure,
+    })
+  }
 
   // Redirect unauthenticated users to login
   if (!token || !token.id) {
