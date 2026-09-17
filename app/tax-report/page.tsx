@@ -125,7 +125,7 @@ export default function TaxReportPage() {
                     YEAR {y}
                   </option>
                 ))}
-              select>
+              </select>
             </div>
             <button
               onClick={handleExportExcel}
