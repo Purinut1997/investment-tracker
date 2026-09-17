@@ -114,6 +114,15 @@ Last updated: 2026-09-17
   - `/settings`: การ์ดเลือก Theme Style แสดง Color swatches และรายละเอียดชัดเจน
 - **Build Status**: `npm run build` ผ่าน 100% ครบทุก 45 Static/Dynamic routes โดยไม่มี Error หรือ Type Warning ใดๆ
 
+### 12. Phase 11: Usability Audit & Modal Window UX Overhaul ✅
+- **Modal Windows & Popups ("หน้าต่างทั้งหมดในระบบ")**:
+  - **Click Outside to Close (Backdrop Dismissal)**: เพิ่มการคลิกพื้นที่ว่างด้านนอกหน้าต่างเพื่อปิดทันทีในทุก Modal (`QuickAddModal`, `EditTransactionModal`, `CsvImportModal`, `AccountModal`, `PlanPresetModal`, `SuperadminModelModal`, และ `Mobile Drawer`)
+  - **ESC Key Dismissal**: รองรับการกดปุ่ม `Escape` บนคีย์บอร์ดเพื่อปิดหน้าต่างทุกตัว
+  - **Body Scroll Lock**: ล็อกการเลื่อนหน้าจอด้านหลังขณะที่หน้าต่าง Modal เปิดอยู่ ป้องกันปัญหาหน้าจอเลื่อนซ้อนบนมือถือ
+  - **Mobile iOS Bottom Sheet Experience**: ปรับเปลี่ยนฟอร์มหน้าต่างบนมือถือให้ขึ้นมาเป็น Bottom Sheet สไตล์ iOS (`rounded-t-3xl sm:rounded-3xl`) จับถือง่ายขึ้น
+  - **Glassmorphism 2.0 Card Standards**: ปรับเส้นขอบและพื้นหลังหน้าต่างเป็นกระจกฝ้าทรงโค้งมน (`border-white/10 backdrop-blur-2xl`) เข้ากับธีมทั้ง 3 แบบ (Aurora, Minimal, Emerald) ไร้สีฮาร์ดโค้ด
+- **Clearance & Breathing Room**: ขยายระยะขอบด้านล่างของหน้าจอ (`pb-28 md:pb-24`) ทำให้ปุ่มบันทึกด่วน AI (Desktop FAB) ไม่บังตารางหรือปุ่ม Pagination ด้านขวาล่างอีกต่อไป
+
 ---
 
 ## วิธีการรันและทดสอบระบบ
