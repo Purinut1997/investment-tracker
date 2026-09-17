@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
 import {
@@ -42,6 +42,23 @@ export default function AccountsPage() {
     accountType: 'brokerage',
     currency: 'THB',
   })
+
+  // ESC key and body scroll lock for account modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && modalOpen) setModalOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    if (modalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [modalOpen])
 
   function openCreateModal() {
     setEditingAccount(null)
@@ -247,13 +264,21 @@ export default function AccountsPage() {
 
       {/* ── Create / Edit Modal ─────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-[var(--bg-surface-solid)] border border-[var(--border-strong)] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
-              <h3 className="font-bold text-white text-base">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setModalOpen(false)
+          }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+        >
+          <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)]">
+            <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+              <h3 className="font-bold text-white text-base tracking-tight">
                 {editingAccount ? 'แก้ไขบัญชีการเงิน' : 'สร้างบัญชีการเงินใหม่'}
               </h3>
-              <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-elevated)] transition-colors">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -289,10 +314,10 @@ export default function AccountsPage() {
                       <div
                         key={type.value}
                         onClick={() => setFormData({ ...formData, accountType: type.value })}
-                        className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition-all ${
+                        className={`p-3 rounded-2xl border cursor-pointer flex items-center justify-between transition-all ${
                           isSelected
-                            ? 'bg-cyan-500/10 border-cyan-500/40 text-white'
-                            : 'bg-[var(--bg-elevated)]/40 border-[var(--border)] text-[var(--text-secondary)] hover:border-white/15'
+                            ? 'bg-violet-500/15 border-violet-500/40 text-white shadow-sm ring-1 ring-violet-500/30'
+                            : 'bg-white/[0.03] border-white/[0.08] text-[var(--text-secondary)] hover:border-white/15'
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -302,7 +327,7 @@ export default function AccountsPage() {
                             <p className="text-[10px] text-[var(--text-muted)]">{type.desc}</p>
                           </div>
                         </div>
-                        {isSelected && <Check className="w-4 h-4 text-[var(--cyan-400)]" />}
+                        {isSelected && <Check className="w-4 h-4 text-[var(--violet)]" />}
                       </div>
                     )
                   })}

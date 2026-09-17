@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
 import {
@@ -36,6 +36,23 @@ export default function SuperadminSettingsPage() {
     sortOrder: 1,
     notes: '',
   })
+
+  // ESC key and body scroll lock
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && modalOpen) setModalOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    if (modalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [modalOpen])
 
   function openCreateModal() {
     setEditingModel(null)
@@ -267,13 +284,21 @@ export default function SuperadminSettingsPage() {
 
       {/* Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
-              <h3 className="font-bold text-white text-base">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setModalOpen(false)
+          }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+        >
+          <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)]">
+            <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+              <h3 className="font-bold text-white text-base tracking-tight">
                 {editingModel ? 'แก้ไขโมเดล AI' : 'เพิ่มโมเดล AI ใหม่'}
               </h3>
-              <button onClick={() => setModalOpen(false)} className="p-1 rounded-lg text-[var(--text-muted)] hover:text-white">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>

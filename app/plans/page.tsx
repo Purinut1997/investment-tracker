@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
@@ -57,6 +57,23 @@ export default function PlansPage() {
     targetDate: '',
     isDefault: false,
   })
+
+  // ESC key and body scroll lock for plan modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && modalOpen) setModalOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    if (modalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [modalOpen])
 
   function openCreateModal() {
     setEditingPreset(null)
@@ -383,13 +400,21 @@ export default function PlansPage() {
 
       {/* ── Preset Modal ────────────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="bg-[var(--bg-surface-solid)] border border-[var(--border-strong)] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
-              <h3 className="font-bold text-white text-base">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setModalOpen(false)
+          }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+        >
+          <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-lg overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)] flex flex-col max-h-[90vh]">
+            <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+              <h3 className="font-bold text-white text-base tracking-tight">
                 {editingPreset ? 'แก้ไขแผนการลงทุน' : 'สร้างแผนเป้าหมายใหม่'}
               </h3>
-              <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-elevated)] transition-colors">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>

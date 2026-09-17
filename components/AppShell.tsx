@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
@@ -59,6 +59,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen]   = useState(false)
   const [quickAddOpen, setQuickAddOpen]       = useState(false)
   const [collapsed, setCollapsed]             = useState(false)
+
+  // ESC key dismiss for mobile menu and quick add
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false)
+        setQuickAddOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const role = (session?.user as any)?.role || 'USER'
   const isSuperAdminOrAdmin = role === 'SUPERADMIN' || role === 'ADMIN'
@@ -237,7 +249,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── MAIN CONTENT ────────────────────────────────────── */}
-      <div className={`flex-1 flex flex-col min-w-0 pb-20 md:pb-6 relative z-10 transition-all duration-300 ${mainML}`}>
+      <div className={`flex-1 flex flex-col min-w-0 pb-28 md:pb-24 relative z-10 transition-all duration-300 ${mainML}`}>
 
         {/* Desktop Topbar */}
         <header className="hidden md:flex items-center justify-between px-8 py-3.5 border-b border-white/[0.06] bg-white/[0.02] backdrop-blur-xl sticky top-0 z-30">
@@ -299,7 +311,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end">
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setMobileMenuOpen(false)
+            }}
+            className="md:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex flex-col justify-end"
+          >
             <div className="bg-[#0d0a2e]/95 backdrop-blur-2xl border-t border-white/10 rounded-t-3xl max-h-[85vh] overflow-y-auto p-5 space-y-4 animate-slide-up">
               <div className="flex items-center justify-between pb-3 border-b border-white/[0.07]">
                 <div className="flex items-center gap-2.5">

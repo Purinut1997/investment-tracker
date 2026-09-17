@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { QuickAddModal } from '@/components/QuickAddModal'
@@ -531,12 +531,34 @@ function EditTransactionModal({ txn, onClose, onSuccess }: { txn: any; onClose: 
     }
   }
 
+  // ESC key and body scroll lock
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-        <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
-          <h3 className="font-bold text-white text-base">แก้ไขรายการ ({txn.asset?.ticker})</h3>
-          <button onClick={onClose} className="p-1 rounded-lg text-[var(--text-muted)] hover:text-white">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+    >
+      <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)]">
+        <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+          <h3 className="font-bold text-white text-base tracking-tight">แก้ไขรายการ ({txn.asset?.ticker})</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -735,15 +757,37 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
     }
   }
 
+  // ESC key and body scroll lock
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = prev
+    }
+  }, [onClose])
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-[var(--cyan-400)]" />
-            <h3 className="font-bold text-white text-base">นำเข้าข้อมูลจาก CSV</h3>
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+    >
+      <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-lg overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)] flex flex-col max-h-[90vh]">
+        <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+          <div className="flex items-center gap-2.5">
+            <FileSpreadsheet className="w-5 h-5 text-[var(--violet)]" />
+            <h3 className="font-bold text-white text-base tracking-tight">นำเข้าข้อมูลจาก CSV</h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-[var(--text-muted)] hover:text-white">
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>

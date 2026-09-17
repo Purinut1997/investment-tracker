@@ -64,6 +64,20 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
   const taxNum = parseFloat(formData.taxWithheld) || 0
   const totalAmount = (quantityNum * priceNum + feeNum - taxNum).toFixed(2)
 
+  // ESC key dismiss and body scroll lock
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = originalOverflow
+    }
+  }, [onClose])
+
   // AI Parser Handler (Fallback rule-based parser if AI service route not yet active)
   async function handleAIParse(e: React.FormEvent) {
     e.preventDefault()
@@ -219,51 +233,56 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+    >
+      <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-lg overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)] flex flex-col max-h-[92vh]">
         {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-[var(--border)] flex items-center justify-between bg-[var(--bg-elevated)]/40">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-emerald-400 flex items-center justify-center text-black font-bold">
+        <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-violet-500 to-indigo-500 flex items-center justify-center text-white shadow-[0_0_18px_rgba(139,92,246,0.35)]">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">บันทึกธุรกรรมด่วน</h2>
+              <h2 className="text-base font-bold text-white tracking-tight">บันทึกธุรกรรมด่วน</h2>
               <p className="text-xs text-[var(--text-muted)]">Quick Add Transaction</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-white hover:bg-[var(--bg-elevated)] transition-colors"
+            className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-[var(--border)] bg-[var(--bg-base)]">
+        <div className="flex border-b border-white/[0.08] bg-black/20 p-1.5 gap-1.5 mx-4 sm:mx-6 mt-4 rounded-2xl">
           <button
             type="button"
             onClick={() => setTab('manual')}
-            className={`flex-1 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 border-b-2 transition-all ${
+            className={`flex-1 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 rounded-xl transition-all ${
               tab === 'manual'
-                ? 'border-[var(--cyan-400)] text-[var(--cyan-400)] bg-cyan-500/5'
-                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                ? 'bg-white/[0.1] text-white shadow-sm ring-1 ring-white/10'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
             }`}
           >
-            <Layers className="w-4 h-4" />
+            <Layers className="w-4 h-4 text-[var(--violet)]" />
             <span>กรอกฟอร์มมาตรฐาน</span>
           </button>
           <button
             type="button"
             onClick={() => setTab('ai')}
-            className={`flex-1 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 border-b-2 transition-all ${
+            className={`flex-1 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 rounded-xl transition-all ${
               tab === 'ai'
-                ? 'border-[var(--cyan-400)] text-[var(--cyan-400)] bg-cyan-500/5'
-                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                ? 'bg-white/[0.1] text-white shadow-sm ring-1 ring-white/10'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-[var(--cyan-400)]" />
+            <Sparkles className="w-4 h-4 text-[var(--violet)]" />
             <span>พิมพ์ข้อความ / AI สรุป</span>
           </button>
         </div>
@@ -468,7 +487,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
               </div>
 
               {/* Calculated Total Box */}
-              <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-500/25 flex items-center justify-between">
+              <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between">
                 <div>
                   <p className="text-[11px] text-[var(--text-muted)] font-medium">
                     ยอดรวมคำนวณอัตโนมัติ (Total Amount)
@@ -478,7 +497,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-lg font-bold text-[var(--cyan-400)] tabular-nums">
+                  <span className="text-xl font-extrabold text-[var(--violet)] tabular-nums">
                     {isNaN(Number(totalAmount)) ? '0.00' : Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -501,7 +520,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
         {/* Modal Footer */}
         {tab === 'manual' && (
-          <div className="p-4 sm:p-5 border-t border-[var(--border)] bg-[var(--bg-elevated)]/40 flex items-center justify-end gap-3">
+          <div className="p-4 sm:p-5 border-t border-white/[0.08] bg-white/[0.02] flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
