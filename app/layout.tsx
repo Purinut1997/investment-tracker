@@ -1,10 +1,18 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import { Bai_Jamjuree, Manrope } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({
+const baiJamjuree = Bai_Jamjuree({
+  subsets: ['thai', 'latin'],
+  variable: '--font-thai',
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+})
+
+const manrope = Manrope({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-english',
+  weight: ['400', '500', '600', '700', '800'],
   display: 'swap',
 })
 
@@ -47,7 +55,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="th" className={inter.variable} suppressHydrationWarning>
+    <html lang="th" className={`${baiJamjuree.variable} ${manrope.variable}`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
