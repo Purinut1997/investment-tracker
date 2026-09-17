@@ -105,6 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isSuperAdminOrAdmin = role === 'SUPERADMIN' || role === 'ADMIN'
   const userName  = session?.user?.name || session?.user?.email?.split('@')[0] || 'นักลงทุน'
   const userEmail = session?.user?.email || ''
+  const showMarketUtility = pathname === '/dashboard' || pathname.startsWith('/market-watch')
 
   const sidebarW = collapsed ? 'w-[72px]' : 'w-[240px]'
   const shellColumns = collapsed ? '72px minmax(0, 1fr)' : '240px minmax(0, 1fr)'
@@ -317,10 +318,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-3">
 
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live" />
-              <span>Real-Time Market Sync</span>
-            </div>
+            {showMarketUtility && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400 text-xs font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live" />
+                <span>Real-Time Market Sync</span>
+              </div>
+            )}
 
             <button
               onClick={() => setQuickAddOpen(true)}
@@ -359,8 +362,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Ticker Tape */}
-        <TickerTape />
+        {/* Ticker is useful on market-oriented pages, but adds noise to work pages. */}
+        {showMarketUtility && <TickerTape />}
 
         {/* Mobile Drawer */}
         {mobileMenuOpen && (
@@ -501,20 +504,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span>เพิ่มเติม</span>
         </button>
       </nav>
-
-      {/* ── DESKTOP FAB ─────────────────────────────────────── */}
-      <div className="hidden lg:flex fixed bottom-8 right-8 z-40 items-center justify-center group">
-        <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-violet-500 via-indigo-400 to-violet-600 opacity-50 blur-md animate-spin-slow group-hover:opacity-80 transition-opacity" />
-        <button
-          onClick={() => setQuickAddOpen(true)}
-          className="relative flex items-center gap-2.5 px-5 py-3.5 rounded-full bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-bold text-sm shadow-[0_6px_28px_rgba(139,92,246,0.5)] hover:shadow-[0_8px_36px_rgba(167,139,250,0.65)] transition-all hover:scale-105 active:scale-95 shimmer-btn"
-          title="บันทึกธุรกรรมด่วนด้วย AI"
-        >
-          <Plus className="w-5 h-5 stroke-[2.8]" />
-          <span className="tracking-wide">บันทึกด่วน</span>
-          <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-black">AI</span>
-        </button>
-      </div>
 
       {/* ── QUICK ADD MODAL ──────────────────────────────────── */}
       {quickAddOpen && <QuickAddModal onClose={() => setQuickAddOpen(false)} />}
