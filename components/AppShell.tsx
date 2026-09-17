@@ -243,13 +243,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-3 rounded-2xl text-[14px] font-semibold transition-all duration-300 no-underline group relative ${
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-200 no-underline group relative ${
                       active
-                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-[0_4px_20px_-4px_rgba(245,158,11,0.4)] border border-white/10'
+                        ? 'bg-amber-500/[0.10] text-white border border-amber-500/25'
                         : 'text-zinc-400 hover:text-white hover:bg-amber-500/5 border border-transparent'
                     } ${collapsed ? 'justify-center w-12 h-12 px-0 mx-auto' : ''}`}
                   >
-                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-all duration-300 ${active ? 'text-white drop-shadow-md' : 'text-zinc-500 group-hover:text-amber-400'}`} />
+                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-colors duration-200 ${active ? 'text-amber-400' : 'text-zinc-500 group-hover:text-amber-400'}`} />
                     {!collapsed && <span className="truncate">{item.label}</span>}
                     {collapsed && (
                       <span className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-semibold text-white bg-[#151821] border border-white/10 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl z-50">
@@ -340,7 +340,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/[0.04] border-b border-white/[0.06] backdrop-blur-xl">
           <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 p-1.5 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)] p-1.5 flex items-center justify-center">
                 <Image src="/logo.png" alt="Investment Pro" width={32} height={32} className="w-full h-full object-contain brightness-0 invert" />
               </div>
               <span className="font-bold text-white text-[15px] tracking-tight">Investment Pro</span>
@@ -471,16 +471,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         ))}
 
-        {/* Center FAB */}
-        <div className="relative -mt-6">
-          <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-violet-500 to-indigo-400 opacity-60 blur-sm animate-pulse-glow" />
-          <button
-            onClick={() => setQuickAddOpen(true)}
-            className="relative flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-tr from-violet-500 to-indigo-400 text-white shadow-[0_0_20px_rgba(139,92,246,0.5)] transition-transform active:scale-95"
-          >
-            <Plus className="w-6 h-6 stroke-[2.5]" />
-          </button>
-        </div>
+        <button
+          onClick={() => setQuickAddOpen(true)}
+          className="flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-xl text-[10px] font-semibold text-[var(--accent)] border border-[var(--border-accent)] bg-[var(--accent-soft)]"
+          title="เพิ่มรายการ"
+        >
+          <Plus className="w-5 h-5" />
+          <span>เพิ่ม</span>
+        </button>
 
         {[
           { href: '/accounts', icon: Wallet, label: 'บัญชี' },
