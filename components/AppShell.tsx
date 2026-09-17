@@ -303,24 +303,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="min-w-0 flex flex-col pb-28 lg:pb-24 relative z-10">
 
         {/* Desktop Topbar */}
-        <header className="hidden lg:flex items-center justify-between px-8 py-3 border-b border-white/[0.07] bg-[#0b0d12]/95 backdrop-blur-xl sticky top-0 z-30">
-          <div className="flex items-center gap-3">
+        <header className="hidden lg:flex min-w-0 items-center justify-between gap-4 px-6 xl:px-8 py-3 border-b border-white/[0.07] bg-[#0b0d12]/95 backdrop-blur-xl sticky top-0 z-30">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] border border-transparent hover:border-white/[0.08] transition-all flex items-center gap-2 text-xs"
+              className="shrink-0 p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] border border-transparent hover:border-white/[0.08] transition-all flex items-center gap-2 text-xs"
               title={collapsed ? 'ขยายแถบเมนู (Sidebar)' : 'ย่อแถบเมนู (Sidebar)'}
             >
               <PanelLeft className="w-4 h-4 text-violet-400" />
-              <span className="text-[var(--text-muted)] font-medium">
+              <span className="hidden xl:inline text-[var(--text-muted)] font-medium">
                 {collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
               </span>
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="min-w-0 flex items-center justify-end gap-2 xl:gap-3">
 
             {showMarketUtility && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400 text-xs font-medium">
+              <div className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400 text-xs font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-live" />
                 <span>Real-Time Market Sync</span>
               </div>
@@ -328,10 +328,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <button
               onClick={() => setQuickAddOpen(true)}
-              className="btn btn-primary text-xs py-2 px-4 flex items-center gap-1.5 rounded-xl"
+              className="btn btn-primary shrink-0 text-xs py-2 px-3 xl:px-4 flex items-center gap-1.5 rounded-xl"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>บันทึกธุรกรรม</span>
+              <span className="hidden xl:inline">บันทึกธุรกรรม</span>
             </button>
           </div>
         </header>
@@ -448,7 +448,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 w-full max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-10 py-8 sm:py-10">
+        <main className="flex-1 min-w-0 w-full max-w-[1440px] mx-auto overflow-x-clip px-5 sm:px-8 lg:px-10 py-8 sm:py-10">
           {children}
         </main>
       </div>
