@@ -143,8 +143,8 @@ export function TickerTape() {
                   <span
                     className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${
                       isPositive
-                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
-                        : 'bg-rose-500/15 text-rose-400 border border-rose-500/25'
+                        ? 'bg-green-500/10 text-[var(--green-400)] border border-green-500/20'
+                        : 'bg-red-500/10 text-[var(--red-400)] border border-red-500/20'
                     }`}
                   >
                     {isPositive ? (

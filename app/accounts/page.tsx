@@ -175,7 +175,7 @@ export default function AccountsPage() {
           </div>
           <div className="card p-4">
             <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1">
-              <Landmark className="w-3.5 h-3.5 text-emerald-400" />
+              <Landmark className="w-3.5 h-3.5 text-[var(--green-400)]" />
               <span>ธนาคาร & เงินสด</span>
             </p>
             <p className="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums">

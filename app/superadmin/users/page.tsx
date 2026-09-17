@@ -121,7 +121,7 @@ export default function SuperadminUsersPage() {
         )}
         {actionSuccess && (
           <div className="alert alert-success flex items-center gap-2.5 text-xs animate-in fade-in">
-            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle className="w-4 h-4 text-[var(--green-400)] shrink-0" />
             <span className="font-medium">{actionSuccess}</span>
           </div>
         )}
@@ -189,7 +189,7 @@ export default function SuperadminUsersPage() {
                           </td>
                           <td className="py-3.5 px-4 whitespace-nowrap">
                             {u.emailVerified ? (
-                              <span className="inline-flex items-center gap-1 text-emerald-400 text-[11px]">
+                              <span className="inline-flex items-center gap-1 text-[var(--green-400)] text-[11px]">
                                 <CheckCircle className="w-3.5 h-3.5" />
                                 <span>ยืนยันแล้ว</span>
                               </span>
@@ -221,8 +221,8 @@ export default function SuperadminUsersPage() {
                               disabled={isUpdating}
                               className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all ${
                                 u.status === 'active'
-                                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
-                                  : 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
+                                  ? 'bg-emerald-500/10 border-green-500/20 text-[var(--green-400)] hover:bg-green-500/10'
+                                  : 'bg-rose-500/10 border-red-500/20 text-[var(--red-400)] hover:bg-red-500/10'
                               }`}
                             >
                               {u.status === 'active' ? (

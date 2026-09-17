@@ -206,7 +206,7 @@ export default function SuperadminSettingsPage() {
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                             m.tier === 'free'
-                              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                              ? 'bg-green-500/10 border-green-500/20 text-[var(--green-400)]'
                               : 'bg-purple-500/15 border-purple-500/30 text-purple-300'
                           }`}
                         >
@@ -233,7 +233,7 @@ export default function SuperadminSettingsPage() {
                           onClick={() => handleToggleActive(m)}
                           className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1.5 ${
                             m.isActive
-                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                              ? 'bg-emerald-500/10 border-green-500/20 text-[var(--green-400)]'
                               : 'bg-slate-500/10 border-slate-500/30 text-slate-400'
                           }`}
                         >

@@ -26,7 +26,6 @@ import {
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
-import { ThemeToggle } from './ThemeToggle'
 
 interface NavItem {
   label: string
@@ -186,11 +185,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              <ThemeToggle />
               <button
                 onClick={() => signOut({ callbackUrl: '/login' })}
                 title="ออกจากระบบ"
-                className="p-2 rounded-xl text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                className="p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--red-400)] hover:bg-rose-500/10 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -217,7 +215,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="font-bold text-white text-sm tracking-tight">INVESTMENT AI</span>
           </Link>
           <div className="flex items-center gap-2">
-            <ThemeToggle />
             <button
               onClick={() => setQuickAddOpen(true)}
               className="p-2 rounded-xl bg-cyan-500/20 text-[var(--cyan-400)] border border-cyan-500/30 text-xs font-semibold flex items-center gap-1"
@@ -316,7 +313,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
                 <button
                   onClick={() => signOut({ callbackUrl: '/login' })}
-                  className="px-3 py-1.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-medium flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-[var(--red-400)] text-xs font-medium flex items-center gap-1.5"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>ออกจากระบบ</span>

@@ -131,7 +131,7 @@ export default function DashboardPage() {
         {/* 1. HEALTH SCORE GAUGE & AI DIGEST CARD */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Health Score Card with Luxury Glass & Animated SVG Gauge */}
-          <div className="card-luxury p-5 lg:col-span-1 flex flex-col justify-between border-cyan-500/25">
+          <div className="card p-5 lg:col-span-1 flex flex-col justify-between border-cyan-500/25">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
@@ -139,12 +139,12 @@ export default function DashboardPage() {
                   Portfolio Health Score
                 </span>
                 <span
-                  className={`text-xs font-bold px-2.5 py-0.5 rounded-full border shadow-sm ${
+                  className={`text-xs font-bold px-2.5 py-0.5 rounded-sm border ${
                     isHighGrade
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      ? 'bg-green-500/10 text-[var(--emerald-400)] border-green-500/20'
                       : isMidGrade
-                      ? 'bg-cyan-500/20 text-[var(--cyan-400)] border-cyan-500/30'
-                      : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                      ? 'bg-amber-500/10 text-[var(--amber-400)] border-amber-500/20'
+                      : 'bg-red-500/10 text-[var(--red-400)] border-red-500/20'
                   }`}
                 >
                   Grade {healthScore.grade}
@@ -159,18 +159,18 @@ export default function DashboardPage() {
                       <linearGradient id="healthGaugeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         {isHighGrade ? (
                           <>
-                            <stop offset="0%" stopColor="#06b6d4" />
-                            <stop offset="100%" stopColor="#10b981" />
+                            <stop offset="0%" stopColor="var(--emerald-400)" />
+                            <stop offset="100%" stopColor="var(--emerald-500)" />
                           </>
                         ) : isMidGrade ? (
                           <>
-                            <stop offset="0%" stopColor="#06b6d4" />
-                            <stop offset="100%" stopColor="#8b5cf6" />
+                            <stop offset="0%" stopColor="var(--amber-400)" />
+                            <stop offset="100%" stopColor="#f39c12" />
                           </>
                         ) : (
                           <>
-                            <stop offset="0%" stopColor="#f59e0b" />
-                            <stop offset="100%" stopColor="#f43f5e" />
+                            <stop offset="0%" stopColor="var(--red-400)" />
+                            <stop offset="100%" stopColor="var(--red-500)" />
                           </>
                         )}
                       </linearGradient>
@@ -289,7 +289,7 @@ export default function DashboardPage() {
           </div>
 
           {/* AI Weekly Digest Card */}
-          <div className="card-luxury p-5 lg:col-span-2 flex flex-col justify-between border-cyan-500/20 bg-gradient-to-br from-[var(--bg-surface)] via-[var(--bg-surface)] to-cyan-950/25">
+          <div className="card p-5 lg:col-span-2 flex flex-col justify-between border-cyan-500/20 bg-gradient-to-br from-[var(--bg-surface)] via-[var(--bg-surface)] to-cyan-950/25">
             <div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -354,7 +354,7 @@ export default function DashboardPage() {
         {/* 2. SUMMARY METRIC CARDS (Luxury Glassmorphism & Status Glow) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Card 1: Total Value */}
-          <div className="card-luxury p-4 sm:p-5 border-cyan-500/25 shadow-[0_0_20px_rgba(6,182,212,0.06)]">
+          <div className="card p-4 sm:p-5 border-cyan-500/25 shadow-[0_0_20px_rgba(6,182,212,0.06)]">
             <span className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
               <Wallet className="w-3.5 h-3.5 text-[var(--cyan-400)]" />
               มูลค่าพอร์ตรวม ({baseCurrency})
@@ -368,18 +368,18 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 2: Unrealized P&L (Dynamic Glow-Profit / Glow-Loss) */}
-          <div className={`card-luxury p-4 sm:p-5 ${isProfit ? 'glow-profit' : 'glow-loss'}`}>
+          <div className={`card p-4 sm:p-5 ${isProfit ? 'glow-profit' : 'glow-loss'}`}>
             <span className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
               {isProfit ? (
-                <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
+                <ArrowUpRight className="w-3.5 h-3.5 text-[var(--green-400)]" />
               ) : (
-                <ArrowDownRight className="w-3.5 h-3.5 text-rose-400" />
+                <ArrowDownRight className="w-3.5 h-3.5 text-[var(--red-400)]" />
               )}
               กำไร/ขาดทุนที่ยังไม่ขาย
             </span>
             <div
               className={`mt-2 text-xl sm:text-2xl lg:text-3xl font-black tabular-nums tracking-tight ${
-                isProfit ? 'text-emerald-400' : 'text-rose-400'
+                isProfit ? 'text-[var(--green-400)]' : 'text-[var(--red-400)]'
               }`}
             >
               {isProfit ? '+' : ''}฿
@@ -387,7 +387,7 @@ export default function DashboardPage() {
             </div>
             <p
               className={`text-xs font-bold mt-1 tabular-nums ${
-                isProfit ? 'text-emerald-400' : 'text-rose-400'
+                isProfit ? 'text-[var(--green-400)]' : 'text-[var(--red-400)]'
               }`}
             >
               {isProfit ? '+' : ''}
@@ -396,7 +396,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 3: Realized Gain & Dividends */}
-          <div className="card-luxury p-4 sm:p-5 border-amber-500/25">
+          <div className="card p-4 sm:p-5 border-amber-500/25">
             <span className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
               กำไรที่ขายแล้ว / ปันผล
@@ -410,7 +410,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 4: Active Assets Count */}
-          <div className="card-luxury p-4 sm:p-5 border-violet-500/25">
+          <div className="card p-4 sm:p-5 border-violet-500/25">
             <span className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-violet-400" />
               จำนวนสินทรัพย์ที่ถือ
@@ -427,7 +427,7 @@ export default function DashboardPage() {
         {/* 3. CHARTS ROW (Trajectory & Allocation) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Area Chart: Portfolio Growth vs Benchmark */}
-          <div className="card-luxury p-5 lg:col-span-2">
+          <div className="card p-5 lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-white tracking-wide">
@@ -437,7 +437,7 @@ export default function DashboardPage() {
                   เปรียบเทียบผลตอบแทนแบบ Cumulative Return
                 </p>
               </div>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-green-500/10 text-[var(--green-400)] border border-green-500/20">
                 Outperforming
               </span>
             </div>
@@ -495,7 +495,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Donut Chart: Asset Allocation */}
-          <div className="card-luxury p-5 lg:col-span-1 flex flex-col justify-between">
+          <div className="card p-5 lg:col-span-1 flex flex-col justify-between">
             <div>
               <h3 className="text-sm font-bold text-white tracking-wide">
                 สัดส่วนการลงทุน (Allocation)
@@ -568,7 +568,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 4. CURRENT HOLDINGS TABLE (With Micro-Sparklines) */}
-        <div className="card-luxury overflow-hidden">
+        <div className="card overflow-hidden">
           <div className="p-4 sm:p-5 border-b border-[var(--border)] flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold text-white">สินทรัพย์ในพอร์ตปัจจุบัน (Holdings)</h3>
@@ -665,7 +665,7 @@ export default function DashboardPage() {
                         </td>
                         <td
                           className={`py-3.5 px-4 text-right font-bold tabular-nums whitespace-nowrap ${
-                            hProfit ? 'text-emerald-400' : 'text-rose-400'
+                            hProfit ? 'text-[var(--green-400)]' : 'text-[var(--red-400)]'
                           }`}
                         >
                           <div>

@@ -279,7 +279,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
           {successMsg && (
             <div className="alert alert-success flex items-start gap-2 text-xs">
-              <Check className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+              <Check className="w-4 h-4 shrink-0 text-[var(--green-400)] mt-0.5" />
               <span>{successMsg}</span>
             </div>
           )}

@@ -186,7 +186,7 @@ export default function TaxReportPage() {
               <div className="text-xs text-[var(--text-secondary)] space-y-0.5 pt-1 border-t border-[var(--border)]">
                 <div className="flex justify-between">
                   <span>ภาษีหัก ณ ที่จ่ายรวม:</span>
-                  <span className="font-semibold text-rose-400">
+                  <span className="font-semibold text-[var(--red-400)]">
                     -฿{Number(report.dividends.totalTaxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -202,10 +202,10 @@ export default function TaxReportPage() {
             {/* Category 2: Thai SET Capital Gains */}
             <div className="card p-5 space-y-2 border-emerald-500/20 bg-gradient-to-b from-[var(--bg-surface)] to-emerald-950/10">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-[var(--green-400)] uppercase tracking-wider">
                   2. กำไรหุ้นไทย (SET)
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/10 text-[var(--green-400)] border border-green-500/20 font-semibold">
                   ยกเว้นภาษี (Exempt)
                 </span>
               </div>
@@ -324,10 +324,10 @@ export default function TaxReportPage() {
                           <td className="py-3 px-4 text-right text-white tabular-nums">
                             ฿{Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-3 px-4 text-right text-rose-400 tabular-nums">
+                          <td className="py-3 px-4 text-right text-[var(--red-400)] tabular-nums">
                             -฿{Number(item.taxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-3 px-4 text-right font-bold text-emerald-400 tabular-nums">
+                          <td className="py-3 px-4 text-right font-bold text-[var(--green-400)] tabular-nums">
                             ฿{Number(item.amount - item.taxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
@@ -387,7 +387,7 @@ export default function TaxReportPage() {
                             </td>
                             <td
                               className={`py-3 px-4 text-right font-bold tabular-nums ${
-                                isGain ? 'text-emerald-400' : 'text-rose-400'
+                                isGain ? 'text-[var(--green-400)]' : 'text-[var(--red-400)]'
                               }`}
                             >
                               {isGain ? '+' : ''}

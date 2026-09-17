@@ -28,8 +28,8 @@ import {
 import Papa from 'papaparse'
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  BUY: { label: 'ซื้อ (BUY)', color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' },
-  SELL: { label: 'ขาย (SELL)', color: 'text-rose-400', bg: 'bg-rose-500/15 border-rose-500/30' },
+  BUY: { label: 'ซื้อ (BUY)', color: 'text-[var(--green-400)]', bg: 'bg-green-500/10 border-green-500/20' },
+  SELL: { label: 'ขาย (SELL)', color: 'text-[var(--red-400)]', bg: 'bg-red-500/10 border-red-500/20' },
   DIVIDEND: { label: 'ปันผล (DIVIDEND)', color: 'text-amber-400', bg: 'bg-amber-500/15 border-amber-500/30' },
   DEPOSIT: { label: 'ฝากเงิน (DEPOSIT)', color: 'text-cyan-400', bg: 'bg-cyan-500/15 border-cyan-500/30' },
   WITHDRAW: { label: 'ถอนเงิน (WITHDRAW)', color: 'text-purple-400', bg: 'bg-purple-500/15 border-purple-500/30' },
@@ -145,7 +145,7 @@ export default function TransactionsPage() {
           </div>
           <div className="card p-4">
             <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1">
-              <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" />
+              <ArrowDownLeft className="w-3.5 h-3.5 text-[var(--green-400)]" />
               <span>เงินลงทุนเข้า (ซื้อ)</span>
             </p>
             <p className="text-xl sm:text-2xl font-bold text-white mt-1 tabular-nums">
@@ -752,8 +752,8 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
           )}
 
           {result && (
-            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 space-y-1">
-              <p className="font-bold flex items-center gap-1.5 text-emerald-400">
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-green-500/20 text-xs text-emerald-300 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-[var(--green-400)]">
                 <CheckCircle2 className="w-4 h-4" />
                 นำเข้าข้อมูลเสร็จสิ้น
               </p>
@@ -824,7 +824,7 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
                       <tr key={i}>
                         <td className="p-2 text-[var(--text-secondary)]">{r.txnDate.slice(0, 10)}</td>
                         <td className="p-2 font-bold text-white">{r.ticker}</td>
-                        <td className="p-2 text-emerald-400">{r.txnType}</td>
+                        <td className="p-2 text-[var(--green-400)]">{r.txnType}</td>
                         <td className="p-2 text-right">{r.quantity}</td>
                         <td className="p-2 text-right">{r.pricePerUnit}</td>
                       </tr>

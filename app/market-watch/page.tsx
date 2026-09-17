@@ -84,7 +84,7 @@ export default function MarketWatchPage() {
         </div>
 
         {/* Currency Converter Mini-Tool with 180° Flip Swap */}
-        <div className="card-luxury p-5 border-cyan-500/25 relative overflow-hidden">
+        <div className="card p-5 border-cyan-500/25 relative overflow-hidden">
           <div className="flex items-center gap-2 mb-3">
             <ArrowRightLeft className="w-5 h-5 text-[var(--cyan-400)]" />
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">
@@ -172,7 +172,7 @@ export default function MarketWatchPage() {
             <span className="text-xs font-semibold">กำลังเชื่อมต่อข้อมูลตลาดสดระดับสากล...</span>
           </div>
         ) : error ? (
-          <div className="card-luxury p-8 text-center text-rose-400 text-xs">
+          <div className="card p-8 text-center text-[var(--red-400)] text-xs">
             ไม่สามารถเชื่อมต่อ Market Data Provider ได้ในขณะนี้
           </div>
         ) : (
@@ -210,7 +210,7 @@ export default function MarketWatchPage() {
             {/* 3. Thai Stocks */}
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <Landmark className="w-4 h-4 text-emerald-400" />
+                <Landmark className="w-4 h-4 text-[var(--green-400)]" />
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                   หุ้นไทยเด่น (SET Index Leaders)
                 </h3>
@@ -248,7 +248,7 @@ function QuoteCard({ quote }: { quote: any }) {
   const isZero = (quote.changePercent ?? 0) === 0
 
   return (
-    <div className="card-luxury p-4 hover:border-cyan-500/40 transition-all group flex flex-col justify-between relative overflow-hidden">
+    <div className="card p-4 hover:border-cyan-500/40 transition-all group flex flex-col justify-between relative overflow-hidden">
       {/* Top accent light beam on hover */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
@@ -284,8 +284,8 @@ function QuoteCard({ quote }: { quote: any }) {
           <span
             className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-extrabold tabular-nums ${
               isPositive
-                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
-                : 'bg-rose-500/15 text-rose-400 border border-rose-500/25 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+                ? 'bg-green-500/10 text-[var(--green-400)] border border-green-500/20 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                : 'bg-red-500/10 text-[var(--red-400)] border border-red-500/20 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
             }`}
           >
             {isPositive ? (

@@ -120,7 +120,7 @@ export default function SettingsPage() {
             } flex items-center gap-2 text-xs`}
           >
             {msg.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+              <CheckCircle className="w-4 h-4 text-[var(--green-400)] shrink-0" />
             ) : (
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
             )}
@@ -145,7 +145,7 @@ export default function SettingsPage() {
               </div>
 
               {settings?.hasApiKey ? (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-500/10 text-[var(--green-400)] border border-green-500/20 flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5" />
                   <span>เชื่อมต่อคีย์แล้ว</span>
                 </span>

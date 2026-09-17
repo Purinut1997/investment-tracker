@@ -216,7 +216,7 @@ export default function ForecastPage() {
 
             {/* P10 Pessimistic */}
             <div className="card p-4 sm:p-5">
-              <span className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-[var(--red-400)] uppercase tracking-wider">
                 กรณีตลาดแย่ (P10)
               </span>
               <div className="mt-1 text-xl sm:text-2xl font-bold text-rose-300 tabular-nums">
@@ -242,7 +242,7 @@ export default function ForecastPage() {
 
             {/* P90 Optimistic */}
             <div className="card p-4 sm:p-5">
-              <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
+              <span className="text-[11px] font-semibold text-[var(--green-400)] uppercase tracking-wider">
                 กรณีตลาดสดใส (P90)
               </span>
               <div className="mt-1 text-xl sm:text-2xl font-bold text-emerald-300 tabular-nums">

@@ -164,11 +164,11 @@ export default function SuperadminLogsPage() {
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         {att.success ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/10 border border-green-500/20 text-[var(--green-400)]">
                             SUCCESS
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 border border-rose-500/30 text-rose-400">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 border border-red-500/20 text-[var(--red-400)]">
                             FAILED
                           </span>
                         )}

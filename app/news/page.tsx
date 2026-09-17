@@ -162,9 +162,9 @@ export default function NewsPage() {
                         <span
                           className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                             item.sentiment === 'positive'
-                              ? 'bg-emerald-500/15 text-emerald-400'
+                              ? 'bg-green-500/10 text-[var(--green-400)]'
                               : item.sentiment === 'negative'
-                              ? 'bg-rose-500/15 text-rose-400'
+                              ? 'bg-red-500/10 text-[var(--red-400)]'
                               : 'bg-slate-500/15 text-slate-300'
                           }`}
                         >
