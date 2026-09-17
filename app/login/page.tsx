@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { Eye, EyeOff } from 'lucide-react'
 
 const ERROR_MESSAGES: Record<string, string> = {
   OAuthAccountNotLinked: 'อีเมลนี้ลงทะเบียนด้วยวิธีอื่นไว้แล้ว กรุณาใช้วิธีเดิม',
@@ -17,12 +18,23 @@ function LoginForm() {
   const params = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(true)
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
   useEffect(() => {
+    // Load remembered email from localStorage
+    try {
+      const savedEmail = localStorage.getItem('inv_remembered_email')
+      if (savedEmail) {
+        setEmail(savedEmail)
+        setRememberMe(true)
+      }
+    } catch {}
+
     const errorParam = params.get('error')
     const verifiedParam = params.get('verified')
     if (errorParam) {
@@ -37,6 +49,15 @@ function LoginForm() {
     e.preventDefault()
     setError('')
     setLoading(true)
+
+    // Remember or forget email
+    try {
+      if (rememberMe && email.trim()) {
+        localStorage.setItem('inv_remembered_email', email.trim())
+      } else {
+        localStorage.removeItem('inv_remembered_email')
+      }
+    } catch {}
 
     // Get client IP for rate limiting (sent as credential)
     const result = await signIn('credentials', {
@@ -112,6 +133,7 @@ function LoginForm() {
         {/* Google Sign In */}
         <button
           id="btn-google-login"
+          type="button"
           onClick={handleGoogleLogin}
           disabled={googleLoading || loading}
           className="btn btn-secondary btn-full"
@@ -133,24 +155,30 @@ function LoginForm() {
         <div className="divider">หรือ</div>
 
         {/* Email + Password Form */}
-        <form onSubmit={handleCredentialsLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <form
+          onSubmit={handleCredentialsLogin}
+          method="post"
+          autoComplete="on"
+          style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+        >
           <div className="form-group">
             <label htmlFor="email" className="form-label">อีเมล</label>
             <input
               id="email"
+              name="email"
               type="email"
               className="input"
               placeholder="example@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoComplete="email"
+              autoComplete="username email"
             />
           </div>
 
           <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label htmlFor="password" className="form-label">รหัสผ่าน</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <label htmlFor="password" className="form-label" style={{ marginBottom: 0 }}>รหัสผ่าน</label>
               <Link
                 href="/forgot-password"
                 style={{ fontSize: 12, color: 'var(--cyan-400)', textDecoration: 'none' }}
@@ -158,16 +186,72 @@ function LoginForm() {
                 ลืมรหัสผ่าน?
               </Link>
             </div>
-            <input
-              id="password"
-              type="password"
-              className="input"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                className="input"
+                style={{ paddingRight: 40 }}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                tabIndex={-1}
+                aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Remember Me Checkbox */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, marginTop: -2 }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                color: 'var(--text-secondary)',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                name="remember"
+                id="remember-me"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                style={{
+                  accentColor: 'var(--cyan-500)',
+                  width: 16,
+                  height: 16,
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+              />
+              จดจำฉันไว้ในอุปกรณ์นี้
+            </label>
           </div>
 
           <button
@@ -175,7 +259,7 @@ function LoginForm() {
             type="submit"
             disabled={loading || googleLoading}
             className="btn btn-primary btn-full"
-            style={{ marginTop: 4 }}
+            style={{ marginTop: 6 }}
           >
             {loading ? <span className="spinner" /> : null}
             {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}

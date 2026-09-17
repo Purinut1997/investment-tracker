@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
@@ -102,50 +105,123 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <form
+          onSubmit={handleSubmit}
+          method="post"
+          autoComplete="on"
+          style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+        >
           <div className="form-group">
             <label htmlFor="name" className="form-label">ชื่อ-นามสกุล</label>
             <input
-              id="name" type="text" className="input"
+              id="name"
+              name="name"
+              type="text"
+              className="input"
               placeholder="ชื่อของคุณ"
               value={form.name}
               onChange={(e) => update('name', e.target.value)}
-              required autoComplete="name"
+              required
+              autoComplete="name"
             />
           </div>
 
           <div className="form-group">
             <label htmlFor="reg-email" className="form-label">อีเมล</label>
             <input
-              id="reg-email" type="email" className="input"
+              id="reg-email"
+              name="email"
+              type="email"
+              className="input"
               placeholder="example@email.com"
               value={form.email}
               onChange={(e) => update('email', e.target.value)}
-              required autoComplete="email"
+              required
+              autoComplete="username email"
             />
           </div>
 
           <div className="form-group">
             <label htmlFor="reg-password" className="form-label">รหัสผ่าน</label>
-            <input
-              id="reg-password" type="password" className="input"
-              placeholder="อย่างน้อย 8 ตัว (ตัวอักษร + ตัวเลข)"
-              value={form.password}
-              onChange={(e) => update('password', e.target.value)}
-              required autoComplete="new-password"
-            />
-            <span className="form-hint">ต้องมีตัวอักษรและตัวเลขอย่างน้อย 1 ตัว</span>
+            <div style={{ position: 'relative' }}>
+              <input
+                id="reg-password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                className="input"
+                style={{ paddingRight: 40 }}
+                placeholder="อย่างน้อย 8 ตัว (ตัวอักษร + ตัวเลข)"
+                value={form.password}
+                onChange={(e) => update('password', e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                tabIndex={-1}
+                aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <span className="form-hint" style={{ marginTop: 4, display: 'block' }}>
+              ต้องมีตัวอักษรและตัวเลขอย่างน้อย 1 ตัว
+            </span>
           </div>
 
           <div className="form-group">
             <label htmlFor="reg-confirm" className="form-label">ยืนยันรหัสผ่าน</label>
-            <input
-              id="reg-confirm" type="password" className="input"
-              placeholder="พิมพ์รหัสผ่านอีกครั้ง"
-              value={form.confirm}
-              onChange={(e) => update('confirm', e.target.value)}
-              required autoComplete="new-password"
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                id="reg-confirm"
+                name="confirm"
+                type={showConfirm ? 'text' : 'password'}
+                className="input"
+                style={{ paddingRight: 40 }}
+                placeholder="พิมพ์รหัสผ่านอีกครั้ง"
+                value={form.confirm}
+                onChange={(e) => update('confirm', e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm(!showConfirm)}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                tabIndex={-1}
+                aria-label={showConfirm ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+              >
+                {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button
