@@ -154,16 +154,16 @@ export default function DashboardPage() {
         )}
 
         {/* ── ROW 1: KEY METRICS (3 KPIs) ───────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
 
           {/* Card 1: Total Value */}
-          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
+          <Surface className="sm:col-span-2 p-6 sm:p-7 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-6 min-h-[220px]">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">มูลค่าพอร์ตรวม</p>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.08] font-semibold">อัปเดตล่าสุด</span>
             </div>
             <div>
-              <p className="text-3xl sm:text-4xl font-black text-white tabular-nums tracking-tight leading-none">
+              <p className="text-5xl sm:text-6xl font-black text-white tabular-nums tracking-tight leading-none">
                 ฿<CountUp end={totalValue} duration={1.2} separator="," decimals={2} />
               </p>
               <p className="text-xs text-zinc-400 mt-2 font-medium">ต้นทุน ฿{totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
@@ -175,7 +175,7 @@ export default function DashboardPage() {
           </Surface>
 
           {/* Card 2: Unrealized P&L */}
-          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
+          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5 min-h-[220px]">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">กำไร/ขาดทุน (ยังไม่ขาย)</p>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-0.5 ${
@@ -198,7 +198,7 @@ export default function DashboardPage() {
           </Surface>
 
           {/* Card 3: Realized + Dividends */}
-          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
+          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5 min-h-[220px]">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">กำไรขายแล้ว + ปันผล</p>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.08] font-semibold">รับรู้แล้ว</span>
@@ -242,7 +242,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Explicit height guarantees zero layout shift or card overlap */}
+              {totalValue > 0 ? (
               <div className="w-full h-[340px] sm:h-[360px] mt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -266,6 +266,13 @@ export default function DashboardPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+              ) : (
+                <div className="flex min-h-[260px] flex-col items-center justify-center text-center border-t border-white/[0.06] mt-4 pt-6">
+                  <p className="text-sm font-semibold text-white">ยังไม่มีข้อมูลผลตอบแทน</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-2 max-w-sm leading-relaxed">เพิ่มธุรกรรมและรอระบบคำนวณมูลค่าพอร์ต เพื่อดูกราฟผลตอบแทนย้อนหลัง</p>
+                  <Link href="/transactions" className="btn btn-secondary text-xs mt-5">เพิ่มธุรกรรมแรก</Link>
+                </div>
+              )}
             </div>
           </div>
 
