@@ -107,15 +107,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userEmail = session?.user?.email || ''
 
   const sidebarW = collapsed ? 'w-[80px]' : 'w-[280px]'
-  const mainML   = collapsed ? 'lg:ml-[80px]' : 'lg:ml-[280px]'
+  const shellColumns = collapsed ? '80px minmax(0, 1fr)' : '280px minmax(0, 1fr)'
 
   return (
-    <div className="min-h-screen text-[var(--text-primary)] flex relative overflow-x-hidden"
-         style={{ background: 'var(--bg-base)' }}>
+    <div
+      className="min-h-screen text-[var(--text-primary)] flex lg:grid relative overflow-x-clip"
+      style={{ background: 'var(--bg-base)', gridTemplateColumns: shellColumns }}
+    >
 
       {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
       <aside
-        className={`hidden lg:flex flex-col border-r border-white/[0.05] bg-[#090b10] shrink-0 fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
+        className={`hidden lg:flex flex-col border-r border-white/[0.05] bg-[#090b10] shrink-0 sticky top-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
       >
         {/* Brand Header */}
         <div className={`flex flex-col shrink-0 border-b border-white/[0.05] transition-all duration-300 p-4 gap-5`}>
@@ -296,7 +298,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── MAIN CONTENT ────────────────────────────────────── */}
-      <div className={`flex-1 flex flex-col min-w-0 pb-28 lg:pb-24 relative z-10 transition-all duration-300 ${mainML}`}>
+      <div className="min-w-0 flex flex-col pb-28 lg:pb-24 relative z-10">
 
         {/* Desktop Topbar */}
         <header className="hidden lg:flex items-center justify-between px-6 lg:px-8 py-3.5 border-b border-white/[0.08] bg-[#0a0c10]/95 backdrop-blur-xl sticky top-0 z-30">
