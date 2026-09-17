@@ -17,7 +17,6 @@ import {
   Coins,
   DollarSign
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
 
 export default function TaxReportPage() {
   const currentYear = new Date().getFullYear()
@@ -30,8 +29,10 @@ export default function TaxReportPage() {
   const [modelUsed, setModelUsed] = useState<string>('')
 
   // Export to Excel using xlsx package
-  function handleExportExcel() {
+  async function handleExportExcel() {
     if (!report) return
+
+    const XLSX = await import('xlsx')
 
     const wb = XLSX.utils.book_new()
 

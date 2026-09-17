@@ -38,7 +38,7 @@ const DEFAULT_TICKERS: TickerItem[] = [
 
 export function TickerTape() {
   const { data } = useSWR<MarketWatchResponse>('/api/market-watch', {
-    refreshInterval: 60000,
+    refreshInterval: 120000,
     revalidateOnFocus: false,
   })
 
@@ -108,7 +108,7 @@ export function TickerTape() {
   }, [data])
 
   // Duplicate list to achieve a seamless continuous infinite scroll
-  const duplicated = [...items, ...items, ...items]
+  const duplicated = [...items, ...items]
 
   return (
     <div className="w-full h-8 relative overflow-hidden bg-[#090a0f]/95 backdrop-blur-md border-b border-white/[0.06] text-xs select-none z-20">

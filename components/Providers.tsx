@@ -13,6 +13,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
             return res.json()
           }),
           revalidateOnFocus: false,
+          dedupingInterval: 10000,
+          errorRetryCount: 2,
         }}
       >
         {children}
