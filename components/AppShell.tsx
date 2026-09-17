@@ -21,8 +21,6 @@ import {
   X,
   Plus,
   Sparkles,
-  ChevronLeft,
-  ChevronRight,
   PanelLeft,
   PanelLeftClose,
 } from 'lucide-react'
@@ -103,13 +101,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const role = (session?.user as any)?.role || 'USER'
+  const role = (session?.user as { role?: string } | undefined)?.role || 'USER'
   const isSuperAdminOrAdmin = role === 'SUPERADMIN' || role === 'ADMIN'
   const userName  = session?.user?.name || session?.user?.email?.split('@')[0] || 'นักลงทุน'
   const userEmail = session?.user?.email || ''
 
   const sidebarW = collapsed ? 'w-[80px]' : 'w-[280px]'
-  const mainML   = collapsed ? 'md:ml-[80px]' : 'md:ml-[280px]'
+  const mainML   = collapsed ? 'lg:ml-[80px]' : 'lg:ml-[280px]'
 
   return (
     <div className="min-h-screen text-[var(--text-primary)] flex relative overflow-x-hidden"
@@ -117,7 +115,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
       <aside
-        className={`hidden md:flex flex-col border-r border-white/[0.05] bg-[#090b10] shrink-0 fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
+        className={`hidden lg:flex flex-col border-r border-white/[0.05] bg-[#090b10] shrink-0 fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
       >
         {/* Brand Header */}
         <div className={`flex flex-col shrink-0 border-b border-white/[0.05] transition-all duration-300 p-4 gap-5`}>
@@ -298,10 +296,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── MAIN CONTENT ────────────────────────────────────── */}
-      <div className={`flex-1 flex flex-col min-w-0 pb-28 md:pb-24 relative z-10 transition-all duration-300 ${mainML}`}>
+      <div className={`flex-1 flex flex-col min-w-0 pb-28 lg:pb-24 relative z-10 transition-all duration-300 ${mainML}`}>
 
         {/* Desktop Topbar */}
-        <header className="hidden md:flex items-center justify-between px-6 lg:px-8 py-3.5 border-b border-white/[0.08] bg-[#0a0c10]/95 backdrop-blur-xl sticky top-0 z-30">
+        <header className="hidden lg:flex items-center justify-between px-6 lg:px-8 py-3.5 border-b border-white/[0.08] bg-[#0a0c10]/95 backdrop-blur-xl sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCollapsed(!collapsed)}
@@ -333,7 +331,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Mobile Header */}
-        <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/[0.04] border-b border-white/[0.06] backdrop-blur-xl">
+        <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/[0.04] border-b border-white/[0.06] backdrop-blur-xl">
           <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 p-1.5 flex items-center justify-center">
@@ -368,7 +366,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={(e) => {
               if (e.target === e.currentTarget) setMobileMenuOpen(false)
             }}
-            className="md:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex flex-col justify-end"
+            className="lg:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex flex-col justify-end"
           >
             <div className="bg-[#0d0a2e]/95 backdrop-blur-2xl border-t border-white/10 rounded-t-3xl max-h-[85vh] overflow-y-auto p-5 space-y-4 animate-slide-up">
               <div className="flex items-center justify-between pb-3 border-b border-white/[0.07]">
@@ -450,7 +448,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── MOBILE BOTTOM NAV ───────────────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/[0.04] border-t border-white/[0.07] backdrop-blur-2xl px-2 py-1.5 flex justify-around items-center">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/[0.04] border-t border-white/[0.07] backdrop-blur-2xl px-2 py-1.5 flex justify-around items-center">
         {[
           { href: '/dashboard',    icon: LayoutDashboard, label: 'แดชบอร์ด' },
           { href: '/transactions', icon: ArrowLeftRight,   label: 'ธุรกรรม' },
@@ -503,7 +501,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       {/* ── DESKTOP FAB ─────────────────────────────────────── */}
-      <div className="hidden md:flex fixed bottom-8 right-8 z-40 items-center justify-center group">
+      <div className="hidden lg:flex fixed bottom-8 right-8 z-40 items-center justify-center group">
         <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-violet-500 via-indigo-400 to-violet-600 opacity-50 blur-md animate-spin-slow group-hover:opacity-80 transition-opacity" />
         <button
           onClick={() => setQuickAddOpen(true)}
