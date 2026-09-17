@@ -23,6 +23,8 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  PanelLeft,
+  PanelLeftClose,
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
@@ -77,8 +79,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userName  = session?.user?.name || session?.user?.email?.split('@')[0] || 'นักลงทุน'
   const userEmail = session?.user?.email || ''
 
-  const sidebarW = collapsed ? 'w-[68px]' : 'w-60'
-  const mainML   = collapsed ? 'md:ml-[68px]' : 'md:ml-60'
+  const sidebarW = collapsed ? 'w-[72px]' : 'w-64'
+  const mainML   = collapsed ? 'md:ml-[72px]' : 'md:ml-64'
 
   return (
     <div className="min-h-screen text-[var(--text-primary)] flex relative overflow-x-hidden"
@@ -93,19 +95,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
       <aside
-        className={`hidden md:flex flex-col ${sidebarW} border-r border-white/[0.07] bg-white/[0.03] backdrop-blur-2xl shrink-0 fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-in-out overflow-hidden`}
+        className={`hidden md:flex flex-col ${sidebarW} border-r border-white/[0.08] bg-[#0c0e14]/95 backdrop-blur-2xl shrink-0 fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-in-out`}
       >
         {/* Brand Header */}
-        <div className="flex items-center justify-between px-4 py-5 border-b border-white/[0.07] shrink-0">
-          <Link href="/dashboard" className="flex items-center gap-3 no-underline min-w-0 overflow-hidden">
-            <div className="w-9 h-9 rounded-2xl bg-white/95 p-1 shrink-0 flex items-center justify-center shadow-[0_0_16px_rgba(139,92,246,0.35)]">
+        <div className={`flex items-center shrink-0 border-b border-white/[0.08] transition-all duration-300 ${
+          collapsed ? 'flex-col justify-center py-4 px-2 gap-3' : 'justify-between px-4 py-4'
+        }`}>
+          <Link href="/dashboard" className="flex items-center gap-3 no-underline min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-white/95 p-1 shrink-0 flex items-center justify-center shadow-[0_0_20px_rgba(129,140,248,0.25)]">
               <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain" />
             </div>
             {!collapsed && (
               <div className="min-w-0 overflow-hidden">
                 <div className="font-bold text-white text-sm tracking-tight flex items-center gap-1.5 whitespace-nowrap">
                   INVESTMENT
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-[var(--violet)] border border-violet-500/30 font-semibold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 font-semibold">
                     AI
                   </span>
                 </div>
@@ -119,18 +123,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Collapse toggle */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--violet)] hover:bg-white/[0.06] transition-colors"
-            title={collapsed ? 'ขยาย Sidebar' : 'ย่อ Sidebar'}
+            className={`rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] transition-colors ${
+              collapsed ? 'w-8 h-8 bg-white/[0.04] border border-white/[0.08]' : 'w-7 h-7'
+            }`}
+            title={collapsed ? 'ขยายแถบเมนู (Sidebar)' : 'ย่อแถบเมนู (Sidebar)'}
           >
             {collapsed
-              ? <ChevronRight className="w-3.5 h-3.5" />
-              : <ChevronLeft  className="w-3.5 h-3.5" />
+              ? <PanelLeft className="w-4 h-4 text-violet-400" />
+              : <PanelLeftClose className="w-4 h-4" />
             }
           </button>
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-4 space-y-1">
+        <div className="flex-1 overflow-y-auto overflow-x-visible px-2 py-4 space-y-1">
           {!collapsed && (
             <p className="px-3 text-[10px] font-semibold tracking-widest text-[var(--text-muted)] uppercase mb-3">
               เมนูหลัก
@@ -144,19 +150,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                title={collapsed ? item.label : undefined}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 no-underline group relative ${
                   active
                     ? 'nav-pill-active text-white'
                     : 'text-[var(--text-secondary)] hover:text-white hover:bg-white/[0.05]'
                 } ${collapsed ? 'justify-center' : ''}`}
               >
-                <Icon className={`w-4 h-4 shrink-0 transition-colors ${active ? 'text-[var(--violet)]' : 'text-[var(--text-muted)] group-hover:text-[var(--violet)]'}`} />
+                <Icon className={`w-4 h-4 shrink-0 transition-colors ${active ? 'text-violet-400' : 'text-[var(--text-muted)] group-hover:text-violet-400'}`} />
                 {!collapsed && (
                   <>
                     <span className="truncate">{item.label}</span>
                     {item.badge && (
-                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-[var(--violet)] border border-violet-500/25 font-bold shrink-0">
+                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/25 font-bold shrink-0">
                         {item.badge}
                       </span>
                     )}
@@ -164,9 +169,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
                 {/* Collapsed tooltip */}
                 {collapsed && (
-                  <span className="absolute left-full ml-3 px-2.5 py-1.5 text-xs font-medium text-white bg-[#0d0a2e] border border-white/10 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-lg z-50">
+                  <span className="absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-semibold text-white bg-[#151821] border border-white/15 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl z-50">
                     {item.label}
-                    {item.badge && <span className="ml-1.5 text-[var(--violet)]">• {item.badge}</span>}
+                    {item.badge && <span className="ml-1.5 text-violet-400 font-bold">• {item.badge}</span>}
                   </span>
                 )}
               </Link>
@@ -175,7 +180,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Admin section */}
           {isSuperAdminOrAdmin && (
-            <div className={`pt-3 border-t border-white/[0.06] mt-3 space-y-1 ${collapsed ? '' : ''}`}>
+            <div className={`pt-3 border-t border-white/[0.06] mt-3 space-y-1`}>
               {!collapsed && (
                 <p className="px-3 text-[10px] font-semibold tracking-widest text-amber-400/70 uppercase mb-2">
                   ผู้ดูแลระบบ
@@ -188,7 +193,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    title={collapsed ? item.label : undefined}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 no-underline group relative ${
                       active
                         ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
@@ -198,7 +202,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-amber-400' : 'text-[var(--text-muted)]'}`} />
                     {!collapsed && <span className="truncate">{item.label}</span>}
                     {collapsed && (
-                      <span className="absolute left-full ml-3 px-2.5 py-1.5 text-xs font-medium text-white bg-[#0d0a2e] border border-white/10 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-lg z-50">
+                      <span className="absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-semibold text-white bg-[#151821] border border-white/15 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl z-50">
                         {item.label}
                       </span>
                     )}
@@ -210,10 +214,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* User Footer */}
-        <div className="p-3 border-t border-white/[0.07] shrink-0">
+        <div className="p-3 border-t border-white/[0.08] shrink-0">
           {collapsed ? (
             <div className="flex flex-col items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white font-bold flex items-center justify-center text-xs">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-sm">
                 {userName.slice(0, 2).toUpperCase()}
               </div>
               <button
@@ -252,13 +256,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className={`flex-1 flex flex-col min-w-0 pb-28 md:pb-24 relative z-10 transition-all duration-300 ${mainML}`}>
 
         {/* Desktop Topbar */}
-        <header className="hidden md:flex items-center justify-between px-8 py-3.5 border-b border-white/[0.06] bg-white/[0.02] backdrop-blur-xl sticky top-0 z-30">
+        <header className="hidden md:flex items-center justify-between px-6 lg:px-8 py-3.5 border-b border-white/[0.08] bg-[#0a0c10]/95 backdrop-blur-xl sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors md:hidden"
+              className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] border border-transparent hover:border-white/[0.08] transition-all flex items-center gap-2 text-xs"
+              title={collapsed ? 'ขยายแถบเมนู (Sidebar)' : 'ย่อแถบเมนู (Sidebar)'}
             >
-              <Menu className="w-5 h-5" />
+              <PanelLeft className="w-4 h-4 text-violet-400" />
+              <span className="text-[var(--text-muted)] font-medium">
+                {collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
+              </span>
             </button>
           </div>
 
@@ -392,7 +400,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 w-full max-w-7xl mx-auto p-5 sm:p-7 lg:p-9">
+        <main className="flex-1 w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8">
           {children}
         </main>
       </div>

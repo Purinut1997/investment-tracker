@@ -123,6 +123,26 @@ Last updated: 2026-09-17
   - **Glassmorphism 2.0 Card Standards**: ปรับเส้นขอบและพื้นหลังหน้าต่างเป็นกระจกฝ้าทรงโค้งมน (`border-white/10 backdrop-blur-2xl`) เข้ากับธีมทั้ง 3 แบบ (Aurora, Minimal, Emerald) ไร้สีฮาร์ดโค้ด
 - **Clearance & Breathing Room**: ขยายระยะขอบด้านล่างของหน้าจอ (`pb-28 md:pb-24`) ทำให้ปุ่มบันทึกด่วน AI (Desktop FAB) ไม่บังตารางหรือปุ่ม Pagination ด้านขวาล่างอีกต่อไป
 
+### 13. Phase 12: Codex & Linear Engineering Dark Architecture Overhaul ✅
+- **Codex Design Tokens (`app/globals.css`)**:
+  - สีพื้นหลัง Deep Charcoal Slate Canvas (`#090a0f`), Surface (`#111319`), Solid (`#151821`), Elevated (`#1a1d28`)
+  - คมชัดระดับ Retina ด้วย 1px Crisp Borders (`rgba(255,255,255,0.08)`) และ Typography Contrast สีขาวบริสุทธิ์ `#ffffff` ตัดกับ Slate Text `#94a3b8`
+  - ปิดกั้นแสงสีม่วงฟุ้ง (`aurora-orb`) ขนาด 800px ทั้งหมด และแทนที่ด้วย Linear-style subtle ambient glow
+- **Collapsible Sidebar Fix & 100% Usability (`components/AppShell.tsx`)**:
+  - ขยาย Sidebar Rail ตอนพับเป็น `w-[72px]` เพื่อให้มีพื้นที่เหลือเพียงพอ
+  - ออกแบบ Header ของ Sidebar ใหม่: เมื่อพับแถบเมนู โลโก้และปุ่มขยาย (`PanelLeft`) จะจัดเรียงในแนวตั้งกึ่งกลาง แสดงผลชัดเจน 100% ไม่หลุดขอบหน้าจอ
+  - เพิ่มปุ่มขยาย/ย่อเมนูใน Desktop Topbar (`PanelLeft`) เพื่อให้ผู้ใช้เปิด-ปิด Sidebar ได้ตลอดเวลา
+  - Floating Hover Tooltips แสดงชื่อเมนูและ Badge อย่างชัดเจนเมื่อเอาเมาส์ไปชี้ไอคอนในโหมดพับ
+- **Fluid Screen Fit ("แก้ปัญหาหน้าต่างไม่พอดี")**:
+  - ขยาย Layout Container จากเดิมที่ล็อกไว้ที่ `max-w-7xl` (1280px) เป็น `max-w-[1720px]` พร้อม Responsive Padding (`px-4 sm:px-6 lg:px-8 xl:px-10`)
+  - ใช้พื้นที่จอกว้าง/Ultrawide ได้อย่างสมดุลเต็มจอ กำจัดพื้นที่ว่างสีดำขนาดใหญ่ด้านขวาอย่างสิ้นเชิง
+- **Dashboard Layout & Recharts Overlap Fix (`app/dashboard/page.tsx`)**:
+  - เปลี่ยน Wrapper จาก `space-y-8` เป็น `flex flex-col gap-6 sm:gap-8 w-full` เพื่อแก้ปัญหาการทับซ้อนกันใน Tailwind CSS v4
+  - กำหนดความสูงแน่นอนให้กับ Recharts Area Chart (`h-[340px] sm:h-[360px]`) ป้องกันไม่ให้กราฟทับซ้อนกับการ์ดสรุป KPI ด้านบน
+  - ปรับการ์ดสรุปข้อมูลทั้งหมด (Row 1 KPI, Row 2 Area Chart & AI Digest, Row 3 Holdings Table) เป็น Codex Solid Surface Cards ป้องกันปัญหาการมองทะลุ (Scroll Bleed-through)
+- **Non-Bleeding Topbar & Ticker Tape (`components/TickerTape.tsx`)**:
+  - เสริมความทึบของแถบด้านบน (`bg-[#0a0c10]/95` และ `bg-[#090a0f]/95`) พร้อม Backdrop Blur เพื่อให้เวลาเลื่อนหน้าจอ ตัวหนังสือและกราฟด้านล่างจะไม่ทะลุผ่านแถบด้านบน
+
 ---
 
 ## วิธีการรันและทดสอบระบบ

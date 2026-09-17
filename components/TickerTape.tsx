@@ -97,9 +97,9 @@ export function TickerTape() {
   const duplicated = [...items, ...items, ...items]
 
   return (
-    <div className="w-full relative overflow-hidden bg-[var(--bg-surface)]/80 backdrop-blur-md border-b border-[var(--border)] py-2 text-xs select-none z-20">
+    <div className="w-full relative overflow-hidden bg-[#090a0f]/95 backdrop-blur-md border-b border-white/[0.06] py-2 text-xs select-none z-20">
       {/* Live Badge Anchor */}
-      <div className="absolute left-0 top-0 bottom-0 z-30 px-3 sm:px-4 bg-[var(--bg-surface)] flex items-center gap-1.5 border-r border-[var(--border)] shadow-[4px_0_12px_rgba(0,0,0,0.3)]">
+      <div className="absolute left-0 top-0 bottom-0 z-30 px-3 sm:px-4 bg-[#090a0f] flex items-center gap-1.5 border-r border-white/[0.06] shadow-[4px_0_12px_rgba(0,0,0,0.5)]">
         <span className="relative flex h-2 w-2">
           <span className="pulse-live absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
