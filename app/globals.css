@@ -80,11 +80,33 @@ body {
   font-family: var(--font-ui);
   background: var(--bg-base);
   color: var(--text-primary);
-  line-height: 1.6;
+  line-height: 1.55;
   min-height: 100dvh;
   overflow-x: hidden;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  text-wrap: pretty;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.25;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 /* ─── Scrollbar ─────────────────────────────────────────────── */
@@ -180,7 +202,7 @@ body {
   justify-content: center;
   gap: 8px;
   padding: 10px 20px;
-  min-height: 42px;
+  min-height: 44px;
   border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 600;
@@ -226,7 +248,7 @@ body {
 @utility input {
   width: 100%;
   padding: 10px 14px;
-  min-height: 42px;
+  min-height: 44px;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   border: 1px solid var(--border);
@@ -244,7 +266,7 @@ body {
 @utility select {
   width: 100%;
   padding: 10px 14px;
-  min-height: 42px;
+  min-height: 44px;
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   border: 1px solid var(--border);

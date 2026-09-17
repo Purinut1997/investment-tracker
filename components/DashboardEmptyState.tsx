@@ -44,25 +44,25 @@ export function DashboardEmptyState({ hasAccounts, hasHoldings, hasPlans }: Dash
 
   return (
     <AppShell>
-      <div className="w-full max-w-4xl mx-auto py-4 sm:py-8">
-        <div className="grid lg:grid-cols-[0.86fr_1.14fr] gap-8 lg:gap-14 items-start">
-          <div className="pt-2 lg:pt-10">
-            <div className="w-12 h-12 rounded-2xl bg-[var(--accent-soft)] border border-[var(--border-accent)] flex items-center justify-center mb-6">
+      <div className="w-full max-w-5xl mx-auto py-2 sm:py-6">
+        <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-10 lg:gap-16 items-start">
+          <div className="pt-2 lg:pt-8">
+            <div className="w-11 h-11 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)] flex items-center justify-center mb-5">
               <Wallet className="w-6 h-6 text-[var(--accent)]" />
             </div>
             <p className="text-xs font-semibold tracking-[0.16em] uppercase text-[var(--accent)] mb-3">Investment Pro</p>
-            <h1 className="text-3xl sm:text-4xl font-semibold text-white tracking-tight leading-tight mb-4">เริ่มจัดการพอร์ตของคุณ</h1>
-            <p className="text-sm text-[var(--text-secondary)] max-w-md leading-relaxed">ตั้งค่าครั้งเดียว แล้วใช้พื้นที่นี้ติดตามมูลค่า ผลตอบแทน และแผนการลงทุนของคุณในมุมมองเดียว</p>
-            <div className="mt-8 pt-5 border-t border-white/[0.08] text-xs text-[var(--text-muted)] flex items-center gap-2">
+            <h1 className="text-3xl sm:text-[2.15rem] font-semibold text-white tracking-tight leading-[1.2] mb-4">เริ่มจัดการพอร์ตของคุณ</h1>
+            <p className="text-[15px] text-[var(--text-secondary)] max-w-lg leading-[1.65]">ตั้งค่าครั้งเดียว แล้วใช้พื้นที่นี้ติดตามมูลค่า ผลตอบแทน และแผนการลงทุนของคุณในมุมมองเดียว</p>
+            <div className="mt-7 pt-5 border-t border-white/[0.08] text-xs text-[var(--text-muted)] flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-[var(--positive)]" /> ข้อมูลของคุณจะถูกใช้เพื่อคำนวณพอร์ตส่วนตัว
             </div>
           </div>
 
           <div className="w-full space-y-3">
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm font-semibold text-white">ตั้งค่าเริ่มต้น</p>
-                <p className="text-xs text-[var(--text-muted)] mt-1">ทำตาม 3 ขั้นตอนเพื่อปลดล็อก dashboard</p>
+                <p className="text-[15px] font-semibold text-white">ตั้งค่าเริ่มต้น</p>
+                <p className="text-[13px] text-[var(--text-muted)] mt-1">ทำตาม 3 ขั้นตอนเพื่อปลดล็อก dashboard</p>
               </div>
               <span className="text-xs tabular-nums text-[var(--text-muted)]">{completedCount}/3</span>
             </div>
@@ -72,15 +72,15 @@ export function DashboardEmptyState({ hasAccounts, hasHoldings, hasPlans }: Dash
               const isLocked = activeIndex !== -1 && index > activeIndex
               const Icon = step.icon
               return (
-                <div key={step.title} className={`p-5 rounded-2xl border transition-colors duration-200 ${step.done ? 'bg-emerald-500/[0.04] border-emerald-500/20' : isActive ? 'bg-[var(--bg-elevated)] border-[var(--border-accent)]' : 'bg-[var(--bg-surface)] border-white/[0.06] opacity-55'}`}>
-                  <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
+                <div key={step.title} className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 ${step.done ? 'bg-emerald-500/[0.04] border-emerald-500/20' : isActive ? 'bg-[var(--bg-elevated)] border-[var(--border-accent)]' : 'bg-[var(--bg-surface)] border-white/[0.06] opacity-55'}`}>
+                  <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-3">
                     <div className="flex items-center gap-4">
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${step.done ? 'bg-emerald-500/15 text-emerald-400' : isActive ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'bg-white/5 text-zinc-500'}`}>
                         {step.done ? <CheckCircle2 className="w-5 h-5" /> : isLocked ? <LockKeyhole className="w-4 h-4" /> : <Icon className="w-5 h-5" />}
                       </div>
                       <div>
                         <h3 className={`font-semibold ${step.done ? 'text-emerald-400' : isActive ? 'text-white' : 'text-zinc-400'}`}>{step.title}</h3>
-                        <p className="text-xs text-zinc-500 mt-1">{step.description}</p>
+                        <p className="text-[13px] text-zinc-500 mt-1 leading-[1.45]">{step.description}</p>
                       </div>
                     </div>
                     {!step.done && isActive && step.action}
