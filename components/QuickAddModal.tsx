@@ -12,6 +12,7 @@ import {
   Layers,
   Wallet,
   HelpCircle,
+  Plus
 } from 'lucide-react'
 
 type TransactionType = 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'FEE'
