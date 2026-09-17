@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
-import { QuickAddModal } from '@/components/QuickAddModal'
 import { PageHeader } from '@/components/PageHeader'
+import { QuickAddModal } from '@/components/QuickAddModal'
 import {
   ArrowLeftRight,
   Plus,
@@ -12,24 +12,26 @@ import {
   Search,
   Trash2,
   Edit2,
-  Wallet,
   AlertCircle,
-  CheckCircle2,
   Loader2,
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
-  X
+  X,
+  Filter,
+  DollarSign,
+  TrendingDown,
+  Coins
 } from 'lucide-react'
 import Papa from 'papaparse'
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  BUY: { label: 'BUY', color: 'text-zinc-300', bg: 'bg-white/5 border-white/10' },
-  SELL: { label: 'SELL', color: 'text-zinc-300', bg: 'bg-white/5 border-white/10' },
-  DIVIDEND: { label: 'DIVIDEND', color: 'text-zinc-300', bg: 'bg-white/5 border-white/10' },
-  DEPOSIT: { label: 'DEPOSIT', color: 'text-zinc-300', bg: 'bg-white/5 border-white/10' },
-  WITHDRAW: { label: 'WITHDRAW', color: 'text-zinc-300', bg: 'bg-white/5 border-white/10' },
-  FEE: { label: 'FEE', color: 'text-zinc-500', bg: 'bg-transparent border-white/5' },
+  BUY: { label: 'BUY', color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' },
+  SELL: { label: 'SELL', color: 'text-rose-400', bg: 'bg-rose-500/15 border-rose-500/30' },
+  DIVIDEND: { label: 'DIVIDEND', color: 'text-cyan-400', bg: 'bg-cyan-500/15 border-cyan-500/30' },
+  DEPOSIT: { label: 'DEPOSIT', color: 'text-indigo-400', bg: 'bg-indigo-500/15 border-indigo-500/30' },
+  WITHDRAW: { label: 'WITHDRAW', color: 'text-amber-400', bg: 'bg-amber-500/15 border-amber-500/30' },
+  FEE: { label: 'FEE', color: 'text-slate-400', bg: 'bg-slate-800/80 border-slate-700/80' },
 }
 
 export default function TransactionsPage() {
@@ -56,6 +58,7 @@ export default function TransactionsPage() {
   const { data: txnData, isLoading, error } = useSWR(`/api/transactions?${queryParams.toString()}`)
   const transactions = txnData?.transactions ?? []
   const pagination = txnData?.pagination ?? { page: 1, totalPages: 1, total: 0 }
+  const hasAnyTransactions = pagination.total > 0
 
   const filteredTransactions = transactions.filter((t: any) => {
     if (!search.trim()) return true
@@ -78,12 +81,14 @@ export default function TransactionsPage() {
     .reduce((sum: number, t: any) => sum + Number(t.fee || 0), 0)
 
   async function handleDelete(id: string) {
-    if (!confirm('ยืนยันลบรายการนี้?')) return
+    if (!confirm('ยืนยันลบรายการนี้? การลบจะมีผลต่อการคำนวณต้นทุนพอร์ต')) return
     setDeletingId(id)
     try {
       const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete')
       mutate(`/api/transactions?${queryParams.toString()}`)
+      mutate('/api/portfolio/summary')
+      mutate('/api/portfolio/holdings')
     } catch (err: any) {
       alert(err.message || 'ลบรายการไม่สำเร็จ')
     } finally {
@@ -92,189 +97,236 @@ export default function TransactionsPage() {
   }
 
   // Common UI styles
-  const inputClass = "bg-[#050505] border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-zinc-500 transition-colors w-full"
+  const inputClass = "bg-slate-900/80 border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors w-full"
   
   return (
     <AppShell>
-      <div className="space-y-6 max-w-[1600px] mx-auto w-full">
+      <div className="space-y-6 max-w-[1600px] mx-auto w-full animate-fade-in">
         
-        {/* Header (Minimalist) */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">รายการธุรกรรม</h1>
-            <p className="text-sm text-zinc-500 mt-1">ประวัติการซื้อขายและกระแสเงินสดทั้งหมด</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setCsvModalOpen(true)} className="bg-[#0a0a0a] border border-white/10 hover:bg-white/5 text-zinc-300 px-4 py-2 rounded-lg font-medium text-xs flex items-center gap-2 transition-colors">
-              <Upload className="w-4 h-4" /> CSV
-            </button>
-            <button onClick={() => setQuickAddOpen(true)} className="bg-white text-black hover:bg-zinc-200 px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 transition-colors">
-              <Plus className="w-4 h-4" /> เพิ่มธุรกรรม
-            </button>
-          </div>
-        </div>
+        {/* Header */}
+        <PageHeader
+          eyebrow="Transactions History"
+          title="ประวัติรายการธุรกรรม"
+          description="บันทึกและตรวจสอบประวัติการซื้อขาย เงินปันผล ค่าธรรมเนียม และกระแสเงินสดทั้งหมดในพอร์ต"
+          action={
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => setCsvModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-[#181C25] hover:bg-[#202532] border border-white/[0.1] transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                <span>นำเข้า CSV</span>
+              </button>
+              <button
+                onClick={() => setQuickAddOpen(true)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/25 active:scale-[0.98] cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>เพิ่มธุรกรรม</span>
+              </button>
+            </div>
+          }
+        />
 
-        {/* Toolbar (Summary + Filters) */}
-        <div className="flex flex-col xl:flex-row gap-5 items-start xl:items-center justify-between p-5 rounded-3xl bg-[#0a0a0a] border border-white/5">
-          <div className="flex items-center gap-6 overflow-x-auto w-full xl:w-auto pb-2 xl:pb-0 scrollbar-hide">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">ลงทุนรวม</span>
-              <span className="text-sm font-bold text-white tabular-nums font-mono mt-0.5">
+        {/* KPI Summary Strip */}
+        {hasAnyTransactions && <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="glass-panel p-4 sm:p-5 rounded-2xl flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">เงินลงทุนสะสม (BUY)</span>
+              <p className="text-xl sm:text-2xl font-bold text-white font-mono tabular-nums mt-1">
                 ฿{totalOutflow.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
+              </p>
             </div>
-            <div className="w-px h-8 bg-white/5 shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">ขาย/ปันผล</span>
-              <span className="text-sm font-bold text-white tabular-nums font-mono mt-0.5">
-                ฿{totalInflow.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-            <div className="w-px h-8 bg-white/5 shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">ค่าธรรมเนียม</span>
-              <span className="text-sm font-bold text-zinc-400 tabular-nums font-mono mt-0.5">
-                ฿{totalFees.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/15 text-indigo-400 flex items-center justify-center">
+              <DollarSign className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
-            <div className="relative flex-1 sm:w-64">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                className={`${inputClass} pl-9`}
-                placeholder="ค้นหา Ticker, ชื่อ..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+          <div className="glass-panel p-4 sm:p-5 rounded-2xl flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">ขาย + เงินปันผลรับ</span>
+              <p className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono tabular-nums mt-1">
+                ฿{totalInflow.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+              <Coins className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="glass-panel p-4 sm:p-5 rounded-2xl flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">ค่าธรรมเนียมรวม (Fee)</span>
+              <p className="text-xl sm:text-2xl font-bold text-slate-300 font-mono tabular-nums mt-1">
+                ฿{totalFees.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center">
+              <TrendingDown className="w-5 h-5" />
+            </div>
+          </div>
+        </div>}
+
+        {/* Toolbar & Filters */}
+        <div className="glass-panel p-4 rounded-2xl flex flex-col sm:flex-row gap-3 items-center justify-between">
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              className={`${inputClass} pl-9`}
+              placeholder="ค้นหา Ticker, ชื่อสินทรัพย์, โน้ต..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 shrink-0">
+              <Filter className="w-3.5 h-3.5 text-indigo-400" />
+              <span>ตัวกรอง:</span>
             </div>
             <select
-              className={`${inputClass} sm:w-40 appearance-none`}
+              className={`${inputClass} sm:w-44`}
               value={selectedAccount}
               onChange={(e) => { setSelectedAccount(e.target.value); setPage(1) }}
             >
-              <option value="">ทุกบัญชี</option>
+              <option value="">ทุกบัญชีการลงทุน</option>
               {accounts.map((acc: any) => (
                 <option key={acc.id} value={acc.id}>{acc.accountName}</option>
               ))}
             </select>
             <select
-              className={`${inputClass} sm:w-40 appearance-none`}
+              className={`${inputClass} sm:w-36`}
               value={selectedType}
               onChange={(e) => { setSelectedType(e.target.value); setPage(1) }}
             >
-              <option value="">ทุกประเภท</option>
-              <option value="BUY">BUY</option>
-              <option value="SELL">SELL</option>
-              <option value="DIVIDEND">DIVIDEND</option>
-              <option value="DEPOSIT">DEPOSIT</option>
-              <option value="WITHDRAW">WITHDRAW</option>
-              <option value="FEE">FEE</option>
+              <option value="">ทุกประเภทรายการ</option>
+              <option value="BUY">BUY (ซื้อ)</option>
+              <option value="SELL">SELL (ขาย)</option>
+              <option value="DIVIDEND">DIVIDEND (ปันผล)</option>
+              <option value="DEPOSIT">DEPOSIT (ฝาก)</option>
+              <option value="WITHDRAW">WITHDRAW (ถอน)</option>
+              <option value="FEE">FEE (ค่าธรรมเนียม)</option>
             </select>
           </div>
         </div>
 
         {/* Transactions Table */}
-        <div className="rounded-3xl bg-[#0a0a0a] border border-white/5 overflow-hidden min-h-[400px] flex flex-col">
+        <div className="glass-panel rounded-3xl overflow-hidden min-h-[400px] flex flex-col">
           {isLoading ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20 text-zinc-500">
-              <Loader2 className="w-6 h-6 animate-spin" />
-              <span className="text-xs font-mono uppercase tracking-widest">Loading...</span>
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 py-24 text-slate-400">
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+              <span className="text-xs font-mono uppercase tracking-wider">กำลังโหลดรายการธุรกรรม...</span>
             </div>
           ) : error ? (
-            <div className="flex-1 py-16 text-center text-xs text-rose-400">Error loading data</div>
+            <div className="flex-1 py-20 flex flex-col items-center justify-center gap-4 text-center text-xs text-rose-400">
+              เกิดข้อผิดพลาดในการดึงข้อมูลรายการธุรกรรม
+              <button onClick={() => mutate(`/api/transactions?${queryParams.toString()}`)} className="min-h-11 px-4 rounded-xl border border-rose-500/30 text-rose-300 hover:bg-rose-500/10 font-semibold">
+                ลองอีกครั้ง
+              </button>
+            </div>
           ) : filteredTransactions.length === 0 ? (
             <div className="flex-1 py-20 flex flex-col items-center justify-center text-center px-4">
-              <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
-                <ArrowLeftRight className="w-5 h-5 text-zinc-500" />
+              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mb-4">
+                <ArrowLeftRight className="w-6 h-6" />
               </div>
-              <h3 className="font-bold text-white text-sm mb-1">NO TRANSACTIONS</h3>
-              <p className="text-xs text-zinc-500 mb-6">เริ่มบันทึกธุรกรรมแรกเพื่อวิเคราะห์พอร์ต</p>
-              <button
-                onClick={() => setQuickAddOpen(true)}
-                className="bg-white text-black hover:bg-zinc-200 text-xs font-bold py-2.5 px-6 rounded-xl transition-colors"
-              >
-                เพิ่มธุรกรรม
-              </button>
+              <h3 className="font-bold text-white text-base mb-1">ไม่พบรายการธุรกรรม</h3>
+              <p className="text-xs text-slate-400 mb-6 max-w-xs">
+                {search || selectedAccount || selectedType
+                  ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา ลองปรับตัวกรองใหม่อีกครั้ง'
+                  : 'เริ่มต้นบันทึกธุรกรรมแรกเพื่อสร้างประวัติพอร์ต'}
+              </p>
+              {accounts.length > 0 ? (
+                <button
+                  onClick={() => setQuickAddOpen(true)}
+                  className="min-h-11 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2.5 px-5 rounded-xl transition-all shadow-md shadow-indigo-600/20"
+                >
+                  เพิ่มธุรกรรมใหม่
+                </button>
+              ) : (
+                <a href="/accounts" className="min-h-11 inline-flex items-center bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-2.5 px-5 rounded-xl transition-all shadow-md shadow-indigo-600/20">
+                  สร้างบัญชีลงทุน
+                </a>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex flex-col">
-              <div className="overflow-x-auto flex-1 scrollbar-thin">
-                <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 z-10 bg-[#050505] border-b border-white/5">
+              <div className="overflow-x-auto flex-1">
+                <table className="custom-table text-left">
+                  <thead>
                     <tr>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em]">วันที่</th>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em]">ประเภท</th>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em]">สินทรัพย์</th>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em] text-right">จำนวน</th>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em] text-right">ราคา</th>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em] text-right hidden lg:table-cell">Fee</th>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em] text-right">ยอดรวม</th>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em] hidden md:table-cell">บัญชี</th>
-                      <th className="py-4 px-5 font-bold text-zinc-500 text-[10px] uppercase tracking-[0.1em] text-right"></th>
+                      <th>วันที่</th>
+                      <th>ประเภท</th>
+                      <th>สินทรัพย์</th>
+                      <th className="text-right">จำนวน</th>
+                      <th className="text-right">ราคา/หน่วย</th>
+                      <th className="text-right hidden lg:table-cell">ค่าธรรมเนียม</th>
+                      <th className="text-right">ยอดรวม</th>
+                      <th className="hidden md:table-cell">บัญชี</th>
+                      <th className="text-right">การจัดการ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody>
                     {filteredTransactions.map((txn: any) => {
-                      const cfg = TYPE_CONFIG[txn.txnType] ?? { label: txn.txnType, color: 'text-zinc-500', bg: 'bg-transparent border-white/5' }
+                      const cfg = TYPE_CONFIG[txn.txnType] ?? { label: txn.txnType, color: 'text-slate-400', bg: 'bg-slate-800/80 border-slate-700/80' }
                       const formattedDate = new Date(txn.txnDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
                       return (
-                        <tr key={txn.id} className="hover:bg-white/[0.02] transition-colors group">
-                          <td className="py-4 px-5 text-zinc-400 font-mono text-[10px] uppercase whitespace-nowrap">
+                        <tr key={txn.id} className="transition-colors group">
+                          <td className="text-slate-400 font-mono text-xs whitespace-nowrap">
                             {formattedDate}
                           </td>
-                          <td className="py-4 px-5 whitespace-nowrap">
-                            <span className={`px-2 py-1 rounded-md text-[9px] font-bold border ${cfg.bg} ${cfg.color} tracking-widest`}>
+                          <td className="whitespace-nowrap">
+                            <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold border ${cfg.bg} ${cfg.color} tracking-wider`}>
                               {cfg.label}
                             </span>
                           </td>
-                          <td className="py-4 px-5">
+                          <td>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-white tracking-wide">
+                              <span className="font-bold text-white group-hover:text-indigo-300 transition-colors">
                                 {txn.asset?.ticker || 'N/A'}
                               </span>
                               {txn.asset?.market && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-sm bg-white/5 text-zinc-500 uppercase font-mono">
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 uppercase font-mono border border-slate-700/60">
                                   {txn.asset.market}
                                 </span>
                               )}
                             </div>
                             {txn.note && (
-                              <p className="text-[10px] text-zinc-600 truncate max-w-[150px] mt-1">
+                              <p className="text-[11px] text-slate-400 truncate max-w-[180px] mt-0.5">
                                 {txn.note}
                               </p>
                             )}
                           </td>
-                          <td className="py-4 px-5 text-right font-mono text-zinc-300">
+                          <td className="text-right font-mono text-xs text-slate-200">
                             {Number(txn.quantity).toLocaleString()}
                           </td>
-                          <td className="py-4 px-5 text-right font-mono text-zinc-400">
+                          <td className="text-right font-mono text-xs text-slate-300">
                             {Number(txn.pricePerUnit).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-4 px-5 text-right font-mono text-zinc-600 hidden lg:table-cell">
+                          <td className="text-right font-mono text-xs text-slate-400 hidden lg:table-cell">
                             {Number(txn.fee || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-4 px-5 text-right font-mono font-bold text-white">
+                          <td className="text-right font-mono text-sm font-bold text-white">
                             ฿{Number(txn.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-4 px-5 text-zinc-500 whitespace-nowrap hidden md:table-cell text-[11px]">
+                          <td className="text-slate-400 whitespace-nowrap hidden md:table-cell text-xs">
                             {txn.account?.accountName}
                           </td>
-                          <td className="py-4 px-5 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
+                          <td className="text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => setEditingTxn(txn)}
-                                className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                                title="แก้ไขรายการ"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDelete(txn.id)}
                                 disabled={deletingId === txn.id}
-                                className="p-1.5 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                title="ลบรายการ"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -289,22 +341,22 @@ export default function TransactionsPage() {
 
               {/* Pagination */}
               {pagination.totalPages > 1 && (
-                <div className="px-5 py-4 border-t border-white/5 flex items-center justify-between bg-[#050505] text-xs">
-                  <span className="text-zinc-500 font-mono text-[10px] uppercase tracking-widest">
-                    PAGE {pagination.page} OF {pagination.totalPages}
+                <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between bg-slate-900/40 text-xs">
+                  <span className="text-slate-400 font-mono text-[11px] uppercase tracking-wider">
+                    หน้า {pagination.page} จาก {pagination.totalPages} (ทั้งหมด {pagination.total} รายการ)
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
                       disabled={pagination.page <= 1}
-                      className="p-1.5 rounded-lg border border-white/10 bg-white/5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
+                      className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:text-white disabled:opacity-30 transition-colors"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
                       disabled={pagination.page >= pagination.totalPages}
-                      className="p-1.5 rounded-lg border border-white/10 bg-white/5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
+                      className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:text-white disabled:opacity-30 transition-colors"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
@@ -383,33 +435,33 @@ function EditTransactionModal({ txn, onClose, onSuccess }: { txn: any; onClose: 
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to update')
       onSuccess()
     } catch (err: any) {
-      setError(err.message || 'Error')
+      setError(err.message || 'Error updating transaction')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const inputClass = "w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-zinc-500 transition-colors font-mono"
-  const labelClass = "block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5"
+  const inputClass = "w-full bg-slate-900/80 border border-slate-700/80 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono transition-colors"
+  const labelClass = "block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-        <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-[#050505]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="glass-panel bg-slate-950/95 border border-slate-700/80 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="px-6 py-4.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
           <div>
-            <h3 className="font-bold text-white text-base tracking-tight">EDIT TRANSACTION</h3>
-            <p className="text-[10px] text-zinc-500 font-mono mt-0.5">{txn.asset?.ticker}</p>
+            <h3 className="font-bold text-white text-base tracking-tight">แก้ไขรายการธุรกรรม</h3>
+            <p className="text-[11px] text-indigo-400 font-mono mt-0.5">{txn.asset?.ticker}</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full text-zinc-500 hover:text-white hover:bg-white/10 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={handleUpdate} className="p-6 space-y-4">
-          {error && <div className="text-xs text-rose-400 mb-2">{error}</div>}
-          <div className="grid grid-cols-2 gap-4">
+          {error && <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">{error}</div>}
+          <div className="grid grid-cols-2 gap-3.5">
             <div>
-              <label className={labelClass}>TYPE</label>
+              <label className={labelClass}>ประเภทรายการ</label>
               <select className={inputClass} value={form.txnType} onChange={(e) => setForm({ ...form, txnType: e.target.value })}>
                 <option value="BUY">BUY</option>
                 <option value="SELL">SELL</option>
@@ -420,40 +472,40 @@ function EditTransactionModal({ txn, onClose, onSuccess }: { txn: any; onClose: 
               </select>
             </div>
             <div>
-              <label className={labelClass}>DATE</label>
+              <label className={labelClass}>วันที่</label>
               <input type="date" className={inputClass} value={form.txnDate} onChange={(e) => setForm({ ...form, txnDate: e.target.value })} required />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3.5">
             <div>
-              <label className={labelClass}>QTY</label>
+              <label className={labelClass}>จำนวน (QTY)</label>
               <input type="number" step="any" className={inputClass} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
             </div>
             <div>
-              <label className={labelClass}>PRICE</label>
+              <label className={labelClass}>ราคา/หน่วย</label>
               <input type="number" step="any" className={inputClass} value={form.pricePerUnit} onChange={(e) => setForm({ ...form, pricePerUnit: e.target.value })} required />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3.5">
             <div>
-              <label className={labelClass}>FEE</label>
+              <label className={labelClass}>ค่าธรรมเนียม</label>
               <input type="number" step="any" className={inputClass} value={form.fee} onChange={(e) => setForm({ ...form, fee: e.target.value })} />
             </div>
             <div>
-              <label className={labelClass}>TAX</label>
+              <label className={labelClass}>ภาษี</label>
               <input type="number" step="any" className={inputClass} value={form.taxWithheld} onChange={(e) => setForm({ ...form, taxWithheld: e.target.value })} />
             </div>
           </div>
           <div>
-            <label className={labelClass}>NOTE</label>
+            <label className={labelClass}>บันทึกเพิ่มเติม (Note)</label>
             <input type="text" className={`${inputClass} font-sans`} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
           </div>
-          <div className="pt-4 flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white transition-colors">
-              Cancel
+          <div className="pt-3 flex justify-end gap-3 border-t border-slate-800">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors">
+              ยกเลิก
             </button>
-            <button type="submit" disabled={submitting} className="bg-white text-black hover:bg-zinc-200 px-6 py-2.5 rounded-xl text-xs font-bold transition-colors">
-              {submitting ? 'Saving...' : 'Save Changes'}
+            <button type="submit" disabled={submitting} className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20">
+              {submitting ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
             </button>
           </div>
         </form>
@@ -483,7 +535,7 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
       skipEmptyLines: true,
       complete: (results) => {
         if (!results.data || results.data.length === 0) {
-          setError('No data found in CSV.')
+          setError('ไม่พบข้อมูลในไฟล์ CSV')
           return
         }
         const parsedRows = (results.data as any[]).map((r) => ({
@@ -515,7 +567,7 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Import failed')
       setResult(data)
-      if (data.imported > 0) setTimeout(() => onSuccess(), 1500)
+      if (data.imported > 0) setTimeout(() => onSuccess(), 1200)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -524,59 +576,65 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
-        <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-[#050505]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="glass-panel bg-slate-950/95 border border-slate-700/80 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+        <div className="px-6 py-4.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white">
+            <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
               <FileSpreadsheet className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-base tracking-tight">IMPORT CSV</h3>
-              <p className="text-[10px] text-zinc-500 font-mono mt-0.5">BATCH TRANSACTIONS</p>
+              <h3 className="font-bold text-white text-base tracking-tight">นำเข้ารายการธุรกรรมจาก CSV</h3>
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5">BATCH IMPORT TRANSACTIONS</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full text-zinc-500 hover:text-white hover:bg-white/10 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
-          {error && <div className="text-xs text-rose-400">{error}</div>}
+        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {error && <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">{error}</div>}
           {result && (
-            <div className="p-3 bg-white/5 border border-white/10 rounded-xl text-xs font-mono text-zinc-300">
-              <p className="font-bold text-white mb-1">Import Complete</p>
-              <p>Success: {result.imported}</p>
-              <p>Skipped: {result.skipped}</p>
-              {result.errors.length > 0 && <p className="text-rose-400">Errors: {result.errors.length}</p>}
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs font-mono text-emerald-300">
+              <p className="font-bold text-white mb-1">การนำเข้าเสร็จสมบูรณ์</p>
+              <p>นำเข้าสำเร็จ: {result.imported} รายการ</p>
+              <p>ข้าม: {result.skipped} รายการ</p>
+              {result.errors.length > 0 && <p className="text-rose-400">พบข้อผิดพลาด: {result.errors.length} รายการ</p>}
             </div>
           )}
 
           <div>
-            <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">TARGET ACCOUNT</label>
-            <select className="w-full bg-[#050505] border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none" value={selectedAccountId} onChange={(e) => setSelectedAccountId(e.target.value)}>
+            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+              เลือกบัญชีปลายทาง *
+            </label>
+            <select
+              className="w-full bg-slate-900/80 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+            >
               {accounts.map((acc: any) => <option key={acc.id} value={acc.id}>{acc.accountName}</option>)}
             </select>
           </div>
 
-          <label className="border-2 border-dashed border-white/10 hover:border-zinc-500 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-[#050505] block">
+          <label className="border-2 border-dashed border-slate-700/80 hover:border-indigo-500/60 rounded-2xl p-7 text-center cursor-pointer transition-colors bg-slate-900/40 block">
             <input type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
-            <Upload className="w-6 h-6 text-zinc-400 mx-auto mb-3" />
-            <p className="text-xs font-bold text-white">{fileName || 'Click to select CSV'}</p>
-            <p className="text-[10px] text-zinc-500 font-mono mt-2 uppercase">Headers: Date, Ticker, Type, Quantity, Price, Fee</p>
+            <Upload className="w-7 h-7 text-indigo-400 mx-auto mb-2" />
+            <p className="text-xs font-bold text-white">{fileName || 'คลิกเพื่อเลือกไฟล์ CSV'}</p>
+            <p className="text-[11px] text-slate-400 font-mono mt-1">คอลัมน์ที่รองรับ: Date, Ticker, Type, Quantity, Price, Fee</p>
           </label>
 
           {rows.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">PREVIEW ({rows.length} ROWS)</p>
-              <div className="border border-white/5 rounded-xl overflow-hidden max-h-32 overflow-y-auto">
-                <table className="w-full text-left text-[10px] font-mono">
-                  <thead className="bg-[#050505] text-zinc-500 sticky top-0">
-                    <tr><th className="p-2">Date</th><th className="p-2">Ticker</th><th className="p-2 text-right">Qty</th></tr>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">ตัวอย่างข้อมูล ({rows.length} แถว)</p>
+              <div className="border border-slate-800 rounded-xl overflow-hidden max-h-32 overflow-y-auto">
+                <table className="w-full text-left text-[11px] font-mono">
+                  <thead className="bg-slate-900 text-slate-400 sticky top-0">
+                    <tr><th className="p-2">วันที่</th><th className="p-2">Ticker</th><th className="p-2 text-right">จำนวน</th></tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-slate-800">
                     {rows.slice(0, 3).map((r, i) => (
-                      <tr key={i}><td className="p-2 text-zinc-400">{r.txnDate.slice(0, 10)}</td><td className="p-2 text-white">{r.ticker}</td><td className="p-2 text-right text-zinc-400">{r.quantity}</td></tr>
+                      <tr key={i}><td className="p-2 text-slate-400">{r.txnDate.slice(0, 10)}</td><td className="p-2 text-white font-bold">{r.ticker}</td><td className="p-2 text-right text-slate-300">{r.quantity}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -585,12 +643,17 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
           )}
         </div>
 
-        <div className="px-6 py-5 border-t border-white/5 flex justify-end gap-3 bg-[#050505]">
-          <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white transition-colors">
-            Cancel
+        <div className="px-6 py-4 border-t border-slate-800 flex justify-end gap-3 bg-slate-900/60">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors">
+            ยกเลิก
           </button>
-          <button type="button" onClick={handleImport} disabled={importing || rows.length === 0} className="bg-white text-black hover:bg-zinc-200 disabled:opacity-50 px-6 py-2.5 rounded-xl text-xs font-bold transition-colors">
-            {importing ? 'Importing...' : 'Confirm Import'}
+          <button
+            type="button"
+            onClick={handleImport}
+            disabled={importing || rows.length === 0}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20"
+          >
+            {importing ? 'กำลังนำเข้า...' : 'ยืนยันการนำเข้า'}
           </button>
         </div>
       </div>

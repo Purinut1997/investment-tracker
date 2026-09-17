@@ -14,28 +14,52 @@ export function DashboardEmptyState({ hasAccounts, hasHoldings, hasPlans }: Dash
     {
       done: hasAccounts,
       title: 'สร้างบัญชีลงทุน',
-      description: 'เช่น บัญชีหุ้นไทย กองทุน หรือคริปโต',
+      description: 'เช่น บัญชีหุ้นไทย บัญชีกองทุน หรือกระเป๋าคริปโต',
       icon: Wallet,
-      action: <Link href="/accounts" className="btn btn-primary text-sm px-5 py-2 w-full sm:w-auto">สร้างบัญชี <ArrowRight className="w-4 h-4" /></Link>,
+      action: (
+        <Link
+          href="/accounts"
+          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 min-h-11 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all w-full sm:w-auto shrink-0"
+        >
+          สร้างบัญชี <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      ),
     },
     {
       done: hasHoldings,
-      title: 'เพิ่มรายการแรก',
-      description: 'บันทึกการซื้อขายหรือโอนสินทรัพย์',
+      title: 'บันทึกธุรกรรมแรก',
+      description: 'บันทึกการซื้อขายหรือนำเข้าพอร์ตจากไฟล์ CSV',
       icon: Plus,
       action: (
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Link href="/transactions" className="btn text-sm px-4 py-2 flex-1 sm:flex-none justify-center bg-transparent text-[var(--text-secondary)] hover:text-white border border-white/10 rounded-xl"><Upload className="w-4 h-4" /> Import CSV</Link>
-          <Link href="/transactions" className="btn btn-primary text-sm px-4 py-2 flex-1 sm:flex-none justify-center"><Plus className="w-4 h-4" /> เพิ่มรายการ</Link>
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          <Link
+            href="/transactions"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-11 rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 transition-all flex-1 sm:flex-none"
+          >
+            <Upload className="w-3.5 h-3.5" /> Import CSV
+          </Link>
+          <Link
+            href="/transactions"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 min-h-11 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all flex-1 sm:flex-none"
+          >
+            <Plus className="w-3.5 h-3.5" /> เพิ่มรายการ
+          </Link>
         </div>
       ),
     },
     {
       done: hasPlans,
-      title: 'ตั้งเป้าหมายและสัดส่วน',
-      description: 'กำหนดสัดส่วนเพื่อดูคำแนะนำการปรับพอร์ต',
+      title: 'ตั้งเป้าหมายสัดส่วนพอร์ต',
+      description: 'กำหนดสัดส่วน Asset Allocation เพื่อรับคำแนะนำปรับพอร์ตจาก AI',
       icon: Target,
-      action: <Link href="/plans" className="btn btn-primary text-sm px-5 py-2 w-full sm:w-auto">ตั้งแผนการลงทุน <ArrowRight className="w-4 h-4" /></Link>,
+      action: (
+        <Link
+          href="/plans"
+          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 min-h-11 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all w-full sm:w-auto shrink-0"
+        >
+          ตั้งแผนการลงทุน <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      ),
     },
   ]
 
@@ -44,27 +68,36 @@ export function DashboardEmptyState({ hasAccounts, hasHoldings, hasPlans }: Dash
 
   return (
     <AppShell>
-      <div className="w-full max-w-5xl mx-auto py-2 sm:py-6">
-        <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-10 lg:gap-16 items-start">
-          <div className="pt-2 lg:pt-8">
-            <div className="w-11 h-11 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)] flex items-center justify-center mb-5">
-              <Wallet className="w-6 h-6 text-[var(--accent)]" />
+      <div className="w-full max-w-[1080px] mx-auto min-h-[calc(100dvh-10rem)] flex items-center py-6 sm:py-10">
+        <div className="grid xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-8 xl:gap-12 items-start w-full">
+          {/* Left Hero Card */}
+          <div className="p-8 rounded-2xl glass-panel">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center mb-6">
+              <Wallet className="w-6 h-6 text-indigo-400" />
             </div>
-            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-[var(--accent)] mb-3">Investment Pro</p>
-            <h1 className="text-3xl sm:text-[2.15rem] font-semibold text-white tracking-tight leading-[1.2] mb-4">เริ่มจัดการพอร์ตของคุณ</h1>
-            <p className="text-[15px] text-[var(--text-secondary)] max-w-lg leading-[1.65]">ตั้งค่าครั้งเดียว แล้วใช้พื้นที่นี้ติดตามมูลค่า ผลตอบแทน และแผนการลงทุนของคุณในมุมมองเดียว</p>
-            <div className="mt-7 pt-5 border-t border-white/[0.08] text-xs text-[var(--text-muted)] flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[var(--positive)]" /> ข้อมูลของคุณจะถูกใช้เพื่อคำนวณพอร์ตส่วนตัว
+            <p className="text-xs font-semibold tracking-wide text-indigo-400 mb-2">เริ่มต้นใช้งาน</p>
+            <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight mb-4">
+              เริ่มต้นจัดการพอร์ตการลงทุนของคุณ
+            </h1>
+            <p className="text-sm text-slate-400 leading-relaxed mb-6">
+              จัดเก็บบัญชีและธุรกรรมไว้ในที่เดียว เพื่อให้มูลค่าพอร์ตและสัดส่วนสินทรัพย์ของคุณถูกคำนวณจากข้อมูลจริง
+            </p>
+            <div className="pt-5 border-t border-slate-800 text-xs text-slate-400 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>ข้อมูลทางการเงินถูกเข้ารหัสและปกป้องอย่างปลอดภัย</span>
             </div>
           </div>
 
-          <div className="w-full space-y-3">
-            <div className="flex items-center justify-between mb-4">
+          {/* Right Setup Steps */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-1">
               <div>
-                <p className="text-[15px] font-semibold text-white">ตั้งค่าเริ่มต้น</p>
-                <p className="text-[13px] text-[var(--text-muted)] mt-1">ทำตาม 3 ขั้นตอนเพื่อปลดล็อก dashboard</p>
+                <p className="text-base font-bold text-white">ขั้นตอนการตั้งค่าเริ่มต้น</p>
+                <p className="text-xs text-slate-400 mt-0.5">ทำตาม 3 ขั้นตอนนี้เพื่อเริ่มใช้งานแดชบอร์ดเต็มรูปแบบ</p>
               </div>
-              <span className="text-xs tabular-nums text-[var(--text-muted)]">{completedCount}/3</span>
+              <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                {completedCount}/3 เสร็จสิ้น
+              </span>
             </div>
 
             {steps.map((step, index) => {
@@ -72,15 +105,42 @@ export function DashboardEmptyState({ hasAccounts, hasHoldings, hasPlans }: Dash
               const isLocked = activeIndex !== -1 && index > activeIndex
               const Icon = step.icon
               return (
-                <div key={step.title} className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 ${step.done ? 'bg-emerald-500/[0.04] border-emerald-500/20' : isActive ? 'bg-[var(--bg-elevated)] border-[var(--border-accent)]' : 'bg-[var(--bg-surface)] border-white/[0.06] opacity-55'}`}>
-                  <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-3">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${step.done ? 'bg-emerald-500/15 text-emerald-400' : isActive ? 'bg-[var(--accent-soft)] text-[var(--accent)]' : 'bg-white/5 text-zinc-500'}`}>
-                        {step.done ? <CheckCircle2 className="w-5 h-5" /> : isLocked ? <LockKeyhole className="w-4 h-4" /> : <Icon className="w-5 h-5" />}
+                <div
+                  key={step.title}
+                  className={`p-5 rounded-2xl border transition-all duration-200 ${
+                    step.done
+                      ? 'bg-emerald-500/[0.06] border-emerald-500/30'
+                      : isActive
+                      ? 'glass-panel border-indigo-500/40 shadow-lg shadow-indigo-500/5'
+                      : 'bg-slate-900/40 border-slate-800/80 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-start sm:items-center justify-between flex-col sm:flex-row gap-4">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          step.done
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : isActive
+                            ? 'bg-indigo-500/20 text-indigo-400'
+                            : 'bg-slate-800/80 text-slate-500'
+                        }`}
+                      >
+                        {step.done ? (
+                          <CheckCircle2 className="w-5 h-5" />
+                        ) : isLocked ? (
+                          <LockKeyhole className="w-4 h-4" />
+                        ) : (
+                          <Icon className="w-5 h-5" />
+                        )}
                       </div>
                       <div>
-                        <h3 className={`font-semibold ${step.done ? 'text-emerald-400' : isActive ? 'text-white' : 'text-zinc-400'}`}>{step.title}</h3>
-                        <p className="text-[13px] text-zinc-500 mt-1 leading-[1.45]">{step.description}</p>
+                        <h3 className={`text-sm font-bold ${step.done ? 'text-emerald-300' : isActive ? 'text-white' : 'text-slate-400'}`}>
+                          {step.title}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-1 leading-normal">
+                          {step.description}
+                        </p>
                       </div>
                     </div>
                     {!step.done && isActive && step.action}
@@ -88,8 +148,6 @@ export function DashboardEmptyState({ hasAccounts, hasHoldings, hasPlans }: Dash
                 </div>
               )
             })}
-
-            <div className="flex items-center gap-2 pt-3 text-[11px] text-[var(--text-muted)]"><LockKeyhole className="w-3.5 h-3.5" /> ขั้นตอนถัดไปจะเปิดใช้งานเมื่อข้อมูลพร้อม</div>
           </div>
         </div>
       </div>

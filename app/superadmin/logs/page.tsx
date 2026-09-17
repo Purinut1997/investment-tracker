@@ -15,7 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  User
+  User,
 } from 'lucide-react'
 
 export default function SuperadminLogsPage() {
@@ -30,20 +30,24 @@ export default function SuperadminLogsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
-        <PageHeader eyebrow="Security & Audit" title="บันทึกความปลอดภัย" description="ตรวจสอบเหตุการณ์สำคัญและการพยายามเข้าสู่ระบบเพื่อเฝ้าระวังความผิดปกติ" />
+      <div className="space-y-6 max-w-7xl mx-auto w-full pb-12">
+        <PageHeader
+          eyebrow="SECURITY & AUDIT"
+          title="บันทึกความปลอดภัย"
+          description="ตรวจสอบเหตุการณ์สำคัญของระบบและการพยายามเข้าสู่ระบบเพื่อเฝ้าระวังความผิดปกติ"
+        />
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-[var(--border)]">
+        <div className="flex border-b border-white/[0.08] gap-2">
           <button
             onClick={() => {
               setTab('audit')
               setPage(1)
             }}
-            className={`py-3 px-5 text-xs sm:text-sm font-semibold flex items-center gap-2 border-b-2 transition-all ${
+            className={`py-3 px-5 text-sm font-medium flex items-center gap-2 border-b-2 transition-all ${
               tab === 'audit'
-                ? 'border-amber-400 text-amber-300 bg-amber-500/10'
-                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-xl'
+                : 'border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.02]'
             }`}
           >
             <Activity className="w-4 h-4" />
@@ -54,69 +58,69 @@ export default function SuperadminLogsPage() {
               setTab('login')
               setPage(1)
             }}
-            className={`py-3 px-5 text-xs sm:text-sm font-semibold flex items-center gap-2 border-b-2 transition-all ${
+            className={`py-3 px-5 text-sm font-medium flex items-center gap-2 border-b-2 transition-all ${
               tab === 'login'
-                ? 'border-amber-400 text-amber-300 bg-amber-500/10'
-                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10 rounded-t-xl'
+                : 'border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.02]'
             }`}
           >
             <Key className="w-4 h-4" />
-            <span>Login Attempts (ประวัติล็อกอิน)</span>
+            <span>Login Attempts (ประวัติการล็อกอิน)</span>
           </button>
         </div>
 
         {/* Table View */}
-        <div className="card overflow-hidden">
+        <div className="bg-[#12151C] border border-white/[0.08] rounded-2xl shadow-xl shadow-black/20 overflow-hidden">
           {isLoading ? (
-            <div className="py-20 flex flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
-              <Loader2 className="w-7 h-7 animate-spin text-amber-400" />
+            <div className="py-20 flex flex-col items-center justify-center gap-3 text-zinc-500">
+              <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
               <span className="text-xs">กำลังโหลดบันทึกความปลอดภัย...</span>
             </div>
           ) : error ? (
-            <div className="py-12 text-center text-xs text-red-400">
+            <div className="py-12 text-center text-xs text-rose-400">
               เกิดข้อผิดพลาดในการโหลดข้อมูลบันทึก
             </div>
           ) : logs.length === 0 ? (
-            <div className="py-12 text-center text-xs text-[var(--text-muted)]">
+            <div className="py-12 text-center text-xs text-zinc-500">
               ยังไม่มีบันทึกข้อมูลในหมวดนี้
             </div>
           ) : tab === 'audit' ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[var(--bg-elevated)]/60 text-[var(--text-muted)] uppercase tracking-wider text-[11px] border-b border-[var(--border)]">
+                <thead className="bg-[#181C25]/80 text-zinc-400 font-semibold uppercase tracking-wider text-[11px] border-b border-white/[0.06]">
                   <tr>
-                    <th className="py-3 px-4">วันเวลา (UTC/BKK)</th>
-                    <th className="py-3 px-4">การกระทำ (Action)</th>
-                    <th className="py-3 px-4">ผู้ใช้งาน</th>
-                    <th className="py-3 px-4">IP Address</th>
-                    <th className="py-3 px-4">รายละเอียด (Details)</th>
+                    <th className="py-3.5 px-4">วันเวลา (UTC/BKK)</th>
+                    <th className="py-3.5 px-4">การกระทำ (Action)</th>
+                    <th className="py-3.5 px-4">ผู้ใช้งาน</th>
+                    <th className="py-3.5 px-4">IP Address</th>
+                    <th className="py-3.5 px-4">รายละเอียด (Details)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--border)] font-mono">
+                <tbody className="divide-y divide-white/[0.04]">
                   {logs.map((log: any) => (
-                    <tr key={log.id} className="hover:bg-[var(--bg-elevated)]/30 transition-colors">
-                      <td className="py-3 px-4 text-[var(--text-muted)] text-[11px] whitespace-nowrap font-sans">
+                    <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-3.5 px-4 text-zinc-400 text-xs whitespace-nowrap">
                         {new Date(log.createdAt).toLocaleString('th-TH')}
                       </td>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded font-bold text-[10px] bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="px-2.5 py-1 rounded-md font-semibold text-[11px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-mono">
                           {log.action}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-sans whitespace-nowrap">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         {log.user ? (
                           <div>
-                            <span className="font-semibold text-white">{log.user.name || log.user.email}</span>
-                            <span className="text-[10px] text-[var(--text-muted)] block">{log.user.role}</span>
+                            <span className="font-medium text-white">{log.user.name || log.user.email}</span>
+                            <span className="text-[11px] text-zinc-500 block">{log.user.role}</span>
                           </div>
                         ) : (
-                          <span className="text-[var(--text-muted)]">System Event</span>
+                          <span className="text-zinc-500">System Event</span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-[var(--text-secondary)] text-[11px] whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-zinc-400 font-mono text-xs whitespace-nowrap">
                         {log.ipAddress || '—'}
                       </td>
-                      <td className="py-3 px-4 text-[11px] text-[var(--text-secondary)] max-w-xs truncate">
+                      <td className="py-3.5 px-4 text-xs text-zinc-300 max-w-xs truncate font-mono">
                         {log.detail ? JSON.stringify(log.detail) : '—'}
                       </td>
                     </tr>
@@ -127,34 +131,34 @@ export default function SuperadminLogsPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[var(--bg-elevated)]/60 text-[var(--text-muted)] uppercase tracking-wider text-[11px] border-b border-[var(--border)]">
+                <thead className="bg-[#181C25]/80 text-zinc-400 font-semibold uppercase tracking-wider text-[11px] border-b border-white/[0.06]">
                   <tr>
-                    <th className="py-3 px-4">วันเวลาที่พยายาม</th>
-                    <th className="py-3 px-4">อีเมลเป้าหมาย</th>
-                    <th className="py-3 px-4">IP Address</th>
-                    <th className="py-3 px-4 text-right">ผลลัพธ์</th>
+                    <th className="py-3.5 px-4">วันเวลาที่พยายาม</th>
+                    <th className="py-3.5 px-4">อีเมลเป้าหมาย</th>
+                    <th className="py-3.5 px-4">IP Address</th>
+                    <th className="py-3.5 px-4 text-right">ผลลัพธ์</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--border)] font-mono">
+                <tbody className="divide-y divide-white/[0.04]">
                   {logs.map((att: any) => (
-                    <tr key={att.id} className="hover:bg-[var(--bg-elevated)]/30 transition-colors">
-                      <td className="py-3 px-4 text-[var(--text-muted)] text-[11px] whitespace-nowrap font-sans">
+                    <tr key={att.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-3.5 px-4 text-zinc-400 text-xs whitespace-nowrap">
                         {new Date(att.attemptedAt).toLocaleString('th-TH')}
                       </td>
-                      <td className="py-3 px-4 font-semibold text-white whitespace-nowrap font-sans">
+                      <td className="py-3.5 px-4 font-medium text-white whitespace-nowrap">
                         {att.email}
                       </td>
-                      <td className="py-3 px-4 text-[var(--text-secondary)] text-[11px] whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-zinc-400 font-mono text-xs whitespace-nowrap">
                         {att.ipAddress || '—'}
                       </td>
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         {att.success ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/10 border border-green-500/20 text-[var(--green-400)]">
-                            SUCCESS
+                          <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                            สำเร็จ (SUCCESS)
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 border border-red-500/20 text-[var(--red-400)]">
-                            FAILED
+                          <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                            ล้มเหลว (FAILED)
                           </span>
                         )}
                       </td>
@@ -167,22 +171,22 @@ export default function SuperadminLogsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="p-4 border-t border-[var(--border)] flex items-center justify-between text-xs">
-              <span className="text-[var(--text-muted)]">
+            <div className="p-4 border-t border-white/[0.06] flex items-center justify-between text-xs bg-[#181C25]/40">
+              <span className="text-zinc-400">
                 หน้า {page} จากทั้งหมด {totalPages} ({total} รายการ)
               </span>
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="p-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] disabled:opacity-40"
+                  className="p-1.5 rounded-lg border border-white/10 bg-[#181C25] text-zinc-300 hover:text-white disabled:opacity-40 transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="p-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] disabled:opacity-40"
+                  className="p-1.5 rounded-lg border border-white/10 bg-[#181C25] text-zinc-300 hover:text-white disabled:opacity-40 transition-colors"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>

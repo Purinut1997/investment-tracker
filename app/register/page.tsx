@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, Lock, Mail, User, TrendingUp, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -20,8 +20,8 @@ export default function RegisterPage() {
 
   function validatePassword(pw: string): string | null {
     if (pw.length < 8) return 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'
-    if (!/[a-zA-Z]/.test(pw)) return 'ต้องมีตัวอักษรภาษาอังกฤษ'
-    if (!/[0-9]/.test(pw)) return 'ต้องมีตัวเลข'
+    if (!/[a-zA-Z]/.test(pw)) return 'รหัสผ่านต้องมีตัวอักษรภาษาอังกฤษ'
+    if (!/[0-9]/.test(pw)) return 'รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว'
     return null
   }
 
@@ -31,7 +31,7 @@ export default function RegisterPage() {
 
     const pwError = validatePassword(form.password)
     if (pwError) { setError(pwError); return }
-    if (form.password !== form.confirm) { setError('รหัสผ่านไม่ตรงกัน'); return }
+    if (form.password !== form.confirm) { setError('รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน'); return }
 
     setLoading(true)
     try {
@@ -42,7 +42,7 @@ export default function RegisterPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'เกิดข้อผิดพลาด')
+        setError(data.error ?? 'เกิดข้อผิดพลาดในการสมัครสมาชิก')
       } else {
         setSuccess(true)
       }
@@ -55,110 +55,109 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="auth-page">
-        <div className="auth-card" style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📧</div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>ตรวจสอบอีเมลของคุณ</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.7 }}>
-            เราส่งลิงก์ยืนยันอีเมลไปที่ <strong style={{ color: 'var(--text-primary)' }}>{form.email}</strong> แล้ว
-            <br />กรุณากดลิงก์ในอีเมลเพื่อเริ่มใช้งาน
+      <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-[#090B10] text-slate-200 relative overflow-hidden">
+        <div className="w-full max-w-[440px] bg-[#12151C] border border-white/[0.08] rounded-2xl p-8 sm:p-10 shadow-2xl shadow-black/80 text-center animate-fade-in relative z-10">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto mb-5 text-emerald-400">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">
+            ตรวจสอบอีเมลของคุณ
+          </h2>
+          <p className="text-sm text-slate-400 leading-relaxed mb-6">
+            เราได้ส่งลิงก์ยืนยันการลงทะเบียนไปที่ <strong className="text-white font-mono">{form.email}</strong> แล้ว กรุณาตรวจสอบกล่องจดหมายเพื่อเปิดใช้งานบัญชี
           </p>
-          <Link href="/login" className="btn btn-primary" style={{ marginTop: 24, display: 'inline-flex' }}>
-            ไปหน้าเข้าสู่ระบบ
+          <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 mb-6">
+            ไม่พบอีเมล? ลองตรวจสอบในโฟลเดอร์ <span className="text-slate-300 font-semibold">Spam / Junk</span>
+          </div>
+          <Link
+            href="/login"
+            className="inline-flex items-center justify-center gap-2 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition-all shadow-lg shadow-indigo-600/25"
+          >
+            <span>ไปหน้าเข้าสู่ระบบ</span>
+            <ArrowRight className="w-4 h-4" />
           </Link>
-          <p style={{ marginTop: 16, fontSize: 12, color: 'var(--text-muted)' }}>
-            ไม่พบอีเมล? ตรวจสอบโฟลเดอร์ Spam
-          </p>
-          <p style={{ marginTop: 20, fontSize: 11, color: 'var(--text-muted)' }}>
-            Created by MIKPURINUT
-          </p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        {/* Brand */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{
-            width: 64, height: 64,
-            borderRadius: '16px',
-            overflow: 'hidden',
-            backgroundColor: '#ffffff',
-            padding: 4,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 14px',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            
-          }}>
-            <img
-              src="/logo.png?v=2"
-              alt="Investment Pro Logo"
-              className="w-full h-full object-contain brightness-0 invert drop-shadow-md"
-            />
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-[#090B10] text-slate-200 relative overflow-hidden">
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="w-full max-w-[440px] bg-[#12151C] border border-white/[0.08] rounded-2xl p-7 sm:p-9 shadow-2xl shadow-black/80 relative z-10 animate-fade-in">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center mx-auto mb-4 text-indigo-400">
+            <TrendingUp className="w-6 h-6" />
           </div>
-          <h2 className="text-3xl font-bold tracking-tight text-white mb-2">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
             สร้างบัญชีผู้ใช้ใหม่
-          </h2>
-          <p className="text-[var(--text-muted)] text-sm">
-            Investment Pro — เครื่องมือบริหารความมั่งคั่งส่วนบุคคล
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+            เริ่มต้นติดตามและบริหารความมั่งคั่งด้วย Investment Pro
           </p>
         </div>
 
         {error && (
-          <div className="alert alert-error" style={{ marginBottom: 16 }}>
-            <span>✕</span> {error}
+          <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
-        <form
-          onSubmit={handleSubmit}
-          method="post"
-          autoComplete="on"
-          style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
-        >
-          <div className="form-group">
-            <label htmlFor="name" className="form-label">ชื่อ-นามสกุล</label>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              className="input"
-              placeholder="ชื่อของคุณ"
-              value={form.name}
-              onChange={(e) => update('name', e.target.value)}
-              required
-              autoComplete="name"
-            />
+        <form onSubmit={handleSubmit} method="post" className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="name" className="text-xs font-medium text-slate-300">
+              ชื่อ-นามสกุล
+            </label>
+            <div className="relative flex items-center">
+              <User className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+              <input
+                id="name"
+                name="name"
+                type="text"
+                className="w-full bg-[#181C25] border border-white/[0.1] text-slate-100 text-sm rounded-xl pl-10 pr-3.5 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-500"
+                placeholder="สมชาย มั่งคั่ง"
+                value={form.name}
+                onChange={(e) => update('name', e.target.value)}
+                required
+                autoComplete="name"
+              />
+            </div>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="reg-email" className="form-label">อีเมล</label>
-            <input
-              id="reg-email"
-              name="email"
-              type="email"
-              className="input"
-              placeholder="example@email.com"
-              value={form.email}
-              onChange={(e) => update('email', e.target.value)}
-              required
-              autoComplete="username email"
-            />
+          <div className="space-y-1.5">
+            <label htmlFor="reg-email" className="text-xs font-medium text-slate-300">
+              อีเมล
+            </label>
+            <div className="relative flex items-center">
+              <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
+              <input
+                id="reg-email"
+                name="email"
+                type="email"
+                className="w-full bg-[#181C25] border border-white/[0.1] text-slate-100 text-sm rounded-xl pl-10 pr-3.5 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-500"
+                placeholder="investor@example.com"
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                required
+                autoComplete="username email"
+              />
+            </div>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="reg-password" className="form-label">รหัสผ่าน</label>
-            <div style={{ position: 'relative' }}>
+          <div className="space-y-1.5">
+            <label htmlFor="reg-password" className="text-xs font-medium text-slate-300">
+              รหัสผ่าน (อย่างน้อย 8 ตัวอักษร มีตัวอักษรและตัวเลข)
+            </label>
+            <div className="relative flex items-center">
+              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
               <input
                 id="reg-password"
                 name="password"
                 type={showPassword ? 'text' : 'password'}
-                className="input"
-                style={{ paddingRight: 40 }}
-                placeholder="อย่างน้อย 8 ตัว (ตัวอักษร + ตัวเลข)"
+                className="w-full bg-[#181C25] border border-white/[0.1] text-slate-100 text-sm rounded-xl pl-10 pr-11 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-500"
+                placeholder="••••••••"
                 value={form.password}
                 onChange={(e) => update('password', e.target.value)}
                 required
@@ -167,41 +166,26 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  padding: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                className="absolute right-3 text-slate-500 hover:text-slate-300 transition-colors p-1"
                 tabIndex={-1}
-                aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-            <span className="form-hint" style={{ marginTop: 4, display: 'block' }}>
-              ต้องมีตัวอักษรและตัวเลขอย่างน้อย 1 ตัว
-            </span>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="reg-confirm" className="form-label">ยืนยันรหัสผ่าน</label>
-            <div style={{ position: 'relative' }}>
+          <div className="space-y-1.5">
+            <label htmlFor="reg-confirm" className="text-xs font-medium text-slate-300">
+              ยืนยันรหัสผ่านอีกครั้ง
+            </label>
+            <div className="relative flex items-center">
+              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 pointer-events-none" />
               <input
                 id="reg-confirm"
                 name="confirm"
                 type={showConfirm ? 'text' : 'password'}
-                className="input"
-                style={{ paddingRight: 40 }}
-                placeholder="พิมพ์รหัสผ่านอีกครั้ง"
+                className="w-full bg-[#181C25] border border-white/[0.1] text-slate-100 text-sm rounded-xl pl-10 pr-11 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-500"
+                placeholder="••••••••"
                 value={form.confirm}
                 onChange={(e) => update('confirm', e.target.value)}
                 required
@@ -210,49 +194,30 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
-                style={{
-                  position: 'absolute',
-                  right: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  padding: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                className="absolute right-3 text-slate-500 hover:text-slate-300 transition-colors p-1"
                 tabIndex={-1}
-                aria-label={showConfirm ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
               >
-                {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
 
           <button
-            id="btn-register"
+            id="btn-register-submit"
             type="submit"
             disabled={loading}
-            className="btn btn-primary btn-full"
-            style={{ marginTop: 4 }}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl px-4 py-2.5 text-sm transition-all duration-150 shadow-lg shadow-indigo-600/25 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 cursor-pointer mt-4"
           >
-            {loading ? <span className="spinner" /> : null}
-            {loading ? 'กำลังสมัคร...' : 'สมัครสมาชิก'}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            <span>{loading ? 'กำลังสร้างบัญชี...' : 'สมัครสมาชิก'}</span>
           </button>
         </form>
 
-        <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: 'var(--text-secondary)' }}>
+        <p className="text-center mt-6 text-xs text-slate-400">
           มีบัญชีอยู่แล้ว?{' '}
-          <Link href="/login" style={{ color: 'var(--cyan-400)', textDecoration: 'none', fontWeight: 600 }}>
+          <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors">
             เข้าสู่ระบบ
           </Link>
-        </p>
-
-        <p style={{ textAlign: 'center', marginTop: 20, fontSize: 11, color: 'var(--text-muted)' }}>
-          Created by MIKPURINUT
         </p>
       </div>
     </div>

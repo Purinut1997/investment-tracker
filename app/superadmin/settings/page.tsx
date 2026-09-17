@@ -16,7 +16,7 @@ import {
   Star,
   Check,
   X,
-  Layers
+  Layers,
 } from 'lucide-react'
 
 export default function SuperadminSettingsPage() {
@@ -106,7 +106,7 @@ export default function SuperadminSettingsPage() {
       mutate('/api/superadmin/models')
       setModalOpen(false)
     } catch (err: any) {
-      setFormError(err.message || 'เกิดข้อผิดพลาด')
+      setFormError(err.message || 'เกิดข้อผิดพลาดในการบันทึก')
     } finally {
       setSubmitting(false)
     }
@@ -150,57 +150,70 @@ export default function SuperadminSettingsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
-        <PageHeader eyebrow="Superadmin System Config" title="จัดการโมเดล AI" description="เพิ่มหรือแก้ไขรายชื่อ Google Gemini Models โดยไม่ต้อง deploy ระบบใหม่" action={<button onClick={openCreateModal} className="btn btn-primary text-sm"><Plus className="w-4 h-4" /> เพิ่มโมเดลใหม่</button>} />
+      <div className="space-y-6 max-w-7xl mx-auto w-full pb-12">
+        <PageHeader
+          eyebrow="SUPERADMIN SYSTEM CONFIG"
+          title="จัดการโมเดล AI"
+          description="เพิ่มหรือแก้ไขรายชื่อ Google Gemini Models โดยไม่ต้อง deploy ระบบใหม่"
+          action={
+            <button
+              onClick={openCreateModal}
+              className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-medium px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>เพิ่มโมเดลใหม่</span>
+            </button>
+          }
+        />
 
         {/* Models Table */}
-        <div className="card overflow-hidden">
+        <div className="bg-[#12151C] border border-white/[0.08] rounded-2xl shadow-xl shadow-black/20 overflow-hidden">
           {isLoading ? (
-            <div className="py-20 flex flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
-              <Loader2 className="w-7 h-7 animate-spin text-amber-400" />
+            <div className="py-20 flex flex-col items-center justify-center gap-3 text-zinc-500">
+              <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
               <span className="text-xs">กำลังโหลดรายชื่อโมเดล...</span>
             </div>
           ) : error ? (
-            <div className="py-12 text-center text-xs text-red-400">
+            <div className="py-12 text-center text-xs text-rose-400">
               เกิดข้อผิดพลาดในการโหลดข้อมูลโมเดล
             </div>
           ) : modelList.length === 0 ? (
-            <div className="py-12 text-center text-xs text-[var(--text-muted)]">
+            <div className="py-12 text-center text-xs text-zinc-500">
               ยังไม่มีโมเดล AI ในระบบ
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[var(--bg-elevated)]/60 text-[var(--text-muted)] uppercase tracking-wider text-[11px] border-b border-[var(--border)]">
+                <thead className="bg-[#181C25]/80 text-zinc-400 font-semibold uppercase tracking-wider text-[11px] border-b border-white/[0.06]">
                   <tr>
-                    <th className="py-3 px-4">ลำดับ / ชื่อแสดงผล</th>
-                    <th className="py-3 px-4">Model ID (API String)</th>
-                    <th className="py-3 px-4">Tier</th>
-                    <th className="py-3 px-4">โหมด Auto Default</th>
-                    <th className="py-3 px-4">สถานะใช้งาน</th>
-                    <th className="py-3 px-4 text-right">จัดการ</th>
+                    <th className="py-3.5 px-4">ลำดับ / ชื่อแสดงผล</th>
+                    <th className="py-3.5 px-4">Model ID (API String)</th>
+                    <th className="py-3.5 px-4">Tier</th>
+                    <th className="py-3.5 px-4">โหมด Auto Default</th>
+                    <th className="py-3.5 px-4">สถานะใช้งาน</th>
+                    <th className="py-3.5 px-4 text-right">จัดการ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--border)]">
+                <tbody className="divide-y divide-white/[0.04]">
                   {modelList.map((m) => (
-                    <tr key={m.id} className="hover:bg-[var(--bg-elevated)]/30 transition-colors">
+                    <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
                       <td className="py-3.5 px-4 font-semibold text-white">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                          <span className="text-[11px] text-zinc-500 font-mono">
                             #{m.sortOrder}
                           </span>
                           <span>{m.displayName}</span>
                         </div>
-                        {m.notes && <p className="text-[10px] text-[var(--text-muted)] mt-0.5">{m.notes}</p>}
+                        {m.notes && <p className="text-[11px] text-zinc-400 font-normal mt-0.5">{m.notes}</p>}
                       </td>
-                      <td className="py-3.5 px-4 font-mono text-[var(--cyan-400)] text-xs">
+                      <td className="py-3.5 px-4 font-mono text-cyan-400 text-xs">
                         {m.modelId}
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
                             m.tier === 'free'
-                              ? 'bg-green-500/10 border-green-500/20 text-[var(--green-400)]'
+                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                               : 'bg-purple-500/15 border-purple-500/30 text-purple-300'
                           }`}
                         >
@@ -209,14 +222,14 @@ export default function SuperadminSettingsPage() {
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {m.isDefaultForAuto ? (
-                          <span className="inline-flex items-center gap-1 text-amber-400 font-bold text-xs">
+                          <span className="inline-flex items-center gap-1.5 text-amber-400 font-semibold text-xs">
                             <Star className="w-3.5 h-3.5 fill-amber-400" />
                             <span>Auto Default</span>
                           </span>
                         ) : (
                           <button
                             onClick={() => handleSetDefaultAuto(m)}
-                            className="text-[11px] text-[var(--text-muted)] hover:text-amber-300 underline"
+                            className="text-xs text-zinc-500 hover:text-amber-400 transition-colors underline underline-offset-2"
                           >
                             ตั้งเป็น Default
                           </button>
@@ -225,28 +238,30 @@ export default function SuperadminSettingsPage() {
                       <td className="py-3.5 px-4">
                         <button
                           onClick={() => handleToggleActive(m)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1.5 ${
+                          className={`px-3 py-1 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-all ${
                             m.isActive
-                              ? 'bg-emerald-500/10 border-green-500/20 text-[var(--green-400)]'
-                              : 'bg-slate-500/10 border-slate-500/30 text-slate-400'
+                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
+                              : 'bg-zinc-800 border-white/10 text-zinc-400 hover:bg-zinc-700'
                           }`}
                         >
                           {m.isActive ? 'เปิดใช้งาน' : 'ปิดการใช้งาน'}
                         </button>
                       </td>
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openEditModal(m)}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-white"
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+                            title="แก้ไขโมเดล"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteModel(m)}
-                            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400"
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                            title="ลบโมเดล"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -265,16 +280,16 @@ export default function SuperadminSettingsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setModalOpen(false)
           }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in"
         >
-          <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)]">
-            <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
-              <h3 className="font-bold text-white text-base tracking-tight">
+          <div className="bg-[#12151C] border border-white/10 rounded-t-3xl sm:rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+              <h3 className="font-semibold text-white text-base">
                 {editingModel ? 'แก้ไขโมเดล AI' : 'เพิ่มโมเดล AI ใหม่'}
               </h3>
               <button
                 onClick={() => setModalOpen(false)}
-                className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -282,17 +297,19 @@ export default function SuperadminSettingsPage() {
 
             <form onSubmit={handleSaveModel} className="p-5 space-y-4">
               {formError && (
-                <div className="alert alert-danger text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-400" />
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{formError}</span>
                 </div>
               )}
 
-              <div>
-                <label className="label">ชื่อแสดงผล (Display Name) *</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-zinc-300">
+                  ชื่อแสดงผล (Display Name) *
+                </label>
                 <input
                   type="text"
-                  className="input text-xs sm:text-sm"
+                  className="w-full bg-[#181C25] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   placeholder="เช่น Gemini 2.0 Flash"
                   value={formData.displayName}
                   onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
@@ -300,11 +317,13 @@ export default function SuperadminSettingsPage() {
                 />
               </div>
 
-              <div>
-                <label className="label">Model ID ใน Google AI Studio (API Name) *</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-zinc-300">
+                  Model ID ใน Google AI Studio (API Name) *
+                </label>
                 <input
                   type="text"
-                  className="input text-xs sm:text-sm font-mono"
+                  className="w-full bg-[#181C25] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors font-mono disabled:opacity-50"
                   placeholder="เช่น gemini-2.0-flash"
                   value={formData.modelId}
                   onChange={(e) => setFormData({ ...formData, modelId: e.target.value })}
@@ -314,10 +333,10 @@ export default function SuperadminSettingsPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">ประเภท Tier</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-zinc-300">ประเภท Tier</label>
                   <select
-                    className="select text-xs"
+                    className="w-full bg-[#181C25] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
                     value={formData.tier}
                     onChange={(e) => setFormData({ ...formData, tier: e.target.value })}
                   >
@@ -326,11 +345,11 @@ export default function SuperadminSettingsPage() {
                     <option value="paid_only">Paid Only</option>
                   </select>
                 </div>
-                <div>
-                  <label className="label">ลำดับ Fallback (Sort Order)</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-zinc-300">ลำดับ Fallback (Sort Order)</label>
                   <input
                     type="number"
-                    className="input text-xs"
+                    className="w-full bg-[#181C25] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors font-mono"
                     value={formData.sortOrder}
                     onChange={(e) => setFormData({ ...formData, sortOrder: parseInt(e.target.value) || 1 })}
                     required
@@ -338,32 +357,32 @@ export default function SuperadminSettingsPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="label">หมายเหตุ (Notes)</label>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-zinc-300">หมายเหตุ (Notes)</label>
                 <input
                   type="text"
-                  className="input text-xs"
+                  className="w-full bg-[#181C25] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
                   placeholder="เช่น รุ่นความเร็วสูง โควตาฟรี 15 RPM"
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 />
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-[var(--border)]">
-                <label className="flex items-center gap-2 text-xs text-white cursor-pointer">
+              <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                <label className="flex items-center gap-2.5 text-xs text-zinc-200 cursor-pointer">
                   <input
                     type="checkbox"
-                    className="accent-cyan-400"
+                    className="w-4 h-4 rounded border-white/20 bg-[#181C25] text-indigo-600 accent-indigo-600 cursor-pointer"
                     checked={formData.isActive}
                     onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                   />
                   <span>เปิดใช้งานโมเดลนี้ (Active)</span>
                 </label>
 
-                <label className="flex items-center gap-2 text-xs text-amber-300 cursor-pointer">
+                <label className="flex items-center gap-2.5 text-xs text-amber-300 cursor-pointer">
                   <input
                     type="checkbox"
-                    className="accent-amber-400"
+                    className="w-4 h-4 rounded border-white/20 bg-[#181C25] text-amber-500 accent-amber-500 cursor-pointer"
                     checked={formData.isDefaultForAuto}
                     onChange={(e) => setFormData({ ...formData, isDefaultForAuto: e.target.checked })}
                   />
@@ -371,11 +390,19 @@ export default function SuperadminSettingsPage() {
                 </label>
               </div>
 
-              <div className="pt-3 flex justify-end gap-2">
-                <button type="button" onClick={() => setModalOpen(false)} className="btn btn-ghost text-xs py-2 px-3">
+              <div className="pt-3 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+                >
                   ยกเลิก
                 </button>
-                <button type="submit" disabled={submitting} className="btn btn-primary text-xs py-2 px-4">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-xs font-medium shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50"
+                >
                   {submitting ? 'กำลังบันทึก...' : 'บันทึกโมเดล'}
                 </button>
               </div>

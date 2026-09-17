@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
+import type { MarketQuote } from '@/lib/market-data/types'
 import {
   Coins,
   Building2,
@@ -14,7 +15,7 @@ import {
   ArrowDownRight,
   Loader2,
   DollarSign,
-  Clock,
+  TrendingUp,
 } from 'lucide-react'
 
 export default function MarketWatchPage() {
@@ -27,13 +28,14 @@ export default function MarketWatchPage() {
   const [convTo, setConvTo] = useState('THB')
   const [isFlipping, setIsFlipping] = useState(false)
 
-  const fxList: any[] = data?.fxAndCommodities ?? []
+  const fxList: MarketQuote[] = Array.isArray(data?.fxAndCommodities) ? data.fxAndCommodities : []
   const usdItem = fxList.find((f) => f.symbol?.includes('USD / THB'))
-  const usdRate = usdItem?.price ?? 35.5
+  const usdRate = usdItem?.price as number | undefined
 
   function calculateConversion(): string {
     const amt = parseFloat(convAmount) || 0
     if (convFrom === convTo) return amt.toFixed(2)
+    if (!usdRate) return '--'
     if (convFrom === 'USD' && convTo === 'THB') return (amt * usdRate).toFixed(2)
     if (convFrom === 'THB' && convTo === 'USD') return (amt / usdRate).toFixed(2)
     return (amt * 1).toFixed(2)
@@ -41,7 +43,7 @@ export default function MarketWatchPage() {
 
   const handleSwapCurrencies = () => {
     setIsFlipping(true)
-    setTimeout(() => setIsFlipping(false), 350)
+    setTimeout(() => setIsFlipping(false), 300)
     const temp = convFrom
     setConvFrom(convTo)
     setConvTo(temp)
@@ -50,73 +52,79 @@ export default function MarketWatchPage() {
   const sections = [
     {
       key: 'crypto',
-      label: 'CRYPTO ASSETS',
+      label: 'สินทรัพย์คริปโต (Cryptocurrency)',
       icon: Coins,
+      color: 'text-amber-400',
       data: data?.crypto ?? [],
     },
     {
       key: 'usStocks',
-      label: 'US EQUITIES',
+      label: 'หุ้นสหรัฐฯ (US Equities)',
       icon: Building2,
+      color: 'text-blue-400',
       data: data?.usStocks ?? [],
     },
     {
       key: 'thStocks',
-      label: 'THAI EQUITIES',
+      label: 'หุ้นไทย (Thai SET Equities)',
       icon: Landmark,
+      color: 'text-emerald-400',
       data: data?.thStocks ?? [],
     },
     {
       key: 'fxAndCommodities',
-      label: 'COMMODITIES & FX',
+      label: 'อัตราแลกเปลี่ยนและสินค้าโภคภัณฑ์ (FX & Commodities)',
       icon: DollarSign,
+      color: 'text-cyan-400',
       data: data?.fxAndCommodities ?? [],
     },
   ]
 
-  const inputClass = "bg-[#0a0a0a] border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-zinc-500 transition-colors w-full font-mono uppercase"
+  const inputClass = "w-full bg-[#181C25] border border-white/[0.1] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all font-mono"
 
   return (
     <AppShell>
-      <div className="space-y-8 max-w-[1600px] mx-auto w-full">
+      <div className="space-y-6 max-w-[1600px] mx-auto w-full animate-fade-in">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">ตลาดการเงิน</h1>
-            <p className="text-sm text-zinc-500 mt-1">ติดตามหุ้นสหรัฐฯ หุ้นไทย คริปโต ทองคำ และอัตราแลกเปลี่ยน</p>
-          </div>
-          <button 
-            onClick={() => revalidate()} 
-            disabled={isValidating} 
-            className="bg-[#050505] text-zinc-400 hover:text-white border border-white/10 hover:bg-white/5 disabled:opacity-50 px-4 py-2 rounded-lg font-medium text-xs flex items-center gap-2 transition-colors w-fit"
-          >
-            <RefreshCw className={`w-4 h-4 ${isValidating ? 'animate-spin' : ''}`} /> 
-            {isValidating ? 'UPDATING...' : 'UPDATE PRICES'}
-          </button>
-        </div>
+        <PageHeader
+          eyebrow="Real-Time Quotes"
+          title="กระดานจับตาตลาดการเงิน"
+          description="ติดตามราคาตลาดสดแบบเรียลไทม์ หุ้นสหรัฐฯ หุ้นไทย คริปโตเคอร์เรนซี ทองคำ และอัตราแลกเปลี่ยน"
+          action={
+            <button 
+              onClick={() => revalidate()} 
+              disabled={isValidating} 
+              className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.1] disabled:opacity-50 px-4 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${isValidating ? 'animate-spin' : ''}`} /> 
+              <span>{isValidating ? 'กำลังดึงราคาล่าสุด...' : 'รีเฟรชราคาตลาด'}</span>
+            </button>
+          }
+        />
 
         {/* Currency Converter Card */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-[#0a0a0a] border border-white/5">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-              <ArrowRightLeft className="w-4 h-4 text-zinc-400" />
+        <div className="p-6 sm:p-7 rounded-2xl bg-[#12151C] border border-white/[0.08] shadow-xl shadow-black/40">
+          <div className="flex items-center gap-2.5 mb-5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+              <ArrowRightLeft className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white tracking-wide">เครื่องมือแปลงสกุลเงิน (FX CONVERTER)</h2>
+              <h2 className="text-sm font-bold text-white tracking-wide">เครื่องมือแปลงสกุลเงิน (FX Converter)</h2>
+              <p className="text-xs text-slate-400 mt-0.5">คำนวณอัตราแลกเปลี่ยนระหว่าง USD และ THB แบบเรียลไทม์</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-11 gap-4 items-end">
             <div className="md:col-span-3">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">AMOUNT</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">จำนวนเงิน</label>
               <input type="number" step="any" className={inputClass} value={convAmount} onChange={(e) => setConvAmount(e.target.value)} />
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">FROM</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">จากสกุลเงิน</label>
               <select className={inputClass} value={convFrom} onChange={(e) => setConvFrom(e.target.value)}>
-                <option value="USD">USD - US DOLLAR</option>
-                <option value="THB">THB - THAI BAHT</option>
+                <option value="USD" className="bg-[#12151C] text-white">USD - ดอลลาร์สหรัฐ</option>
+                <option value="THB" className="bg-[#12151C] text-white">THB - บาทไทย</option>
               </select>
             </div>
 
@@ -124,31 +132,34 @@ export default function MarketWatchPage() {
               <button
                 type="button"
                 onClick={handleSwapCurrencies}
-                className="w-10 h-10 rounded-xl bg-[#050505] border border-white/10 hover:bg-white/10 text-zinc-400 hover:text-white transition-all flex items-center justify-center"
+                className="w-10 h-10 rounded-xl bg-[#181C25] border border-white/[0.1] hover:bg-[#202532] text-indigo-400 hover:text-white transition-all flex items-center justify-center cursor-pointer active:scale-95"
+                title="สลับสกุลเงิน"
               >
                 <ArrowRightLeft className={`w-4 h-4 transition-transform duration-300 ${isFlipping ? 'rotate-180 scale-110' : ''}`} />
               </button>
             </div>
 
-            <div className="md:col-span-3">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">TO</label>
+            <div className="md:col-span-4">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">เป็นสกุลเงิน</label>
               <select className={inputClass} value={convTo} onChange={(e) => setConvTo(e.target.value)}>
-                <option value="THB">THB - THAI BAHT</option>
-                <option value="USD">USD - US DOLLAR</option>
+                <option value="THB" className="bg-[#12151C] text-white">THB - บาทไทย</option>
+                <option value="USD" className="bg-[#12151C] text-white">USD - ดอลลาร์สหรัฐ</option>
               </select>
             </div>
           </div>
 
-          <div className="mt-6 p-4 sm:p-5 rounded-2xl bg-[#050505] border border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="mt-5 p-4 sm:p-5 rounded-xl bg-[#181C25] border border-white/[0.06] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">EXCHANGE RATE (LIVE)</p>
-              <p className="text-xs font-mono text-zinc-400 mt-1">1 USD = {usdRate.toFixed(4)} THB</p>
+              <span className="text-[11px] text-slate-400 font-medium">อัตราแลกเปลี่ยนอ้างอิงล่าสุด</span>
+              <p className="text-xs font-mono text-slate-200 font-semibold mt-1">
+                {usdRate ? `1 USD = ${usdRate.toFixed(4)} THB` : 'กำลังรอข้อมูลอัตราแลกเปลี่ยน'}
+              </p>
             </div>
             <div className="text-left sm:text-right">
-              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">RESULT</p>
-              <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums font-mono mt-1">
+              <span className="text-[11px] text-slate-400 font-medium">ผลลัพธ์คำนวณสุทธิ</span>
+              <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums font-mono mt-0.5">
                 {Number(calculateConversion()).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
-                <span className="text-sm text-zinc-500 ml-1">{convTo}</span>
+                <span className="text-sm font-semibold text-indigo-400 ml-1">{convTo}</span>
               </p>
             </div>
           </div>
@@ -156,31 +167,34 @@ export default function MarketWatchPage() {
 
         {/* Market Sections */}
         {isLoading ? (
-          <div className="py-24 flex flex-col items-center justify-center gap-3 text-zinc-500">
-            <Loader2 className="w-8 h-8 animate-spin" />
-            <span className="text-[10px] font-mono tracking-widest uppercase">Fetching Live Market Data...</span>
+          <div className="py-24 flex flex-col items-center justify-center gap-3 text-slate-500">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+            <span className="text-xs font-medium">กำลังดึงข้อมูลราคาตลาดสด...</span>
           </div>
         ) : error ? (
-          <div className="py-24 text-center text-rose-400 text-xs">Error connecting to market data providers.</div>
+          <div className="py-16 p-8 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex flex-col items-center justify-center text-center">
+            <p className="text-rose-300 text-xs mb-3">ไม่สามารถเชื่อมต่อข้อมูลราคาตลาดได้ในขณะนี้</p>
+            <button onClick={() => revalidate()} className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-white">ลองอีกครั้ง</button>
+          </div>
         ) : (
-          <div className="space-y-10">
+          <div className="space-y-8">
             {sections.map((section) => {
               const Icon = section.icon
               if (!section.data || section.data.length === 0) return null
               
               return (
-                <div key={section.key} className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Icon className="w-4 h-4 text-zinc-500" />
-                    <h3 className="text-sm font-bold text-white tracking-widest uppercase">{section.label}</h3>
-                    <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded-sm bg-white/5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-[9px] text-zinc-400 font-mono tracking-widest uppercase">LIVE FEED</span>
+                <div key={section.key} className="space-y-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <Icon className={`w-4 h-4 ${section.color}`} />
+                    <h3 className="text-sm font-bold text-white tracking-tight">{section.label}</h3>
+                    <div className="ml-auto flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[10px] text-emerald-300 font-mono font-semibold tracking-wider">LIVE</span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {section.data.map((q: any) => (
+                    {section.data.map((q: MarketQuote) => (
                       <QuoteCard key={q.symbol} quote={q} />
                     ))}
                   </div>
@@ -194,59 +208,50 @@ export default function MarketWatchPage() {
   )
 }
 
-function QuoteCard({ quote }: { quote: any }) {
+function QuoteCard({ quote }: { quote: MarketQuote }) {
   const isPositive = (quote.changePercent ?? 0) >= 0
   const isZero = (quote.changePercent ?? 0) === 0
 
   return (
-    <div className="p-5 rounded-2xl bg-[#0a0a0a] border border-white/5 hover:border-white/20 transition-all duration-300 group flex flex-col justify-between">
+    <div className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-white/[0.08] hover:border-white/[0.16] hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[120px]">
       <div>
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex flex-col min-w-0 pr-2">
-            <span className="font-bold text-white tracking-wide text-base group-hover:text-zinc-300 transition-colors truncate">
+        <div className="flex items-start justify-between mb-3">
+          <div className="min-w-0 pr-2">
+            <span className="font-bold text-white text-sm sm:text-base group-hover:text-indigo-300 transition-colors truncate block">
               {quote.symbol}
             </span>
-            <span className="text-[10px] font-mono text-zinc-500 truncate mt-0.5 uppercase tracking-widest">
+            <span className="text-[11px] text-slate-400 truncate block mt-0.5">
               {quote.name ?? quote.symbol}
             </span>
           </div>
-          <span className="text-[9px] font-mono font-bold text-zinc-500 px-1.5 py-0.5 rounded-sm bg-white/5 uppercase tracking-widest shrink-0">
-            {quote.currency}
-          </span>
-        </div>
 
-        <p className="text-2xl font-bold text-white tabular-nums tracking-tight font-mono">
-          {quote.currency === 'USD' ? '$' : '฿'}
-          {Number(quote.price).toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: quote.price < 1 ? 4 : 2,
-          })}
-        </p>
-      </div>
-
-      <div className="mt-5 pt-4 border-t border-white/5 flex items-center justify-between">
-        <span className="text-[9px] font-mono font-bold text-zinc-600 uppercase tracking-widest truncate max-w-[50%]">
-          {quote.provider}
-        </span>
-
-        {!isZero && quote.changePercent !== undefined ? (
           <span
-            className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold tabular-nums font-mono tracking-widest ${
-              isPositive
-                ? 'text-emerald-400 bg-emerald-500/10'
-                : 'text-rose-400 bg-rose-500/10'
+            className={`flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold shrink-0 border ${
+              isZero
+                ? 'bg-slate-800 text-slate-400 border-slate-700'
+                : isPositive
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
             }`}
           >
             {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
             {isPositive ? '+' : ''}
-            {Number(quote.changePercent).toFixed(2)}%
+            {(quote.changePercent ?? 0).toFixed(2)}%
           </span>
-        ) : (
-          <span className="text-[9px] font-mono text-zinc-600 flex items-center gap-1 uppercase tracking-widest">
-            <Clock className="w-3 h-3" />
-            REF
-          </span>
-        )}
+        </div>
+      </div>
+
+      <div className="mt-2 pt-2.5 border-t border-white/[0.04] flex items-baseline justify-between">
+        <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums">
+          {quote.currency === 'THB' ? '฿' : '$'}
+          {Number(quote.price).toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: quote.price < 1 ? 4 : 2,
+          })}
+        </span>
+        <span className="text-[10px] text-slate-500 font-mono uppercase">
+          {quote.currency ?? 'USD'}
+        </span>
       </div>
     </div>
   )

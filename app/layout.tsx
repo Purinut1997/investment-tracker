@@ -27,9 +27,9 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'th_TH',
     url: 'https://investmenttracker.app',
-    title: 'Investment PRO',
+    title: 'Investment Pro',
     description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
-    siteName: 'Investment PRO',
+    siteName: 'Investment Pro',
   },
   icons: {
     icon: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png',
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Investment PRO',
+    title: 'Investment Pro',
     description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
   },
 }
@@ -59,19 +59,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="th" className={`${inter.variable} ${jetbrainsMono.variable} font-sans`} suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var theme = localStorage.getItem('investment_theme_style') || 'aurora';
-                document.documentElement.setAttribute('data-theme-style', theme);
-              } catch (e) {}
-            `,
-          }}
-        />
-      </head>
-      <body className="bg-slate-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-200 min-h-screen selection:bg-purple-500/30">
+      <body className="min-h-screen bg-[#090B10] text-slate-200 selection:bg-indigo-500/30">
         <Providers>{children}</Providers>
       </body>
     </html>

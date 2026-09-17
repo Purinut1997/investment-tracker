@@ -67,8 +67,8 @@ export function Sparkline({
   const usableH = height - padY * 2
 
   const coords = points.map((val, idx) => {
-    const x = padX + (idx / (points.length - 1)) * usableW
-    const y = padY + usableH - ((val - min) / range) * usableH
+    const x = Number((padX + (idx / (points.length - 1)) * usableW).toFixed(3))
+    const y = Number((padY + usableH - ((val - min) / range) * usableH).toFixed(3))
     return { x, y }
   })
 
@@ -77,7 +77,7 @@ export function Sparkline({
   for (let i = 0; i < coords.length - 1; i++) {
     const current = coords[i]
     const next = coords[i + 1]
-    const controlX = (current.x + next.x) / 2
+    const controlX = Number(((current.x + next.x) / 2).toFixed(3))
     pathD += ` C ${controlX},${current.y} ${controlX},${next.y} ${next.x},${next.y}`
   }
 

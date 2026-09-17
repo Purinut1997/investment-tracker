@@ -10,6 +10,11 @@ import {
   AlertTriangle,
   Calendar,
   Loader2,
+  FileSpreadsheet,
+  Coins,
+  Building2,
+  Receipt,
+  CheckCircle2,
 } from 'lucide-react'
 
 export default function TaxReportPage() {
@@ -26,7 +31,6 @@ export default function TaxReportPage() {
     if (!report) return
 
     const XLSX = await import('xlsx')
-
     const wb = XLSX.utils.book_new()
 
     // 1. Dividends Sheet
@@ -69,7 +73,7 @@ export default function TaxReportPage() {
     const wsForeign = XLSX.utils.json_to_sheet(foreignRows)
     XLSX.utils.book_append_sheet(wb, wsForeign, 'หุ้นนอก & คริปโต')
 
-    XLSX.writeFile(wb, `Tax_Report_${selectedYear}_InvestmentTracker.xlsx`)
+    XLSX.writeFile(wb, `Tax_Report_${selectedYear}_InvestmentPro.xlsx`)
   }
 
   async function handleExplainAI() {
@@ -79,20 +83,15 @@ export default function TaxReportPage() {
       const res = await fetch('/api/tax-report/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          year: selectedYear,
-          dividends: report.dividends,
-          thaiSetCapitalGains: report.thaiSetCapitalGains,
-          foreignAndCryptoGains: report.foreignAndCryptoGains,
-        }),
+        body: JSON.stringify({ report, year: selectedYear }),
       })
-
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to explain')
-      setAiExplanation(data.explanation)
-      setModelUsed(data.modelUsed)
-    } catch (err: any) {
-      alert(err.message || 'Error occurred')
+      if (data.explanation) {
+        setAiExplanation(data.explanation)
+        setModelUsed(data.modelUsed || '')
+      }
+    } catch {
+      setAiExplanation('เกิดข้อผิดพลาดในการประมวลผลคำแนะนำจาก AI กรุณาลองใหม่อีกครั้ง')
     } finally {
       setAiLoading(false)
     }
@@ -102,87 +101,92 @@ export default function TaxReportPage() {
 
   return (
     <AppShell>
-      <div className="space-y-8 max-w-[1600px] mx-auto w-full">
+      <div className="space-y-6 max-w-[1600px] mx-auto w-full animate-fade-in">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">รายงานสรุปภาษีการลงทุน</h1>
-            <p className="text-sm text-zinc-500 mt-1">คำนวณต้นทุน FIFO แยกปันผล หุ้นไทย และหุ้นนอกหรือคริปโต</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 bg-[#050505] border border-white/10 rounded-xl px-4 py-2">
-              <Calendar className="w-4 h-4 text-zinc-400" />
-              <select
-                className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer uppercase tracking-widest font-mono"
-                value={selectedYear}
-                onChange={(e) => {
-                  setSelectedYear(parseInt(e.target.value))
-                  setAiExplanation(null)
-                }}
+        <PageHeader
+          eyebrow="Tax & Compliance"
+          title="รายงานภาษีและการจัดการส่วนบุคคล"
+          description="จัดหมวดหมู่กระแสเงินสด เงินปันผล และผลกำไรตามหลักเกณฑ์ FIFO เพื่อเตรียมข้อมูลยื่นแบบแสดงรายการภาษี"
+          action={
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2 bg-[#181C25] border border-white/[0.1] rounded-xl px-3 py-1.5">
+                <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                <select
+                  className="bg-transparent text-xs text-white outline-none font-mono cursor-pointer"
+                  value={selectedYear}
+                  onChange={(e) => {
+                    setSelectedYear(parseInt(e.target.value))
+                    setAiExplanation(null)
+                  }}
+                >
+                  {yearsList.map((y) => (
+                    <option key={y} value={y} className="bg-[#12151C] text-white">
+                      ปีภาษี {y} (พ.ศ. {y + 543})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={handleExportExcel}
+                disabled={!report}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-600/25 active:scale-[0.98] cursor-pointer"
               >
-                {yearsList.map((y) => (
-                  <option key={y} value={y} className="bg-black">
-                    YEAR {y}
-                  </option>
-                ))}
-              </select>
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>ส่งออกไฟล์ Excel (.xlsx)</span>
+              </button>
             </div>
-            <button
-              onClick={handleExportExcel}
-              disabled={!report}
-              className="bg-white text-black hover:bg-zinc-200 disabled:opacity-50 text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors h-[34px]"
-            >
-              <Download className="w-4 h-4" /> EXPORT
-            </button>
-          </div>
-        </div>
+          }
+        />
 
-        {/* Mandatory Legal Disclaimer Banner */}
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 text-xs text-amber-200/80 leading-relaxed font-mono">
+        {/* Legal Disclaimer Banner */}
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3 text-xs text-amber-200/90 leading-relaxed shadow-lg shadow-amber-500/5">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold text-amber-400 uppercase tracking-widest mb-1">
-              LEGAL DISCLAIMER
-            </p>
-            <p>
-              รายงานนี้สร้างขึ้นเพื่ออำนวยความสะดวกในการจัดหมวดหมู่ข้อมูลการลงทุนส่วนบุคคลด้วยวิธี FIFO เท่านั้น ไม่ถือเป็นการยื่นแบบภาษีจริง และคำอธิบายจาก AI ไม่ใช่คำแนะนำด้านภาษีที่มีใบอนุญาต ผู้เสียภาษีมีหน้าที่ตรวจสอบความถูกต้องกับหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)
+            <span className="font-bold text-amber-300">ข้อควรทราบทางกฎหมายและการยื่นแบบภาษี:</span>
+            <p className="mt-0.5">
+              รายงานนี้สร้างขึ้นเพื่ออำนวยความสะดวกในการจัดระเบียบข้อมูลการลงทุนส่วนบุคคลด้วยวิธีเข้าก่อน-ออกก่อน (FIFO) เท่านั้น ไม่ถือเป็นการยื่นแบบภาษีจริง และคำอธิบายจาก AI ไม่ใช่คำแนะนำทางกฎหมาย ผู้เสียภาษีมีหน้าที่ตรวจสอบความถูกต้องกับเอกสารรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ) จากโบรกเกอร์ก่อนยื่นต่อกรมสรรพากร
             </p>
           </div>
         </div>
 
         {/* 3 Main Tax Category KPI Cards */}
         {isLoading ? (
-           <div className="py-24 flex flex-col items-center justify-center gap-4 text-zinc-500">
-             <Loader2 className="w-8 h-8 animate-spin" />
-             <span className="text-[10px] font-mono tracking-widest uppercase">Calculating Taxes...</span>
-           </div>
+          <div className="py-24 flex flex-col items-center justify-center gap-3 text-slate-500">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+            <span className="text-xs font-medium">กำลังคำนวณและสรุปข้อมูลภาษีปี {selectedYear}...</span>
+          </div>
         ) : error ? (
-           <div className="p-8 text-center text-rose-400 text-xs font-mono">Error generating tax report</div>
+          <div className="p-8 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center text-rose-300 text-xs font-mono">
+            เกิดข้อผิดพลาดในการดึงข้อมูลรายงานภาษี
+          </div>
         ) : report ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Category 1: Dividends */}
-            <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-4 flex flex-col justify-between min-h-[160px]">
+            <div className="p-6 rounded-2xl bg-[#12151C] border border-white/[0.08] space-y-4 flex flex-col justify-between min-h-[160px] shadow-xl shadow-black/30">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">
-                  DIVIDENDS
+                <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                  <Coins className="w-4 h-4" /> เงินปันผลรับสะสม (Dividends)
                 </span>
-                <span className="text-[9px] px-2 py-0.5 rounded-sm bg-white/5 font-mono text-zinc-500 tracking-widest">
-                  {report.dividends.items.length} ITEMS
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 font-mono text-slate-400">
+                  {report.dividends.items.length} รายการ
                 </span>
               </div>
-              <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono">
-                ฿{Number(report.dividends.totalDividendGross).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              <div>
+                <span className="text-xs text-slate-400">ยอดเงินปันผลรวม (ก่อนหักภาษี)</span>
+                <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono mt-0.5">
+                  ฿{Number(report.dividends.totalDividendGross).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
               </div>
-              <div className="text-[10px] text-zinc-500 space-y-1.5 pt-4 border-t border-white/5 font-mono tracking-widest">
+              <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
                 <div className="flex justify-between">
-                  <span>TAX WITHHELD:</span>
+                  <span>ภาษีหัก ณ ที่จ่าย (10%):</span>
                   <span className="font-bold text-rose-400">
                     -฿{Number(report.dividends.totalTaxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>NET DIVIDENDS:</span>
-                  <span className="font-bold text-white">
+                  <span>เงินปันผลรับสุทธิ:</span>
+                  <span className="font-bold text-emerald-400">
                     ฿{Number(report.dividends.totalDividendNet).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -190,20 +194,23 @@ export default function TaxReportPage() {
             </div>
 
             {/* Category 2: Thai SET Capital Gains */}
-            <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-4 flex flex-col justify-between min-h-[160px]">
+            <div className="p-6 rounded-2xl bg-[#12151C] border border-white/[0.08] space-y-4 flex flex-col justify-between min-h-[160px] shadow-xl shadow-black/30">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
-                  THAI SET GAINS
+                <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4" /> กำไรหุ้นไทยในตลาด (SET)
                 </span>
-                <span className="text-[9px] px-2 py-0.5 rounded-sm bg-emerald-500/10 font-mono text-emerald-400 tracking-widest">
-                  EXEMPT
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 font-mono text-emerald-300 border border-emerald-500/30">
+                  ยกเว้นภาษี (Exempt)
                 </span>
               </div>
-              <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono">
-                ฿{Number(report.thaiSetCapitalGains.totalRealizedGain).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              <div>
+                <span className="text-xs text-slate-400">กำไรส่วนต่างราคาขายสุทธิ (Capital Gains)</span>
+                <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono mt-0.5">
+                  ฿{Number(report.thaiSetCapitalGains.totalRealizedGain).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
               </div>
-              <div className="text-[10px] text-zinc-500 pt-4 border-t border-white/5 flex justify-between font-mono tracking-widest">
-                <span>TOTAL VOLUME:</span>
+              <div className="text-xs text-slate-400 pt-3 border-t border-white/[0.06] flex justify-between font-mono">
+                <span>มูลค่าซื้อขายรวมทั้งสิ้น:</span>
                 <span className="font-bold text-white">
                   ฿{Number(report.thaiSetCapitalGains.totalVolume).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </span>
@@ -211,28 +218,31 @@ export default function TaxReportPage() {
             </div>
 
             {/* Category 3: Foreign & Crypto Gains */}
-            <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-4 flex flex-col justify-between min-h-[160px]">
+            <div className="p-6 rounded-2xl bg-[#12151C] border border-white/[0.08] space-y-4 flex flex-col justify-between min-h-[160px] shadow-xl shadow-black/30">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                  FOREIGN & CRYPTO GAINS
+                <span className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4" /> กำไรหุ้นต่างประเทศและคริปโต
                 </span>
-                <span className="text-[9px] px-2 py-0.5 rounded-sm bg-white/5 font-mono text-zinc-500 tracking-widest">
-                  {report.foreignAndCryptoGains.trades.length} TRADES
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 font-mono text-slate-400">
+                  {report.foreignAndCryptoGains.trades.length} รายการขาย
                 </span>
               </div>
-              <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono">
-                ฿{Number(report.foreignAndCryptoGains.totalRealizedGain).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              <div>
+                <span className="text-xs text-slate-400">กำไรรับรู้จริงสะสม (FIFO Realized)</span>
+                <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono mt-0.5">
+                  ฿{Number(report.foreignAndCryptoGains.totalRealizedGain).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
               </div>
-              <div className="text-[10px] text-zinc-500 space-y-1.5 pt-4 border-t border-white/5 font-mono tracking-widest">
+              <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
                 <div className="flex justify-between">
-                  <span>TOTAL PROCEEDS:</span>
+                  <span>ยอดขายรวม:</span>
                   <span className="font-bold text-white">
                     ฿{Number(report.foreignAndCryptoGains.totalProceeds).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>FIFO COST:</span>
-                  <span className="font-bold text-zinc-400">
+                  <span>ต้นทุน FIFO:</span>
+                  <span className="font-bold text-slate-300">
                     ฿{Number(report.foreignAndCryptoGains.totalCost).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -241,42 +251,45 @@ export default function TaxReportPage() {
           </div>
         ) : null}
 
-        {/* AI Explain Tax Button & Card */}
-        <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-6">
+        {/* AI Tax Advisor Card */}
+        <div className="p-6 rounded-2xl bg-[#12151C] border border-white/[0.08] space-y-5 shadow-xl shadow-black/40">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-widest">
-                AI TAX ADVISOR
+              <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                <span>คำแนะนำเชิงภาษีจาก AI Tax Advisor</span>
               </h3>
-              <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest font-mono">
-                Get AI analysis and explanations for your tax year {selectedYear}
+              <p className="text-xs text-slate-400 mt-0.5">
+                รับการวิเคราะห์ภาพรวมภาษีและการเตรียมเอกสาร ภ.ง.ด. สำหรับปีภาษี {selectedYear}
               </p>
             </div>
 
             <button
               onClick={handleExplainAI}
               disabled={aiLoading || !report}
-              className="bg-white text-black hover:bg-zinc-200 disabled:opacity-50 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors self-start sm:self-auto"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-600/25 active:scale-[0.98] cursor-pointer self-start sm:self-auto"
             >
               {aiLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>ANALYZING...</span>
+                  <span>AI กำลังวิเคราะห์ข้อมูลภาษี...</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <span>GENERATE REPORT</span>
+                  <span>วิเคราะห์ภาษีด้วย AI</span>
                 </>
               )}
             </button>
           </div>
 
           {aiExplanation && (
-            <div className="p-5 rounded-2xl bg-[#050505] border border-white/5 text-xs text-zinc-300 leading-relaxed whitespace-pre-line font-mono animate-in fade-in">
-              <div className="flex justify-between items-center mb-4 pb-2 border-b border-white/5">
-                <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">ANALYSIS COMPLETE</span>
-                <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">{modelUsed}</span>
+            <div className="p-5 rounded-xl bg-[#181C25] border border-indigo-500/25 text-xs text-slate-200 leading-relaxed whitespace-pre-line animate-fade-in shadow-inner">
+              <div className="flex justify-between items-center mb-3 pb-2 border-b border-white/[0.06]">
+                <span className="text-[11px] text-indigo-400 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> ผลการวิเคราะห์เสร็จสมบูรณ์
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">{modelUsed}</span>
               </div>
               {aiExplanation}
             </div>
@@ -287,41 +300,43 @@ export default function TaxReportPage() {
         {report && (
           <div className="space-y-6">
             {/* Table 1: Dividends */}
-            <div className="rounded-3xl bg-[#0a0a0a] border border-white/5 overflow-hidden">
-              <div className="p-5 border-b border-white/5">
-                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">DIVIDENDS DETAIL</h3>
+            <div className="rounded-2xl bg-[#12151C] border border-white/[0.08] overflow-hidden shadow-xl shadow-black/30">
+              <div className="px-6 py-4 border-b border-white/[0.06] bg-[#181C25]">
+                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  รายละเอียดเงินปันผลรับสะสม (Dividends Detail)
+                </h3>
               </div>
               {report.dividends.items.length === 0 ? (
-                <div className="p-8 text-center text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                  No dividends received in {selectedYear}
+                <div className="p-8 text-center text-xs text-slate-500 font-mono">
+                  ไม่พบรายการเงินปันผลในปีภาษี {selectedYear}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-[11px] font-mono">
-                    <thead className="bg-[#050505] text-zinc-500 uppercase tracking-widest">
+                  <table className="custom-table text-left">
+                    <thead>
                       <tr>
-                        <th className="py-3 px-5 font-bold">DATE</th>
-                        <th className="py-3 px-5 font-bold">TICKER</th>
-                        <th className="py-3 px-5 text-right font-bold">GROSS</th>
-                        <th className="py-3 px-5 text-right font-bold">TAX WITHHELD</th>
-                        <th className="py-3 px-5 text-right font-bold">NET</th>
+                        <th>วันที่รับเงิน</th>
+                        <th>สัญลักษณ์ (Ticker)</th>
+                        <th className="text-right">ยอดก่อนหักภาษี (Gross)</th>
+                        <th className="text-right">ภาษีหัก ณ ที่จ่าย (10%)</th>
+                        <th className="text-right">ยอดสุทธิ (Net)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody>
                       {report.dividends.items.map((item: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-white/5 transition-colors">
-                          <td className="py-3 px-5 text-zinc-400">
-                            {new Date(item.date).toLocaleDateString('en-US', { year: '2-digit', month: 'short', day: '2-digit' })}
+                        <tr key={idx} className="transition-colors">
+                          <td className="font-mono text-xs text-slate-400">
+                            {new Date(item.date).toLocaleDateString('th-TH', { year: '2-digit', month: 'short', day: '2-digit' })}
                           </td>
-                          <td className="py-3 px-5 font-bold text-white">{item.ticker}</td>
-                          <td className="py-3 px-5 text-right text-white tabular-nums">
-                            {Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          <td className="font-bold text-white font-mono">{item.ticker}</td>
+                          <td className="text-right text-white tabular-nums font-mono">
+                            ฿{Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-3 px-5 text-right text-rose-400 tabular-nums">
-                            -{Number(item.taxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          <td className="text-right text-rose-400 tabular-nums font-mono">
+                            -฿{Number(item.taxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-3 px-5 text-right font-bold text-emerald-400 tabular-nums">
-                            {Number(item.amount - item.taxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          <td className="text-right font-bold text-emerald-400 tabular-nums font-mono">
+                            ฿{Number(item.amount - item.taxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
                       ))}
@@ -332,59 +347,61 @@ export default function TaxReportPage() {
             </div>
 
             {/* Table 2: Foreign & Crypto Trades */}
-            <div className="rounded-3xl bg-[#0a0a0a] border border-white/5 overflow-hidden">
-              <div className="p-5 border-b border-white/5">
-                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">FOREIGN & CRYPTO TRADES (FIFO)</h3>
+            <div className="rounded-2xl bg-[#12151C] border border-white/[0.08] overflow-hidden shadow-xl shadow-black/30">
+              <div className="px-6 py-4 border-b border-white/[0.06] bg-[#181C25]">
+                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  รายการขายสินทรัพย์ต่างประเทศและคริปโต (FIFO Lots)
+                </h3>
               </div>
               {report.foreignAndCryptoGains.trades.length === 0 ? (
-                <div className="p-8 text-center text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
-                  No foreign or crypto trades in {selectedYear}
+                <div className="p-8 text-center text-xs text-slate-500 font-mono">
+                  ไม่พบรายการขายสินทรัพย์ต่างประเทศหรือคริปโตในปีภาษี {selectedYear}
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-[11px] font-mono">
-                    <thead className="bg-[#050505] text-zinc-500 uppercase tracking-widest">
+                  <table className="custom-table text-left">
+                    <thead>
                       <tr>
-                        <th className="py-3 px-5 font-bold">DATE</th>
-                        <th className="py-3 px-5 font-bold">TICKER</th>
-                        <th className="py-3 px-5 text-right font-bold">QTY</th>
-                        <th className="py-3 px-5 text-right font-bold">PRICE</th>
-                        <th className="py-3 px-5 text-right font-bold">PROCEEDS</th>
-                        <th className="py-3 px-5 text-right font-bold">FIFO COST</th>
-                        <th className="py-3 px-5 text-right font-bold">REALIZED P/L</th>
+                        <th>วันที่ขาย</th>
+                        <th>สินทรัพย์</th>
+                        <th className="text-right">จำนวน</th>
+                        <th className="text-right">ราคาขาย/หน่วย</th>
+                        <th className="text-right">ยอดขายรวม</th>
+                        <th className="text-right">ต้นทุน FIFO</th>
+                        <th className="text-right">กำไร/ขาดทุนรับรู้</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody>
                       {report.foreignAndCryptoGains.trades.map((t: any, idx: number) => {
                         const isGain = t.realizedGain >= 0
                         return (
-                          <tr key={idx} className="hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-5 text-zinc-400">
-                              {new Date(t.sellDate).toLocaleDateString('en-US', { year: '2-digit', month: 'short', day: '2-digit' })}
+                          <tr key={idx} className="transition-colors">
+                            <td className="font-mono text-xs text-slate-400">
+                              {new Date(t.sellDate).toLocaleDateString('th-TH', { year: '2-digit', month: 'short', day: '2-digit' })}
                             </td>
-                            <td className="py-3 px-5 font-bold text-white">
+                            <td className="font-bold text-white font-mono">
                               {t.ticker}
-                              <span className="text-[9px] text-zinc-500 ml-1">({t.market})</span>
+                              <span className="text-[10px] text-slate-500 ml-1 font-normal uppercase">({t.market})</span>
                             </td>
-                            <td className="py-3 px-5 text-right text-white tabular-nums">
+                            <td className="text-right text-white tabular-nums font-mono">
                               {Number(t.quantity).toLocaleString()}
                             </td>
-                            <td className="py-3 px-5 text-right text-zinc-400 tabular-nums">
-                              {Number(t.sellPrice).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            <td className="text-right text-slate-300 tabular-nums font-mono">
+                              ฿{Number(t.sellPrice).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
-                            <td className="py-3 px-5 text-right text-white tabular-nums">
-                              {Number(t.sellProceeds).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            <td className="text-right text-white tabular-nums font-mono">
+                              ฿{Number(t.sellProceeds).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
-                            <td className="py-3 px-5 text-right text-zinc-500 tabular-nums">
-                              {Number(t.costBasis).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            <td className="text-right text-slate-400 tabular-nums font-mono">
+                              ฿{Number(t.costBasis).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                             <td
-                              className={`py-3 px-5 text-right font-bold tabular-nums ${
+                              className={`text-right font-bold tabular-nums font-mono ${
                                 isGain ? 'text-emerald-400' : 'text-rose-400'
                               }`}
                             >
                               {isGain ? '+' : ''}
-                              {Number(t.realizedGain).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              ฿{Number(t.realizedGain).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
                         )
