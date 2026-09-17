@@ -22,7 +22,9 @@ import {
   Plus,
   ChevronRight,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Search,
+  Bell
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
@@ -38,17 +40,18 @@ const PRIMARY_NAV: NavItem[] = [
   { label: 'แดชบอร์ด', href: '/dashboard', icon: LayoutDashboard },
   { label: 'รายการธุรกรรม', href: '/transactions', icon: ArrowLeftRight },
   { label: 'บัญชีการเงิน', href: '/accounts', icon: Wallet },
-  { label: 'แผน & สัดส่วน', href: '/plans', icon: PieChart },
-  { label: 'ตลาดการเงิน', href: '/market-watch', icon: TrendingUp },
-  { label: 'ข่าวสาร & Digest', href: '/news', icon: Newspaper },
+  { label: 'แผนการลงทุน', href: '/plans', icon: PieChart },
+  { label: 'จับตาตลาด', href: '/market-watch', icon: TrendingUp },
+  { label: 'พยากรณ์พอร์ต', href: '/forecast', icon: Sparkles, badge: 'AI' },
+  { label: 'สรุปข่าวเศรษฐกิจ', href: '/news', icon: Newspaper },
   { label: 'รายงานภาษี', href: '/tax-report', icon: ReceiptText },
   { label: 'ตั้งค่าระบบ', href: '/settings', icon: Settings },
 ]
 
 const SUPERADMIN_NAV: NavItem[] = [
   { label: 'จัดการผู้ใช้', href: '/superadmin/users', icon: Users },
-  { label: 'Audit Logs', href: '/superadmin/logs', icon: ShieldAlert },
-  { label: 'โมเดล AI', href: '/superadmin/settings', icon: Cpu },
+  { label: 'บันทึกระบบ (Logs)', href: '/superadmin/logs', icon: ShieldAlert },
+  { label: 'สถานะระบบ / AI', href: '/superadmin/settings', icon: Cpu },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -57,10 +60,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
 
-  const role = (session?.user as { role?: string })?.role ?? 'user'
-  const isSuperAdminOrAdmin = role === 'superadmin' || role === 'admin'
-  const userName = session?.user?.name ?? session?.user?.email?.split('@')[0] ?? 'นักลงทุน'
-  const userEmail = session?.user?.email ?? ''
+  const role = (session?.user as any)?.role || 'USER'
+  const isSuperAdminOrAdmin = role === 'SUPERADMIN' || role === 'ADMIN'
+  const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'นักลงทุน'
+  const userEmail = session?.user?.email || ''
 
   return (
     <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex relative overflow-x-hidden">
@@ -72,11 +75,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────────────── */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-[var(--border)] bg-[var(--bg-surface)]/90 backdrop-blur-xl shrink-0 sticky top-0 h-screen z-40">
+      <aside className="hidden md:flex flex-col w-64 border-r border-[var(--border)] bg-[#0A0F1D]/80 backdrop-blur-2xl shrink-0 sticky top-0 h-screen z-40 shadow-[4px_0_24px_rgba(0,0,0,0.4)]">
         {/* Brand Header */}
         <div className="p-5 border-b border-[var(--border)] flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-3 no-underline group">
-            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/95 p-1 border border-white/20 shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-transform group-hover:scale-105 shrink-0 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl overflow-hidden bg-white/95 p-1 border border-white/20 shadow-[0_0_20px_rgba(56,189,248,0.3)] transition-transform group-hover:scale-105 shrink-0 flex items-center justify-center">
               <img
                 src="/logo.png?v=2"
                 alt="Mix The Architect System Logo"
@@ -86,11 +89,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div>
               <div className="font-bold tracking-tight text-white flex items-center gap-1.5 text-base">
                 <span>INVESTMENT</span>
-                <span className="text-[var(--cyan-400)] text-xs font-semibold px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30">
+                <span className="text-[var(--cyan-400)] text-xs font-semibold px-1.5 py-0.5 rounded-lg bg-cyan-950/80 border border-cyan-500/30 shadow-[0_0_8px_rgba(6,182,212,0.3)]">
                   AI
                 </span>
               </div>
-              <p className="text-[10px] text-[var(--text-muted)] tracking-wider uppercase font-medium">
+              <p className="text-[10px] text-[var(--text-muted)] tracking-wider uppercase font-semibold">
                 MIX THE ARCHITECT
               </p>
             </div>
@@ -202,10 +205,50 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ─── MAIN CONTENT AREA ──────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-6 relative z-10">
+        {/* Desktop Topbar */}
+        <header className="hidden md:flex items-center justify-between px-8 py-3.5 border-b border-[var(--border)] bg-[#0A0F1D]/80 backdrop-blur-xl sticky top-0 z-30 shadow-sm">
+          <div className="flex items-center gap-3 w-96">
+            <div className="relative w-full">
+              <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="ค้นหาสินทรัพย์, หุ้น, คริปโต... (⌘K)"
+                className="w-full pl-10 pr-12 py-2 bg-[var(--bg-surface)]/80 border border-[var(--border)] rounded-xl text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--cyan-400)]/60 focus:ring-1 focus:ring-[var(--cyan-400)]/40 transition-all shadow-inner"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[var(--text-muted)]">
+                ⌘K
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3.5">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium shadow-[0_0_12px_rgba(16,185,129,0.15)]">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Real-Time Market Sync</span>
+            </div>
+
+            <button
+              onClick={() => setQuickAddOpen(true)}
+              className="btn btn-primary text-xs py-2 px-4 shadow-[0_0_18px_rgba(6,182,212,0.3)] flex items-center gap-1.5 rounded-xl font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>บันทึกธุรกรรม</span>
+            </button>
+
+            <Link
+              href="/settings"
+              className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.05] transition-colors border border-transparent hover:border-[var(--border)]"
+              title="การตั้งค่า"
+            >
+              <Settings className="w-4 h-4" />
+            </Link>
+          </div>
+        </header>
+
         {/* Mobile Header */}
         <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[var(--bg-surface)]/90 border-b border-[var(--border)] backdrop-blur-md">
           <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white/95 p-0.5 border border-white/20 shadow-[0_0_12px_rgba(34,211,238,0.25)] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl overflow-hidden bg-white/95 p-0.5 border border-white/20 shadow-[0_0_12px_rgba(34,211,238,0.25)] flex items-center justify-center">
               <img
                 src="/logo.png?v=2"
                 alt="Mix The Architect System Logo"
