@@ -98,10 +98,8 @@ function LoginForm() {
         {/* Logo / Brand */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <div style={{
-            width: 64, height: 64,
-            borderRadius: '16px',
-            overflow: 'hidden',
-            backgroundColor: '#ffffff',
+            width: 48, height: 48, borderRadius: 12,
+            background: '#ffffff',
             padding: 4,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             margin: '0 auto 14px',
@@ -109,7 +107,7 @@ function LoginForm() {
             boxShadow: '0 0 25px rgba(34, 211, 238, 0.3)',
           }}>
             <img
-              src="/logo.png"
+              src="/logo.png?v=2"
               alt="Mix The Architect System Logo"
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />

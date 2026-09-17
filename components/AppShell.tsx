@@ -79,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="flex items-center gap-3 no-underline group">
             <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/95 p-1 border border-white/20 shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-transform group-hover:scale-105 shrink-0 flex items-center justify-center">
               <img
-                src="/logo.png"
+                src="/logo.png?v=2"
                 alt="Mix The Architect System Logo"
                 className="w-full h-full object-contain"
               />
@@ -209,7 +209,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
             <div className="w-8 h-8 rounded-lg overflow-hidden bg-white/95 p-0.5 border border-white/20 shadow-[0_0_12px_rgba(34,211,238,0.25)] flex items-center justify-center">
               <img
-                src="/logo.png"
+                src="/logo.png?v=2"
                 alt="Mix The Architect System Logo"
                 className="w-full h-full object-contain"
               />
@@ -245,7 +245,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg overflow-hidden bg-white/95 p-0.5 border border-white/20 shadow-[0_0_12px_rgba(34,211,238,0.25)] flex items-center justify-center">
                     <img
-                      src="/logo.png"
+                      src="/logo.png?v=2"
                       alt="Mix The Architect System Logo"
                       className="w-full h-full object-contain"
                     />
