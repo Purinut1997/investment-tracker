@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   Cpu,
   Plus,
@@ -150,31 +151,7 @@ export default function SuperadminSettingsPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                Superadmin System Config
-              </span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
-              <Cpu className="w-7 h-7 text-amber-400" />
-              <span>จัดการโมเดล AI (AiModelOption)</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-              เพิ่ม/แก้ไขรายชื่อ Google Gemini Models ได้ทันทีโดยไม่ต้อง Redeploy ระบบ
-            </p>
-          </div>
-
-          <button
-            onClick={openCreateModal}
-            className="btn btn-primary text-xs sm:text-sm py-2 px-4 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>เพิ่มโมเดลใหม่</span>
-          </button>
-        </div>
+        <PageHeader eyebrow="Superadmin System Config" title="จัดการโมเดล AI" description="เพิ่มหรือแก้ไขรายชื่อ Google Gemini Models โดยไม่ต้อง deploy ระบบใหม่" action={<button onClick={openCreateModal} className="btn btn-primary text-sm"><Plus className="w-4 h-4" /> เพิ่มโมเดลใหม่</button>} />
 
         {/* Models Table */}
         <div className="card overflow-hidden">

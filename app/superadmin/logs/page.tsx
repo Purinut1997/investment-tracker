@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   ShieldAlert,
   ShieldCheck,
@@ -30,23 +31,7 @@ export default function SuperadminLogsPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                Security & Audit
-              </span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
-              <ShieldAlert className="w-7 h-7 text-amber-400" />
-              <span>บันทึกความปลอดภัย (Audit Logs)</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-              ตรวจสอบประวัติการทำรายการสำคัญของระบบ และการพยายามล็อกอินทั้งหมดเพื่อเฝ้าระวัง Brute-force
-            </p>
-          </div>
-        </div>
+        <PageHeader eyebrow="Security & Audit" title="บันทึกความปลอดภัย" description="ตรวจสอบเหตุการณ์สำคัญและการพยายามเข้าสู่ระบบเพื่อเฝ้าระวังความผิดปกติ" />
 
         {/* Tab Switcher */}
         <div className="flex border-b border-[var(--border)]">

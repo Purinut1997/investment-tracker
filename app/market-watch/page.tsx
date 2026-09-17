@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   TrendingUp,
   Coins,
@@ -89,32 +90,12 @@ export default function MarketWatchPage() {
   return (
     <AppShell>
       <div className="space-y-8">
-        {/* ── Page Header ─────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-cyan-400/10 border border-cyan-400/20">
-                <TrendingUp className="w-5 h-5 text-cyan-400" />
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-                ตลาดการเงิน & อัตราแลกเปลี่ยน
-              </h1>
-            </div>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] pl-11">
-              ราคาหุ้นสหรัฐฯ, หุ้นไทย, คริปโต, ทองคำ แบบ Real-time
-            </p>
-          </div>
-
-          <button
-            onClick={() => revalidate()}
-            disabled={isValidating}
-            className="btn btn-secondary text-xs sm:text-sm py-2 px-4 flex items-center gap-2 self-start sm:self-auto"
-          >
-            <RefreshCw className={`w-4 h-4 ${isValidating ? 'animate-spin text-[var(--cyan-400)]' : ''}`} />
-            <span>{isValidating ? 'กำลังดึงราคา...' : 'อัปเดตราคา'}</span>
-          </button>
-        </div>
-
+        <PageHeader
+          eyebrow="ตลาดและข้อมูล"
+          title="ตลาดการเงินและอัตราแลกเปลี่ยน"
+          description="ติดตามหุ้นสหรัฐฯ หุ้นไทย คริปโต ทองคำ และอัตราแลกเปลี่ยน"
+          action={<button onClick={() => revalidate()} disabled={isValidating} className="btn btn-secondary text-sm"><RefreshCw className={`w-4 h-4 ${isValidating ? 'animate-spin text-[var(--cyan-400)]' : ''}`} /> {isValidating ? 'กำลังดึงราคา...' : 'อัปเดตราคา'}</button>}
+        />
         {/* ── Currency Converter Card ────────────────────── */}
         <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] relative overflow-hidden">
           {/* subtle top glow line */}

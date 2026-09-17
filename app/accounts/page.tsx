@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   Wallet,
   Plus,
@@ -123,27 +124,12 @@ export default function AccountsPage() {
   return (
     <AppShell>
       <div className="space-y-8">
-        {/* ── Header ─────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)]">
-                <Wallet className="w-5 h-5 text-white" />
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">บัญชีการเงิน</h1>
-            </div>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] pl-11">
-              จัดการพอร์ตและบัญชีลงทุนต่างๆ — Brokerage, Crypto, Bank, Cash
-            </p>
-          </div>
-          <button
-            onClick={openCreateModal}
-            className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2 self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>สร้างบัญชีใหม่</span>
-          </button>
-        </div>
+        <PageHeader
+          eyebrow="พอร์ตของฉัน"
+          title="บัญชีการเงิน"
+          description="จัดการพอร์ตและบัญชีลงทุนต่างๆ ในพื้นที่เดียว"
+          action={<button onClick={openCreateModal} className="btn btn-primary text-sm"><Plus className="w-4 h-4" /> สร้างบัญชีใหม่</button>}
+        />
 
         {/* ── Stats Row ───────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

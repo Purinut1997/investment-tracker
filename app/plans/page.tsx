@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   Scale,
   Plus,
@@ -143,23 +144,11 @@ export default function PlansPage() {
   return (
     <AppShell>
       <div className="space-y-8">
-        {/* ── Header ─────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)]">
-                <Scale className="w-5 h-5 text-white" />
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-                แผนจัดสรรสินทรัพย์
-              </h1>
-            </div>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] pl-11">
-              กำหนดสัดส่วนเป้าหมาย, ตรวจสอบความเบี่ยงเบน, และคำนวณ Rebalancing
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5">
+        <PageHeader
+          eyebrow="วางแผนการลงทุน"
+          title="แผนจัดสรรสินทรัพย์"
+          description="กำหนดสัดส่วนเป้าหมาย ตรวจสอบความเบี่ยงเบน และคำนวณการปรับพอร์ต"
+          action={<div className="flex flex-wrap items-center gap-2.5">
             <Link
               href="/forecast"
               className="btn btn-secondary text-xs sm:text-sm py-2 px-3.5 flex items-center gap-2"
@@ -174,8 +163,8 @@ export default function PlansPage() {
               <Plus className="w-4 h-4 stroke-[2.5]" />
               <span>สร้างแผนใหม่</span>
             </button>
-          </div>
-        </div>
+          </div>}
+        />
 
         {/* ── Rebalancing Comparison ─────────────────────── */}
         {activePreset && (

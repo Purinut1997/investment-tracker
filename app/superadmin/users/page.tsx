@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   Users,
   Shield,
@@ -94,23 +95,7 @@ export default function SuperadminUsersPage() {
   return (
     <AppShell>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                Superadmin Control Panel
-              </span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
-              <Users className="w-7 h-7 text-amber-400" />
-              <span>จัดการผู้ใช้งานในระบบ</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-              ตรวจสอบรายชื่อ กำหนดสิทธิ์ (Roles), และควบคุมการระงับบัญชี (พร้อมระบบป้องกัน Last Superadmin)
-            </p>
-          </div>
-        </div>
+        <PageHeader eyebrow="Superadmin Control Panel" title="จัดการผู้ใช้งานในระบบ" description="ตรวจสอบรายชื่อ กำหนดสิทธิ์ และควบคุมการระงับบัญชี" />
 
         {/* Feedback Alerts */}
         {actionError && (

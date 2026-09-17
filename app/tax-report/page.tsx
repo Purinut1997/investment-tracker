@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   ReceiptText,
   Sparkles,
@@ -109,19 +110,11 @@ export default function TaxReportPage() {
   return (
     <AppShell>
       <div className="space-y-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
-              <ReceiptText className="w-7 h-7 text-[var(--cyan-400)]" />
-              <span>รายงานสรุปภาษีการลงทุน (Tax Report)</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-              คำนวณต้นทุน FIFO แยก 3 หมวดตามเกณฑ์กรมสรรพากร: ปันผล, หุ้นไทย SET, และหุ้นนอก/คริปโต
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5">
+        <PageHeader
+          eyebrow="วางแผนการลงทุน"
+          title="รายงานสรุปภาษีการลงทุน"
+          description="คำนวณต้นทุน FIFO แยกปันผล หุ้นไทย และหุ้นนอกหรือคริปโต"
+          action={<div className="flex flex-wrap items-center gap-2.5">
             {/* Year Selector */}
             <div className="flex items-center gap-1.5 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl px-3 py-1.5">
               <Calendar className="w-4 h-4 text-[var(--cyan-400)]" />
@@ -149,8 +142,8 @@ export default function TaxReportPage() {
               <Download className="w-4 h-4" />
               <span>ส่งออก Excel</span>
             </button>
-          </div>
-        </div>
+          </div>}
+        />
 
         {/* Mandatory Legal Disclaimer Banner */}
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3 text-xs text-amber-200/90 leading-relaxed">

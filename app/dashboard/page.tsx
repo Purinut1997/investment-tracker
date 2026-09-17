@@ -5,6 +5,8 @@ import useSWR from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
 import { DashboardEmptyState } from '@/components/DashboardEmptyState'
+import { PageHeader } from '@/components/PageHeader'
+import { Surface } from '@/components/Surface'
 import { Sparkline } from '@/components/Sparkline'
 import {
   Sparkles,
@@ -126,16 +128,14 @@ export default function DashboardPage() {
     <AppShell>
       <div className="flex flex-col gap-8 sm:gap-10 w-full">
 
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-[var(--accent)] mb-2">ภาพรวมพอร์ต</p>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">สวัสดี, นักลงทุน</h1>
-            <p className="text-sm text-[var(--text-secondary)] mt-2">ติดตามภาพรวมพอร์ตและสิ่งที่ควรทำต่อจากที่เดียว</p>
-          </div>
-          <Link href="/transactions" className="btn btn-primary self-start sm:self-auto px-4">
+        <PageHeader
+          eyebrow="ภาพรวมพอร์ต"
+          title="สวัสดี, นักลงทุน"
+          description="ติดตามภาพรวมพอร์ตและสิ่งที่ควรทำต่อจากที่เดียว"
+          action={<Link href="/transactions" className="btn btn-primary px-4">
             <Plus className="w-4 h-4" /> เพิ่มรายการ
-          </Link>
-        </div>
+          </Link>}
+        />
 
         {/* Alert */}
         {summary?.unackAlert && (
@@ -157,7 +157,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
           {/* Card 1: Total Value */}
-          <div className="rounded-2xl p-5 sm:p-6 bg-[var(--bg-surface)] border border-white/[0.08] hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
+          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">มูลค่าพอร์ตรวม</p>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.08] font-semibold">อัปเดตล่าสุด</span>
@@ -172,10 +172,10 @@ export default function DashboardPage() {
               <span className="text-[10px] text-zinc-400 font-medium">แนวโน้ม 7 วัน</span>
               <Sparkline seed="portfolio-total" trend="up" width={76} height={22} />
             </div>
-          </div>
+          </Surface>
 
           {/* Card 2: Unrealized P&L */}
-          <div className="rounded-2xl p-5 sm:p-6 bg-[var(--bg-surface)] border border-white/[0.08] hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
+          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">กำไร/ขาดทุน (ยังไม่ขาย)</p>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-0.5 ${
@@ -195,10 +195,10 @@ export default function DashboardPage() {
               <span className="text-[10px] text-zinc-400 font-medium">แนวโน้มกำไร/ขาดทุน</span>
               <Sparkline seed="portfolio-pnl" trend={isProfit ? 'up' : 'down'} width={76} height={22} />
             </div>
-          </div>
+          </Surface>
 
           {/* Card 3: Realized + Dividends */}
-          <div className="rounded-2xl p-5 sm:p-6 bg-[var(--bg-surface)] border border-white/[0.08] hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
+          <Surface className="p-5 sm:p-6 hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">กำไรขายแล้ว + ปันผล</p>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.08] font-semibold">รับรู้แล้ว</span>
@@ -213,7 +213,7 @@ export default function DashboardPage() {
               <span className="text-[10px] text-zinc-400 font-medium">กระแสเงินเข้า</span>
               <Sparkline seed="portfolio-dividend" trend="up" width={76} height={22} />
             </div>
-          </div>
+          </Surface>
 
         </div>
 

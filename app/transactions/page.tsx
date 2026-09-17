@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { QuickAddModal } from '@/components/QuickAddModal'
+import { PageHeader } from '@/components/PageHeader'
 import {
   ArrowLeftRight,
   Plus,
@@ -104,37 +105,19 @@ export default function TransactionsPage() {
   return (
     <AppShell>
       <div className="space-y-8">
-        {/* ── Page Header ─────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-cyan-400/10 border border-cyan-400/20">
-                <ArrowLeftRight className="w-5 h-5 text-white" />
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">รายการธุรกรรม</h1>
-            </div>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] pl-11">
-              บันทึก ตรวจสอบ และจัดการประวัติการซื้อ-ขายและปันผลทั้งหมด
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setCsvModalOpen(true)}
-              className="btn btn-secondary text-xs sm:text-sm py-2 px-3.5 flex items-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              <span>นำเข้า CSV</span>
+        <PageHeader
+          eyebrow="พอร์ตของฉัน"
+          title="รายการธุรกรรม"
+          description="บันทึก ตรวจสอบ และจัดการประวัติการซื้อขายและปันผลทั้งหมด"
+          action={<>
+            <button onClick={() => setCsvModalOpen(true)} className="btn btn-secondary text-sm">
+              <Upload className="w-4 h-4" /> นำเข้า CSV
             </button>
-            <button
-              onClick={() => setQuickAddOpen(true)}
-              className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>เพิ่มธุรกรรม</span>
+            <button onClick={() => setQuickAddOpen(true)} className="btn btn-primary text-sm">
+              <Plus className="w-4 h-4" /> เพิ่มธุรกรรม
             </button>
-          </div>
-        </div>
+          </>}
+        />
 
         {/* ── Unified Toolbar (3-Value Summary + Filters) ────────────── */}
         <div className="flex flex-col lg:flex-row gap-5 items-start lg:items-center justify-between p-5 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08]">

@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   Newspaper,
   ExternalLink,
@@ -35,26 +36,12 @@ export default function NewsPage() {
   return (
     <AppShell>
       <div className="space-y-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
-              <Newspaper className="w-7 h-7 text-[var(--cyan-400)]" />
-              <span>ข่าวสารการลงทุน & Weekly Digest</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-              ฟีดข่าวสารล่าสุดของสินทรัพย์ที่คุณถือครอง และข่าวตลาดการเงินโลก
-            </p>
-          </div>
-
-          <button
-            onClick={() => revalidate()}
-            className="btn btn-secondary text-xs sm:text-sm py-2 px-3.5 flex items-center gap-2 self-start sm:self-auto"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>รีเฟรชข่าว</span>
-          </button>
-        </div>
+        <PageHeader
+          eyebrow="ตลาดและข้อมูล"
+          title="ข่าวสารการลงทุน"
+          description="ฟีดข่าวล่าสุดของสินทรัพย์ในพอร์ตและตลาดการเงินโลก"
+          action={<button onClick={() => revalidate()} className="btn btn-secondary text-sm"><RefreshCw className="w-4 h-4" /> รีเฟรชข่าว</button>}
+        />
 
         {/* Tab Switcher & Filter Toolbar */}
         <div className="p-4 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">

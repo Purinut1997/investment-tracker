@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { signOut } from 'next-auth/react'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import {
   Settings,
   Sparkles,
@@ -102,16 +103,11 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <div className="space-y-8 max-w-4xl">
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
-            <Settings className="w-7 h-7 text-[var(--cyan-400)]" />
-            <span>ตั้งค่าระบบ (Settings)</span>
-          </h1>
-          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-            ปรับแต่งโมเดล AI (Gemini), สกุลเงินหลัก, การแจ้งเตือน และการรักษาความปลอดภัย
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="ระบบ"
+          title="ตั้งค่าระบบ"
+          description="ปรับแต่ง AI, สกุลเงินหลัก, การแจ้งเตือน และการรักษาความปลอดภัย"
+        />
 
         {/* Feedback Alert */}
         {msg && (

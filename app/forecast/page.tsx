@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
+import { PageHeader } from '@/components/PageHeader'
 import { runMonteCarloSimulation, SimulationResult } from '@/lib/analytics/monte-carlo'
 import {
   TrendingUp,
@@ -104,18 +105,11 @@ export default function ForecastPage() {
   return (
     <AppShell>
       <div className="space-y-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
-              <TrendingUp className="w-7 h-7 text-[var(--cyan-400)]" />
-              <span>แบบจำลองความน่าจะเป็นพอร์ต (Monte Carlo Forecast)</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-              จำลอง 500 สถานการณ์ตลาดล่วงหน้า ด้วย Geometric Brownian Motion เพื่อหาค่า P10, P50, P90
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          eyebrow="วางแผนการลงทุน"
+          title="แบบจำลองความน่าจะเป็นพอร์ต"
+          description="จำลอง 500 สถานการณ์ตลาดล่วงหน้าเพื่อดูช่วงผลลัพธ์ P10, P50 และ P90"
+        />
 
         {/* Input Parameters Controls */}
         <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] space-y-5">
