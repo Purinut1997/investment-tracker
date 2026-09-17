@@ -115,18 +115,18 @@ export default function MarketWatchPage() {
           </button>
         </div>
 
-        {/* ── Currency Converter ──────────────────────────── */}
-        <div className="card p-5 relative overflow-hidden border-cyan-500/20">
+        {/* ── Currency Converter Card ────────────────────── */}
+        <div className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.36)] relative overflow-hidden">
           {/* subtle top glow line */}
-          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
 
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-              <ArrowRightLeft className="w-4 h-4 text-[var(--cyan-400)]" />
+          <div className="flex items-center gap-2.5 mb-5">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center">
+              <ArrowRightLeft className="w-4 h-4 text-[var(--violet)]" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">เครื่องมือแปลงสกุลเงิน</h2>
-              <p className="text-[11px] text-[var(--text-muted)]">Instant Currency Converter</p>
+              <h2 className="text-base font-bold text-white">เครื่องมือแปลงสกุลเงิน</h2>
+              <p className="text-xs text-[var(--text-muted)]">Instant Currency Converter</p>
             </div>
           </div>
 
@@ -254,24 +254,24 @@ function QuoteCard({ quote, accentClass }: { quote: any; accentClass: string }) 
   const isZero = (quote.changePercent ?? 0) === 0
 
   return (
-    <div className="card p-4 hover:border-white/15 transition-all group flex flex-col justify-between relative overflow-hidden cursor-default">
+    <div className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] hover:border-white/20 transition-all duration-300 group flex flex-col justify-between relative overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.3)] cursor-default">
       {/* Top accent beam on hover */}
-      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
       <div>
         <div className="flex items-start justify-between mb-3">
-          <div className="flex flex-col">
-            <span className="font-extrabold text-white tracking-wide text-sm group-hover:text-[var(--cyan-400)] transition-colors">
+          <div className="flex flex-col min-w-0 pr-2">
+            <span className="font-extrabold text-white tracking-wide text-base group-hover:text-[var(--violet)] transition-colors truncate">
               {quote.symbol}
             </span>
-            <span className="text-[10px] text-[var(--text-muted)] mt-0.5">{quote.name ?? quote.symbol}</span>
+            <span className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">{quote.name ?? quote.symbol}</span>
           </div>
-          <span className="text-[10px] font-bold text-[var(--text-muted)] px-1.5 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border)] uppercase tracking-wider">
+          <span className="text-[10px] font-bold text-[var(--text-secondary)] px-2 py-0.5 rounded-lg bg-white/[0.06] border border-white/[0.08] uppercase tracking-wider shrink-0">
             {quote.currency}
           </span>
         </div>
 
-        <p className="text-xl sm:text-2xl font-black text-white tabular-nums tracking-tight">
+        <p className="text-2xl sm:text-3xl font-black text-white tabular-nums tracking-tight mt-1">
           {quote.currency === 'USD' ? '$' : '฿'}
           {Number(quote.price).toLocaleString('en-US', {
             minimumFractionDigits: 2,
@@ -280,8 +280,8 @@ function QuoteCard({ quote, accentClass }: { quote: any; accentClass: string }) 
         </p>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-[var(--border)] flex items-center justify-between">
-        <span className="text-[10px] font-medium text-[var(--text-muted)] uppercase tracking-wider truncate max-w-[60%]">
+      <div className="mt-5 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+        <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate max-w-[50%]">
           {quote.provider}
         </span>
 

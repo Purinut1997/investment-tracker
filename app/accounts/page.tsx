@@ -129,22 +129,22 @@ export default function AccountsPage() {
         </div>
 
         {/* ── Stats Row ───────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'บัญชีทั้งหมด', value: `${accounts.length}`, icon: Layers, color: 'text-[var(--cyan-400)]' },
-            { label: 'โบรกเกอร์หุ้น', value: `${brokerageCount}`, icon: Building2, color: 'text-blue-400' },
-            { label: 'Crypto Exchange', value: `${cryptoCount}`, icon: Coins, color: 'text-amber-400' },
-            { label: 'ธนาคาร & เงินสด', value: `${bankCount}`, icon: Landmark, color: 'text-emerald-400' },
+            { label: 'บัญชีทั้งหมด', value: `${accounts.length}`, icon: Layers, color: 'text-[var(--cyan-400)]', bg: 'bg-cyan-500/10' },
+            { label: 'โบรกเกอร์หุ้น', value: `${brokerageCount}`, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+            { label: 'Crypto Exchange', value: `${cryptoCount}`, icon: Coins, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+            { label: 'ธนาคาร & เงินสด', value: `${bankCount}`, icon: Landmark, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
           ].map((stat) => {
             const Icon = stat.icon
             return (
-              <div key={stat.label} className="card p-4 flex items-start gap-3">
-                <div className={`w-9 h-9 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center shrink-0 ${stat.color}`}>
-                  <Icon className="w-4 h-4" />
+              <div key={stat.label} className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)] flex items-start gap-3.5 hover:border-white/15 transition-all">
+                <div className={`w-10 h-10 rounded-xl ${stat.bg} border border-white/[0.08] flex items-center justify-center shrink-0 ${stat.color}`}>
+                  <Icon className="w-5 h-5" />
                 </div>
-                <div>
-                  <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">{stat.label}</p>
-                  <p className="text-xl font-bold text-white mt-0.5 tabular-nums">{stat.value}</p>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate">{stat.label}</p>
+                  <p className="text-2xl font-extrabold text-white mt-0.5 tabular-nums">{stat.value}</p>
                 </div>
               </div>
             )
@@ -158,10 +158,10 @@ export default function AccountsPage() {
             <span className="text-xs">กำลังโหลดบัญชีการเงิน...</span>
           </div>
         ) : error ? (
-          <div className="card p-8 text-center text-[var(--red-400)] text-xs">เกิดข้อผิดพลาดในการโหลดข้อมูลบัญชี</div>
+          <div className="p-8 rounded-2xl bg-white/[0.04] border border-red-500/20 text-center text-[var(--red-400)] text-xs">เกิดข้อผิดพลาดในการโหลดข้อมูลบัญชี</div>
         ) : accounts.length === 0 ? (
-          <div className="card p-16 text-center flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] mb-5">
+          <div className="p-16 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] text-center flex flex-col items-center justify-center">
+            <div className="w-16 h-16 rounded-2xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-[var(--text-muted)] mb-5">
               <Wallet className="w-8 h-8" />
             </div>
             <h3 className="font-bold text-white text-lg mb-2">ยังไม่มีบัญชีการลงทุน</h3>
@@ -174,7 +174,7 @@ export default function AccountsPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {accounts.map((acc: any) => {
               const typeObj = ACCOUNT_TYPES.find((t) => t.value === acc.accountType) ?? ACCOUNT_TYPES[0]
               const Icon = typeObj.icon
@@ -183,22 +183,22 @@ export default function AccountsPage() {
               return (
                 <div
                   key={acc.id}
-                  className="card p-5 hover:border-white/15 transition-all group flex flex-col justify-between relative overflow-hidden"
+                  className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] hover:border-white/20 transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.36)] group flex flex-col justify-between relative overflow-hidden"
                 >
-                  {/* top accent glow on hover */}
-                  <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {/* Subtle top card shimmer */}
+                  <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
                   <div>
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-11 h-11 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center group-hover:scale-105 transition-transform ${typeObj.color}`}>
-                          <Icon className="w-5 h-5" />
+                      <div className="flex items-center gap-3.5">
+                        <div className={`w-12 h-12 rounded-2xl bg-white/[0.06] border border-white/10 flex items-center justify-center group-hover:scale-105 transition-transform ${typeObj.color} shadow-sm`}>
+                          <Icon className="w-6 h-6" />
                         </div>
                         <div>
-                          <h3 className="font-bold text-white text-base group-hover:text-[var(--cyan-400)] transition-colors">
+                          <h3 className="font-bold text-white text-base group-hover:text-[var(--violet)] transition-colors">
                             {acc.accountName}
                           </h3>
-                          <span className="text-[11px] text-[var(--text-muted)] uppercase tracking-wider">
+                          <span className="text-[11px] text-[var(--text-muted)] font-medium">
                             {typeObj.label.split(' ')[0]}
                           </span>
                         </div>
@@ -207,7 +207,7 @@ export default function AccountsPage() {
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => openEditModal(acc)}
-                          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--cyan-400)] hover:bg-cyan-500/10 transition-colors"
+                          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--cyan-400)] hover:bg-white/[0.08] transition-colors"
                           title="แก้ไขบัญชี"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -223,16 +223,18 @@ export default function AccountsPage() {
                       </div>
                     </div>
 
-                    <div className="mt-5 pt-4 border-t border-[var(--border)] flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
+                    <div className="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
                         <span className="text-[var(--text-muted)]">สกุลเงิน</span>
-                        <span className="font-semibold text-white px-2 py-0.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border)]">
+                        <span className="font-semibold text-white px-2 py-0.5 rounded-lg bg-white/[0.06] border border-white/[0.08]">
                           {acc.currency}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[var(--text-muted)]">ธุรกรรม</span>
-                        <span className="font-bold text-white tabular-nums">{txnCount}</span>
+                        <span className="text-[var(--text-muted)]">บันทึกธุรกรรม</span>
+                        <span className="font-bold text-white tabular-nums px-2 py-0.5 rounded-lg bg-violet-500/15 text-[var(--violet)] border border-violet-500/20">
+                          {txnCount} รายการ
+                        </span>
                       </div>
                     </div>
                   </div>

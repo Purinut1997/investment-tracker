@@ -162,19 +162,19 @@ export default function PlansPage() {
 
         {/* ── Rebalancing Comparison ─────────────────────── */}
         {activePreset && (
-          <div className="card p-5 sm:p-6 space-y-5 border-cyan-500/20 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
+          <div className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.36)] space-y-6 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--cyan-400)] mb-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--violet)] mb-0.5">
                   Active Allocation Plan
                 </p>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
                   {activePreset.presetName}
                   {activePreset.isDefault && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-[var(--cyan-400)] font-semibold border border-cyan-500/25">
-                      Default
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-violet-500/20 text-[var(--violet)] font-semibold border border-violet-500/30">
+                      แผนหลัก (Default)
                     </span>
                   )}
                 </h2>
@@ -184,7 +184,7 @@ export default function PlansPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-[var(--text-muted)]">สลับดูแผน:</span>
                   <select
-                    className="select text-xs py-1"
+                    className="select text-xs py-1.5 rounded-xl bg-white/[0.04] border-white/[0.08]"
                     value={activePreset.id}
                     onChange={(e) => setSelectedPresetId(e.target.value)}
                   >
@@ -197,7 +197,7 @@ export default function PlansPage() {
             </div>
 
             {/* Comparison Bars */}
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               <p className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
                 เปรียบเทียบสัดส่วนปัจจุบัน vs เป้าหมาย
               </p>
@@ -210,10 +210,10 @@ export default function PlansPage() {
                 const isOnTarget = Math.abs(diff) < 2
 
                 return (
-                  <div key={category} className="p-4 rounded-xl bg-[var(--bg-elevated)]/40 border border-[var(--border)] space-y-3">
+                  <div key={category} className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] hover:border-white/15 transition-all space-y-3">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-white flex items-center gap-1.5">
-                        <span>{cfg.emoji}</span>
+                      <span className="font-semibold text-white flex items-center gap-2">
+                        <span className="text-base">{cfg.emoji}</span>
                         <span>{cfg.label}</span>
                       </span>
                       <div className="flex items-center gap-3">
@@ -223,10 +223,10 @@ export default function PlansPage() {
                         <span className="text-[var(--text-muted)]">
                           ตอนนี้ <strong className={cfg.color}>{actualPct.toFixed(1)}%</strong>
                         </span>
-                        <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border tabular-nums ${
-                          isOnTarget ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : isOver    ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-                                      : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border tabular-nums ${
+                          isOnTarget ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+                          : isOver    ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
+                                      : 'bg-rose-500/15 text-rose-400 border-rose-500/25'
                         }`}>
                           {diff > 0 ? '+' : ''}{diff.toFixed(1)}%
                         </span>
@@ -234,24 +234,24 @@ export default function PlansPage() {
                     </div>
 
                     {/* Dual bar: target vs actual */}
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-[var(--text-muted)] w-10">เป้า</span>
-                        <div className="flex-1 h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
-                          <div className="h-full bg-white/20 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, targetPct)}%` }} />
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[10px] font-medium text-[var(--text-muted)] w-10">เป้า</span>
+                        <div className="flex-1 h-2 bg-white/[0.05] rounded-full overflow-hidden">
+                          <div className="h-full bg-white/25 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, targetPct)}%` }} />
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-[var(--text-muted)] w-10">จริง</span>
-                        <div className="flex-1 h-1.5 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
-                          <div className={`h-full ${cfg.barColor} rounded-full transition-all duration-500 opacity-80`} style={{ width: `${Math.min(100, actualPct)}%` }} />
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[10px] font-medium text-[var(--text-muted)] w-10">จริง</span>
+                        <div className="flex-1 h-2 bg-white/[0.05] rounded-full overflow-hidden">
+                          <div className={`h-full ${cfg.barColor} rounded-full transition-all duration-500 shadow-sm`} style={{ width: `${Math.min(100, actualPct)}%` }} />
                         </div>
                       </div>
                     </div>
 
                     {/* Recommendation */}
                     {Math.abs(diff) >= 3 && totalValue > 0 && (
-                      <p className="text-[11px] text-[var(--text-secondary)] flex items-start gap-1.5 pt-1">
+                      <p className="text-[11px] text-[var(--text-secondary)] flex items-start gap-1.5 pt-1 border-t border-white/[0.04]">
                         <span className="shrink-0">💡</span>
                         {isOver ? (
                           <span className="text-amber-300">
@@ -286,8 +286,8 @@ export default function PlansPage() {
               <span>กำลังโหลดแผนการลงทุน...</span>
             </div>
           ) : presets.length === 0 ? (
-            <div className="card p-14 text-center flex flex-col items-center justify-center">
-              <div className="w-16 h-16 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] mb-5">
+            <div className="p-14 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] text-center flex flex-col items-center justify-center">
+              <div className="w-16 h-16 rounded-2xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-[var(--text-muted)] mb-5">
                 <Scale className="w-8 h-8" />
               </div>
               <h4 className="font-bold text-white text-lg mb-2">ยังไม่มีแผนการลงทุน</h4>
@@ -299,7 +299,7 @@ export default function PlansPage() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {presets.map((preset) => {
                 const riskCfg = RISK_CONFIG[preset.riskProfile] ?? { label: preset.riskProfile, color: 'text-slate-400', bg: 'bg-slate-500/10 border-slate-500/20' }
                 const isActive = preset.id === activePreset?.id
@@ -307,8 +307,8 @@ export default function PlansPage() {
                 return (
                   <div
                     key={preset.id}
-                    className={`card p-5 flex flex-col justify-between transition-all hover:border-white/15 relative overflow-hidden group ${
-                      isActive ? 'border-cyan-500/30 bg-cyan-950/10' : ''
+                    className={`p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.36)] relative overflow-hidden group flex flex-col justify-between ${
+                      isActive ? 'border-violet-500/40 ring-1 ring-violet-500/30' : 'border-white/[0.08] hover:border-white/20'
                     }`}
                   >
                     {isActive && (

@@ -57,16 +57,16 @@ export default function NewsPage() {
         </div>
 
         {/* Tab Switcher & Filter Toolbar */}
-        <div className="card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex border border-[var(--border)] rounded-xl p-1 bg-[var(--bg-elevated)]/40 self-start">
+        <div className="p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex border border-white/[0.08] rounded-xl p-1 bg-white/[0.02] self-start">
             <button
               onClick={() => {
                 setCategory('portfolio')
                 setSelectedTicker('')
               }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                 category === 'portfolio'
-                  ? 'bg-cyan-500/20 text-[var(--cyan-400)] border border-cyan-500/30 shadow-sm'
+                  ? 'bg-violet-500/20 text-[var(--violet)] border border-violet-500/30 shadow-sm'
                   : 'text-[var(--text-muted)] hover:text-white'
               }`}
             >
@@ -77,9 +77,9 @@ export default function NewsPage() {
                 setCategory('general')
                 setSelectedTicker('')
               }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                 category === 'general'
-                  ? 'bg-cyan-500/20 text-[var(--cyan-400)] border border-cyan-500/30 shadow-sm'
+                  ? 'bg-violet-500/20 text-[var(--violet)] border border-violet-500/30 shadow-sm'
                   : 'text-[var(--text-muted)] hover:text-white'
               }`}
             >
@@ -92,7 +92,7 @@ export default function NewsPage() {
             <div className="flex items-center gap-2 text-xs">
               <Filter className="w-3.5 h-3.5 text-[var(--text-muted)]" />
               <select
-                className="select text-xs py-1.5"
+                className="select text-xs py-1.5 rounded-xl bg-white/[0.04] border-white/[0.08]"
                 value={selectedTicker}
                 onChange={(e) => setSelectedTicker(e.target.value)}
               >
@@ -110,15 +110,15 @@ export default function NewsPage() {
         {/* News Feed Grid */}
         {isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
-            <Loader2 className="w-7 h-7 animate-spin text-[var(--cyan-400)]" />
+            <Loader2 className="w-7 h-7 animate-spin text-[var(--violet)]" />
             <span className="text-xs">กำลังโหลดข่าวสารล่าสุด...</span>
           </div>
         ) : error ? (
-          <div className="card p-8 text-center text-xs text-red-400">
+          <div className="p-8 rounded-2xl bg-white/[0.04] border border-red-500/20 text-center text-xs text-red-400">
             เกิดข้อผิดพลาดในการโหลดข่าวสาร
           </div>
         ) : newsItems.length === 0 ? (
-          <div className="card p-12 text-center flex flex-col items-center justify-center">
+          <div className="p-16 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] text-center flex flex-col items-center justify-center">
             <Newspaper className="w-10 h-10 text-[var(--text-muted)] mb-3" />
             <h3 className="font-bold text-white text-base">ไม่พบข่าวสารในขณะนี้</h3>
             <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-sm">
@@ -126,7 +126,7 @@ export default function NewsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {newsItems.map((item) => {
               const published = new Date(item.publishedAt).toLocaleDateString('th-TH', {
                 year: 'numeric',
@@ -139,7 +139,7 @@ export default function NewsPage() {
               return (
                 <div
                   key={item.id}
-                  className="card p-5 hover:border-cyan-500/40 transition-all flex flex-col justify-between group space-y-3"
+                  className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] hover:border-white/20 transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.36)] flex flex-col justify-between group space-y-4"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">

@@ -93,6 +93,27 @@ Last updated: 2026-09-17
 - **Market Watch Overhaul (`app/market-watch/page.tsx`)**: Luxury quote cards พร้อมไฟกะพริบสด Live Pulse และปุ่มสลับสกุลเงินหมุน Flip 180°
 - **Official Brand Logo Integration ("MIX THE ARCHITECT")**: ติดตั้งโลโก้ทางการของระบบที่ Desktop Sidebar, Mobile Top Header, Mobile Navigation Drawer, หน้ายืนยันตัวตนทั้งหมด (`/login`, `/register`, `/forgot-password`, `/reset-password`), PWA App Icons (`icon-192`, `icon-512`, `apple-icon`) และ Favicon metadata (`app/layout.tsx`)
 
+### 11. Phase 10: Glassmorphism 2.0 & Multi-Theme Switcher Overhaul ✅
+- **Multi-Theme Style Switcher (`components/ThemeStyleSelector.tsx`)**:
+  - รองรับ 3 รูปแบบสไตล์ UI ที่เลือกสลับได้ทันที:
+    1. 🌌 **Aurora Glass**: กระจกฝ้า Deep Indigo-Violet พร้อมลูกแก้วแสงลอยเบาๆ (Aurora Orbs)
+    2. 🖤 **Minimal Slate**: สไตล์ Linear / Apple เรียบหรู สะอาดตา ไร้แสงฟุ้ง เส้นขอบคมชัด สบายตาที่สุด
+    3. 💎 **Cyber Emerald**: โทนดำลึกตัดเขียวมรกต สไตล์ High-Tech FinTech & Wealth
+  - ติดตั้งตัวสลับธีมที่ Desktop Topbar, Mobile Header และหน้า Settings พร้อม Live Preview
+  - จดจำค่าใน `localStorage` และมี Inline Script ใน `<head>` เพื่อป้องกันการกะพริบ (Zero Flicker)
+- **Collapsible Sidebar (`components/AppShell.tsx`)**: พับย่อ-ขยายแถบเมนูด้านซ้ายได้ด้วยปุ่มเดียว เพิ่มพื้นที่การใช้งาน (Breathing room) พร้อม Tooltip อัตโนมัติเมื่อย่อแถบ
+- **Complete System-wide Redesign (ครบทั้ง 8 หน้าหลัก)**:
+  - `/dashboard`: สไตล์ Modern Personal Finance ตัวเลขใหญ่คมชัด Holdings แบบ Card Rows ลอยตัว
+  - `/transactions`: Summary metric cards ตัวเลขใหญ่, ตัวกรองกระจกฝ้า, ตารางธุรกรรมหรูหรา
+  - `/accounts`: การ์ดบัญชีการเงินสไตล์ Neo-Bank / Apple Wallet พร้อม Glow accent ตามประเภทบัญชี
+  - `/plans`: การ์ดแผนการลงทุนสัดส่วนสินทรัพย์ พร้อมแถบเปรียบเทียบ Dual-progress bars นุ่มนวล
+  - `/market-watch`: เครื่องมือแปลงสกุลเงินด่วน และ Quote Cards ขนาดใหญ่พร้อมอัตราแลกเปลี่ยนสด
+  - `/forecast`: กล่องควบคุมตัวแปรจำลอง Monte Carlo, เส้นพัด Fan Chart, และการ์ดวิเคราะห์ AI
+  - `/news`: ฟีดข่าวสารแบบ Feed Cards พร้อมแท็ก Sentiment
+  - `/tax-report`: 3 Tax Category KPI cards และตารางแยกหมวดภาษี FIFO สไตล์ Luxury
+  - `/settings`: การ์ดเลือก Theme Style แสดง Color swatches และรายละเอียดชัดเจน
+- **Build Status**: `npm run build` ผ่าน 100% ครบทุก 45 Static/Dynamic routes โดยไม่มี Error หรือ Type Warning ใดๆ
+
 ---
 
 ## วิธีการรันและทดสอบระบบ

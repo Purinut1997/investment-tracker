@@ -137,7 +137,7 @@ export default function TransactionsPage() {
         </div>
 
         {/* ── Summary Metric Cards ─────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
               label: 'รายการทั้งหมด',
@@ -169,18 +169,18 @@ export default function TransactionsPage() {
               unit: '',
               icon: Wallet,
               color: 'text-[var(--text-muted)]',
-              iconBg: 'bg-[var(--bg-elevated)] border-[var(--border)]',
+              iconBg: 'bg-white/[0.05] border-white/[0.08]',
             },
           ].map((stat) => {
             const Icon = stat.icon
             return (
-              <div key={stat.label} className="card p-4 flex items-start gap-3">
-                <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${stat.iconBg} ${stat.color}`}>
-                  <Icon className="w-4 h-4" />
+              <div key={stat.label} className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)] flex items-start gap-3.5 hover:border-white/15 transition-all">
+                <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${stat.iconBg} ${stat.color}`}>
+                  <Icon className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate">{stat.label}</p>
-                  <p className="text-lg sm:text-xl font-bold text-white mt-0.5 tabular-nums truncate">
+                  <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate">{stat.label}</p>
+                  <p className="text-xl sm:text-2xl font-black text-white mt-0.5 tabular-nums truncate">
                     {stat.value} <span className="text-[var(--text-muted)] text-xs font-normal">{stat.unit}</span>
                   </p>
                 </div>
@@ -190,21 +190,21 @@ export default function TransactionsPage() {
         </div>
 
         {/* ── Filters Toolbar ──────────────────────────────── */}
-        <div className="card p-4">
+        <div className="p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-sm">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                className="input pl-9 text-xs sm:text-sm"
+                className="input pl-10 text-xs sm:text-sm rounded-xl bg-white/[0.04] border-white/[0.08] focus:border-violet-500/50"
                 placeholder="ค้นหา Ticker, ชื่อสินทรัพย์, หรือบันทึก..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="w-full sm:w-48">
+            <div className="w-full sm:w-52">
               <select
-                className="select text-xs sm:text-sm"
+                className="select text-xs sm:text-sm rounded-xl bg-white/[0.04] border-white/[0.08]"
                 value={selectedAccount}
                 onChange={(e) => { setSelectedAccount(e.target.value); setPage(1) }}
               >
@@ -214,9 +214,9 @@ export default function TransactionsPage() {
                 ))}
               </select>
             </div>
-            <div className="w-full sm:w-44">
+            <div className="w-full sm:w-48">
               <select
-                className="select text-xs sm:text-sm"
+                className="select text-xs sm:text-sm rounded-xl bg-white/[0.04] border-white/[0.08]"
                 value={selectedType}
                 onChange={(e) => { setSelectedType(e.target.value); setPage(1) }}
               >
@@ -233,7 +233,7 @@ export default function TransactionsPage() {
         </div>
 
         {/* Transactions Table / List */}
-        <div className="card overflow-hidden">
+        <div className="rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.36)] overflow-hidden">
           {isLoading ? (
             <div className="py-20 flex flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
               <Loader2 className="w-7 h-7 animate-spin text-[var(--cyan-400)]" />

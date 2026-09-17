@@ -56,6 +56,16 @@ export default function RootLayout({
   return (
     <html lang="th" className={inter.variable} suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var theme = localStorage.getItem('investment_theme_style') || 'aurora';
+                document.documentElement.setAttribute('data-theme-style', theme);
+              } catch (e) {}
+            `,
+          }}
+        />
       </head>
       <body>
         <Providers>{children}</Providers>
