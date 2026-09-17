@@ -108,13 +108,13 @@ function LoginForm() {
           }}>
             <img
               src="/logo.png?v=2"
-              alt="Mix The Architect System Logo"
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              alt="Investment Pro Logo"
+              className="w-full h-full object-contain brightness-0 invert drop-shadow-md"
             />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
-            Investment Tracker
-          </h1>
+          <h2 className="text-3xl font-bold tracking-tight text-white mb-2">
+            Investment Pro
+          </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
             เข้าสู่ระบบเพื่อดูพอร์ตการลงทุนของคุณ
           </p>

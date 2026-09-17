@@ -136,99 +136,68 @@ export default function TransactionsPage() {
           </div>
         </div>
 
-        {/* ── Summary Metric Cards ─────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            {
-              label: 'รายการทั้งหมด',
-              value: `${pagination.total}`,
-              unit: 'รายการ',
-              icon: ArrowLeftRight,
-              color: 'text-[var(--cyan-400)]',
-              iconBg: 'bg-cyan-500/10 border-cyan-500/20',
-            },
-            {
-              label: 'ลงทุนรวม (ซื้อ)',
-              value: `฿${totalOutflow.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-              unit: '',
-              icon: ArrowDownLeft,
-              color: 'text-emerald-400',
-              iconBg: 'bg-emerald-500/10 border-emerald-500/20',
-            },
-            {
-              label: 'กระแสกลับ (ขาย/ปันผล)',
-              value: `฿${totalInflow.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-              unit: '',
-              icon: ArrowUpRight,
-              color: 'text-amber-400',
-              iconBg: 'bg-amber-500/10 border-amber-500/20',
-            },
-            {
-              label: 'ค่าธรรมเนียมรวม',
-              value: `฿${totalFees.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-              unit: '',
-              icon: Wallet,
-              color: 'text-[var(--text-muted)]',
-              iconBg: 'bg-white/[0.05] border-white/[0.08]',
-            },
-          ].map((stat) => {
-            const Icon = stat.icon
-            return (
-              <div key={stat.label} className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)] flex items-start gap-3.5 hover:border-white/15 transition-all">
-                <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${stat.iconBg} ${stat.color}`}>
-                  <Icon className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate">{stat.label}</p>
-                  <p className="text-xl sm:text-2xl font-black text-white mt-0.5 tabular-nums truncate">
-                    {stat.value} <span className="text-[var(--text-muted)] text-xs font-normal">{stat.unit}</span>
-                  </p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        {/* ── Unified Toolbar (3-Value Summary + Filters) ────────────── */}
+        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-sm">
+          
+          {/* 3-Value Summary */}
+          <div className="flex items-center gap-6 overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 scrollbar-hide">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">ลงทุนรวม (ซื้อ)</span>
+              <span className="text-sm font-bold text-emerald-400 tabular-nums">
+                ฿{totalOutflow.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="w-px h-8 bg-white/10 shrink-0" />
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">กระแสกลับ (ขาย/ปันผล)</span>
+              <span className="text-sm font-bold text-amber-400 tabular-nums">
+                ฿{totalInflow.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="w-px h-8 bg-white/10 shrink-0" />
+            <div className="flex flex-col">
+              <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">ค่าธรรมเนียมสะสม</span>
+              <span className="text-sm font-bold text-zinc-300 tabular-nums">
+                ฿{totalFees.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
 
-        {/* ── Filters Toolbar ──────────────────────────────── */}
-        <div className="p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-sm">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+            <div className="relative flex-1 sm:w-56">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                className="input pl-10 text-xs sm:text-sm rounded-xl bg-white/[0.04] border-white/[0.08] focus:border-violet-500/50"
-                placeholder="ค้นหา Ticker, ชื่อสินทรัพย์, หรือบันทึก..."
+                className="input pl-9 text-xs py-2 rounded-xl bg-black/20 border-white/[0.08] focus:border-violet-500/50 w-full"
+                placeholder="ค้นหา Ticker, ชื่อ..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="w-full sm:w-52">
-              <select
-                className="select text-xs sm:text-sm rounded-xl bg-white/[0.04] border-white/[0.08]"
-                value={selectedAccount}
-                onChange={(e) => { setSelectedAccount(e.target.value); setPage(1) }}
-              >
-                <option value="">ทุกบัญชีการเงิน</option>
-                {accounts.map((acc: any) => (
-                  <option key={acc.id} value={acc.id}>{acc.accountName} ({acc.currency})</option>
-                ))}
-              </select>
-            </div>
-            <div className="w-full sm:w-48">
-              <select
-                className="select text-xs sm:text-sm rounded-xl bg-white/[0.04] border-white/[0.08]"
-                value={selectedType}
-                onChange={(e) => { setSelectedType(e.target.value); setPage(1) }}
-              >
-                <option value="">ทุกประเภทรายการ</option>
-                <option value="BUY">🟢 ซื้อ (BUY)</option>
-                <option value="SELL">🔴 ขาย (SELL)</option>
-                <option value="DIVIDEND">💰 ปันผล (DIVIDEND)</option>
-                <option value="DEPOSIT">📥 ฝากเงิน</option>
-                <option value="WITHDRAW">📤 ถอนเงิน</option>
-                <option value="FEE">🧾 ค่าธรรมเนียม</option>
-              </select>
-            </div>
+            <select
+              className="select text-xs py-2 px-3 rounded-xl bg-black/20 border-white/[0.08] w-full sm:w-36"
+              value={selectedAccount}
+              onChange={(e) => { setSelectedAccount(e.target.value); setPage(1) }}
+            >
+              <option value="">ทุกบัญชี</option>
+              {accounts.map((acc: any) => (
+                <option key={acc.id} value={acc.id}>{acc.accountName}</option>
+              ))}
+            </select>
+            <select
+              className="select text-xs py-2 px-3 rounded-xl bg-black/20 border-white/[0.08] w-full sm:w-36"
+              value={selectedType}
+              onChange={(e) => { setSelectedType(e.target.value); setPage(1) }}
+            >
+              <option value="">ทุกประเภท</option>
+              <option value="BUY">🟢 ซื้อ (BUY)</option>
+              <option value="SELL">🔴 ขาย (SELL)</option>
+              <option value="DIVIDEND">💰 ปันผล</option>
+              <option value="DEPOSIT">📥 ฝากเงิน</option>
+              <option value="WITHDRAW">📤 ถอนเงิน</option>
+              <option value="FEE">🧾 ค่าธรรมเนียม</option>
+            </select>
           </div>
         </div>
 
@@ -263,19 +232,19 @@ export default function TransactionsPage() {
           ) : (
             <>
               {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[var(--bg-elevated)]/80 text-[var(--text-muted)] uppercase tracking-widest text-[10px] border-b border-[var(--border)]">
+              <div className="hidden md:block overflow-x-auto max-h-[65vh] scrollbar-thin">
+                <table className="w-full text-left text-xs relative">
+                  <thead className="sticky top-0 z-10 bg-[#151821]/95 backdrop-blur-md text-zinc-400 uppercase tracking-widest text-[10px] shadow-sm">
                     <tr>
-                      <th className="py-3.5 px-4 font-semibold">วันที่</th>
-                      <th className="py-3.5 px-4 font-semibold">ประเภท</th>
-                      <th className="py-3.5 px-4 font-semibold">สินทรัพย์ / Ticker</th>
-                      <th className="py-3.5 px-4 text-right font-semibold">จำนวน</th>
-                      <th className="py-3.5 px-4 text-right font-semibold">ราคา/หน่วย</th>
-                      <th className="py-3.5 px-4 text-right font-semibold">Fee</th>
-                      <th className="py-3.5 px-4 text-right font-semibold">ยอดรวม</th>
-                      <th className="py-3.5 px-4 font-semibold">บัญชี</th>
-                      <th className="py-3.5 px-4 text-right font-semibold">จัดการ</th>
+                      <th className="py-2.5 px-4 font-semibold border-b border-white/[0.08]">วันที่</th>
+                      <th className="py-2.5 px-4 font-semibold border-b border-white/[0.08]">ประเภท</th>
+                      <th className="py-2.5 px-4 font-semibold border-b border-white/[0.08]">สินทรัพย์ / Ticker</th>
+                      <th className="py-2.5 px-4 text-right font-semibold border-b border-white/[0.08]">จำนวน</th>
+                      <th className="py-2.5 px-4 text-right font-semibold border-b border-white/[0.08]">ราคา/หน่วย</th>
+                      <th className="py-2.5 px-4 text-right font-semibold border-b border-white/[0.08]">Fee</th>
+                      <th className="py-2.5 px-4 text-right font-semibold border-b border-white/[0.08]">ยอดรวม</th>
+                      <th className="py-2.5 px-4 font-semibold border-b border-white/[0.08]">บัญชี</th>
+                      <th className="py-2.5 px-4 text-right font-semibold border-b border-white/[0.08]">จัดการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
@@ -288,49 +257,49 @@ export default function TransactionsPage() {
                       })
 
                       return (
-                        <tr key={txn.id} className="hover:bg-[var(--bg-elevated)]/50 transition-colors group">
-                          <td className="py-3.5 px-4 text-[var(--text-secondary)] font-medium whitespace-nowrap">
+                        <tr key={txn.id} className="hover:bg-white/[0.03] transition-colors group">
+                          <td className="py-2.5 px-4 text-[var(--text-secondary)] font-medium whitespace-nowrap">
                             {formattedDate}
                           </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border ${cfg.bg} ${cfg.color}`}>
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${cfg.bg} ${cfg.color}`}>
                               {cfg.label}
                             </span>
                           </td>
-                          <td className="py-3.5 px-4">
+                          <td className="py-2.5 px-4">
                             <div className="flex items-center gap-1.5">
                               <span className="font-bold text-white tracking-wide">
                                 {txn.asset?.ticker}
                               </span>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-[var(--bg-elevated)] text-[var(--text-muted)] border border-[var(--border)] uppercase">
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/30 text-[var(--text-muted)] border border-white/5 uppercase">
                                 {txn.asset?.market}
                               </span>
                             </div>
                             {txn.note && (
-                              <p className="text-[11px] text-[var(--text-muted)] truncate max-w-[200px]">
+                              <p className="text-[10px] text-[var(--text-muted)] truncate max-w-[160px]">
                                 {txn.note}
                               </p>
                             )}
                           </td>
-                          <td className="py-3.5 px-4 text-right font-medium text-white tabular-nums">
+                          <td className="py-2.5 px-4 text-right font-medium text-white tabular-nums">
                             {Number(txn.quantity).toLocaleString()}
                           </td>
-                          <td className="py-3.5 px-4 text-right text-[var(--text-secondary)] tabular-nums">
+                          <td className="py-2.5 px-4 text-right text-[var(--text-secondary)] tabular-nums">
                             {Number(txn.pricePerUnit).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-3.5 px-4 text-right text-[var(--text-muted)] tabular-nums">
+                          <td className="py-2.5 px-4 text-right text-[var(--text-muted)] tabular-nums">
                             {Number(txn.fee || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-3.5 px-4 text-right font-bold text-white tabular-nums">
+                          <td className="py-2.5 px-4 text-right font-bold text-white tabular-nums">
                             {Number(txn.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-3.5 px-4 text-[var(--text-secondary)] whitespace-nowrap">
-                            <span className="flex items-center gap-1 text-[11px]">
+                          <td className="py-2.5 px-4 text-[var(--text-secondary)] whitespace-nowrap">
+                            <span className="flex items-center gap-1 text-[10px]">
                               <Wallet className="w-3 h-3 text-[var(--text-muted)]" />
                               <span>{txn.account?.accountName}</span>
                             </span>
                           </td>
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <td className="py-2.5 px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => setEditingTxn(txn)}

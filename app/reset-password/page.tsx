@@ -102,13 +102,13 @@ function ResetPasswordForm() {
           }}>
             <img
               src="/logo.png?v=2"
-              alt="Mix The Architect System Logo"
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              alt="Investment Pro Logo"
+              className="w-full h-full object-contain brightness-0 invert drop-shadow-md"
             />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>ตั้งรหัสผ่านใหม่</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-            รหัสผ่านใหม่จะใช้แทนรหัสผ่านเดิมและจะออกจากระบบทุกอุปกรณ์
+          <h2 className="text-3xl font-bold tracking-tight text-white mb-2">ตั้งรหัสผ่านใหม่</h2>
+          <p className="text-[var(--text-muted)] text-sm">
+            กรุณาตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ
           </p>
         </div>
 

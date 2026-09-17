@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
+import { DashboardEmptyState } from '@/components/DashboardEmptyState'
 import { Sparkline } from '@/components/Sparkline'
 import {
   Sparkles,
@@ -71,6 +72,8 @@ export default function DashboardPage() {
   const { data: holdingsData, isLoading: holdLoading } = useSWR('/api/portfolio/holdings', {
     refreshInterval: 60000,
   })
+  const { data: accountsData, isLoading: accLoading } = useSWR('/api/accounts')
+  const { data: plansData, isLoading: planLoading } = useSWR('/api/plans')
 
   const [expandHealth, setExpandHealth] = useState(false)
   const holdings: any[] = holdingsData?.holdings ?? []
@@ -84,6 +87,21 @@ export default function DashboardPage() {
   const healthScore = summary?.healthScore ?? { score: 75, grade: 'B', breakdown: {}, suggestions: [] }
   const baseCurrency = summary?.baseCurrency ?? 'THB'
   const isProfit = unrealizedPnL >= 0
+
+  const hasAccounts = (accountsData?.accounts?.length ?? 0) > 0
+  const hasHoldings = holdings.length > 0 || totalCost > 0
+  const hasPlans = (plansData?.presets?.length ?? 0) > 0
+  const isLoading = sumLoading || holdLoading || accLoading || planLoading
+
+  if (!isLoading && (!hasAccounts || !hasHoldings)) {
+    return (
+      <DashboardEmptyState 
+        hasAccounts={hasAccounts} 
+        hasHoldings={hasHoldings} 
+        hasPlans={hasPlans} 
+      />
+    )
+  }
 
   const allocationData = holdings.map((h, i) => ({
     name: h.ticker,
@@ -124,8 +142,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── ROW 1: KEY METRICS ──────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
+        {/* ── ROW 1: KEY METRICS (3 KPIs) ───────────────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
 
           {/* Card 1: Total Value */}
           <div className="rounded-2xl p-5 sm:p-6 bg-[#111319] border border-white/[0.08] hover:border-white/[0.16] transition-all flex flex-col justify-between gap-5 relative shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
@@ -186,42 +204,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Card 4: Health Score */}
-          <div className="rounded-2xl p-5 sm:p-6 bg-[#111319] border border-white/[0.08] hover:border-white/[0.16] transition-all flex flex-col justify-between gap-4 relative shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">ความเสี่ยงพอร์ต</p>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                isHighGrade ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
-                : isMidGrade ? 'bg-amber-500/15 text-amber-400 border-amber-500/25'
-                : 'bg-rose-500/15 text-rose-400 border-rose-500/25'
-              }`}>Grade {healthScore.grade}</span>
-            </div>
-            <div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl sm:text-4xl font-black text-white tabular-nums tracking-tight leading-none">{healthScore.score}</span>
-                <span className="text-sm text-zinc-400 font-medium">/ 100</span>
-              </div>
-            </div>
-            <div className="space-y-2 pt-3 border-t border-white/[0.06]">
-              <div className="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-1000 ${
-                    isHighGrade ? 'bg-gradient-to-r from-emerald-500 to-cyan-400'
-                    : isMidGrade ? 'bg-gradient-to-r from-amber-400 to-amber-300'
-                    : 'bg-gradient-to-r from-rose-500 to-rose-400'
-                  }`}
-                  style={{ width: `${healthScore.score}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-zinc-400">การกระจายตัว</span>
-                <span className={`font-semibold ${isHighGrade ? 'text-emerald-400' : isMidGrade ? 'text-amber-400' : 'text-rose-400'}`}>
-                  {isHighGrade ? 'ดีมาก' : isMidGrade ? 'ปานกลาง' : 'ควรปรับ'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+
 
         {/* ── ROW 2: CHARTS & AI ───────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -275,8 +258,46 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Right: AI Digest + Allocation (1/3) */}
+          {/* Right: Health Score, AI Digest + Allocation (1/3) */}
           <div className="lg:col-span-1 flex flex-col gap-5">
+
+            {/* Health Score */}
+            <div className="rounded-2xl p-5 bg-[#111319] border border-white/[0.08] flex flex-col justify-between gap-4 relative shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> ความเสี่ยงพอร์ต
+                </p>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                  isHighGrade ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+                  : isMidGrade ? 'bg-amber-500/15 text-amber-400 border-amber-500/25'
+                  : 'bg-rose-500/15 text-rose-400 border-rose-500/25'
+                }`}>Grade {healthScore.grade}</span>
+              </div>
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-3xl font-black text-white tabular-nums tracking-tight leading-none">{healthScore.score}</span>
+                  <span className="text-sm text-zinc-400 font-medium">/ 100</span>
+                </div>
+              </div>
+              <div className="space-y-2 pt-3 border-t border-white/[0.06]">
+                <div className="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ${
+                      isHighGrade ? 'bg-gradient-to-r from-emerald-500 to-cyan-400'
+                      : isMidGrade ? 'bg-gradient-to-r from-amber-400 to-amber-300'
+                      : 'bg-gradient-to-r from-rose-500 to-rose-400'
+                    }`}
+                    style={{ width: `${healthScore.score}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-400">การกระจายตัว</span>
+                  <span className={`font-semibold ${isHighGrade ? 'text-emerald-400' : isMidGrade ? 'text-amber-400' : 'text-rose-400'}`}>
+                    {isHighGrade ? 'สมดุลดีมาก' : isMidGrade ? 'อยู่ในเกณฑ์ปกติ' : 'ควรกระจายความเสี่ยงเพิ่ม'}
+                  </span>
+                </div>
+              </div>
+            </div>
 
             {/* AI Weekly Digest */}
             <div className="rounded-2xl p-5 bg-[#131226] border border-violet-500/25 relative overflow-hidden shrink-0 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5)]">

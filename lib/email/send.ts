@@ -14,6 +14,7 @@ function getResend() {
 }
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? 'noreply@investmenttracker.app'
+const BRAND_NAME = 'Investment Pro'
 const BASE_URL = process.env.NEXTAUTH_URL ?? 'http://localhost:3000'
 
 export async function sendEmailVerification(
@@ -30,7 +31,7 @@ export async function sendEmailVerification(
   await resend.emails.send({
     from: FROM,
     to: email,
-    subject: 'ยืนยันอีเมล — Investment Tracker',
+    subject: `ยืนยันอีเมล — ${BRAND_NAME}`,
     html: `
       <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
         <h2 style="color:#22d3ee;margin-bottom:8px">ยืนยันอีเมลของคุณ</h2>
@@ -61,7 +62,7 @@ export async function sendPasswordReset(
   await resend.emails.send({
     from: FROM,
     to: email,
-    subject: 'รีเซ็ตรหัสผ่าน — Investment Tracker',
+    subject: `รีเซ็ตรหัสผ่าน — ${BRAND_NAME}`,
     html: `
       <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
         <h2 style="color:#f59e0b;margin-bottom:8px">รีเซ็ตรหัสผ่าน</h2>
@@ -92,7 +93,7 @@ export async function sendWeeklyDigest(
   await resend.emails.send({
     from: FROM,
     to: email,
-    subject: `📊 สรุปพอร์ตประจำสัปดาห์ ${weekOf} — Investment Tracker`,
+    subject: `📊 สรุปพอร์ตประจำสัปดาห์ ${weekOf} — ${BRAND_NAME}`,
     html: `
       <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;padding:32px 24px">
         <h2 style="color:#22d3ee">📊 สรุปพอร์ตประจำสัปดาห์</h2>

@@ -111,7 +111,7 @@ export function TickerTape() {
 
       {/* Marquee Container with Gradient Edge Vignettes */}
       <div
-        className="overflow-hidden pl-16 sm:pl-20"
+        className="overflow-hidden motion-reduce:overflow-x-auto pl-16 sm:pl-20 scrollbar-hide"
         style={{
           maskImage: 'linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent)',
           WebkitMaskImage: 'linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent)',

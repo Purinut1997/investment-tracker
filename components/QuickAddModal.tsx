@@ -259,7 +259,26 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
           </button>
         </div>
 
-        {/* Tab Switcher */}
+        {accountsData && accounts.length === 0 ? (
+          <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
+            <div className="w-16 h-16 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center mb-5">
+              <Wallet className="w-8 h-8 text-zinc-400" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">ยังไม่มีบัญชีการลงทุน</h3>
+            <p className="text-sm text-[var(--text-muted)] mb-8 max-w-[280px]">
+              คุณจำเป็นต้องมีบัญชีการลงทุนก่อน จึงจะสามารถเพิ่มธุรกรรมได้
+            </p>
+            <a 
+              href="/accounts" 
+              onClick={onClose}
+              className="btn btn-primary text-sm px-6 py-2.5 w-full sm:w-auto shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
+            >
+              สร้างบัญชีลงทุน <ArrowRight className="w-4 h-4 ml-2 inline" />
+            </a>
+          </div>
+        ) : (
+          <>
+            {/* Tab Switcher */}
         <div className="flex border-b border-white/[0.08] bg-black/20 p-1.5 gap-1.5 mx-4 sm:mx-6 mt-4 rounded-2xl">
           <button
             type="button"
@@ -548,6 +567,7 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
               )}
             </button>
           </div>
+        )}
         )}
       </div>
     </div>

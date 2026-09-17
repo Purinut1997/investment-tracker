@@ -10,31 +10,25 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Investment Tracker — บันทึกการลงทุนส่วนตัว',
-    template: '%s | Investment Tracker',
+    default: 'Investment Pro — เครื่องมือบริหารความมั่งคั่งส่วนบุคคล',
+    template: '%s | Investment Pro',
   },
-  description:
-    'ระบบบันทึกและวิเคราะห์การลงทุนส่วนบุคคล ด้วย AI, กราฟ, และรายงานภาษี',
-  keywords: ['investment', 'portfolio', 'tracker', 'stock', 'crypto', 'เงินลงทุน'],
-  authors: [{ name: 'MIKPURINUT' }],
-  creator: 'MIKPURINUT',
-  manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'Investment Tracker',
-  },
-  icons: {
-    icon: [
-      { url: '/logo.png', type: 'image/png' },
-      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-    ],
-    apple: '/icons/apple-icon.png',
-  },
+  description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
+  keywords: ['investment', 'portfolio', 'tracker', 'wealth management', 'เงินลงทุน'],
+  authors: [{ name: 'Investment Pro Team' }],
+  creator: 'Investment Pro',
   openGraph: {
     type: 'website',
-    title: 'Investment Tracker',
-    description: 'ระบบบันทึกการลงทุนส่วนบุคคล',
+    locale: 'th_TH',
+    url: 'https://investmenttracker.app',
+    title: 'Investment Pro',
+    description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
+    siteName: 'Investment Pro',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Investment Pro',
+    description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
   },
 }
 

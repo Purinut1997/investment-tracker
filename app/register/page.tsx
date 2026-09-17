@@ -95,13 +95,15 @@ export default function RegisterPage() {
           }}>
             <img
               src="/logo.png?v=2"
-              alt="Mix The Architect System Logo"
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              alt="Investment Pro Logo"
+              className="w-full h-full object-contain brightness-0 invert drop-shadow-md"
             />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>สมัครสมาชิก</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-            Investment Tracker — บันทึกการลงทุนส่วนตัว
+          <h2 className="text-3xl font-bold tracking-tight text-white mb-2">
+            สร้างบัญชีผู้ใช้ใหม่
+          </h2>
+          <p className="text-[var(--text-muted)] text-sm">
+            Investment Pro — เครื่องมือบริหารความมั่งคั่งส่วนบุคคล
           </p>
         </div>
 

@@ -37,16 +37,46 @@ interface NavItem {
   badge?: string
 }
 
-const PRIMARY_NAV: NavItem[] = [
-  { label: 'แดชบอร์ด',        href: '/dashboard',    icon: LayoutDashboard },
-  { label: 'รายการธุรกรรม',   href: '/transactions', icon: ArrowLeftRight },
-  { label: 'บัญชีการเงิน',    href: '/accounts',     icon: Wallet },
-  { label: 'แผนการลงทุน',     href: '/plans',        icon: PieChart },
-  { label: 'จับตาตลาด',       href: '/market-watch', icon: TrendingUp },
-  { label: 'พยากรณ์พอร์ต',   href: '/forecast',     icon: Sparkles, badge: 'AI' },
-  { label: 'สรุปข่าวเศรษฐกิจ', href: '/news',        icon: Newspaper },
-  { label: 'รายงานภาษี',      href: '/tax-report',   icon: ReceiptText },
-  { label: 'ตั้งค่าระบบ',     href: '/settings',     icon: Settings },
+interface NavGroup {
+  groupName: string
+  items: NavItem[]
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    groupName: 'Overview',
+    items: [
+      { label: 'แดชบอร์ด',        href: '/dashboard',    icon: LayoutDashboard },
+    ]
+  },
+  {
+    groupName: 'My Portfolio',
+    items: [
+      { label: 'รายการธุรกรรม',   href: '/transactions', icon: ArrowLeftRight },
+      { label: 'บัญชีการเงิน',    href: '/accounts',     icon: Wallet },
+      { label: 'รายงานภาษี',      href: '/tax-report',   icon: ReceiptText },
+    ]
+  },
+  {
+    groupName: 'Planning',
+    items: [
+      { label: 'แผนการลงทุน',     href: '/plans',        icon: PieChart },
+      { label: 'พยากรณ์พอร์ต',   href: '/forecast',     icon: Sparkles, badge: 'AI' },
+    ]
+  },
+  {
+    groupName: 'Market & Data',
+    items: [
+      { label: 'จับตาตลาด',       href: '/market-watch', icon: TrendingUp },
+      { label: 'สรุปข่าวเศรษฐกิจ', href: '/news',        icon: Newspaper },
+    ]
+  },
+  {
+    groupName: 'System',
+    items: [
+      { label: 'ตั้งค่าระบบ',     href: '/settings',     icon: Settings },
+    ]
+  }
 ]
 
 const SUPERADMIN_NAV: NavItem[] = [
@@ -79,110 +109,129 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userName  = session?.user?.name || session?.user?.email?.split('@')[0] || 'นักลงทุน'
   const userEmail = session?.user?.email || ''
 
-  const sidebarW = collapsed ? 'w-[72px]' : 'w-64'
-  const mainML   = collapsed ? 'md:ml-[72px]' : 'md:ml-64'
+  const sidebarW = collapsed ? 'w-[80px]' : 'w-[280px]'
+  const mainML   = collapsed ? 'md:ml-[80px]' : 'md:ml-[280px]'
 
   return (
     <div className="min-h-screen text-[var(--text-primary)] flex relative overflow-x-hidden"
          style={{ background: 'var(--bg-base)' }}>
 
-      {/* ── Aurora Background ───────────────────────────────── */}
-      <div className="aurora-bg">
-        <div className="aurora-orb-1" />
-        <div className="aurora-orb-2" />
-        <div className="aurora-orb-3" />
-      </div>
-
       {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
       <aside
-        className={`hidden md:flex flex-col ${sidebarW} border-r border-white/[0.08] bg-[#0c0e14]/95 backdrop-blur-2xl shrink-0 fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-in-out`}
+        className={`hidden md:flex flex-col border-r border-white/[0.05] bg-[#090b10] shrink-0 fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-in-out ${sidebarW}`}
       >
         {/* Brand Header */}
-        <div className={`flex items-center shrink-0 border-b border-white/[0.08] transition-all duration-300 ${
-          collapsed ? 'flex-col justify-center py-4 px-2 gap-3' : 'justify-between px-4 py-4'
-        }`}>
-          <Link href="/dashboard" className="flex items-center gap-3 no-underline min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-white/95 p-1 shrink-0 flex items-center justify-center shadow-[0_0_20px_rgba(129,140,248,0.25)]">
-              <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain" />
-            </div>
-            {!collapsed && (
-              <div className="min-w-0 overflow-hidden">
-                <div className="font-bold text-white text-sm tracking-tight flex items-center gap-1.5 whitespace-nowrap">
-                  INVESTMENT
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 font-semibold">
-                    AI
-                  </span>
+        <div className={`flex flex-col shrink-0 border-b border-white/[0.05] transition-all duration-300 p-4 gap-5`}>
+          <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
+            <Link href="/dashboard" className="flex items-center gap-3 no-underline min-w-0">
+              <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-violet-600 to-indigo-600 p-2 shrink-0 flex items-center justify-center shadow-[0_0_24px_rgba(124,58,237,0.35)]">
+                <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain brightness-0 invert drop-shadow-md" />
+              </div>
+              {!collapsed && (
+                <div className="min-w-0 overflow-hidden">
+                  <div className="font-bold text-white text-[15px] tracking-tight flex items-center gap-1.5 whitespace-nowrap">
+                    Investment
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-white/10 text-white font-bold uppercase tracking-wider">
+                      Pro
+                    </span>
+                  </div>
                 </div>
-                <p className="text-[10px] text-[var(--text-muted)] tracking-widest uppercase font-medium whitespace-nowrap">
-                  MIX THE ARCHITECT
+              )}
+            </Link>
+
+            {/* Collapse toggle */}
+            {!collapsed && (
+              <button
+                onClick={() => setCollapsed(!collapsed)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:text-white hover:bg-white/[0.08] transition-all shrink-0 group"
+              >
+                <PanelLeftClose className="w-4 h-4 group-hover:scale-95 transition-transform" />
+              </button>
+            )}
+          </div>
+
+          {!collapsed && (
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.02] border border-white/[0.04] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.02)]">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-emerald-500/20 to-emerald-500/5 flex items-center justify-center border border-emerald-500/20 shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                <Wallet className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white/90 truncate leading-tight">พอร์ตลงทุนหลัก</p>
+                <p className="text-[11px] text-zinc-500 truncate mt-0.5 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                  ซิงค์ล่าสุด: วันนี้
                 </p>
               </div>
-            )}
-          </Link>
-
-          {/* Collapse toggle */}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className={`rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] transition-colors ${
-              collapsed ? 'w-8 h-8 bg-white/[0.04] border border-white/[0.08]' : 'w-7 h-7'
-            }`}
-            title={collapsed ? 'ขยายแถบเมนู (Sidebar)' : 'ย่อแถบเมนู (Sidebar)'}
-          >
-            {collapsed
-              ? <PanelLeft className="w-4 h-4 text-violet-400" />
-              : <PanelLeftClose className="w-4 h-4" />
-            }
-          </button>
+            </div>
+          )}
+          {collapsed && (
+            <button
+                onClick={() => setCollapsed(!collapsed)}
+                className="w-11 h-11 mx-auto rounded-xl flex items-center justify-center bg-white/[0.02] border border-white/[0.04] text-zinc-500 hover:text-white hover:bg-white/[0.08] transition-all group"
+                title="ขยายแถบเมนู (Sidebar)"
+              >
+                <PanelLeft className="w-5 h-5 text-violet-400 group-hover:scale-105 transition-transform" />
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto overflow-x-visible px-2 py-4 space-y-1">
-          {!collapsed && (
-            <p className="px-3 text-[10px] font-semibold tracking-widest text-[var(--text-muted)] uppercase mb-3">
-              เมนูหลัก
-            </p>
-          )}
+        <div className="flex-1 overflow-y-auto overflow-x-visible p-3 space-y-1.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+          {NAV_GROUPS.map((group, gIdx) => (
+            <div key={group.groupName} className="space-y-1.5">
+              {!collapsed && (
+                <p className={`px-3 ${gIdx === 0 ? 'pt-2' : 'pt-4 border-t border-white/[0.04] mt-2'} pb-1 text-[10px] font-bold tracking-[0.15em] text-zinc-500 uppercase`}>
+                  {group.groupName}
+                </p>
+              )}
+              {collapsed && gIdx !== 0 && <div className="h-px bg-white/[0.04] w-10 mx-auto my-2" />}
 
-          {PRIMARY_NAV.map((item) => {
-            const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 no-underline group relative ${
-                  active
-                    ? 'nav-pill-active text-white'
-                    : 'text-[var(--text-secondary)] hover:text-white hover:bg-white/[0.05]'
-                } ${collapsed ? 'justify-center' : ''}`}
-              >
-                <Icon className={`w-4 h-4 shrink-0 transition-colors ${active ? 'text-violet-400' : 'text-[var(--text-muted)] group-hover:text-violet-400'}`} />
-                {!collapsed && (
-                  <>
-                    <span className="truncate">{item.label}</span>
-                    {item.badge && (
-                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/25 font-bold shrink-0">
-                        {item.badge}
+              {group.items.map((item) => {
+                const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-2xl text-[14px] font-semibold transition-all duration-300 no-underline group relative ${
+                      active
+                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_4px_20px_-4px_rgba(124,58,237,0.5)] border border-white/10'
+                        : 'text-zinc-400 hover:text-white hover:bg-white/[0.04] border border-transparent'
+                    } ${collapsed ? 'justify-center w-12 h-12 px-0 mx-auto' : ''}`}
+                  >
+                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-all duration-300 ${active ? 'text-white drop-shadow-md' : 'text-zinc-500 group-hover:text-violet-400'}`} />
+                    {!collapsed && (
+                      <>
+                        <span className="truncate">{item.label}</span>
+                        {item.badge && (
+                          <span className="ml-auto text-[9px] px-2 py-0.5 rounded-full bg-black/20 text-white border border-white/20 font-bold shrink-0 shadow-inner">
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {/* Collapsed tooltip */}
+                    {collapsed && (
+                      <span className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-semibold text-white bg-[#151821] border border-white/10 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl z-50 flex items-center gap-2">
+                        {item.label}
+                        {item.badge && <span className="text-violet-400 text-[10px] bg-violet-500/10 px-1.5 py-0.5 rounded-full">{item.badge}</span>}
                       </span>
                     )}
-                  </>
-                )}
-                {/* Collapsed tooltip */}
-                {collapsed && (
-                  <span className="absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-semibold text-white bg-[#151821] border border-white/15 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl z-50">
-                    {item.label}
-                    {item.badge && <span className="ml-1.5 text-violet-400 font-bold">• {item.badge}</span>}
-                  </span>
-                )}
-              </Link>
-            )
-          })}
+                  </Link>
+                )
+              })}
+            </div>
+          ))}
 
           {/* Admin section */}
           {isSuperAdminOrAdmin && (
-            <div className={`pt-3 border-t border-white/[0.06] mt-3 space-y-1`}>
+            <div className={`pt-4 mt-2 space-y-1.5 relative`}>
+              {/* Divider */}
+              <div className="absolute top-0 left-3 right-3 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+              
               {!collapsed && (
-                <p className="px-3 text-[10px] font-semibold tracking-widest text-amber-400/70 uppercase mb-2">
+                <p className="px-3 pb-1 text-[10px] font-bold tracking-[0.15em] text-amber-500/70 uppercase flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50" />
                   ผู้ดูแลระบบ
                 </p>
               )}
@@ -193,16 +242,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 no-underline group relative ${
+                    className={`flex items-center gap-3 px-3 py-3 rounded-2xl text-[14px] font-semibold transition-all duration-300 no-underline group relative ${
                       active
-                        ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
-                        : 'text-[var(--text-secondary)] hover:text-amber-200 hover:bg-amber-500/[0.06]'
-                    } ${collapsed ? 'justify-center' : ''}`}
+                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-[0_4px_20px_-4px_rgba(245,158,11,0.4)] border border-white/10'
+                        : 'text-zinc-400 hover:text-white hover:bg-amber-500/5 border border-transparent'
+                    } ${collapsed ? 'justify-center w-12 h-12 px-0 mx-auto' : ''}`}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-amber-400' : 'text-[var(--text-muted)]'}`} />
+                    <Icon className={`w-[18px] h-[18px] shrink-0 transition-all duration-300 ${active ? 'text-white drop-shadow-md' : 'text-zinc-500 group-hover:text-amber-400'}`} />
                     {!collapsed && <span className="truncate">{item.label}</span>}
                     {collapsed && (
-                      <span className="absolute left-[calc(100%+12px)] top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-semibold text-white bg-[#151821] border border-white/15 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl z-50">
+                      <span className="absolute left-[calc(100%+16px)] top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-semibold text-white bg-[#151821] border border-white/10 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-2xl z-50">
                         {item.label}
                       </span>
                     )}
@@ -214,38 +263,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* User Footer */}
-        <div className="p-3 border-t border-white/[0.08] shrink-0">
+        <div className="p-4 border-t border-white/[0.05] shrink-0 bg-[#090b10]">
           {collapsed ? (
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-sm">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-violet-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-[0_0_15px_rgba(124,58,237,0.3)] ring-2 ring-white/10">
                 {userName.slice(0, 2).toUpperCase()}
               </div>
               <button
                 onClick={() => signOut({ callbackUrl: '/login' })}
-                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                className="p-2 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                 title="ออกจากระบบ"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
+            <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/[0.02] border border-white/[0.04] shadow-inner">
+              <div className="w-10 h-10 rounded-[14px] bg-gradient-to-br from-violet-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shrink-0 shadow-[0_0_15px_rgba(124,58,237,0.3)] ring-2 ring-white/10">
                 {userName.slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold truncate text-white">{userName}</p>
-                <div className="flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${isSuperAdminOrAdmin ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-                  <span className="text-[10px] text-[var(--text-muted)] truncate capitalize">{role}</span>
-                </div>
+                <p className="text-[13px] font-bold truncate text-white/90">{userName}</p>
+                <p className="text-[10px] text-zinc-500 truncate capitalize mt-0.5">{role}</p>
               </div>
               <button
                 onClick={() => signOut({ callbackUrl: '/login' })}
-                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+                className="p-2 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
                 title="ออกจากระบบ"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -291,10 +337,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Mobile Header */}
         <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/[0.04] border-b border-white/[0.06] backdrop-blur-xl">
           <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
-            <div className="w-8 h-8 rounded-xl bg-white/95 p-0.5 flex items-center justify-center shadow-[0_0_12px_rgba(139,92,246,0.3)]">
-              <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain" />
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 p-1.5 flex items-center justify-center">
+                <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain brightness-0 invert" />
+              </div>
+              <span className="font-bold text-white text-[15px] tracking-tight">Investment Pro</span>
             </div>
-            <span className="font-bold text-white text-sm tracking-tight">INVESTMENT AI</span>
           </Link>
           <div className="flex items-center gap-1.5">
             <ThemeStyleSelector />
