@@ -130,13 +130,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col shrink-0 p-4 pb-2 gap-4">
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
             <Link href="/dashboard" className="flex items-center gap-3 no-underline min-w-0 group">
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-5 h-5 text-indigo-400" />
+              <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/10 p-1 flex items-center justify-center shrink-0 shadow-md">
+                <img src="/logo.png" alt="Investment Pro" className="w-full h-full object-contain" />
               </div>
               {!collapsed && (
                 <div className="min-w-0">
-                  <span className="text-[16px] font-semibold tracking-tight text-white">Investment Pro</span>
-                  <p className="text-[11px] text-slate-500 truncate mt-0.5">จัดการการลงทุนอย่างเป็นระบบ</p>
+                  <span className="text-[15px] font-bold tracking-tight text-white">Investment Pro</span>
+                  <p className="text-[11px] text-zinc-400 truncate mt-0.5">ระบบจัดการพอร์ตลงทุน</p>
                 </div>
               )}
             </Link>
@@ -321,8 +321,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Mobile Header */}
           <header className="app-mobile-only items-center justify-between px-4 py-2.5 bg-[#12151C]/95 border-b border-white/10 backdrop-blur-xl">
             <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
-              <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
-                <TrendingUp className="w-4 h-4 text-indigo-400" />
+              <div className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/10 p-0.5 flex items-center justify-center">
+                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <span className="font-semibold text-white text-sm">Investment Pro</span>
             </Link>
@@ -351,8 +351,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="bg-slate-950 border-t border-slate-800 rounded-t-3xl max-h-[85vh] overflow-y-auto p-5 space-y-4 animate-slide-up shadow-2xl">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-                    <TrendingUp className="w-4 h-4" />
+                  <div className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/10 p-0.5 flex items-center justify-center">
+                    <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                   </div>
                   <span className="font-semibold text-sm text-white">Investment Pro</span>
                 </div>

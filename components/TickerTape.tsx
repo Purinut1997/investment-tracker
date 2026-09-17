@@ -66,7 +66,8 @@ export function TickerTape() {
   return (
     <div className="w-full h-9 relative overflow-hidden bg-[#0c0e15] border-b border-white/[0.08] text-xs select-none z-30 shadow-inner">
       {/* ── Fixed Left Badge (Live Indicator) ────────────────── */}
-      <div className="absolute left-0 inset-y-0 z-30 px-3.5 sm:px-4 bg-[#0c0e15]/95 backdrop-blur-md flex items-center gap-2 border-r border-white/[0.08] shadow-[4px_0_12px_rgba(0,0,0,0.6)]">
+      <div className="absolute left-0 inset-y-0 z-30 px-3 sm:px-3.5 bg-[#0c0e15]/95 backdrop-blur-md flex items-center gap-2 border-r border-white/[0.08] shadow-[4px_0_12px_rgba(0,0,0,0.6)]">
+        <img src="/logo.png" alt="Logo" className="w-4 h-4 object-contain rounded-sm" />
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />

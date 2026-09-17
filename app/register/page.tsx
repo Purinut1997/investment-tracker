@@ -87,8 +87,8 @@ export default function RegisterPage() {
 
       <div className="w-full max-w-[440px] bg-[#12151C] border border-white/[0.08] rounded-2xl p-7 sm:p-9 shadow-2xl shadow-black/80 relative z-10 animate-fade-in">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center mx-auto mb-4 text-indigo-400">
-            <TrendingUp className="w-6 h-6" />
+          <div className="w-16 h-16 rounded-2xl bg-white/[0.04] border border-white/10 p-2.5 flex items-center justify-center mx-auto mb-4 shadow-xl shadow-black/40">
+            <img src="/logo.png" alt="Investment Pro Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
             สร้างบัญชีผู้ใช้ใหม่
