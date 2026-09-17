@@ -52,7 +52,22 @@ export default function ForgotPasswordPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 24, textAlign: 'center' }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 12,
+            background: '#ffffff',
+            padding: 4,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 14px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: '0 0 25px rgba(34, 211, 238, 0.3)',
+          }}>
+            <img
+              src="/logo.png"
+              alt="Mix The Architect System Logo"
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          </div>
           <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>ลืมรหัสผ่าน</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
             กรอกอีเมลที่ใช้สมัคร เราจะส่งลิงก์รีเซ็ตให้คุณ

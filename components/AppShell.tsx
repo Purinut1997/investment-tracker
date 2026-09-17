@@ -25,6 +25,8 @@ import {
   ExternalLink
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
+import { TickerTape } from './TickerTape'
+import { ThemeToggle } from './ThemeToggle'
 
 interface NavItem {
   label: string
@@ -62,14 +64,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userEmail = session?.user?.email ?? ''
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex">
+    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] flex relative overflow-x-hidden">
+      {/* Ambient Lighting & Atmospheric Depth */}
+      <div className="ambient-aura-bg">
+        <div className="ambient-blob-1" />
+        <div className="ambient-blob-2" />
+        <div className="ambient-blob-3" />
+      </div>
+
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────────────── */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-[var(--border)] bg-[var(--bg-surface)] shrink-0 sticky top-0 h-screen z-40">
+      <aside className="hidden md:flex flex-col w-64 border-r border-[var(--border)] bg-[var(--bg-surface)]/90 backdrop-blur-xl shrink-0 sticky top-0 h-screen z-40">
         {/* Brand Header */}
         <div className="p-5 border-b border-[var(--border)] flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-3 no-underline group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-emerald-400 flex items-center justify-center shadow-[0_0_20px_rgba(34,211,238,0.3)] transition-transform group-hover:scale-105">
-              <Sparkles className="w-5 h-5 text-black" />
+            <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/95 p-1 border border-white/20 shadow-[0_0_20px_rgba(34,211,238,0.25)] transition-transform group-hover:scale-105 shrink-0 flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="Mix The Architect System Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="font-bold tracking-tight text-white flex items-center gap-1.5 text-base">
@@ -79,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
               </div>
               <p className="text-[10px] text-[var(--text-muted)] tracking-wider uppercase font-medium">
-                Tracker v5
+                MIX THE ARCHITECT
               </p>
             </div>
           </Link>
@@ -101,8 +114,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   href={item.href}
                   className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all no-underline ${
                     active
-                      ? 'bg-cyan-500/15 text-[var(--cyan-400)] border border-cyan-500/30 font-semibold shadow-[0_0_15px_rgba(34,211,238,0.08)]'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                      ? 'nav-pill-active font-semibold'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]/60'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -136,8 +149,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     href={item.href}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all no-underline ${
                       active
-                        ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold'
-                        : 'text-[var(--text-secondary)] hover:text-amber-200 hover:bg-[var(--bg-elevated)]'
+                        ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold shadow-[0_0_15px_rgba(251,191,36,0.1)]'
+                        : 'text-[var(--text-secondary)] hover:text-amber-200 hover:bg-[var(--bg-elevated)]/60'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -153,10 +166,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* User Footer Profile */}
-        <div className="p-3 border-t border-[var(--border)] bg-[var(--bg-surface)]">
-          <div className="p-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-between">
+        <div className="p-3 border-t border-[var(--border)] bg-[var(--bg-surface)]/80 backdrop-blur-md">
+          <div className="p-2.5 rounded-xl bg-[var(--bg-elevated)]/80 border border-[var(--border)] flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-600 to-blue-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm">
                 {userName.slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0">
@@ -171,56 +184,80 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => signOut({ callbackUrl: '/login' })}
-              title="ออกจากระบบ"
-              className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+
+            <div className="flex items-center gap-1 shrink-0">
+              <ThemeToggle />
+              <button
+                onClick={() => signOut({ callbackUrl: '/login' })}
+                title="ออกจากระบบ"
+                className="p-2 rounded-xl text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <p className="text-[10px] text-center text-[var(--text-muted)] mt-2">
-            Created by MIKPURINUT
+          <p className="text-[10px] text-center text-[var(--text-muted)] mt-2 font-medium">
+            Investment AI • Luxury Edition
           </p>
         </div>
       </aside>
 
       {/* ─── MAIN CONTENT AREA ──────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-6">
+      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-6 relative z-10">
         {/* Mobile Header */}
-        <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[var(--bg-surface)] border-b border-[var(--border)] backdrop-blur-md bg-opacity-90">
+        <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-[var(--bg-surface)]/90 border-b border-[var(--border)] backdrop-blur-md">
           <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500 to-emerald-400 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-black" />
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white/95 p-0.5 border border-white/20 shadow-[0_0_12px_rgba(34,211,238,0.25)] flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="Mix The Architect System Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
-            <span className="font-bold text-white text-sm">INVESTMENT AI</span>
+            <span className="font-bold text-white text-sm tracking-tight">INVESTMENT AI</span>
           </Link>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button
               onClick={() => setQuickAddOpen(true)}
-              className="p-2 rounded-lg bg-cyan-500/20 text-[var(--cyan-400)] border border-cyan-500/30 text-xs font-semibold flex items-center gap-1"
+              className="p-2 rounded-xl bg-cyan-500/20 text-[var(--cyan-400)] border border-cyan-500/30 text-xs font-semibold flex items-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>บันทึก</span>
             </button>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+              className="p-2 rounded-xl text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </header>
 
+        {/* Global Wall Street Marquee Ticker Tape */}
+        <TickerTape />
+
         {/* Mobile Drawer Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end">
+          <div className="md:hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex flex-col justify-end">
             <div className="bg-[var(--bg-surface)] border-t border-[var(--border)] rounded-t-3xl max-h-[85vh] overflow-y-auto p-5 space-y-4 animate-in slide-in-from-bottom">
               <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
-                <span className="font-bold text-base">เมนูทั้งหมด</span>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg overflow-hidden bg-white/95 p-0.5 border border-white/20 shadow-[0_0_12px_rgba(34,211,238,0.25)] flex items-center justify-center">
+                    <img
+                      src="/logo.png"
+                      alt="Mix The Architect System Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div>
+                    <span className="font-bold text-sm text-white block leading-tight">INVESTMENT AI</span>
+                    <span className="text-[10px] text-[var(--text-muted)] tracking-wider uppercase font-medium">MIX THE ARCHITECT</span>
+                  </div>
+                </div>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
-                  className="p-1 rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]"
+                  className="p-1.5 rounded-full text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -235,10 +272,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs font-medium no-underline ${
+                      className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs font-medium no-underline transition-all ${
                         active
-                          ? 'bg-cyan-500/15 border-cyan-500/30 text-[var(--cyan-400)]'
-                          : 'bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-primary)]'
+                          ? 'nav-pill-active font-semibold'
+                          : 'bg-[var(--bg-elevated)]/60 border-[var(--border)] text-[var(--text-primary)]'
                       }`}
                     >
                       <Icon className="w-4 h-4 text-[var(--cyan-400)]" />
@@ -279,7 +316,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
                 <button
                   onClick={() => signOut({ callbackUrl: '/login' })}
-                  className="px-3 py-1.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-medium flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs font-medium flex items-center gap-1.5"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>ออกจากระบบ</span>
@@ -296,7 +333,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ─── MOBILE BOTTOM NAV ─────────────────────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-[var(--bg-surface)] border-t border-[var(--border)] backdrop-blur-lg bg-opacity-95 px-2 py-1.5 flex justify-around items-center">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-[var(--bg-surface)]/90 border-t border-[var(--border)] backdrop-blur-lg px-2 py-1.5 flex justify-around items-center">
         <Link
           href="/dashboard"
           className={`flex flex-col items-center py-1 px-3 rounded-lg text-[10px] font-medium transition-colors no-underline ${
@@ -315,12 +352,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <ArrowLeftRight className="w-5 h-5 mb-0.5" />
           <span>ธุรกรรม</span>
         </Link>
-        <button
-          onClick={() => setQuickAddOpen(true)}
-          className="flex flex-col items-center justify-center -mt-5 w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 to-emerald-400 text-black shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-transform active:scale-95"
-        >
-          <Plus className="w-6 h-6 stroke-[2.5]" />
-        </button>
+
+        {/* Center Mobile FAB with Aura Glow */}
+        <div className="relative -mt-6">
+          <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 opacity-70 blur-sm animate-pulse-glow" />
+          <button
+            onClick={() => setQuickAddOpen(true)}
+            className="relative flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-400 to-emerald-400 text-black shadow-[0_0_20px_rgba(34,211,238,0.5)] transition-transform active:scale-95"
+            aria-label="Quick Add"
+          >
+            <Plus className="w-6 h-6 stroke-[2.5]" />
+          </button>
+        </div>
+
         <Link
           href="/accounts"
           className={`flex flex-col items-center py-1 px-3 rounded-lg text-[10px] font-medium transition-colors no-underline ${
@@ -339,18 +383,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </button>
       </nav>
 
-      {/* ─── DESKTOP FLOATING ACTION BUTTON (FAB) ──────────────────── */}
-      <button
-        onClick={() => setQuickAddOpen(true)}
-        className="hidden md:flex fixed bottom-8 right-8 z-40 items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400 text-black font-semibold text-sm shadow-[0_4px_25px_rgba(34,211,238,0.35)] hover:shadow-[0_4px_30px_rgba(34,211,238,0.5)] transition-all hover:scale-105 active:scale-95"
-        title="บันทึกธุรกรรมด่วนด้วย AI"
-      >
-        <Plus className="w-5 h-5 stroke-[2.5]" />
-        <span>บันทึกด่วน</span>
-        <span className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded-full font-bold">
-          AI
-        </span>
-      </button>
+      {/* ─── DESKTOP FLOATING ACTION BUTTON (FAB) WITH AURA RING ───── */}
+      <div className="hidden md:flex fixed bottom-8 right-8 z-40 items-center justify-center group">
+        <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-cyan-500 via-emerald-400 to-violet-500 opacity-60 blur-md animate-spin-slow group-hover:opacity-100 transition-opacity" />
+        <button
+          onClick={() => setQuickAddOpen(true)}
+          className="relative flex items-center gap-2.5 px-5 py-3.5 rounded-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-cyan-300 text-black font-extrabold text-sm shadow-[0_6px_28px_rgba(34,211,238,0.45)] hover:shadow-[0_8px_35px_rgba(34,211,238,0.65)] transition-all hover:scale-105 active:scale-95 shimmer-btn"
+          title="บันทึกธุรกรรมด่วนด้วย AI"
+        >
+          <Plus className="w-5 h-5 stroke-[2.8]" />
+          <span className="tracking-wide">บันทึกด่วน</span>
+          <span className="text-[10px] bg-black/25 text-black font-black px-1.5 py-0.5 rounded-full">
+            AI
+          </span>
+        </button>
+      </div>
 
       {/* ─── QUICK ADD MODAL (Natural Language & Quick Add) ────────── */}
       {quickAddOpen && (

@@ -25,7 +25,10 @@ export const metadata: Metadata = {
     title: 'Investment Tracker',
   },
   icons: {
-    icon: '/icons/icon-192.png',
+    icon: [
+      { url: '/logo.png', type: 'image/png' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
     apple: '/icons/apple-icon.png',
   },
   openGraph: {
@@ -52,6 +55,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="th" className={inter.variable} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

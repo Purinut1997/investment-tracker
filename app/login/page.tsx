@@ -98,15 +98,21 @@ function LoginForm() {
         {/* Logo / Brand */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <div style={{
-            width: 52, height: 52,
-            background: 'linear-gradient(135deg, #06b6d4, #818cf8)',
-            borderRadius: '14px',
+            width: 64, height: 64,
+            borderRadius: '16px',
+            overflow: 'hidden',
+            backgroundColor: '#ffffff',
+            padding: 4,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 12px',
-            fontSize: 24,
-            boxShadow: '0 0 24px rgba(34, 211, 238, 0.3)',
+            margin: '0 auto 14px',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            boxShadow: '0 0 25px rgba(34, 211, 238, 0.3)',
           }}>
-            📈
+            <img
+              src="/logo.png"
+              alt="Mix The Architect System Logo"
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
             Investment Tracker
