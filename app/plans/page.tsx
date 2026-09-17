@@ -150,7 +150,7 @@ export default function PlansPage() {
               <div className="p-2 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)]">
                 <Scale className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
                 แผนจัดสรรสินทรัพย์
               </h1>
             </div>

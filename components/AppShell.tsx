@@ -300,7 +300,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── MAIN CONTENT ────────────────────────────────────── */}
-      <div className="min-w-0 flex flex-col pb-28 lg:pb-24 relative z-10">
+      <div className="min-w-0 flex flex-col pb-24 lg:pb-8 relative z-10">
 
         {/* Desktop Topbar */}
         <header className="hidden lg:flex min-w-0 items-center justify-between gap-4 px-6 xl:px-8 py-3 border-b border-white/[0.07] bg-[#0b0d12]/95 backdrop-blur-xl sticky top-0 z-30">
@@ -448,13 +448,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 min-w-0 w-full max-w-[1440px] mx-auto overflow-x-clip px-5 sm:px-8 lg:px-10 py-8 sm:py-10">
+        <main className="flex-1 min-w-0 w-full max-w-[1440px] mx-auto overflow-x-clip px-[var(--space-page)] py-[var(--space-section)]">
           {children}
         </main>
       </div>
 
       {/* ── MOBILE BOTTOM NAV ───────────────────────────────── */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/[0.04] border-t border-white/[0.07] backdrop-blur-2xl px-2 py-1.5 flex justify-around items-center">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#0b0d12]/95 border-t border-white/[0.08] backdrop-blur-xl px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex justify-around items-center">
         {[
           { href: '/dashboard',    icon: LayoutDashboard, label: 'แดชบอร์ด' },
           { href: '/transactions', icon: ArrowLeftRight,   label: 'ธุรกรรม' },

@@ -158,7 +158,7 @@ export default function SuperadminSettingsPage() {
                 Superadmin System Config
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
               <Cpu className="w-7 h-7 text-amber-400" />
               <span>จัดการโมเดล AI (AiModelOption)</span>
             </h1>

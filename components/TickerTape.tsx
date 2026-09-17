@@ -3,7 +3,7 @@
 import React from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
-import { ArrowUpRight, ArrowDownRight, Radio } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 
 interface TickerItem {
   symbol: string
@@ -11,6 +11,20 @@ interface TickerItem {
   price: number
   changePercent?: number
   currency?: string
+}
+
+interface MarketDataItem {
+  symbol: string
+  price: number
+  changePercent?: number
+  currency?: string
+}
+
+interface MarketWatchResponse {
+  thStocks?: MarketDataItem[]
+  usStocks?: MarketDataItem[]
+  crypto?: MarketDataItem[]
+  fxAndCommodities?: MarketDataItem[]
 }
 
 const DEFAULT_TICKERS: TickerItem[] = [
@@ -23,7 +37,7 @@ const DEFAULT_TICKERS: TickerItem[] = [
 ]
 
 export function TickerTape() {
-  const { data } = useSWR('/api/market-watch', {
+  const { data } = useSWR<MarketWatchResponse>('/api/market-watch', {
     refreshInterval: 60000,
     revalidateOnFocus: false,
   })
@@ -36,7 +50,7 @@ export function TickerTape() {
 
     // 1. Th stocks or SET index
     if (data.thStocks && data.thStocks.length > 0) {
-      data.thStocks.slice(0, 3).forEach((s: any) => {
+      data.thStocks.slice(0, 3).forEach((s) => {
         list.push({
           symbol: s.symbol,
           price: s.price,
@@ -50,7 +64,7 @@ export function TickerTape() {
 
     // 2. US stocks
     if (data.usStocks && data.usStocks.length > 0) {
-      data.usStocks.slice(0, 3).forEach((s: any) => {
+      data.usStocks.slice(0, 3).forEach((s) => {
         list.push({
           symbol: s.symbol,
           price: s.price,
@@ -64,7 +78,7 @@ export function TickerTape() {
 
     // 3. Crypto
     if (data.crypto && data.crypto.length > 0) {
-      data.crypto.slice(0, 3).forEach((c: any) => {
+      data.crypto.slice(0, 3).forEach((c) => {
         list.push({
           symbol: c.symbol,
           price: c.price,
@@ -78,7 +92,7 @@ export function TickerTape() {
 
     // 4. Commodities & FX
     if (data.fxAndCommodities && data.fxAndCommodities.length > 0) {
-      data.fxAndCommodities.forEach((f: any) => {
+      data.fxAndCommodities.forEach((f) => {
         list.push({
           symbol: f.symbol.replace(' (XAU/USD)', ''),
           price: f.price,
@@ -97,9 +111,9 @@ export function TickerTape() {
   const duplicated = [...items, ...items, ...items]
 
   return (
-    <div className="w-full relative overflow-hidden bg-[#090a0f]/95 backdrop-blur-md border-b border-white/[0.06] py-2 text-xs select-none z-20">
+    <div className="w-full h-8 relative overflow-hidden bg-[#090a0f]/95 backdrop-blur-md border-b border-white/[0.06] text-xs select-none z-20">
       {/* Live Badge Anchor */}
-      <div className="absolute left-0 top-0 bottom-0 z-30 px-3 sm:px-4 bg-[#090a0f] flex items-center gap-1.5 border-r border-white/[0.06] shadow-[4px_0_12px_rgba(0,0,0,0.5)]">
+      <div className="absolute left-0 inset-y-0 z-30 px-3 sm:px-4 bg-[#090a0f] flex items-center gap-1.5 border-r border-white/[0.06] shadow-[4px_0_12px_rgba(0,0,0,0.5)]">
         <span className="relative flex h-2 w-2">
           <span className="pulse-live absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -117,7 +131,7 @@ export function TickerTape() {
           WebkitMaskImage: 'linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent)',
         }}
       >
-        <div className="marquee-track flex items-center gap-6 sm:gap-8">
+        <div className="marquee-track h-8 flex items-center gap-6 sm:gap-8">
           {duplicated.map((item, idx) => {
             const isPositive = (item.changePercent ?? 0) >= 0
             const isZero = (item.changePercent ?? 0) === 0
