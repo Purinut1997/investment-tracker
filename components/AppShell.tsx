@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import {
@@ -125,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
             <Link href="/dashboard" className="flex items-center gap-3 no-underline min-w-0">
               <div className="w-10 h-10 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)] p-2 shrink-0 flex items-center justify-center">
-                <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain brightness-0 invert drop-shadow-md" />
+                <Image src="/logo.png" alt="Investment Pro" width={40} height={40} className="w-full h-full object-contain brightness-0 invert" />
               </div>
               {!collapsed && (
                 <div className="min-w-0 overflow-hidden">
@@ -340,7 +341,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 p-1.5 flex items-center justify-center">
-                <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain brightness-0 invert" />
+                <Image src="/logo.png" alt="Investment Pro" width={32} height={32} className="w-full h-full object-contain brightness-0 invert" />
               </div>
               <span className="font-bold text-white text-[15px] tracking-tight">Investment Pro</span>
             </div>
@@ -377,7 +378,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="flex items-center justify-between pb-3 border-b border-white/[0.07]">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-white/95 p-0.5 flex items-center justify-center shadow-[0_0_12px_rgba(139,92,246,0.3)]">
-                    <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain" />
+                    <Image src="/logo.png" alt="Investment Pro" width={32} height={32} className="w-full h-full object-contain" />
                   </div>
                   <div>
                     <span className="font-bold text-sm text-white block leading-tight">Investment Pro</span>
