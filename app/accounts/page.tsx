@@ -122,15 +122,15 @@ export default function AccountsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* ── Header ─────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-400 shadow-[0_0_20px_rgba(139,92,246,0.25)]">
+              <div className="p-2 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)]">
                 <Wallet className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">บัญชีการเงิน</h1>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">บัญชีการเงิน</h1>
             </div>
             <p className="text-xs sm:text-sm text-[var(--text-secondary)] pl-11">
               จัดการพอร์ตและบัญชีลงทุนต่างๆ — Brokerage, Crypto, Bank, Cash
@@ -138,7 +138,7 @@ export default function AccountsPage() {
           </div>
           <button
             onClick={openCreateModal}
-            className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2 shadow-[0_0_20px_rgba(34,211,238,0.2)] self-start sm:self-auto"
+            className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2 self-start sm:self-auto"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>สร้างบัญชีใหม่</span>
@@ -155,7 +155,7 @@ export default function AccountsPage() {
           ].map((stat) => {
             const Icon = stat.icon
             return (
-              <div key={stat.label} className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)] flex items-start gap-3.5 hover:border-white/15 transition-all">
+              <div key={stat.label} className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] flex items-start gap-3.5 hover:border-white/15 transition-colors">
                 <div className={`w-10 h-10 rounded-xl ${stat.bg} border border-white/[0.08] flex items-center justify-center shrink-0 ${stat.color}`}>
                   <Icon className="w-5 h-5" />
                 </div>

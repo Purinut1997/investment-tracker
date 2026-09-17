@@ -124,7 +124,18 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-6 sm:gap-8 w-full">
+      <div className="flex flex-col gap-8 sm:gap-10 w-full">
+
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-[var(--accent)] mb-2">ภาพรวมพอร์ต</p>
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">สวัสดี, นักลงทุน</h1>
+            <p className="text-sm text-[var(--text-secondary)] mt-2">ติดตามภาพรวมพอร์ตและสิ่งที่ควรทำต่อจากที่เดียว</p>
+          </div>
+          <Link href="/transactions" className="btn btn-primary self-start sm:self-auto px-4">
+            <Plus className="w-4 h-4" /> เพิ่มรายการ
+          </Link>
+        </div>
 
         {/* Alert */}
         {summary?.unackAlert && (
@@ -143,13 +154,13 @@ export default function DashboardPage() {
         )}
 
         {/* ── ROW 1: KEY METRICS (3 KPIs) ───────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
           {/* Card 1: Total Value */}
-          <div className="rounded-2xl p-5 sm:p-6 bg-[#111319] border border-white/[0.08] hover:border-white/[0.16] transition-all flex flex-col justify-between gap-5 relative shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="rounded-2xl p-5 sm:p-6 bg-[var(--bg-surface)] border border-white/[0.08] hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">มูลค่าพอร์ตรวม</p>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/25 font-semibold">Live</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.08] font-semibold">อัปเดตล่าสุด</span>
             </div>
             <div>
               <p className="text-3xl sm:text-4xl font-black text-white tabular-nums tracking-tight leading-none">
@@ -158,13 +169,13 @@ export default function DashboardPage() {
               <p className="text-xs text-zinc-400 mt-2 font-medium">ต้นทุน ฿{totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
-              <span className="text-[10px] text-zinc-400 font-medium">7-Day Trend</span>
+              <span className="text-[10px] text-zinc-400 font-medium">แนวโน้ม 7 วัน</span>
               <Sparkline seed="portfolio-total" trend="up" width={76} height={22} />
             </div>
           </div>
 
           {/* Card 2: Unrealized P&L */}
-          <div className="rounded-2xl p-5 sm:p-6 bg-[#111319] border border-white/[0.08] hover:border-white/[0.16] transition-all flex flex-col justify-between gap-5 relative shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="rounded-2xl p-5 sm:p-6 bg-[var(--bg-surface)] border border-white/[0.08] hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">กำไร/ขาดทุน (ยังไม่ขาย)</p>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-0.5 ${
@@ -181,16 +192,16 @@ export default function DashboardPage() {
               <p className="text-xs text-zinc-400 mt-2 font-medium">{isProfit ? 'กำไรยังไม่รับรู้' : 'ขาดทุนทางบัญชี'}</p>
             </div>
             <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
-              <span className="text-[10px] text-zinc-400 font-medium">PnL Momentum</span>
+              <span className="text-[10px] text-zinc-400 font-medium">แนวโน้มกำไร/ขาดทุน</span>
               <Sparkline seed="portfolio-pnl" trend={isProfit ? 'up' : 'down'} width={76} height={22} />
             </div>
           </div>
 
           {/* Card 3: Realized + Dividends */}
-          <div className="rounded-2xl p-5 sm:p-6 bg-[#111319] border border-white/[0.08] hover:border-white/[0.16] transition-all flex flex-col justify-between gap-5 relative shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="rounded-2xl p-5 sm:p-6 bg-[var(--bg-surface)] border border-white/[0.08] hover:border-white/[0.16] transition-colors flex flex-col justify-between gap-5">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-bold tracking-wider uppercase text-zinc-400">กำไรขายแล้ว + ปันผล</p>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 font-semibold">Realized</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.08] font-semibold">รับรู้แล้ว</span>
             </div>
             <div>
               <p className="text-3xl sm:text-4xl font-black text-white tabular-nums tracking-tight leading-none">
@@ -199,7 +210,7 @@ export default function DashboardPage() {
               <p className="text-xs text-zinc-400 mt-2 font-medium">ปันผลสะสม ฿{totalDividends.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
             </div>
             <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
-              <span className="text-[10px] text-zinc-400 font-medium">Cashflow Inflow</span>
+              <span className="text-[10px] text-zinc-400 font-medium">กระแสเงินเข้า</span>
               <Sparkline seed="portfolio-dividend" trend="up" width={76} height={22} />
             </div>
           </div>

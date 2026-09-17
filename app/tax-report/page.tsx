@@ -108,11 +108,11 @@ export default function TaxReportPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-2.5">
               <ReceiptText className="w-7 h-7 text-[var(--cyan-400)]" />
               <span>รายงานสรุปภาษีการลงทุน (Tax Report)</span>
             </h1>
@@ -171,7 +171,7 @@ export default function TaxReportPage() {
         {report && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Category 1: Dividends */}
-            <div className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.36)] space-y-3 relative overflow-hidden">
+            <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] space-y-3 relative overflow-hidden">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
                   1. เงินปันผลรับรวม

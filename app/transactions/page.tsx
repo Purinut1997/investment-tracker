@@ -103,15 +103,15 @@ export default function TransactionsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* ── Page Header ─────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 shadow-[0_0_20px_rgba(34,211,238,0.25)]">
+              <div className="p-2 rounded-xl bg-cyan-400/10 border border-cyan-400/20">
                 <ArrowLeftRight className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">รายการธุรกรรม</h1>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">รายการธุรกรรม</h1>
             </div>
             <p className="text-xs sm:text-sm text-[var(--text-secondary)] pl-11">
               บันทึก ตรวจสอบ และจัดการประวัติการซื้อ-ขายและปันผลทั้งหมด
@@ -128,7 +128,7 @@ export default function TransactionsPage() {
             </button>
             <button
               onClick={() => setQuickAddOpen(true)}
-              className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+              className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
               <span>เพิ่มธุรกรรม</span>
@@ -137,7 +137,7 @@ export default function TransactionsPage() {
         </div>
 
         {/* ── Unified Toolbar (3-Value Summary + Filters) ────────────── */}
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] shadow-sm">
+        <div className="flex flex-col lg:flex-row gap-5 items-start lg:items-center justify-between p-5 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08]">
           
           {/* 3-Value Summary */}
           <div className="flex items-center gap-6 overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 scrollbar-hide">

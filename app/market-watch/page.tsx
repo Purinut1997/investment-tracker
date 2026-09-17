@@ -88,15 +88,15 @@ export default function MarketWatchPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* ── Page Header ─────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-500 to-emerald-400 shadow-[0_0_20px_rgba(34,211,238,0.25)]">
-                <TrendingUp className="w-5 h-5 text-black" />
+              <div className="p-2 rounded-xl bg-cyan-400/10 border border-cyan-400/20">
+                <TrendingUp className="w-5 h-5 text-cyan-400" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
                 ตลาดการเงิน & อัตราแลกเปลี่ยน
               </h1>
             </div>
@@ -116,7 +116,7 @@ export default function MarketWatchPage() {
         </div>
 
         {/* ── Currency Converter Card ────────────────────── */}
-        <div className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.36)] relative overflow-hidden">
+        <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] relative overflow-hidden">
           {/* subtle top glow line */}
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
 
