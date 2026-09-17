@@ -26,6 +26,7 @@ import {
   PanelLeftClose,
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
+import { TickerTape } from './TickerTape'
 
 interface NavItem {
   label: string
@@ -286,53 +287,58 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── MAIN CONTENT ────────────────────────────────────── */}
       <div className="min-w-0 flex flex-col pb-20 lg:pb-6 relative z-10">
-        {/* Desktop Topbar */}
-        <header className="app-desktop-topbar min-w-0 items-center justify-between gap-4 px-6 xl:px-10 py-3.5 border-b border-white/10 bg-[#12151C]/95 backdrop-blur-xl sticky top-0 z-30">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setCollapsed(!collapsed)}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors flex items-center gap-2 text-xs"
-              title={collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
-            >
-              <PanelLeft className="w-4 h-4" />
-              <span className="hidden xl:inline text-slate-400">
-                {collapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
-              </span>
-            </button>
-          </div>
+        <div className="sticky top-0 z-30 w-full flex flex-col">
+          {/* Real-time Market Ticker Tape */}
+          <TickerTape />
 
-          <div className="flex items-center gap-3">
-            <Link
-              href={ctaHref}
-              onClick={hasAccounts ? (event) => { event.preventDefault(); openQuickAdd() } : undefined}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs min-h-11 py-2 px-3.5 flex items-center gap-1.5 rounded-xl transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{ctaLabel}</span>
-            </Link>
-          </div>
-        </header>
-
-        {/* Mobile Header */}
-        <header className="app-mobile-only sticky top-0 z-30 items-center justify-between px-4 py-3 bg-[#12151C]/95 border-b border-white/10 backdrop-blur-xl">
-          <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-indigo-400" />
+          {/* Desktop Topbar */}
+          <header className="app-desktop-topbar min-w-0 items-center justify-between gap-4 px-6 xl:px-10 py-3 border-b border-white/10 bg-[#12151C]/95 backdrop-blur-xl">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setCollapsed(!collapsed)}
+                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors flex items-center gap-2 text-xs"
+                title={collapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
+              >
+                <PanelLeft className="w-4 h-4" />
+                <span className="hidden xl:inline text-slate-400">
+                  {collapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
+                </span>
+              </button>
             </div>
-            <span className="font-semibold text-white text-sm">Investment Pro</span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <Link href={ctaHref} onClick={hasAccounts ? (event) => { event.preventDefault(); openQuickAdd() } : undefined} className="min-w-11 min-h-11 rounded-lg bg-indigo-600 text-white text-xs flex items-center justify-center" title={ctaLabel}>
-              <Plus className="w-4 h-4" />
+
+            <div className="flex items-center gap-3">
+              <Link
+                href={ctaHref}
+                onClick={hasAccounts ? (event) => { event.preventDefault(); openQuickAdd() } : undefined}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs min-h-9 py-2 px-3.5 flex items-center gap-1.5 rounded-xl shadow-md shadow-indigo-600/20 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{ctaLabel}</span>
+              </Link>
+            </div>
+          </header>
+
+          {/* Mobile Header */}
+          <header className="app-mobile-only items-center justify-between px-4 py-2.5 bg-[#12151C]/95 border-b border-white/10 backdrop-blur-xl">
+            <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
+              <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-indigo-400" />
+              </div>
+              <span className="font-semibold text-white text-sm">Investment Pro</span>
             </Link>
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-1.5 rounded-lg text-slate-300 hover:text-white transition-colors"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </header>
+            <div className="flex items-center gap-2">
+              <Link href={ctaHref} onClick={hasAccounts ? (event) => { event.preventDefault(); openQuickAdd() } : undefined} className="w-9 h-9 rounded-lg bg-indigo-600 text-white text-xs flex items-center justify-center" title={ctaLabel}>
+                <Plus className="w-4 h-4" />
+              </Link>
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-1.5 rounded-lg text-slate-300 hover:text-white transition-colors"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
+          </header>
+        </div>
 
         {/* Mobile Drawer */}
         {mobileMenuOpen && (

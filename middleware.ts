@@ -16,6 +16,8 @@ const PUBLIC_PATHS = [
   '/forgot-password',
   '/reset-password',
   '/api/auth',
+  '/api/market-data',
+  '/api/market-watch',
 ]
 
 export async function middleware(req: NextRequest) {

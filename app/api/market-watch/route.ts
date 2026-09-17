@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/auth'
-import { finnhubProvider } from '@/lib/market-data/finnhub'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
-import { stooqProvider } from '@/lib/market-data/stooq'
+import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   try {
     // 1. Fetch Crypto quotes
     const cryptoSymbols = ['BTC', 'ETH', 'SOL', 'BNB']
@@ -21,22 +14,18 @@ export async function GET(req: NextRequest) {
     // 2. Fetch US stocks
     const usSymbols = ['AAPL', 'NVDA', 'MSFT', 'TSLA']
     const usQuotes = await Promise.all(
-      usSymbols.map(async (s) => {
-        let q = await finnhubProvider.getQuote(s)
-        if (!q) q = await stooqProvider.getQuote(`${s}.US`, 'US')
-        return q
-      })
+      usSymbols.map(async (s) => yahooFinanceProvider.getQuote(s, 'US'))
     )
 
     // 3. Fetch Thai stocks
     const thSymbols = ['PTT', 'CPALL', 'BDMS', 'DELTA']
     const thQuotes = await Promise.all(
-      thSymbols.map((s) => stooqProvider.getQuote(s, 'TH'))
+      thSymbols.map((s) => yahooFinanceProvider.getQuote(s, 'TH'))
     )
 
     // 4. Fetch Commodities & FX
     const [goldQuote, usdThb, eurThb, jpyThb] = await Promise.all([
-      stooqProvider.getQuote('GC.F', 'COMMODITY'),
+      yahooFinanceProvider.getQuote('GOLD'),
       getExchangeRate('USD', 'THB'),
       getExchangeRate('EUR', 'THB'),
       getExchangeRate('JPY', 'THB'),
