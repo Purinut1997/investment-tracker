@@ -568,7 +568,8 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
             </button>
           </div>
         )}
-        )}
+        </>
+      )}
       </div>
     </div>
   )

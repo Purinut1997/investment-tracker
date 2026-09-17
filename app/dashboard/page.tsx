@@ -204,7 +204,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-
+        </div>
 
         {/* ── ROW 2: CHARTS & AI ───────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

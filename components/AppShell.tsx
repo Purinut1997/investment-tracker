@@ -380,8 +380,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <img src="/logo.png?v=2" alt="Logo" className="w-full h-full object-contain" />
                   </div>
                   <div>
-                    <span className="font-bold text-sm text-white block leading-tight">INVESTMENT AI</span>
-                    <span className="text-[10px] text-[var(--text-muted)] tracking-wider uppercase">MIX THE ARCHITECT</span>
+                    <span className="font-bold text-sm text-white block leading-tight">Investment Pro</span>
                   </div>
                 </div>
                 <button onClick={() => setMobileMenuOpen(false)} className="p-1.5 rounded-full text-[var(--text-muted)] hover:bg-white/[0.06]">
@@ -390,7 +389,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                {PRIMARY_NAV.map((item) => {
+                {NAV_GROUPS.flatMap(g => g.items).map((item) => {
                   const Icon = item.icon
                   const active = pathname === item.href
                   return (
