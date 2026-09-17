@@ -5,7 +5,6 @@ import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import {
-  TrendingUp,
   Coins,
   Building2,
   Landmark,
@@ -51,173 +50,138 @@ export default function MarketWatchPage() {
   const sections = [
     {
       key: 'crypto',
-      label: 'สินทรัพย์ดิจิทัล',
-      sublabel: 'Crypto Top Assets',
+      label: 'CRYPTO ASSETS',
       icon: Coins,
-      iconColor: 'text-amber-400',
-      accentColor: 'from-amber-500/20 to-transparent',
       data: data?.crypto ?? [],
     },
     {
       key: 'usStocks',
-      label: 'หุ้นสหรัฐฯ',
-      sublabel: 'US Tech Giants',
+      label: 'US EQUITIES',
       icon: Building2,
-      iconColor: 'text-blue-400',
-      accentColor: 'from-blue-500/20 to-transparent',
       data: data?.usStocks ?? [],
     },
     {
       key: 'thStocks',
-      label: 'หุ้นไทย',
-      sublabel: 'SET Index Leaders',
+      label: 'THAI EQUITIES',
       icon: Landmark,
-      iconColor: 'text-emerald-400',
-      accentColor: 'from-emerald-500/20 to-transparent',
       data: data?.thStocks ?? [],
     },
     {
       key: 'fxAndCommodities',
-      label: 'สินค้าโภคภัณฑ์ & FX',
-      sublabel: 'Commodities & Exchange Rates',
+      label: 'COMMODITIES & FX',
       icon: DollarSign,
-      iconColor: 'text-violet-400',
-      accentColor: 'from-violet-500/20 to-transparent',
       data: data?.fxAndCommodities ?? [],
     },
   ]
 
+  const inputClass = "bg-[#0a0a0a] border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-zinc-500 transition-colors w-full font-mono uppercase"
+
   return (
     <AppShell>
-      <div className="space-y-8">
-        <PageHeader
-          eyebrow="ตลาดและข้อมูล"
-          title="ตลาดการเงินและอัตราแลกเปลี่ยน"
-          description="ติดตามหุ้นสหรัฐฯ หุ้นไทย คริปโต ทองคำ และอัตราแลกเปลี่ยน"
-          action={<button onClick={() => revalidate()} disabled={isValidating} className="btn btn-secondary text-sm"><RefreshCw className={`w-4 h-4 ${isValidating ? 'animate-spin text-[var(--cyan-400)]' : ''}`} /> {isValidating ? 'กำลังดึงราคา...' : 'อัปเดตราคา'}</button>}
-        />
-        {/* ── Currency Converter Card ────────────────────── */}
-        <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] relative overflow-hidden">
-          {/* subtle top glow line */}
-          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
+      <div className="space-y-8 max-w-[1600px] mx-auto w-full">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">ตลาดการเงิน</h1>
+            <p className="text-sm text-zinc-500 mt-1">ติดตามหุ้นสหรัฐฯ หุ้นไทย คริปโต ทองคำ และอัตราแลกเปลี่ยน</p>
+          </div>
+          <button 
+            onClick={() => revalidate()} 
+            disabled={isValidating} 
+            className="bg-[#050505] text-zinc-400 hover:text-white border border-white/10 hover:bg-white/5 disabled:opacity-50 px-4 py-2 rounded-lg font-medium text-xs flex items-center gap-2 transition-colors w-fit"
+          >
+            <RefreshCw className={`w-4 h-4 ${isValidating ? 'animate-spin' : ''}`} /> 
+            {isValidating ? 'UPDATING...' : 'UPDATE PRICES'}
+          </button>
+        </div>
 
-          <div className="flex items-center gap-2.5 mb-5">
-            <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center">
-              <ArrowRightLeft className="w-4 h-4 text-[var(--violet)]" />
+        {/* Currency Converter Card */}
+        <div className="p-6 sm:p-8 rounded-3xl bg-[#0a0a0a] border border-white/5">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+              <ArrowRightLeft className="w-4 h-4 text-zinc-400" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">เครื่องมือแปลงสกุลเงิน</h2>
-              <p className="text-xs text-[var(--text-muted)]">Instant Currency Converter</p>
+              <h2 className="text-sm font-bold text-white tracking-wide">เครื่องมือแปลงสกุลเงิน (FX CONVERTER)</h2>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-            <div className="sm:col-span-4">
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">
-                จำนวนเงิน
-              </label>
-              <input
-                type="number"
-                step="any"
-                className="input text-sm font-bold"
-                value={convAmount}
-                onChange={(e) => setConvAmount(e.target.value)}
-              />
+          <div className="grid grid-cols-1 md:grid-cols-11 gap-4 items-end">
+            <div className="md:col-span-3">
+              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">AMOUNT</label>
+              <input type="number" step="any" className={inputClass} value={convAmount} onChange={(e) => setConvAmount(e.target.value)} />
             </div>
 
-            <div className="sm:col-span-3">
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">
-                จากสกุลเงิน
-              </label>
-              <select
-                className="input text-sm font-semibold"
-                value={convFrom}
-                onChange={(e) => setConvFrom(e.target.value)}
-              >
-                <option value="USD">USD — ดอลลาร์สหรัฐ</option>
-                <option value="THB">THB — บาทไทย</option>
+            <div className="md:col-span-3">
+              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">FROM</label>
+              <select className={inputClass} value={convFrom} onChange={(e) => setConvFrom(e.target.value)}>
+                <option value="USD">USD - US DOLLAR</option>
+                <option value="THB">THB - THAI BAHT</option>
               </select>
             </div>
 
-            <div className="sm:col-span-1 flex items-center justify-center pb-1">
+            <div className="md:col-span-1 flex items-center justify-center pb-1">
               <button
                 type="button"
                 onClick={handleSwapCurrencies}
-                className="w-9 h-9 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] hover:border-cyan-500/40 hover:bg-cyan-500/10 text-[var(--cyan-400)] transition-all active:scale-95 flex items-center justify-center"
-                title="สลับสกุลเงิน"
+                className="w-10 h-10 rounded-xl bg-[#050505] border border-white/10 hover:bg-white/10 text-zinc-400 hover:text-white transition-all flex items-center justify-center"
               >
-                <ArrowRightLeft
-                  className={`w-4 h-4 transition-transform duration-300 ${isFlipping ? 'rotate-180 scale-110' : ''}`}
-                />
+                <ArrowRightLeft className={`w-4 h-4 transition-transform duration-300 ${isFlipping ? 'rotate-180 scale-110' : ''}`} />
               </button>
             </div>
 
-            <div className="sm:col-span-4">
-              <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block mb-1.5">
-                ไปยังสกุลเงิน
-              </label>
-              <select
-                className="input text-sm font-semibold"
-                value={convTo}
-                onChange={(e) => setConvTo(e.target.value)}
-              >
-                <option value="THB">THB — บาทไทย</option>
-                <option value="USD">USD — ดอลลาร์สหรัฐ</option>
+            <div className="md:col-span-3">
+              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5">TO</label>
+              <select className={inputClass} value={convTo} onChange={(e) => setConvTo(e.target.value)}>
+                <option value="THB">THB - THAI BAHT</option>
+                <option value="USD">USD - US DOLLAR</option>
               </select>
             </div>
           </div>
 
-          <div className="mt-4 p-4 rounded-xl bg-[var(--bg-elevated)]/60 border border-[var(--border)] flex items-center justify-between">
+          <div className="mt-6 p-4 sm:p-5 rounded-2xl bg-[#050505] border border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <p className="text-[11px] text-[var(--text-muted)] font-medium">อ้างอิง</p>
-              <p className="text-xs font-semibold text-white mt-0.5">
-                1 USD ≈ {usdRate.toFixed(2)} THB
-              </p>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">EXCHANGE RATE (LIVE)</p>
+              <p className="text-xs font-mono text-zinc-400 mt-1">1 USD = {usdRate.toFixed(4)} THB</p>
             </div>
-            <div className="text-right">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase font-semibold tracking-wider">ผลลัพธ์</p>
-              <p className="text-xl sm:text-2xl font-black text-[var(--cyan-400)] tabular-nums mt-0.5">
+            <div className="text-left sm:text-right">
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">RESULT</p>
+              <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums font-mono mt-1">
                 {Number(calculateConversion()).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
-                <span className="text-sm text-white font-bold">{convTo}</span>
+                <span className="text-sm text-zinc-500 ml-1">{convTo}</span>
               </p>
             </div>
           </div>
         </div>
 
-        {/* ── Market Sections ─────────────────────────────── */}
+        {/* Market Sections */}
         {isLoading ? (
-          <div className="py-24 flex flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
-            <Loader2 className="w-8 h-8 animate-spin text-[var(--cyan-400)]" />
-            <span className="text-xs font-semibold">กำลังเชื่อมต่อข้อมูลตลาดสดระดับสากล...</span>
+          <div className="py-24 flex flex-col items-center justify-center gap-3 text-zinc-500">
+            <Loader2 className="w-8 h-8 animate-spin" />
+            <span className="text-[10px] font-mono tracking-widest uppercase">Fetching Live Market Data...</span>
           </div>
         ) : error ? (
-          <div className="card p-8 text-center text-[var(--red-400)] text-xs">
-            ไม่สามารถเชื่อมต่อ Market Data Provider ได้ในขณะนี้
-          </div>
+          <div className="py-24 text-center text-rose-400 text-xs">Error connecting to market data providers.</div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-10">
             {sections.map((section) => {
               const Icon = section.icon
+              if (!section.data || section.data.length === 0) return null
+              
               return (
-                <div key={section.key}>
-                  {/* Section Header */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-8 h-8 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center ${section.iconColor}`}>
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-white">{section.label}</h3>
-                      <p className="text-[11px] text-[var(--text-muted)]">{section.sublabel}</p>
-                    </div>
-                    <div className="ml-auto flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-[11px] text-emerald-400 font-semibold">LIVE</span>
+                <div key={section.key} className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <Icon className="w-4 h-4 text-zinc-500" />
+                    <h3 className="text-sm font-bold text-white tracking-widest uppercase">{section.label}</h3>
+                    <div className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded-sm bg-white/5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-[9px] text-zinc-400 font-mono tracking-widest uppercase">LIVE FEED</span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {section.data.map((q: any) => (
-                      <QuoteCard key={q.symbol} quote={q} accentClass={section.iconColor} />
+                      <QuoteCard key={q.symbol} quote={q} />
                     ))}
                   </div>
                 </div>
@@ -230,29 +194,28 @@ export default function MarketWatchPage() {
   )
 }
 
-function QuoteCard({ quote, accentClass }: { quote: any; accentClass: string }) {
+function QuoteCard({ quote }: { quote: any }) {
   const isPositive = (quote.changePercent ?? 0) >= 0
   const isZero = (quote.changePercent ?? 0) === 0
 
   return (
-    <div className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] hover:border-white/20 transition-all duration-300 group flex flex-col justify-between relative overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.3)] cursor-default">
-      {/* Top accent beam on hover */}
-      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
+    <div className="p-5 rounded-2xl bg-[#0a0a0a] border border-white/5 hover:border-white/20 transition-all duration-300 group flex flex-col justify-between">
       <div>
-        <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start justify-between mb-4">
           <div className="flex flex-col min-w-0 pr-2">
-            <span className="font-extrabold text-white tracking-wide text-base group-hover:text-[var(--violet)] transition-colors truncate">
+            <span className="font-bold text-white tracking-wide text-base group-hover:text-zinc-300 transition-colors truncate">
               {quote.symbol}
             </span>
-            <span className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">{quote.name ?? quote.symbol}</span>
+            <span className="text-[10px] font-mono text-zinc-500 truncate mt-0.5 uppercase tracking-widest">
+              {quote.name ?? quote.symbol}
+            </span>
           </div>
-          <span className="text-[10px] font-bold text-[var(--text-secondary)] px-2 py-0.5 rounded-lg bg-white/[0.06] border border-white/[0.08] uppercase tracking-wider shrink-0">
+          <span className="text-[9px] font-mono font-bold text-zinc-500 px-1.5 py-0.5 rounded-sm bg-white/5 uppercase tracking-widest shrink-0">
             {quote.currency}
           </span>
         </div>
 
-        <p className="text-2xl sm:text-3xl font-black text-white tabular-nums tracking-tight mt-1">
+        <p className="text-2xl font-bold text-white tabular-nums tracking-tight font-mono">
           {quote.currency === 'USD' ? '$' : '฿'}
           {Number(quote.price).toLocaleString('en-US', {
             minimumFractionDigits: 2,
@@ -261,17 +224,17 @@ function QuoteCard({ quote, accentClass }: { quote: any; accentClass: string }) 
         </p>
       </div>
 
-      <div className="mt-5 pt-3 border-t border-white/[0.06] flex items-center justify-between">
-        <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate max-w-[50%]">
+      <div className="mt-5 pt-4 border-t border-white/5 flex items-center justify-between">
+        <span className="text-[9px] font-mono font-bold text-zinc-600 uppercase tracking-widest truncate max-w-[50%]">
           {quote.provider}
         </span>
 
         {!isZero && quote.changePercent !== undefined ? (
           <span
-            className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] font-extrabold tabular-nums ${
+            className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold tabular-nums font-mono tracking-widest ${
               isPositive
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                ? 'text-emerald-400 bg-emerald-500/10'
+                : 'text-rose-400 bg-rose-500/10'
             }`}
           >
             {isPositive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
@@ -279,9 +242,9 @@ function QuoteCard({ quote, accentClass }: { quote: any; accentClass: string }) 
             {Number(quote.changePercent).toFixed(2)}%
           </span>
         ) : (
-          <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+          <span className="text-[9px] font-mono text-zinc-600 flex items-center gap-1 uppercase tracking-widest">
             <Clock className="w-3 h-3" />
-            <span>อ้างอิง</span>
+            REF
           </span>
         )}
       </div>

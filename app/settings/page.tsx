@@ -10,17 +10,12 @@ import {
   Sparkles,
   Key,
   Shield,
-  Coins,
-  Bell,
   LogOut,
   CheckCircle,
   AlertCircle,
   Loader2,
   Check,
-  Cpu,
-  Info,
   ExternalLink,
-  Palette
 } from 'lucide-react'
 
 export default function SettingsPage() {
@@ -36,7 +31,6 @@ export default function SettingsPage() {
   const [weeklyDigest, setWeeklyDigest] = useState(true)
 
   const [saving, setSaving] = useState(false)
-  const [testingKey, setTestingKey] = useState(false)
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [invalidating, setInvalidating] = useState(false)
 
@@ -76,35 +70,38 @@ export default function SettingsPage() {
       })
 
       const resJson = await res.json()
-      if (!res.ok) throw new Error(resJson.error || 'บันทึกการตั้งค่าไม่สำเร็จ')
+      if (!res.ok) throw new Error(resJson.error || 'Failed to save settings')
 
-      setMsg({ type: 'success', text: 'บันทึกการตั้งค่าเรียบร้อยแล้ว' })
+      setMsg({ type: 'success', text: 'Settings saved successfully.' })
       setApiKey('') // Clear raw input
       mutate('/api/settings')
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.message || 'เกิดข้อผิดพลาด' })
+      setMsg({ type: 'error', text: err.message || 'An error occurred' })
     } finally {
       setSaving(false)
     }
   }
 
   async function handleInvalidateAllSessions() {
-    if (!confirm('คุณต้องการออกจากระบบทุกอุปกรณ์จริงหรือไม่? (คุณจะต้องเข้าสู่ระบบใหม่)')) return
+    if (!confirm('Are you sure you want to sign out of all devices?')) return
     setInvalidating(true)
     try {
       await fetch('/api/auth/invalidate-sessions', { method: 'POST' })
       signOut({ callbackUrl: '/login' })
     } catch (err) {
-      alert('ออกจากระบบไม่สำเร็จ')
+      alert('Failed to sign out of all devices')
       setInvalidating(false)
     }
   }
+  
+  const inputClass = "w-full bg-[#050505] border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-zinc-500 transition-colors font-mono"
+  const labelClass = "block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2"
 
   return (
     <AppShell>
-      <div className="space-y-8 max-w-4xl">
+      <div className="space-y-8 max-w-[1200px] mx-auto w-full">
         <PageHeader
-          eyebrow="ระบบ"
+          eyebrow="SYSTEM"
           title="ตั้งค่าระบบ"
           description="ปรับแต่ง AI, สกุลเงินหลัก, การแจ้งเตือน และการรักษาความปลอดภัย"
         />
@@ -112,14 +109,14 @@ export default function SettingsPage() {
         {/* Feedback Alert */}
         {msg && (
           <div
-            className={`alert ${
-              msg.type === 'success' ? 'alert-success' : 'alert-danger'
-            } flex items-center gap-2 text-xs`}
+            className={`p-4 rounded-2xl flex items-center gap-3 text-xs font-mono tracking-widest uppercase ${
+              msg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
+            }`}
           >
             {msg.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-[var(--green-400)] shrink-0" />
+              <CheckCircle className="w-5 h-5 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <AlertCircle className="w-5 h-5 shrink-0" />
             )}
             <span>{msg.text}</span>
           </div>
@@ -128,113 +125,112 @@ export default function SettingsPage() {
 
         <form onSubmit={handleSaveSettings} className="space-y-6">
           {/* ─── SECTION 1: GEMINI AI CONFIGURATION ──────────────────── */}
-          <div className="card p-6 sm:p-7 space-y-5 border-white/[0.08]">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-[var(--cyan-400)]">
-                  <Sparkles className="w-4 h-4" />
+          <div className="p-6 md:p-8 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-zinc-400">
+                  <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-white">การตั้งค่า AI (Gemini Developer API)</h2>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    เชื่อมต่อ Google Gemini เพื่อใช้ฟังก์ชัน AI Advisor, Weekly Digest, และ Quick Add
+                  <h2 className="text-base font-bold text-white tracking-wide">AI CONFIGURATION</h2>
+                  <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest font-mono">
+                    Connect Google Gemini Developer API
                   </p>
                 </div>
               </div>
 
               {settings?.hasApiKey ? (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-500/10 text-[var(--green-400)] border border-green-500/20 flex items-center gap-1.5">
+                <span className="text-[9px] font-bold px-3 py-1.5 rounded-sm bg-emerald-500/10 text-emerald-400 uppercase tracking-widest font-mono flex items-center gap-1.5 self-start sm:self-auto">
                   <Check className="w-3.5 h-3.5" />
-                  <span>เชื่อมต่อคีย์แล้ว</span>
+                  CONNECTED
                 </span>
               ) : (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                  ยังไม่ได้ใส่ API Key
+                <span className="text-[9px] font-bold px-3 py-1.5 rounded-sm bg-white/5 text-zinc-500 uppercase tracking-widest font-mono self-start sm:self-auto">
+                  NO API KEY
                 </span>
               )}
             </div>
 
             {/* API Key Input */}
-            <div className="space-y-2">
-              <label className="label">
-                Gemini API Key (เข้ารหัสด้วย AES-256-GCM ในฐานข้อมูล)
+            <div className="space-y-3">
+              <label className={labelClass}>
+                GEMINI API KEY (AES-256-GCM ENCRYPTED)
               </label>
               <div className="relative">
-                <Key className="w-4 h-4 text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
+                <Key className="w-4 h-4 text-zinc-600 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
-                  className="input pl-9 text-xs sm:text-sm font-mono"
-                  placeholder={settings?.hasApiKey ? '•••••••••••••••••••••••••••• (ใส่ใหม่เพื่อเปลี่ยน)' : 'AIzaSy...'}
+                  className={`${inputClass} pl-11`}
+                  placeholder={settings?.hasApiKey ? '•••••••••••••••••••••••••••• (Enter new key to update)' : 'AIzaSy...'}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
               </div>
-              <p className="text-[11px] text-[var(--text-muted)]">
-                รับ API Key ฟรีได้จาก{' '}
+              <p className="text-[10px] text-zinc-500 font-mono tracking-widest uppercase">
+                Get a free API Key from{' '}
                 <a
                   href="https://aistudio.google.com/app/apikey"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[var(--cyan-400)] hover:underline inline-flex items-center gap-0.5"
+                  className="text-white hover:underline inline-flex items-center gap-1 font-bold"
                 >
                   Google AI Studio <ExternalLink className="w-3 h-3" />
-                </a>{' '}
-                (รุ่น Flash ฟรี ไม่เสียค่าใช้จ่าย)
+                </a>
               </p>
             </div>
 
             {/* AI Model Mode: Auto vs Manual */}
-            <div className="space-y-3 pt-3 border-t border-[var(--border)]">
-              <label className="label">โหมดการเลือกโมเดล AI (Model Selection Mode)</label>
+            <div className="space-y-4 pt-4 border-t border-white/5">
+              <label className={labelClass}>MODEL SELECTION MODE</label>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div
                   onClick={() => setAiModelMode('auto')}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                  className={`p-5 rounded-2xl border cursor-pointer transition-all ${
                     aiModelMode === 'auto'
-                      ? 'bg-cyan-500/10 border-cyan-500/40 text-white'
-                      : 'bg-[var(--bg-elevated)]/40 border-[var(--border)] text-[var(--text-secondary)] hover:border-slate-700'
+                      ? 'bg-white/10 border-white/20'
+                      : 'bg-transparent border-white/5 hover:bg-white/5'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-sm text-white">⚡ โหมดอัตโนมัติ (Auto Mode) — แนะนำ</span>
-                    {aiModelMode === 'auto' && <Check className="w-4 h-4 text-[var(--cyan-400)]" />}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`font-bold text-sm tracking-wide ${aiModelMode === 'auto' ? 'text-white' : 'text-zinc-400'}`}>AUTO MODE (RECOMMENDED)</span>
+                    {aiModelMode === 'auto' && <Check className="w-4 h-4 text-white" />}
                   </div>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    ระบบจะเลือกโมเดลฟรีที่เร็วและดีที่สุดให้เอง หากโควตาเต็มจะสลับไปยังโมเดลสำรองอัตโนมัติ (Fallback Chain)
+                  <p className="text-[10px] font-mono tracking-widest uppercase text-zinc-500 leading-relaxed">
+                    Automatically select the best free model. Fallback to alternatives if quota exceeded.
                   </p>
                 </div>
 
                 <div
                   onClick={() => setAiModelMode('manual')}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                  className={`p-5 rounded-2xl border cursor-pointer transition-all ${
                     aiModelMode === 'manual'
-                      ? 'bg-cyan-500/10 border-cyan-500/40 text-white'
-                      : 'bg-[var(--bg-elevated)]/40 border-[var(--border)] text-[var(--text-secondary)] hover:border-slate-700'
+                      ? 'bg-white/10 border-white/20'
+                      : 'bg-transparent border-white/5 hover:bg-white/5'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-sm text-white">🛠️ โหมดเลือกเอง (Manual Mode)</span>
-                    {aiModelMode === 'manual' && <Check className="w-4 h-4 text-[var(--cyan-400)]" />}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`font-bold text-sm tracking-wide ${aiModelMode === 'manual' ? 'text-white' : 'text-zinc-400'}`}>MANUAL MODE</span>
+                    {aiModelMode === 'manual' && <Check className="w-4 h-4 text-white" />}
                   </div>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    ระบุโมเดลเฉพาะเจาะจงที่ต้องการใช้งานจากรายการโมเดลที่เปิดใช้งานในระบบ
+                  <p className="text-[10px] font-mono tracking-widest uppercase text-zinc-500 leading-relaxed">
+                    Specify an exact model to use from the available models list.
                   </p>
                 </div>
               </div>
 
               {/* Manual Model Dropdown */}
               {aiModelMode === 'manual' && (
-                <div className="pt-2 animate-in fade-in">
-                  <label className="label">เลือกโมเดล Gemini *</label>
+                <div className="pt-4 animate-in fade-in">
+                  <label className={labelClass}>SELECT MODEL *</label>
                   <select
-                    className="select text-xs sm:text-sm"
+                    className={inputClass}
                     value={selectedAiModelId}
                     onChange={(e) => setSelectedAiModelId(e.target.value)}
                   >
                     {aiModels.map((m: any) => (
                       <option key={m.id} value={m.id}>
-                        {m.displayName} ({m.modelId}) — [{m.tier === 'free' ? 'ฟรี' : 'Requires Billing'}]
+                        {m.displayName} ({m.modelId}) - [{m.tier.toUpperCase()}]
                       </option>
                     ))}
                   </select>
@@ -244,64 +240,58 @@ export default function SettingsPage() {
           </div>
 
           {/* ─── SECTION 2: PORTFOLIO & PREFERENCES ─────────────────── */}
-          <div className="card p-5 sm:p-6 space-y-4">
-            <h2 className="text-base font-bold text-white pb-3 border-b border-[var(--border)]">
-              การคำนวณและการแจ้งเตือน (Preferences)
+          <div className="p-6 md:p-8 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-6">
+            <h2 className="text-sm font-bold text-white tracking-widest uppercase pb-4 border-b border-white/5">
+              PREFERENCES
             </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
-                <label className="label">สกุลเงินหลักสำหรับแสดงผลพอร์ต (Base Currency)</label>
+                <label className={labelClass}>BASE CURRENCY</label>
                 <select
-                  className="select text-xs sm:text-sm"
+                  className={inputClass}
                   value={baseCurrency}
                   onChange={(e) => setBaseCurrency(e.target.value)}
                 >
-                  <option value="THB">THB — บาทไทย (฿)</option>
-                  <option value="USD">USD — ดอลลาร์สหรัฐ ($)</option>
-                  <option value="EUR">EUR — ยูโร (€)</option>
-                  <option value="SGD">SGD — ดอลลาร์สิงคโปร์ (S$)</option>
-                  <option value="JPY">JPY — เยนญี่ปุ่น (¥)</option>
+                  <option value="THB">THB</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="SGD">SGD</option>
+                  <option value="JPY">JPY</option>
                 </select>
-                <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                  ระบบจะแปลงมูลค่าสินทรัพย์ทุกสกุลเงินเป็นสกุลเงินหลักนี้โดยอัตโนมัติ
-                </p>
               </div>
 
               <div>
-                <label className="label">เกณฑ์การแจ้งเตือนพอร์ตเบี่ยงเบน (Alert Threshold)</label>
-                <div className="flex items-center gap-3">
+                <label className={labelClass}>ALERT THRESHOLD</label>
+                <div className="flex items-center gap-4 bg-[#050505] border border-white/10 rounded-xl px-4 py-3">
                   <input
                     type="range"
                     min="1"
                     max="20"
                     step="1"
-                    className="flex-1 accent-cyan-400"
+                    className="flex-1 accent-white"
                     value={alertThreshold}
                     onChange={(e) => setAlertThreshold(parseInt(e.target.value))}
                   />
-                  <span className="font-bold text-white text-sm tabular-nums w-12 text-right">
+                  <span className="font-bold text-white text-sm tabular-nums w-12 text-right font-mono">
                     ±{alertThreshold}%
                   </span>
                 </div>
-                <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                  แจ้งเตือนเมื่อสัดส่วนสินทรัพย์เบี่ยงเบนจากเป้าหมายเกินเกณฑ์นี้
-                </p>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between">
+            <div className="pt-4 border-t border-white/5 flex items-center justify-between">
               <div>
-                <p className="font-semibold text-white text-xs sm:text-sm">
-                  สรุปพอร์ตประจำสัปดาห์ (AI Weekly Digest)
+                <p className="font-bold text-white text-sm tracking-wide">
+                  AI WEEKLY DIGEST
                 </p>
-                <p className="text-xs text-[var(--text-muted)]">
-                  รับบทวิเคราะห์ภาพรวมพอร์ตและข่าวสารสำคัญสรุปส่งทุกวันจันทร์
+                <p className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 mt-1">
+                  Receive portfolio analysis and market news every Monday
                 </p>
               </div>
               <input
                 type="checkbox"
-                className="w-5 h-5 accent-cyan-400 rounded cursor-pointer"
+                className="w-5 h-5 rounded border-white/20 bg-[#050505] text-white cursor-pointer"
                 checked={weeklyDigest}
                 onChange={(e) => setWeeklyDigest(e.target.checked)}
               />
@@ -313,17 +303,17 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={saving}
-              className="btn btn-primary text-xs sm:text-sm py-2.5 px-6 flex items-center gap-2 shadow-[0_0_20px_rgba(34,211,238,0.25)]"
+              className="bg-white text-black hover:bg-zinc-200 px-8 py-3 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-50 min-w-[150px] justify-center"
             >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>กำลังบันทึกการตั้งค่า...</span>
+                  <span>SAVING...</span>
                 </>
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>บันทึกการตั้งค่าทั้งหมด</span>
+                  <span>SAVE SETTINGS</span>
                 </>
               )}
             </button>
@@ -331,22 +321,22 @@ export default function SettingsPage() {
         </form>
 
         {/* ─── SECTION 3: SESSIONS & SECURITY ────────────────────────── */}
-        <div className="card p-5 sm:p-6 space-y-4 border-red-500/20 bg-red-950/5">
-          <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
-            <Shield className="w-4 h-4" />
-            <span>ความปลอดภัยของเซสชัน (Session Security)</span>
+        <div className="p-6 md:p-8 rounded-3xl bg-[#0a0a0a] border border-rose-500/20 space-y-4">
+          <div className="flex items-center gap-3 text-rose-400">
+            <Shield className="w-5 h-5" />
+            <span className="font-bold tracking-widest uppercase text-sm">SECURITY</span>
           </div>
-          <p className="text-xs text-[var(--text-secondary)]">
-            หากคุณสงสัยว่ามีการเข้าถึงบัญชีจากอุปกรณ์อื่น หรือต้องการออกจากระบบในทุกเบราว์เซอร์พร้อมกัน
+          <p className="text-[10px] font-mono tracking-widest text-zinc-500 uppercase leading-relaxed max-w-xl">
+            If you suspect unauthorized access or want to sign out from all browsers simultaneously, invalidate all active sessions.
           </p>
 
           <button
             onClick={handleInvalidateAllSessions}
             disabled={invalidating}
-            className="btn btn-danger text-xs py-2 px-4 flex items-center gap-2"
+            className="bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20 px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors mt-4"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>ออกจากระบบทุกอุปกรณ์ (Sign Out All Devices)</span>
+            <LogOut className="w-4 h-4" />
+            <span>SIGN OUT ALL DEVICES</span>
           </button>
         </div>
       </div>

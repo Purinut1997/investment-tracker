@@ -3,19 +3,11 @@
 import React, { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
-import { PageHeader } from '@/components/PageHeader'
 import { runMonteCarloSimulation, SimulationResult } from '@/lib/analytics/monte-carlo'
 import {
-  TrendingUp,
-  Sparkles,
-  Play,
-  RotateCcw,
   Target,
-  ShieldAlert,
+  Sparkles,
   Loader2,
-  HelpCircle,
-  CheckCircle2,
-  Calendar
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -25,7 +17,6 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  Legend
 } from 'recharts'
 
 export default function ForecastPage() {
@@ -45,14 +36,12 @@ export default function ForecastPage() {
   const [aiExplanation, setAiExplanation] = useState<string | null>(null)
   const [modelUsed, setModelUsed] = useState<string>('')
 
-  // Set default initial amount from current portfolio value once loaded
   useEffect(() => {
     if (summary?.totalValue && summary.totalValue > 0) {
       setInitialAmount(Math.round(summary.totalValue))
     }
   }, [summary?.totalValue])
 
-  // Run simulation on button or parameter change
   function handleRunSimulation() {
     const sim = runMonteCarloSimulation({
       initialAmount,
@@ -64,14 +53,13 @@ export default function ForecastPage() {
       numSimulations: 500,
     })
     setResult(sim)
-    setAiExplanation(null) // reset previous AI explanation
+    setAiExplanation(null)
   }
 
   useEffect(() => {
     handleRunSimulation()
   }, [initialAmount, monthlyContribution, years, annualReturn, annualVolatility, targetAmount])
 
-  // Request AI Explanation
   async function handleExplainAI() {
     if (!result) return
     setAiLoading(true)
@@ -96,97 +84,56 @@ export default function ForecastPage() {
       setAiExplanation(data.explanation)
       setModelUsed(data.modelUsed)
     } catch (err: any) {
-      alert(err.message || 'ไม่สามารถขอคำอธิบายจาก AI ได้')
+      alert(err.message || 'Error explaining forecast')
     } finally {
       setAiLoading(false)
     }
   }
 
+  const inputClass = "bg-[#050505] border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-zinc-500 transition-colors w-full font-mono"
+  const labelClass = "block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-1.5"
+
   return (
     <AppShell>
-      <div className="space-y-8">
-        <PageHeader
-          eyebrow="วางแผนการลงทุน"
-          title="แบบจำลองความน่าจะเป็นพอร์ต"
-          description="จำลอง 500 สถานการณ์ตลาดล่วงหน้าเพื่อดูช่วงผลลัพธ์ P10, P50 และ P90"
-        />
+      <div className="space-y-6 max-w-[1600px] mx-auto w-full">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">แบบจำลองความน่าจะเป็นพอร์ต</h1>
+            <p className="text-sm text-zinc-500 mt-1">จำลอง 500 สถานการณ์ล่วงหน้าด้วย Monte Carlo Simulation</p>
+          </div>
+        </div>
 
         {/* Input Parameters Controls */}
-        <div className="p-6 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] space-y-5">
-          <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-            กำหนดตัวแปรการจำลอง (Simulation Parameters)
+        <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-6">
+          <h2 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+            SIMULATION PARAMETERS
           </h2>
 
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3.5">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             <div className="col-span-1 sm:col-span-2 lg:col-span-1">
-              <label className="label">เงินต้นเริ่มต้น (฿)</label>
-              <input
-                type="number"
-                step="10000"
-                className="input text-xs sm:text-sm font-semibold rounded-xl bg-white/[0.04] border-white/[0.08]"
-                value={initialAmount}
-                onChange={(e) => setInitialAmount(parseFloat(e.target.value) || 0)}
-              />
+              <label className={labelClass}>เงินต้น (INITIAL) ฿</label>
+              <input type="number" step="10000" className={inputClass} value={initialAmount} onChange={(e) => setInitialAmount(parseFloat(e.target.value) || 0)} />
             </div>
-
             <div className="col-span-1 sm:col-span-2 lg:col-span-1">
-              <label className="label">เงินออมต่อเดือน (฿)</label>
-              <input
-                type="number"
-                step="1000"
-                className="input text-xs sm:text-sm font-semibold rounded-xl bg-white/[0.04] border-white/[0.08]"
-                value={monthlyContribution}
-                onChange={(e) => setMonthlyContribution(parseFloat(e.target.value) || 0)}
-              />
+              <label className={labelClass}>ออมต่อเดือน (MONTHLY) ฿</label>
+              <input type="number" step="1000" className={inputClass} value={monthlyContribution} onChange={(e) => setMonthlyContribution(parseFloat(e.target.value) || 0)} />
             </div>
-
             <div className="col-span-1 sm:col-span-2 lg:col-span-1">
-              <label className="label">ระยะเวลา (ปี)</label>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                className="input text-xs sm:text-sm font-semibold rounded-xl bg-white/[0.04] border-white/[0.08]"
-                value={years}
-                onChange={(e) => setYears(Math.max(1, parseInt(e.target.value) || 1))}
-              />
+              <label className={labelClass}>ระยะเวลา (YEARS)</label>
+              <input type="number" min="1" max="30" className={inputClass} value={years} onChange={(e) => setYears(Math.max(1, parseInt(e.target.value) || 1))} />
             </div>
-
             <div className="col-span-1 sm:col-span-2 lg:col-span-1">
-              <label className="label">ผลตอบแทนคาดหวัง (%)</label>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                step="0.5"
-                className="input text-xs sm:text-sm font-semibold rounded-xl bg-white/[0.04] border-white/[0.08]"
-                value={annualReturn}
-                onChange={(e) => setAnnualReturn(parseFloat(e.target.value) || 0)}
-              />
+              <label className={labelClass}>คาดหวังผลตอบแทน (RETURN) %</label>
+              <input type="number" min="1" max="30" step="0.5" className={inputClass} value={annualReturn} onChange={(e) => setAnnualReturn(parseFloat(e.target.value) || 0)} />
             </div>
-
             <div className="col-span-1 sm:col-span-2 lg:col-span-1">
-              <label className="label">ความผันผวน Volatility (%)</label>
-              <input
-                type="number"
-                min="1"
-                max="50"
-                step="1"
-                className="input text-xs sm:text-sm font-semibold rounded-xl bg-white/[0.04] border-white/[0.08]"
-                value={annualVolatility}
-                onChange={(e) => setAnnualVolatility(parseFloat(e.target.value) || 0)}
-              />
+              <label className={labelClass}>ความผันผวน (VOLATILITY) %</label>
+              <input type="number" min="1" max="50" step="1" className={inputClass} value={annualVolatility} onChange={(e) => setAnnualVolatility(parseFloat(e.target.value) || 0)} />
             </div>
-
             <div className="col-span-1 sm:col-span-2 lg:col-span-1">
-              <label className="label">เป้าหมายที่ต้องการ (฿)</label>
-              <input
-                type="number"
-                step="500000"
-                className="input text-xs sm:text-sm font-bold text-[var(--violet)] rounded-xl bg-white/[0.04] border-white/[0.08]"
-                value={targetAmount}
-                onChange={(e) => setTargetAmount(parseFloat(e.target.value) || 0)}
-              />
+              <label className={labelClass}>เป้าหมาย (TARGET) ฿</label>
+              <input type="number" step="500000" className={`${inputClass} font-bold text-white`} value={targetAmount} onChange={(e) => setTargetAmount(parseFloat(e.target.value) || 0)} />
             </div>
           </div>
         </div>
@@ -194,150 +141,120 @@ export default function ForecastPage() {
         {/* Results Metrics */}
         {result && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Target Probability */}
-            <div className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-violet-500/30 shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
-              <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center gap-1.5">
-                <Target className="w-4 h-4 text-[var(--violet)]" />
-                โอกาสถึงเป้าหมาย
+            <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 flex flex-col justify-between min-h-[140px]">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5" /> โอกาสถึงเป้าหมาย
               </span>
-              <div className="mt-1 text-2xl sm:text-3xl font-black text-[var(--violet)] tabular-nums">
-                {result.probabilityOfReachingTarget ?? 0}%
+              <div>
+                <div className="text-3xl font-bold text-white tabular-nums font-mono">
+                  {result.probabilityOfReachingTarget ?? 0}%
+                </div>
+                <p className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">
+                  TARGET ฿{targetAmount.toLocaleString()}
+                </p>
               </div>
-              <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                เป้าหมาย ฿{targetAmount.toLocaleString()}
-              </p>
             </div>
 
-            {/* P10 Pessimistic */}
-            <div className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
-              <span className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider">
-                กรณีตลาดแย่ (P10)
+            <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 flex flex-col justify-between min-h-[140px]">
+              <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">
+                กรณีแย่ (P10)
               </span>
-              <div className="mt-1 text-xl sm:text-2xl font-bold text-rose-300 tabular-nums">
-                ฿{result.finalP10.toLocaleString()}
+              <div>
+                <div className="text-2xl font-bold text-rose-300 tabular-nums font-mono">
+                  ฿{result.finalP10.toLocaleString()}
+                </div>
+                <p className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">
+                  10% PROBABILITY
+                </p>
               </div>
-              <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                มีโอกาส 90% ที่จะได้สูงกว่านี้
-              </p>
             </div>
 
-            {/* P50 Median */}
-            <div className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
-              <span className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
-                กรณีตลาดกลาง (P50 มัธยฐาน)
+            <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 flex flex-col justify-between min-h-[140px]">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                มัธยฐาน (P50)
               </span>
-              <div className="mt-1 text-xl sm:text-2xl font-bold text-amber-300 tabular-nums">
-                ฿{result.finalP50.toLocaleString()}
+              <div>
+                <div className="text-2xl font-bold text-zinc-300 tabular-nums font-mono">
+                  ฿{result.finalP50.toLocaleString()}
+                </div>
+                <p className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">
+                  50% PROBABILITY
+                </p>
               </div>
-              <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                ค่ากึ่งกลางที่น่าจะเกิดขึ้นมากที่สุด
-              </p>
             </div>
 
-            {/* P90 Optimistic */}
-            <div className="p-5 rounded-2xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
-              <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
-                กรณีตลาดดีเยี่ยม (P90)
+            <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 flex flex-col justify-between min-h-[140px]">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
+                กรณีดีเยี่ยม (P90)
               </span>
-              <div className="mt-1 text-xl sm:text-2xl font-bold text-emerald-300 tabular-nums">
-                ฿{result.finalP90.toLocaleString()}
+              <div>
+                <div className="text-2xl font-bold text-emerald-300 tabular-nums font-mono">
+                  ฿{result.finalP90.toLocaleString()}
+                </div>
+                <p className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-widest">
+                  TOTAL SAVED ฿{result.totalContributed.toLocaleString()}
+                </p>
               </div>
-              <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                เงินออมสะสมรวม ฿{result.totalContributed.toLocaleString()}
-              </p>
             </div>
           </div>
         )}
 
         {/* Fan Chart View */}
         {result && (
-          <div className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.36)] space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h3 className="text-base font-bold text-white tracking-wide">
-                  เส้นพัดจำลองผลลัพธ์ (Fan Chart P10 / P50 / P90)
+                <h3 className="text-sm font-bold text-white tracking-wide">
+                  เส้นพัดจำลองผลลัพธ์ (Fan Chart)
                 </h3>
-                <p className="text-xs text-[var(--text-muted)]">
-                  แกนนอนแสดงจำนวนปี แกนตั้งแสดงมูลค่าพอร์ตการลงทุน (บาท)
+                <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest mt-1">
+                  P10 / P50 / P90 PROJECTIONS
                 </p>
               </div>
-
               <button
                 onClick={handleExplainAI}
                 disabled={aiLoading}
-                className="btn btn-primary text-xs py-2.5 px-5 flex items-center gap-2 self-start sm:self-auto rounded-xl shadow-[0_0_20px_rgba(167,139,250,0.25)]"
+                className="bg-white text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed text-xs py-2 px-4 rounded-lg font-bold flex items-center gap-2 transition-colors"
               >
                 {aiLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>AI กำลังวิเคราะห์ผล...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>อธิบายผลลัพธ์นี้ด้วย AI</span>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>AI วิเคราะห์ผล</span>
                   </>
                 )}
               </button>
             </div>
 
-            <div className="h-72 w-full">
+            <div className="h-[350px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={result.steps} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                <AreaChart data={result.steps} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="p90Grad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                      <stop offset="5%" stopColor="#34d399" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#34d399" stopOpacity={0.0} />
                     </linearGradient>
                     <linearGradient id="p50Grad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#a78bfa" stopOpacity={0.0} />
+                      <stop offset="5%" stopColor="#d4d4d8" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#d4d4d8" stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                  <XAxis dataKey="year" stroke="#6b7280" tickFormatter={(y) => `ปีที่ ${y}`} />
-                  <YAxis
-                    stroke="#6b7280"
-                    fontSize={11}
-                    tickFormatter={(v) => `฿${(v / 1000000).toFixed(1)}M`}
-                  />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                  <XAxis dataKey="year" stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(y) => `YR ${y}`} dy={10} />
+                  <YAxis stroke="#52525b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `฿${(v / 1000000).toFixed(1)}M`} dx={-10} />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#0d0a2e',
-                      borderColor: 'rgba(255,255,255,0.12)',
-                      borderRadius: 16,
-                      fontSize: 12,
-                      boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
-                    }}
+                    contentStyle={{ backgroundColor: '#000', borderColor: 'rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 11, color: '#fff' }}
+                    itemStyle={{ color: '#fff', fontFamily: 'monospace' }}
                     formatter={(val: any, name: any) => [`฿${Number(val).toLocaleString()}`, name]}
-                    labelFormatter={(y) => `เมื่อครบปีที่ ${y}`}
+                    labelFormatter={(y) => `YEAR ${y}`}
                   />
-                  <Area
-                    type="monotone"
-                    dataKey="p90"
-                    stroke="#10b981"
-                    strokeWidth={1.5}
-                    fillOpacity={1}
-                    fill="url(#p90Grad)"
-                    name="P90 (กรณีดีเยี่ยม)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="p50"
-                    stroke="#a78bfa"
-                    strokeWidth={2.5}
-                    fillOpacity={1}
-                    fill="url(#p50Grad)"
-                    name="P50 (กรณีมัธยฐาน)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="p10"
-                    stroke="#f87171"
-                    strokeWidth={1.5}
-                    fillOpacity={0}
-                    name="P10 (กรณีแย่)"
-                  />
+                  <Area type="monotone" dataKey="p90" stroke="#34d399" strokeWidth={1} fillOpacity={1} fill="url(#p90Grad)" name="P90 (BEST)" />
+                  <Area type="monotone" dataKey="p50" stroke="#d4d4d8" strokeWidth={2} fillOpacity={1} fill="url(#p50Grad)" name="P50 (MEDIAN)" />
+                  <Area type="monotone" dataKey="p10" stroke="#fb7185" strokeWidth={1} fillOpacity={0} name="P10 (WORST)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -346,20 +263,20 @@ export default function ForecastPage() {
 
         {/* AI Explanation Box */}
         {aiExplanation && (
-          <div className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-violet-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.36)] space-y-4 animate-scale-in">
+          <div className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/10 space-y-4 animate-in fade-in">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 text-white font-bold text-base">
-                <Sparkles className="w-5 h-5 text-[var(--violet)]" />
-                <span>คำอธิบายผลลัพธ์จาก AI Advisor</span>
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Sparkles className="w-4 h-4" />
+                <span>AI ADVISOR SUMMARY</span>
               </div>
               {modelUsed && (
-                <span className="text-[10px] px-2.5 py-1 rounded-full bg-violet-500/20 text-[var(--violet)] border border-violet-500/30 font-mono">
-                  Model: {modelUsed}
+                <span className="text-[9px] px-2 py-0.5 rounded-sm bg-white/5 text-zinc-500 font-mono uppercase tracking-widest">
+                  {modelUsed}
                 </span>
               )}
             </div>
 
-            <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/[0.08] text-xs sm:text-sm text-slate-200 leading-relaxed space-y-2 whitespace-pre-line font-sans">
+            <div className="p-5 rounded-2xl bg-[#050505] border border-white/5 text-xs text-zinc-300 leading-relaxed space-y-2 whitespace-pre-line font-mono">
               {aiExplanation}
             </div>
           </div>

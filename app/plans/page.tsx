@@ -13,7 +13,6 @@ import {
   CheckCircle,
   AlertCircle,
   TrendingUp,
-  Check,
   X,
   Loader2,
 } from 'lucide-react'
@@ -21,17 +20,17 @@ import {
 const DEFAULT_CATEGORIES = ['US', 'TH', 'CRYPTO', 'GOLD', 'CASH']
 
 const CATEGORY_CONFIG: Record<string, { label: string; emoji: string; color: string; barColor: string }> = {
-  US:     { label: 'หุ้นสหรัฐฯ (US Stocks)',       emoji: '🇺🇸', color: 'text-blue-400',    barColor: 'bg-blue-400' },
-  TH:     { label: 'หุ้นไทย (SET)',                 emoji: '🇹🇭', color: 'text-emerald-400', barColor: 'bg-emerald-400' },
-  CRYPTO: { label: 'สินทรัพย์ดิจิทัล (Crypto)',    emoji: '🪙',  color: 'text-amber-400',   barColor: 'bg-amber-400' },
-  GOLD:   { label: 'ทองคำ (Gold)',                  emoji: '🏆',  color: 'text-yellow-400',  barColor: 'bg-yellow-400' },
-  CASH:   { label: 'เงินสด & ตราสารหนี้',          emoji: '💵',  color: 'text-violet-400',  barColor: 'bg-violet-400' },
+  US:     { label: 'US Equities',  emoji: '🇺🇸', color: 'text-zinc-300', barColor: 'bg-zinc-300' },
+  TH:     { label: 'Thai Equities',emoji: '🇹🇭', color: 'text-zinc-400', barColor: 'bg-zinc-400' },
+  CRYPTO: { label: 'Crypto',       emoji: '🪙', color: 'text-zinc-500', barColor: 'bg-zinc-500' },
+  GOLD:   { label: 'Gold',         emoji: '🏆', color: 'text-zinc-600', barColor: 'bg-zinc-600' },
+  CASH:   { label: 'Cash & Bonds', emoji: '💵', color: 'text-zinc-700', barColor: 'bg-zinc-700' },
 }
 
 const RISK_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  conservative: { label: 'Conservative (ต่ำ)',  color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-  moderate:     { label: 'Moderate (ปานกลาง)', color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20' },
-  aggressive:   { label: 'Aggressive (สูง)',    color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/20' },
+  conservative: { label: 'CONSERVATIVE', color: 'text-zinc-500', bg: 'bg-white/5 border-white/10' },
+  moderate:     { label: 'MODERATE',     color: 'text-zinc-300', bg: 'bg-white/10 border-white/20' },
+  aggressive:   { label: 'AGGRESSIVE',   color: 'text-white',    bg: 'bg-white/20 border-white/30' },
 }
 
 export default function PlansPage() {
@@ -59,7 +58,6 @@ export default function PlansPage() {
     isDefault: false,
   })
 
-  // ESC key and body scroll lock for plan modal
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape' && modalOpen) setModalOpen(false)
@@ -110,7 +108,7 @@ export default function PlansPage() {
     e.preventDefault()
     const totalAlloc = Object.values(formData.targetAllocation).reduce((a, b) => a + Number(b || 0), 0)
     if (Math.abs(totalAlloc - 100) > 0.01) {
-      setFormError(`ผลรวมสัดส่วนเป้าหมายต้องเท่ากับ 100% (ปัจจุบัน: ${totalAlloc}%)`)
+      setFormError(`Target allocation must sum to 100% (Current: ${totalAlloc}%)`)
       return
     }
     setSubmitting(true); setFormError('')
@@ -119,78 +117,78 @@ export default function PlansPage() {
       const method = editingPreset ? 'PUT' : 'POST'
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) })
       const resJson = await res.json()
-      if (!res.ok) throw new Error(resJson.error || 'บันทึกแผนไม่สำเร็จ')
+      if (!res.ok) throw new Error(resJson.error || 'Failed to save plan')
       mutate('/api/plans')
       setModalOpen(false)
     } catch (err: any) {
-      setFormError(err.message || 'เกิดข้อผิดพลาด')
+      setFormError(err.message || 'An error occurred')
     } finally {
       setSubmitting(false)
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('คุณต้องการลบแผนเป้าหมายนี้ใช่หรือไม่?')) return
+    if (!confirm('Are you sure you want to delete this plan?')) return
     try {
       await fetch(`/api/plans/${id}`, { method: 'DELETE' })
       mutate('/api/plans')
     } catch {
-      alert('ลบแผนไม่สำเร็จ')
+      alert('Failed to delete plan')
     }
   }
 
   const totalAllocForm = Object.values(formData.targetAllocation).reduce((a, b) => a + Number(b || 0), 0)
+  
+  const inputClass = "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-zinc-500 transition-colors font-mono"
+  const labelClass = "block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2"
 
   return (
     <AppShell>
-      <div className="space-y-8">
-        <PageHeader
-          eyebrow="วางแผนการลงทุน"
-          title="แผนจัดสรรสินทรัพย์"
-          description="กำหนดสัดส่วนเป้าหมาย ตรวจสอบความเบี่ยงเบน และคำนวณการปรับพอร์ต"
-          action={<div className="flex flex-wrap items-center gap-2.5">
+      <div className="space-y-8 max-w-[1600px] mx-auto w-full">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">แผนการลงทุน</h1>
+            <p className="text-sm text-zinc-500 mt-1">กำหนดสัดส่วนเป้าหมาย ตรวจสอบความเบี่ยงเบน และปรับพอร์ต</p>
+          </div>
+          <div className="flex items-center gap-3">
             <Link
               href="/forecast"
-              className="btn btn-secondary text-xs sm:text-sm py-2 px-3.5 flex items-center gap-2"
+              className="bg-[#050505] text-zinc-400 hover:text-white border border-white/10 hover:bg-white/5 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors"
             >
-              <TrendingUp className="w-4 h-4" />
-              <span>Monte Carlo</span>
+              <TrendingUp className="w-4 h-4" /> Monte Carlo
             </Link>
-            <button
-              onClick={openCreateModal}
-              className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>สร้างแผนใหม่</span>
+            <button onClick={openCreateModal} className="bg-white text-black hover:bg-zinc-200 px-5 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors h-[34px]">
+              <Plus className="w-4 h-4" /> สร้างแผนใหม่
             </button>
-          </div>}
-        />
+          </div>
+        </div>
 
-        {/* ── Rebalancing Comparison ─────────────────────── */}
+        {/* Rebalancing Comparison */}
         {activePreset && (
-          <div className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.36)] space-y-6 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400/40 to-transparent" />
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="p-6 md:p-8 rounded-3xl bg-[#0a0a0a] border border-white/5 space-y-8">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--violet)] mb-0.5">
-                  Active Allocation Plan
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">
+                  ACTIVE ALLOCATION PLAN
                 </p>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
-                  {activePreset.presetName}
+                <div className="flex items-center gap-3">
+                  <h2 className="text-2xl font-bold text-white tracking-wide">
+                    {activePreset.presetName}
+                  </h2>
                   {activePreset.isDefault && (
-                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-violet-500/20 text-[var(--violet)] font-semibold border border-violet-500/30">
-                      แผนหลัก (Default)
+                    <span className="text-[9px] px-2 py-0.5 rounded-sm bg-white/10 text-white font-mono uppercase tracking-widest">
+                      DEFAULT
                     </span>
                   )}
-                </h2>
+                </div>
               </div>
 
               {presets.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-[var(--text-muted)]">สลับดูแผน:</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">SWITCH PLAN:</span>
                   <select
-                    className="select text-xs py-1.5 rounded-xl bg-white/[0.04] border-white/[0.08]"
+                    className="bg-[#050505] border border-white/10 text-xs text-white rounded-lg px-3 py-2 outline-none font-mono focus:border-zinc-500"
                     value={activePreset.id}
                     onChange={(e) => setSelectedPresetId(e.target.value)}
                   >
@@ -203,12 +201,12 @@ export default function PlansPage() {
             </div>
 
             {/* Comparison Bars */}
-            <div className="space-y-3.5">
-              <p className="text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
-                เปรียบเทียบสัดส่วนปัจจุบัน vs เป้าหมาย
+            <div className="space-y-4">
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                TARGET VS ACTUAL ALLOCATION
               </p>
               {Object.entries(activePreset.targetAllocation as Record<string, number>).map(([category, targetPct]) => {
-                const cfg = CATEGORY_CONFIG[category] ?? { label: category, emoji: '📊', color: 'text-slate-400', barColor: 'bg-slate-400' }
+                const cfg = CATEGORY_CONFIG[category] ?? { label: category, emoji: '📊', color: 'text-zinc-400', barColor: 'bg-zinc-400' }
                 const actualPct = actualAllocation[category] ?? 0
                 const diff = actualPct - targetPct
                 const isOver = diff > 0
@@ -216,59 +214,64 @@ export default function PlansPage() {
                 const isOnTarget = Math.abs(diff) < 2
 
                 return (
-                  <div key={category} className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] hover:border-white/15 transition-all space-y-3">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-white flex items-center gap-2">
-                        <span className="text-base">{cfg.emoji}</span>
-                        <span>{cfg.label}</span>
+                  <div key={category} className="p-5 rounded-2xl bg-[#050505] border border-white/5 hover:border-white/10 transition-colors space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <span className="font-bold text-white flex items-center gap-2 tracking-wide text-sm">
+                        <span>{cfg.emoji}</span>
+                        <span className="uppercase">{cfg.label}</span>
                       </span>
+                      
+                      <div className="flex items-center gap-4 text-xs font-mono">
+                        <div className="flex flex-col items-end">
+                          <span className="text-[9px] text-zinc-500 tracking-widest">TARGET</span>
+                          <span className="text-white">{targetPct}%</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-[9px] text-zinc-500 tracking-widest">ACTUAL</span>
+                          <span className={cfg.color}>{actualPct.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex flex-col items-end pl-2 border-l border-white/10">
+                          <span className="text-[9px] text-zinc-500 tracking-widest">DRIFT</span>
+                          <span className={`font-bold ${
+                            isOnTarget ? 'text-zinc-500'
+                            : isOver ? 'text-white' : 'text-zinc-300'
+                          }`}>
+                            {diff > 0 ? '+' : ''}{diff.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
                       <div className="flex items-center gap-3">
-                        <span className="text-[var(--text-muted)]">
-                          เป้า <strong className="text-white">{targetPct}%</strong>
-                        </span>
-                        <span className="text-[var(--text-muted)]">
-                          ตอนนี้ <strong className={cfg.color}>{actualPct.toFixed(1)}%</strong>
-                        </span>
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border tabular-nums ${
-                          isOnTarget ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
-                          : isOver    ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
-                                      : 'bg-rose-500/15 text-rose-400 border-rose-500/25'
-                        }`}>
-                          {diff > 0 ? '+' : ''}{diff.toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Dual bar: target vs actual */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-[10px] font-medium text-[var(--text-muted)] w-10">เป้า</span>
-                        <div className="flex-1 h-2 bg-white/[0.05] rounded-full overflow-hidden">
-                          <div className="h-full bg-white/25 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, targetPct)}%` }} />
+                        <span className="text-[9px] font-bold text-zinc-600 w-12 tracking-widest">TARGET</span>
+                        <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-full bg-white/20 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, targetPct)}%` }} />
                         </div>
                       </div>
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-[10px] font-medium text-[var(--text-muted)] w-10">จริง</span>
-                        <div className="flex-1 h-2 bg-white/[0.05] rounded-full overflow-hidden">
-                          <div className={`h-full ${cfg.barColor} rounded-full transition-all duration-500 shadow-sm`} style={{ width: `${Math.min(100, actualPct)}%` }} />
+                      <div className="flex items-center gap-3">
+                        <span className="text-[9px] font-bold text-zinc-600 w-12 tracking-widest">ACTUAL</span>
+                        <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div className={`h-full ${cfg.barColor} rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(255,255,255,0.1)]`} style={{ width: `${Math.min(100, actualPct)}%` }} />
                         </div>
                       </div>
                     </div>
 
-                    {/* Recommendation */}
                     {Math.abs(diff) >= 3 && totalValue > 0 && (
-                      <p className="text-[11px] text-[var(--text-secondary)] flex items-start gap-1.5 pt-1 border-t border-white/[0.04]">
-                        <span className="shrink-0">💡</span>
-                        {isOver ? (
-                          <span className="text-amber-300">
-                            แนะนำทยอยขายประมาณ ฿{diffAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })} เพื่อคืนสัดส่วน
-                          </span>
-                        ) : (
-                          <span className="text-[var(--cyan-400)]">
-                            แนะนำลงทุนเพิ่มอีกประมาณ ฿{diffAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })} ในสินทรัพย์หมวดนี้
-                          </span>
-                        )}
-                      </p>
+                      <div className="pt-3 border-t border-white/5">
+                        <p className="text-[10px] font-mono text-zinc-400 flex items-center gap-2">
+                          <span className="w-4 h-4 rounded bg-white/10 flex items-center justify-center shrink-0">💡</span>
+                          {isOver ? (
+                            <span>
+                              SELL ~฿{diffAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })} TO REBALANCE
+                            </span>
+                          ) : (
+                            <span className="text-white">
+                              BUY ~฿{diffAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })} TO REBALANCE
+                            </span>
+                          )}
+                        </p>
+                      </div>
                     )}
                   </div>
                 )
@@ -277,105 +280,85 @@ export default function PlansPage() {
           </div>
         )}
 
-        {/* ── Presets List ────────────────────────────────── */}
+        {/* Presets List */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              แผนการลงทุนของคุณ
-              <span className="ml-2 text-[var(--text-muted)] font-normal normal-case">({presets.length})</span>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              SAVED PLANS ({presets.length})
             </h3>
           </div>
 
           {isLoading ? (
-            <div className="py-16 text-center text-xs text-[var(--text-muted)] flex items-center justify-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-[var(--cyan-400)]" />
-              <span>กำลังโหลดแผนการลงทุน...</span>
+            <div className="py-16 text-center flex flex-col items-center justify-center gap-3 text-zinc-500">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span className="text-[10px] font-mono tracking-widest uppercase">Loading plans...</span>
             </div>
           ) : presets.length === 0 ? (
-            <div className="p-14 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] text-center flex flex-col items-center justify-center">
-              <div className="w-16 h-16 rounded-2xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-[var(--text-muted)] mb-5">
+            <div className="p-14 rounded-3xl bg-[#0a0a0a] border border-white/5 text-center flex flex-col items-center justify-center min-h-[300px]">
+              <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center text-zinc-600 mb-6">
                 <Scale className="w-8 h-8" />
               </div>
-              <h4 className="font-bold text-white text-lg mb-2">ยังไม่มีแผนการลงทุน</h4>
-              <p className="text-sm text-[var(--text-secondary)] max-w-sm mb-6">
-                สร้างแผนแรกเพื่อตั้งเป้าหมายสัดส่วนพอร์ต เช่น 80/20 หรือ All-Weather
+              <h4 className="font-bold text-white text-lg mb-2">NO PLANS CREATED</h4>
+              <p className="text-[10px] font-mono tracking-widest text-zinc-500 max-w-sm mb-6 uppercase">
+                Create a target allocation plan to guide your investments.
               </p>
-              <button onClick={openCreateModal} className="btn btn-primary text-sm py-2.5 px-5">
-                สร้างแผนการลงทุน
+              <button onClick={openCreateModal} className="bg-white text-black hover:bg-zinc-200 text-xs font-bold py-2.5 px-6 rounded-xl transition-colors">
+                CREATE FIRST PLAN
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {presets.map((preset) => {
-                const riskCfg = RISK_CONFIG[preset.riskProfile] ?? { label: preset.riskProfile, color: 'text-slate-400', bg: 'bg-slate-500/10 border-slate-500/20' }
+                const riskCfg = RISK_CONFIG[preset.riskProfile] ?? { label: preset.riskProfile, color: 'text-zinc-500', bg: 'bg-white/5' }
                 const isActive = preset.id === activePreset?.id
 
                 return (
                   <div
                     key={preset.id}
-                    className={`p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.36)] relative overflow-hidden group flex flex-col justify-between ${
-                      isActive ? 'border-violet-500/40 ring-1 ring-violet-500/30' : 'border-white/[0.08] hover:border-white/20'
+                    className={`p-6 rounded-3xl bg-[#0a0a0a] border transition-all duration-300 relative overflow-hidden group flex flex-col justify-between min-h-[220px] ${
+                      isActive ? 'border-white/20' : 'border-white/5 hover:border-white/15'
                     }`}
                   >
-                    {isActive && (
-                      <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
-                    )}
-
                     <div>
                       <div className="flex items-start justify-between">
                         <div>
-                          <h4 className="font-bold text-white text-base">{preset.presetName}</h4>
-                          <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full border mt-1.5 ${riskCfg.bg} ${riskCfg.color}`}>
+                          <h4 className="font-bold text-white text-lg tracking-wide">{preset.presetName}</h4>
+                          <span className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-sm border mt-2 uppercase tracking-widest ${riskCfg.bg} ${riskCfg.color}`}>
                             {riskCfg.label}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => openEditModal(preset)}
-                            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--cyan-400)] rounded-lg hover:bg-cyan-500/10 transition-colors"
-                          >
+                          <button onClick={() => openEditModal(preset)} className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleDelete(preset.id)}
-                            className="p-1.5 text-[var(--text-muted)] hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors"
-                          >
+                          <button onClick={() => handleDelete(preset.id)} className="p-2 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
 
-                      {/* Allocation Pills */}
-                      <div className="mt-4 flex flex-wrap gap-1.5">
+                      <div className="mt-5 flex flex-wrap gap-2">
                         {Object.entries(preset.targetAllocation as Record<string, number>).map(([cat, pct]) => {
-                          const catCfg = CATEGORY_CONFIG[cat]
                           return (
-                            <span
-                              key={cat}
-                              className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-[var(--bg-elevated)] border border-[var(--border)] text-white"
-                            >
-                              {catCfg?.emoji} {cat}: {pct}%
+                            <span key={cat} className="px-2 py-1 rounded bg-[#050505] border border-white/5 text-zinc-400 text-[10px] font-mono">
+                              {cat} <span className="text-white font-bold ml-1">{pct}%</span>
                             </span>
                           )
                         })}
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-[var(--border)] flex items-center justify-between text-xs">
-                      <span className="text-[var(--text-secondary)]">
-                        ออมเพิ่ม ฿{Number(preset.monthlyContribution).toLocaleString()}/เดือน
+                    <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+                        +฿{Number(preset.monthlyContribution).toLocaleString()}/MO
                       </span>
                       {preset.isDefault ? (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-[var(--cyan-400)]">
-                          <CheckCircle className="w-3 h-3" />
-                          Default
+                        <span className="flex items-center gap-1.5 text-[9px] font-bold text-white tracking-widest uppercase">
+                          <CheckCircle className="w-3 h-3" /> DEFAULT
                         </span>
                       ) : (
-                        <button
-                          onClick={() => setSelectedPresetId(preset.id)}
-                          className="text-[11px] text-[var(--cyan-400)] hover:underline"
-                        >
-                          เลือกดูแผนนี้
+                        <button onClick={() => setSelectedPresetId(preset.id)} className="text-[9px] font-bold text-zinc-500 hover:text-white uppercase tracking-widest transition-colors">
+                          VIEW PLAN
                         </button>
                       )}
                     </div>
@@ -387,41 +370,33 @@ export default function PlansPage() {
         </div>
       </div>
 
-      {/* ── Preset Modal ────────────────────────────────── */}
+      {/* Preset Modal */}
       {modalOpen && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setModalOpen(false)
-          }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
-        >
-          <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-lg overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)] flex flex-col max-h-[90vh]">
-            <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
-              <h3 className="font-bold text-white text-base tracking-tight">
-                {editingPreset ? 'แก้ไขแผนการลงทุน' : 'สร้างแผนเป้าหมายใหม่'}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false) }}>
+          <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-[#050505]">
+              <h3 className="font-bold text-white text-base tracking-tight uppercase">
+                {editingPreset ? 'EDIT PLAN' : 'NEW PLAN'}
               </h3>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
-              >
+              <button onClick={() => setModalOpen(false)} className="p-2 rounded-full text-zinc-500 hover:text-white hover:bg-white/10 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSavePreset} className="p-5 overflow-y-auto space-y-4 flex-1">
+            <form onSubmit={handleSavePreset} className="p-6 overflow-y-auto space-y-6 flex-1">
               {formError && (
-                <div className="alert alert-danger text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-2 text-xs text-rose-400">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{formError}</span>
                 </div>
               )}
 
               <div>
-                <label className="label">ชื่อแผนเป้าหมาย *</label>
+                <label className={labelClass}>PLAN NAME</label>
                 <input
                   type="text"
-                  className="input text-sm"
-                  placeholder="เช่น พอร์ตอิสรภาพ, 80/20 DCA, All-Weather"
+                  className={inputClass}
+                  placeholder="e.g. 80/20 Growth, All-Weather"
                   value={formData.presetName}
                   onChange={(e) => setFormData({ ...formData, presetName: e.target.value })}
                   required
@@ -429,25 +404,25 @@ export default function PlansPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">ระดับความเสี่ยง</label>
+                  <label className={labelClass}>RISK PROFILE</label>
                   <select
-                    className="select text-xs"
+                    className={inputClass}
                     value={formData.riskProfile}
                     onChange={(e) => setFormData({ ...formData, riskProfile: e.target.value })}
                   >
-                    <option value="conservative">ต่ำ (Conservative)</option>
-                    <option value="moderate">ปานกลาง (Moderate)</option>
-                    <option value="aggressive">สูง (Aggressive)</option>
+                    <option value="conservative">Conservative</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="aggressive">Aggressive</option>
                   </select>
                 </div>
                 <div>
-                  <label className="label">เงินออมต่อเดือน (บาท)</label>
+                  <label className={labelClass}>MONTHLY SAVINGS (฿)</label>
                   <input
                     type="number"
                     step="1000"
-                    className="input text-xs"
+                    className={inputClass}
                     value={formData.monthlyContribution}
                     onChange={(e) => setFormData({ ...formData, monthlyContribution: parseFloat(e.target.value) || 0 })}
                   />
@@ -455,87 +430,86 @@ export default function PlansPage() {
               </div>
 
               {/* Allocation Weights */}
-              <div className="space-y-2 pt-2 border-t border-[var(--border)]">
-                <div className="flex items-center justify-between">
-                  <label className="label mb-0">สัดส่วนสินทรัพย์เป้าหมาย (%) *</label>
-                  <span className={`text-xs font-bold tabular-nums ${Math.abs(totalAllocForm - 100) < 0.01 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <div className="space-y-3 pt-4 border-t border-white/5">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest m-0">TARGET ALLOCATION (%)</label>
+                  <span className={`text-[10px] font-bold font-mono tracking-widest ${Math.abs(totalAllocForm - 100) < 0.01 ? 'text-white' : 'text-rose-400'}`}>
                     {totalAllocForm}% / 100%
                   </span>
                 </div>
 
                 {DEFAULT_CATEGORIES.map((cat) => {
-                  const catCfg = CATEGORY_CONFIG[cat]
                   return (
-                    <div key={cat} className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
-                        <span>{catCfg?.emoji}</span>
-                        <span className="truncate">{catCfg?.label ?? cat}</span>
+                    <div key={cat} className="flex items-center justify-between gap-4">
+                      <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-zinc-600"></span>
+                        {cat}
                       </span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <input
                           type="number"
                           min="0"
                           max="100"
                           step="5"
-                          className="input text-xs w-20 text-right font-bold"
+                          className="bg-[#050505] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-500 transition-colors w-20 text-right font-mono"
                           value={formData.targetAllocation[cat] ?? 0}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0
                             setFormData({ ...formData, targetAllocation: { ...formData.targetAllocation, [cat]: val } })
                           }}
                         />
-                        <span className="text-xs text-[var(--text-muted)]">%</span>
+                        <span className="text-xs font-mono text-zinc-500">%</span>
                       </div>
                     </div>
                   )
                 })}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
                 <div>
-                  <label className="label">เป้าหมายมูลค่าพอร์ต (บาท)</label>
+                  <label className={labelClass}>TARGET PORTFOLIO (฿)</label>
                   <input
                     type="number"
                     step="100000"
-                    className="input text-xs"
-                    placeholder="เช่น 1,000,000"
+                    className={inputClass}
+                    placeholder="1000000"
                     value={formData.targetAmount}
                     onChange={(e) => setFormData({ ...formData, targetAmount: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
                 <div>
-                  <label className="label">วันที่เป้าหมาย</label>
+                  <label className={labelClass}>TARGET DATE</label>
                   <input
                     type="date"
-                    className="input text-xs"
+                    className={inputClass}
                     value={formData.targetDate}
                     onChange={(e) => setFormData({ ...formData, targetDate: e.target.value })}
                   />
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 text-xs text-[var(--cyan-400)] pt-1 cursor-pointer">
+              <label className="flex items-center gap-3 text-xs text-white cursor-pointer mt-2 bg-white/5 p-3 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
                 <input
                   type="checkbox"
-                  className="accent-cyan-400 w-3.5 h-3.5"
+                  className="w-4 h-4 rounded border-white/20 bg-[#050505] text-white"
                   checked={formData.isDefault}
                   onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
                 />
-                <span>ตั้งเป็นแผนเริ่มต้นของพอร์ต (Default Plan)</span>
+                <span className="font-bold uppercase tracking-widest text-[10px]">Set as Default Plan</span>
               </label>
 
-              <div className="pt-3 border-t border-[var(--border)] flex justify-end gap-2">
-                <button type="button" onClick={() => setModalOpen(false)} className="btn btn-ghost text-xs py-2 px-3">
-                  ยกเลิก
+              <div className="pt-6 flex justify-end gap-3">
+                <button type="button" onClick={() => setModalOpen(false)} className="px-5 py-2.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white transition-colors">
+                  Cancel
                 </button>
-                <button type="submit" disabled={submitting} className="btn btn-primary text-xs py-2 px-4 flex items-center gap-2">
+                <button type="submit" disabled={submitting} className="bg-white text-black hover:bg-zinc-200 px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors min-w-[120px] justify-center">
                   {submitting ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>กำลังบันทึก...</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
                     </>
                   ) : (
-                    <span>บันทึกแผน</span>
+                    <span>{editingPreset ? 'Save Changes' : 'Create Plan'}</span>
                   )}
                 </button>
               </div>

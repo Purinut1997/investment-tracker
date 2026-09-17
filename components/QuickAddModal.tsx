@@ -127,14 +127,13 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
         }
       }
 
-      // Local heuristic fallback parser (e.g. "ซื้อ AAPL 10 หุ้น ที่ 150")
+      // Local heuristic fallback parser
       const lower = nlText.toLowerCase()
       let type: TransactionType = 'BUY'
       if (lower.includes('ขาย') || lower.includes('sell')) type = 'SELL'
       else if (lower.includes('ปันผล') || lower.includes('dividend')) type = 'DIVIDEND'
       else if (lower.includes('ฝาก') || lower.includes('deposit')) type = 'DEPOSIT'
 
-      // Match numbers and symbols
       const words = nlText.split(/\s+/)
       let foundTicker = ''
       const numbers: number[] = []
@@ -192,7 +191,6 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
     setSubmitting(true)
 
     try {
-      // Step 1: Ensure asset exists or create it
       const assetRes = await fetch('/api/assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +210,6 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
 
       const assetData = await assetRes.json()
 
-      // Step 2: Create Transaction
       const txnRes = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -235,7 +232,6 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
         throw new Error(errJson.error || 'บันทึกธุรกรรมล้มเหลว')
       }
 
-      // Revalidate SWR caches
       mutate('/api/transactions')
       mutate('/api/accounts')
 
@@ -248,344 +244,342 @@ export function QuickAddModal({ onClose, onSuccess }: QuickAddModalProps) {
     }
   }
 
+  // Common input styles
+  const inputClass = "w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-zinc-500 focus:bg-white/10 transition-colors"
+  const labelClass = "block text-[11px] font-bold text-zinc-500 uppercase tracking-wider mb-2"
+
   return (
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#050609]/80 backdrop-blur-sm animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
     >
-      <div className="bg-[#11141b] border border-white/[0.12] rounded-2xl sm:rounded-3xl w-full max-w-xl overflow-hidden shadow-[0_32px_96px_rgba(0,0,0,0.65)] flex flex-col max-h-[min(760px,calc(100dvh-24px))]">
+      <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        
         {/* Modal Header */}
-        <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-white/[0.08] flex items-center justify-between bg-[#151821]">
+        <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-[#050505]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[var(--accent-soft)] border border-[var(--border-accent)] flex items-center justify-center text-[var(--accent)]">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white">
+              <Plus className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white tracking-tight leading-tight">บันทึกธุรกรรม</h2>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">เพิ่มรายการลงทุนเข้าสู่พอร์ต</p>
+              <h2 className="text-lg font-bold text-white tracking-tight">บันทึกธุรกรรม</h2>
+              <p className="text-[11px] text-zinc-500 font-mono mt-0.5">NEW TRANSACTION</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.08] transition-colors"
+            className="p-2 rounded-full text-zinc-500 hover:text-white hover:bg-white/10 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {accountsData && accounts.length === 0 ? (
-          <div className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center mb-5">
-              <Wallet className="w-8 h-8 text-zinc-400" />
+          <div className="p-10 flex flex-col items-center justify-center text-center">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6">
+              <Wallet className="w-8 h-8 text-zinc-600" />
             </div>
-            <h3 className="text-lg font-bold text-white mb-2">ยังไม่มีบัญชีการลงทุน</h3>
-            <p className="text-sm text-[var(--text-muted)] mb-8 max-w-[280px]">
+            <h3 className="text-base font-bold text-white mb-2">ยังไม่มีบัญชีการลงทุน</h3>
+            <p className="text-xs text-zinc-500 mb-8 max-w-[280px]">
               คุณจำเป็นต้องมีบัญชีการลงทุนก่อน จึงจะสามารถเพิ่มธุรกรรมได้
             </p>
             <a 
               href="/accounts" 
               onClick={onClose}
-              className="btn btn-primary text-sm px-6 py-2.5 w-full sm:w-auto shadow-[0_4px_16px_rgba(124,58,237,0.4)]"
+              className="bg-white text-black hover:bg-zinc-200 px-6 py-2.5 rounded-xl font-semibold text-sm flex items-center transition-colors"
             >
-              สร้างบัญชีลงทุน <ArrowRight className="w-4 h-4 ml-2 inline" />
+              สร้างบัญชีลงทุน <ArrowRight className="w-4 h-4 ml-2" />
             </a>
           </div>
         ) : (
           <>
             {/* Tab Switcher */}
-        <div className="flex bg-[#0b0d12] p-1 gap-1 mx-5 sm:mx-6 mt-5 rounded-xl border border-white/[0.07]">
-          <button
-            type="button"
-            onClick={() => setTab('manual')}
-            className={`flex-1 min-h-10 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 rounded-lg transition-all ${
-              tab === 'manual'
-                ? 'bg-white/[0.1] text-white'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-            }`}
-          >
-            <Layers className="w-4 h-4 text-[var(--violet)]" />
-            <span>กรอกฟอร์มมาตรฐาน</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('ai')}
-            className={`flex-1 min-h-10 py-2 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 rounded-lg transition-all ${
-              tab === 'ai'
-                ? 'bg-white/[0.1] text-white'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 text-[var(--violet)]" />
-            <span>พิมพ์ข้อความ / AI สรุป</span>
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <div className="px-5 py-5 sm:px-6 sm:py-6 overflow-y-auto flex-1 space-y-5">
-          {error && (
-            <div className="alert alert-danger flex items-start gap-2 text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {successMsg && (
-            <div className="alert alert-success flex items-start gap-2 text-xs">
-              <Check className="w-4 h-4 shrink-0 text-[var(--green-400)] mt-0.5" />
-              <span>{successMsg}</span>
-            </div>
-          )}
-
-          {/* AI NLP TAB */}
-          {tab === 'ai' && (
-            <form onSubmit={handleAIParse} className="space-y-4">
-              <div>
-                <label className="label">
-                  พิมพ์ประโยคธุรกรรมตามธรรมชาติ (ภาษาไทยหรืออังกฤษ)
-                </label>
-                <textarea
-                  className="input min-h-[90px] text-sm"
-                  placeholder="เช่น: ซื้อ AAPL 5 หุ้น ที่ราคา 182.5 ดอลลาร์ ค่าธรรมเนียม 1 บัญชี Dime เมื่อวานนี้"
-                  value={nlText}
-                  onChange={(e) => setNlText(e.target.value)}
-                  disabled={parsing}
-                  autoFocus
-                />
-              </div>
-
-              <div className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-xs text-[var(--text-secondary)] space-y-1">
-                <p className="font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
-                  <HelpCircle className="w-3.5 h-3.5 text-[var(--cyan-400)]" />
-                  ตัวอย่างที่ระบบเข้าใจได้:
-                </p>
-                <p>• &quot;ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2&quot;</p>
-                <p>• &quot;ขาย BTC 0.05 ราคา 65000 ใน Bitkub&quot;</p>
-                <p>• &quot;รับปันผล PTT 1500 บาท บัญชี InnovestX&quot;</p>
-              </div>
-
+            <div className="flex bg-[#050505] p-1.5 gap-1 mx-6 mt-6 rounded-xl border border-white/10">
               <button
-                type="submit"
-                disabled={parsing || !nlText.trim()}
-                className="btn btn-primary w-full py-3 flex items-center justify-center gap-2"
+                type="button"
+                onClick={() => setTab('manual')}
+                className={`flex-1 min-h-10 py-1.5 text-xs font-semibold flex items-center justify-center gap-2 rounded-lg transition-all ${
+                  tab === 'manual'
+                    ? 'bg-white/10 text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
               >
-                {parsing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>AI กำลังวิเคราะห์ข้อมูล...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>วิเคราะห์และเติมข้อมูลในฟอร์ม</span>
-                  </>
-                )}
+                <Layers className="w-3.5 h-3.5" />
+                <span>กรอกฟอร์มมาตรฐาน</span>
               </button>
-            </form>
-          )}
+              <button
+                type="button"
+                onClick={() => setTab('ai')}
+                className={`flex-1 min-h-10 py-1.5 text-xs font-semibold flex items-center justify-center gap-2 rounded-lg transition-all ${
+                  tab === 'ai'
+                    ? 'bg-white/10 text-white shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>พิมพ์ข้อความ (AI)</span>
+              </button>
+            </div>
 
-          {/* MANUAL FORM TAB */}
-          {tab === 'manual' && (
-            <form onSubmit={handleSubmit} id="manual-form" className="space-y-5">
-              {/* Account Selection */}
-              <div>
-                <label className="label">บัญชีการเงิน *</label>
-                {accounts.length === 0 ? (
-                  <div className="text-xs text-amber-400 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20">
-                    ยังไม่มีบัญชีการลงทุน กรุณาสร้างบัญชีที่หน้า /accounts ก่อน
-                  </div>
-                ) : (
-                  <select
-                    className="select text-sm"
-                    value={accountId}
-                    onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
-                    required
-                  >
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.accountName} ({acc.accountType} — {acc.currency})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {/* Transaction Type & Date */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">ประเภทรายการ *</label>
-                  <select
-                    className="select text-sm"
-                    value={formData.txnType}
-                    onChange={(e) => setFormData({ ...formData, txnType: e.target.value as TransactionType })}
-                  >
-                    <option value="BUY">🟢 ซื้อ (BUY)</option>
-                    <option value="SELL">🔴 ขาย (SELL)</option>
-                    <option value="DIVIDEND">💰 ปันผล (DIVIDEND)</option>
-                    <option value="DEPOSIT">📥 ฝากเงิน (DEPOSIT)</option>
-                    <option value="WITHDRAW">📤 ถอนเงิน (WITHDRAW)</option>
-                    <option value="FEE">🧾 ค่าธรรมเนียม (FEE)</option>
-                  </select>
+            {/* Modal Body */}
+            <div className="px-6 py-6 overflow-y-auto flex-1 space-y-6">
+              {error && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-2 text-xs text-rose-400">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
                 </div>
-                <div>
-                  <label className="label">วันที่ทำรายการ *</label>
-                  <input
-                    type="date"
-                    className="input text-sm"
-                    value={formData.txnDate}
-                    onChange={(e) => setFormData({ ...formData, txnDate: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Ticker, Market & Asset Type */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="col-span-1">
-                  <label className="label">ตลาด</label>
-                  <select
-                    className="select text-xs"
-                    value={formData.market}
-                    onChange={(e) => setFormData({ ...formData, market: e.target.value as Market })}
-                  >
-                    <option value="US">🇺🇸 หุ้น US</option>
-                    <option value="TH">🇹🇭 หุ้นไทย (SET)</option>
-                    <option value="CRYPTO">🪙 Crypto</option>
-                  </select>
-                </div>
-                <div className="col-span-1 sm:col-span-2">
-                  <label className="label">Ticker / สัญลักษณ์ *</label>
-                  <input
-                    type="text"
-                    className="input uppercase text-sm font-semibold"
-                    placeholder="เช่น AAPL, PTT, BTC"
-                    value={formData.ticker}
-                    onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase() })}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Quantity & Price */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">จำนวนหน่วย (Quantity) *</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input text-sm"
-                    placeholder="0.00"
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="label">ราคาต่อหน่วย (Price) *</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input text-sm"
-                    placeholder="0.00"
-                    value={formData.pricePerUnit}
-                    onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Fee & Tax */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">ค่าคอม/ธรรมเนียม</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input text-sm"
-                    placeholder="0.00"
-                    value={formData.fee}
-                    onChange={(e) => setFormData({ ...formData, fee: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">ภาษีหัก ณ ที่จ่าย</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input text-sm"
-                    placeholder="0.00"
-                    value={formData.taxWithheld}
-                    onChange={(e) => setFormData({ ...formData, taxWithheld: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {/* Calculated Total Box */}
-              <div className="p-4 rounded-xl bg-[#191d27] border border-white/[0.09] flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-[11px] text-[var(--text-muted)] font-medium">
-                    ยอดรวมคำนวณอัตโนมัติ (Total Amount)
-                  </p>
-                  <p className="text-xs text-[var(--text-secondary)]">
-                    (จำนวน × ราคา) + ค่าธรรมเนียม - ภาษี
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xl font-extrabold text-[var(--violet)] tabular-nums">
-                    {isNaN(Number(totalAmount)) ? '0.00' : Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              </div>
-
-              {/* Note */}
-              <div>
-                <label className="label">บันทึกเพิ่มเติม (Optional)</label>
-                <input
-                  type="text"
-                  className="input text-sm"
-                  placeholder="เช่น DCA ประจำเดือน, รับปันผลงวด 1"
-                  value={formData.note}
-                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                />
-              </div>
-            </form>
-          )}
-        </div>
-
-        {/* Modal Footer */}
-        {tab === 'manual' && (
-          <div className="px-5 py-4 sm:px-6 border-t border-white/[0.08] bg-[#151821] flex items-center justify-end gap-3 sticky bottom-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn btn-ghost text-xs sm:text-sm py-2 px-4"
-              disabled={submitting}
-            >
-              ยกเลิก
-            </button>
-            <button
-              type="submit"
-              form="manual-form"
-              disabled={submitting || accounts.length === 0}
-              className="btn btn-primary text-xs sm:text-sm py-2.5 px-5 flex items-center gap-2 min-w-[142px]"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>กำลังบันทึก...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  <span>บันทึกรายการ</span>
-                </>
               )}
-            </button>
-          </div>
+
+              {successMsg && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2 text-xs text-emerald-400">
+                  <Check className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              {/* AI NLP TAB */}
+              {tab === 'ai' && (
+                <form onSubmit={handleAIParse} className="space-y-5">
+                  <div>
+                    <label className={labelClass}>รายละเอียดธุรกรรม</label>
+                    <textarea
+                      className={`${inputClass} min-h-[100px] resize-none`}
+                      placeholder="เช่น: ซื้อ AAPL 5 หุ้น ที่ราคา 182.5 ดอลลาร์ ค่าธรรมเนียม 1 บัญชี Dime เมื่อวานนี้"
+                      value={nlText}
+                      onChange={(e) => setNlText(e.target.value)}
+                      disabled={parsing}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-xs text-zinc-500 space-y-2 font-mono">
+                    <p className="font-bold text-zinc-400 flex items-center gap-1.5 uppercase tracking-widest">
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      Examples
+                    </p>
+                    <p>• ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2</p>
+                    <p>• ขาย BTC 0.05 ราคา 65000</p>
+                    <p>• รับปันผล PTT 1500 บาท</p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={parsing || !nlText.trim()}
+                    className="w-full bg-white text-black hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    {parsing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>AI กำลังวิเคราะห์ข้อมูล...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        <span>วิเคราะห์ข้อมูลด้วย AI</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+
+              {/* MANUAL FORM TAB */}
+              {tab === 'manual' && (
+                <form onSubmit={handleSubmit} id="manual-form" className="space-y-5">
+                  
+                  {/* Account Selection */}
+                  <div>
+                    <label className={labelClass}>บัญชีการเงิน *</label>
+                    <select
+                      className={inputClass}
+                      value={accountId}
+                      onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+                      required
+                    >
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.accountName} ({acc.accountType} — {acc.currency})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Transaction Type & Date */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>ประเภทรายการ *</label>
+                      <select
+                        className={inputClass}
+                        value={formData.txnType}
+                        onChange={(e) => setFormData({ ...formData, txnType: e.target.value as TransactionType })}
+                      >
+                        <option value="BUY">ซื้อ (BUY)</option>
+                        <option value="SELL">ขาย (SELL)</option>
+                        <option value="DIVIDEND">ปันผล (DIVIDEND)</option>
+                        <option value="DEPOSIT">ฝากเงิน (DEPOSIT)</option>
+                        <option value="WITHDRAW">ถอนเงิน (WITHDRAW)</option>
+                        <option value="FEE">ค่าธรรมเนียม (FEE)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>วันที่ *</label>
+                      <input
+                        type="date"
+                        className={inputClass}
+                        value={formData.txnDate}
+                        onChange={(e) => setFormData({ ...formData, txnDate: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Ticker & Market */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="col-span-1">
+                      <label className={labelClass}>ตลาด</label>
+                      <select
+                        className={inputClass}
+                        value={formData.market}
+                        onChange={(e) => setFormData({ ...formData, market: e.target.value as Market })}
+                      >
+                        <option value="US">US</option>
+                        <option value="TH">TH</option>
+                        <option value="CRYPTO">CRYPTO</option>
+                      </select>
+                    </div>
+                    <div className="col-span-1 sm:col-span-2">
+                      <label className={labelClass}>TICKER *</label>
+                      <input
+                        type="text"
+                        className={`${inputClass} font-mono uppercase font-bold`}
+                        placeholder="AAPL, BTC"
+                        value={formData.ticker}
+                        onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase() })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quantity & Price */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>จำนวน (QTY) *</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className={`${inputClass} font-mono`}
+                        placeholder="0.00"
+                        value={formData.quantity}
+                        onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>ราคา/หน่วย (PRICE) *</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className={`${inputClass} font-mono`}
+                        placeholder="0.00"
+                        value={formData.pricePerUnit}
+                        onChange={(e) => setFormData({ ...formData, pricePerUnit: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fee & Tax */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>ค่าธรรมเนียม</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className={`${inputClass} font-mono`}
+                        placeholder="0.00"
+                        value={formData.fee}
+                        onChange={(e) => setFormData({ ...formData, fee: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>ภาษี</label>
+                      <input
+                        type="number"
+                        step="any"
+                        className={`${inputClass} font-mono`}
+                        placeholder="0.00"
+                        value={formData.taxWithheld}
+                        onChange={(e) => setFormData({ ...formData, taxWithheld: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Calculated Total Box */}
+                  <div className="p-4 rounded-xl bg-[#050505] border border-white/5 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                        TOTAL AMOUNT
+                      </p>
+                      <p className="text-[10px] text-zinc-600 font-mono mt-0.5">
+                        (QTY × PRICE) + FEE - TAX
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xl font-bold text-white font-mono tabular-nums">
+                        {isNaN(Number(totalAmount)) ? '0.00' : Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Note */}
+                  <div>
+                    <label className={labelClass}>บันทึกเพิ่มเติม (Note)</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="รายละเอียดเพิ่มเติม (optional)"
+                      value={formData.note}
+                      onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                    />
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            {tab === 'manual' && (
+              <div className="px-6 py-5 border-t border-white/5 bg-[#050505] flex items-center justify-end gap-3 sticky bottom-0">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-5 py-2.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white transition-colors"
+                  disabled={submitting}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  form="manual-form"
+                  disabled={submitting || accounts.length === 0}
+                  className="bg-white text-black hover:bg-zinc-200 disabled:opacity-50 px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors min-w-[120px] justify-center"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>บันทึก...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>บันทึกรายการ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )}
-        </>
-      )}
       </div>
     </div>
   )

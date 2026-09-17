@@ -18,14 +18,13 @@ import {
   Check,
   X,
   Layers,
-  ArrowRight
 } from 'lucide-react'
 
 const ACCOUNT_TYPES = [
-  { value: 'brokerage', label: 'โบรกเกอร์ (Brokerage)', icon: Building2, desc: 'เช่น Dime, InnovestX, Interactive Brokers', color: 'text-blue-400', glow: 'from-blue-500/20' },
-  { value: 'crypto_exchange', label: 'ศูนย์ซื้อขายคริปโต (Crypto)', icon: Coins, desc: 'เช่น Bitkub, Binance', color: 'text-amber-400', glow: 'from-amber-500/20' },
-  { value: 'bank', label: 'บัญชีธนาคาร (Bank)', icon: Landmark, desc: 'เงินฝากประจำ/ออมทรัพย์', color: 'text-emerald-400', glow: 'from-emerald-500/20' },
-  { value: 'cash', label: 'เงินสด (Cash)', icon: Banknote, desc: 'เงินสดสำหรับรอจังหวะลงทุน', color: 'text-violet-400', glow: 'from-violet-500/20' },
+  { value: 'brokerage', label: 'Brokerage', icon: Building2, desc: 'Dime, InnovestX, IBKR', color: 'text-blue-400' },
+  { value: 'crypto_exchange', label: 'Crypto', icon: Coins, desc: 'Bitkub, Binance, OKX', color: 'text-amber-400' },
+  { value: 'bank', label: 'Bank', icon: Landmark, desc: 'Savings / Checking', color: 'text-emerald-400' },
+  { value: 'cash', label: 'Cash', icon: Banknote, desc: 'Physical / Idle Cash', color: 'text-zinc-400' },
 ]
 
 export default function AccountsPage() {
@@ -44,7 +43,6 @@ export default function AccountsPage() {
     currency: 'THB',
   })
 
-  // ESC key and body scroll lock for account modal
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape' && modalOpen) setModalOpen(false)
@@ -81,18 +79,18 @@ export default function AccountsPage() {
 
   async function handleSaveAccount(e: React.FormEvent) {
     e.preventDefault()
-    if (!formData.accountName.trim()) { setFormError('กรุณากรอกชื่อบัญชี'); return }
+    if (!formData.accountName.trim()) { setFormError('Account name is required'); return }
     setSubmitting(true); setFormError('')
     try {
       const url = editingAccount ? `/api/accounts/${editingAccount.id}` : '/api/accounts'
       const method = editingAccount ? 'PUT' : 'POST'
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) })
       const resJson = await res.json()
-      if (!res.ok) throw new Error(resJson.error || 'ไม่สามารถบันทึกบัญชีได้')
+      if (!res.ok) throw new Error(resJson.error || 'Failed to save account')
       mutate('/api/accounts')
       setModalOpen(false)
     } catch (err: any) {
-      setFormError(err.message || 'เกิดข้อผิดพลาด')
+      setFormError(err.message || 'Error occurred')
     } finally {
       setSubmitting(false)
     }
@@ -100,18 +98,18 @@ export default function AccountsPage() {
 
   async function handleDeleteAccount(acc: any) {
     if (acc._count?.transactions > 0) {
-      alert(`ไม่สามารถลบบัญชี "${acc.accountName}" ได้ เนื่องจากมีธุรกรรม ${acc._count.transactions} รายการที่ผูกอยู่`)
+      alert(`Cannot delete account "${acc.accountName}" because it has ${acc._count.transactions} transactions associated with it.`)
       return
     }
-    if (!confirm(`คุณต้องการลบบัญชี "${acc.accountName}" ใช่หรือไม่?`)) return
+    if (!confirm(`Are you sure you want to delete account "${acc.accountName}"?`)) return
     setDeletingId(acc.id)
     try {
       const res = await fetch(`/api/accounts/${acc.id}`, { method: 'DELETE' })
       const resJson = await res.json()
-      if (!res.ok) throw new Error(resJson.error || 'ลบบัญชีไม่สำเร็จ')
+      if (!res.ok) throw new Error(resJson.error || 'Failed to delete account')
       mutate('/api/accounts')
     } catch (err: any) {
-      alert(err.message || 'ลบบัญชีไม่สำเร็จ')
+      alert(err.message || 'Error occurred while deleting account')
     } finally {
       setDeletingId(null)
     }
@@ -121,63 +119,67 @@ export default function AccountsPage() {
   const cryptoCount = accounts.filter((a) => a.accountType === 'crypto_exchange').length
   const bankCount = accounts.filter((a) => a.accountType === 'bank' || a.accountType === 'cash').length
 
+  const inputClass = "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-zinc-500 transition-colors"
+  const labelClass = "block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2"
+
   return (
     <AppShell>
-      <div className="space-y-8">
-        <PageHeader
-          eyebrow="พอร์ตของฉัน"
-          title="บัญชีการเงิน"
-          description="จัดการพอร์ตและบัญชีลงทุนต่างๆ ในพื้นที่เดียว"
-          action={<button onClick={openCreateModal} className="btn btn-primary text-sm"><Plus className="w-4 h-4" /> สร้างบัญชีใหม่</button>}
-        />
+      <div className="space-y-8 max-w-[1600px] mx-auto w-full">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">บัญชีการลงทุน</h1>
+            <p className="text-sm text-zinc-500 mt-1">จัดการพอร์ตและบัญชีลงทุนต่างๆ ในพื้นที่เดียว</p>
+          </div>
+          <button onClick={openCreateModal} className="bg-white text-black hover:bg-zinc-200 px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors">
+            <Plus className="w-4 h-4" /> สร้างบัญชีใหม่
+          </button>
+        </div>
 
-        {/* ── Stats Row ───────────────────────────────────── */}
+        {/* Stats Row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'บัญชีทั้งหมด', value: `${accounts.length}`, icon: Layers, color: 'text-[var(--cyan-400)]', bg: 'bg-cyan-500/10' },
-            { label: 'โบรกเกอร์หุ้น', value: `${brokerageCount}`, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-            { label: 'Crypto Exchange', value: `${cryptoCount}`, icon: Coins, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-            { label: 'ธนาคาร & เงินสด', value: `${bankCount}`, icon: Landmark, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+            { label: 'ALL ACCOUNTS', value: `${accounts.length}`, icon: Layers },
+            { label: 'BROKERAGE', value: `${brokerageCount}`, icon: Building2 },
+            { label: 'CRYPTO', value: `${cryptoCount}`, icon: Coins },
+            { label: 'BANK & CASH', value: `${bankCount}`, icon: Landmark },
           ].map((stat) => {
             const Icon = stat.icon
             return (
-              <div key={stat.label} className="p-5 rounded-2xl bg-[var(--bg-surface)] border border-white/[0.08] flex items-start gap-3.5 hover:border-white/15 transition-colors">
-                <div className={`w-10 h-10 rounded-xl ${stat.bg} border border-white/[0.08] flex items-center justify-center shrink-0 ${stat.color}`}>
-                  <Icon className="w-5 h-5" />
+              <div key={stat.label} className="p-5 rounded-3xl bg-[#0a0a0a] border border-white/5 flex flex-col gap-3 min-h-[110px] justify-between">
+                <div className="flex items-center gap-2">
+                  <Icon className="w-4 h-4 text-zinc-500" />
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{stat.label}</p>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider truncate">{stat.label}</p>
-                  <p className="text-2xl font-extrabold text-white mt-0.5 tabular-nums">{stat.value}</p>
-                </div>
+                <p className="text-3xl font-bold text-white tabular-nums font-mono leading-none">{stat.value}</p>
               </div>
             )
           })}
         </div>
 
-        {/* ── Accounts Grid ───────────────────────────────── */}
+        {/* Accounts Grid */}
         {isLoading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-3 text-[var(--text-muted)]">
-            <Loader2 className="w-7 h-7 animate-spin text-[var(--cyan-400)]" />
-            <span className="text-xs">กำลังโหลดบัญชีการเงิน...</span>
+          <div className="py-24 flex flex-col items-center justify-center gap-4 text-zinc-500">
+            <Loader2 className="w-8 h-8 animate-spin" />
+            <span className="text-[10px] font-mono tracking-widest uppercase">Loading accounts...</span>
           </div>
         ) : error ? (
-          <div className="p-8 rounded-2xl bg-white/[0.04] border border-red-500/20 text-center text-[var(--red-400)] text-xs">เกิดข้อผิดพลาดในการโหลดข้อมูลบัญชี</div>
+          <div className="p-8 text-center text-rose-400 text-xs">Error loading accounts</div>
         ) : accounts.length === 0 ? (
-          <div className="p-16 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] text-center flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-2xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-[var(--text-muted)] mb-5">
+          <div className="p-16 rounded-3xl bg-[#0a0a0a] border border-white/5 text-center flex flex-col items-center justify-center min-h-[400px]">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center text-zinc-600 mb-6">
               <Wallet className="w-8 h-8" />
             </div>
-            <h3 className="font-bold text-white text-lg mb-2">ยังไม่มีบัญชีการลงทุน</h3>
-            <p className="text-sm text-[var(--text-secondary)] max-w-sm mb-6">
-              เริ่มต้นด้วยการสร้างบัญชีเพื่อบันทึกรายการซื้อขาย เช่น Dime, InnovestX, หรือ Bitkub
+            <h3 className="font-bold text-white text-lg mb-2">NO ACCOUNTS FOUND</h3>
+            <p className="text-xs text-zinc-500 max-w-sm mb-6 uppercase tracking-widest font-mono">
+              CREATE YOUR FIRST ACCOUNT TO START TRACKING YOUR PORTFOLIO
             </p>
-            <button onClick={openCreateModal} className="btn btn-primary text-sm py-2.5 px-5 flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              <span>สร้างบัญชีแรกของคุณ</span>
+            <button onClick={openCreateModal} className="bg-white text-black hover:bg-zinc-200 text-xs font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 transition-colors">
+              <Plus className="w-4 h-4" /> CREATE ACCOUNT
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {accounts.map((acc: any) => {
               const typeObj = ACCOUNT_TYPES.find((t) => t.value === acc.accountType) ?? ACCOUNT_TYPES[0]
               const Icon = typeObj.icon
@@ -186,60 +188,47 @@ export default function AccountsPage() {
               return (
                 <div
                   key={acc.id}
-                  className="p-6 rounded-3xl bg-white/[0.04] backdrop-blur-2xl border border-white/[0.08] hover:border-white/20 transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.36)] group flex flex-col justify-between relative overflow-hidden"
+                  className="p-6 rounded-3xl bg-[#0a0a0a] border border-white/5 hover:border-white/20 transition-all duration-300 group flex flex-col justify-between min-h-[160px]"
                 >
-                  {/* Subtle top card shimmer */}
-                  <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3.5">
-                        <div className={`w-12 h-12 rounded-2xl bg-white/[0.06] border border-white/10 flex items-center justify-center group-hover:scale-105 transition-transform ${typeObj.color} shadow-sm`}>
-                          <Icon className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-white text-base group-hover:text-[var(--violet)] transition-colors">
-                            {acc.accountName}
-                          </h3>
-                          <span className="text-[11px] text-[var(--text-muted)] font-medium">
-                            {typeObj.label.split(' ')[0]}
-                          </span>
-                        </div>
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className={`w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center ${typeObj.color}`}>
+                        <Icon className="w-5 h-5" />
                       </div>
-
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => openEditModal(acc)}
-                          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--cyan-400)] hover:bg-white/[0.08] transition-colors"
-                          title="แก้ไขบัญชี"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAccount(acc)}
-                          disabled={deletingId === acc.id}
-                          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                          title="ลบบัญชี"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[var(--text-muted)]">สกุลเงิน</span>
-                        <span className="font-semibold text-white px-2 py-0.5 rounded-lg bg-white/[0.06] border border-white/[0.08]">
-                          {acc.currency}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[var(--text-muted)]">บันทึกธุรกรรม</span>
-                        <span className="font-bold text-white tabular-nums px-2 py-0.5 rounded-lg bg-violet-500/15 text-[var(--violet)] border border-violet-500/20">
-                          {txnCount} รายการ
+                      <div>
+                        <h3 className="font-bold text-white text-base tracking-wide truncate max-w-[120px]">
+                          {acc.accountName}
+                        </h3>
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                          {typeObj.label}
                         </span>
                       </div>
                     </div>
+
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => openEditModal(acc)}
+                        className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAccount(acc)}
+                        disabled={deletingId === acc.id}
+                        className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-[10px] font-mono font-bold text-zinc-500 px-2 py-0.5 rounded-sm bg-white/5 uppercase tracking-widest">
+                      {acc.currency}
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-widest">
+                      {txnCount} TXNS
+                    </span>
                   </div>
                 </div>
               )
@@ -248,41 +237,33 @@ export default function AccountsPage() {
         )}
       </div>
 
-      {/* ── Create / Edit Modal ─────────────────────────── */}
+      {/* Create / Edit Modal */}
       {modalOpen && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setModalOpen(false)
-          }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
-        >
-          <div className="bg-[var(--bg-surface-solid)]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-[0_24px_64px_rgba(0,0,0,0.75)]">
-            <div className="p-4 sm:p-5 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false) }}>
+          <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-[#050505]">
               <h3 className="font-bold text-white text-base tracking-tight">
-                {editingAccount ? 'แก้ไขบัญชีการเงิน' : 'สร้างบัญชีการเงินใหม่'}
+                {editingAccount ? 'EDIT ACCOUNT' : 'NEW ACCOUNT'}
               </h3>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-white hover:bg-white/[0.06] transition-colors"
-              >
+              <button onClick={() => setModalOpen(false)} className="p-2 rounded-full text-zinc-500 hover:text-white hover:bg-white/10 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveAccount} className="p-5 space-y-4">
+            <form onSubmit={handleSaveAccount} className="p-6 space-y-5">
               {formError && (
-                <div className="alert alert-danger text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-2 text-xs text-rose-400">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{formError}</span>
                 </div>
               )}
 
               <div>
-                <label className="label">ชื่อบัญชี *</label>
+                <label className={labelClass}>ACCOUNT NAME</label>
                 <input
                   type="text"
-                  className="input text-sm"
-                  placeholder="เช่น Dime, InnovestX, Bitkub, K-Bank"
+                  className={inputClass}
+                  placeholder="e.g. Dime, InnovestX, Bitkub"
                   value={formData.accountName}
                   onChange={(e) => setFormData({ ...formData, accountName: e.target.value })}
                   required
@@ -291,8 +272,8 @@ export default function AccountsPage() {
               </div>
 
               <div>
-                <label className="label">ประเภทบัญชี *</label>
-                <div className="space-y-2">
+                <label className={labelClass}>ACCOUNT TYPE</label>
+                <div className="grid grid-cols-2 gap-3">
                   {ACCOUNT_TYPES.map((type) => {
                     const Icon = type.icon
                     const isSelected = formData.accountType === type.value
@@ -300,20 +281,16 @@ export default function AccountsPage() {
                       <div
                         key={type.value}
                         onClick={() => setFormData({ ...formData, accountType: type.value })}
-                        className={`p-3 rounded-2xl border cursor-pointer flex items-center justify-between transition-all ${
+                        className={`p-3 rounded-xl border cursor-pointer flex flex-col justify-between min-h-[80px] transition-all ${
                           isSelected
-                            ? 'bg-violet-500/15 border-violet-500/40 text-white shadow-sm ring-1 ring-violet-500/30'
-                            : 'bg-white/[0.03] border-white/[0.08] text-[var(--text-secondary)] hover:border-white/15'
+                            ? 'bg-white/10 border-white/20 text-white'
+                            : 'bg-transparent border-white/5 text-zinc-500 hover:border-white/10 hover:bg-white/5'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <Icon className={`w-4 h-4 ${isSelected ? type.color : 'text-[var(--text-muted)]'}`} />
-                          <div>
-                            <p className="text-xs font-semibold text-white">{type.label}</p>
-                            <p className="text-[10px] text-[var(--text-muted)]">{type.desc}</p>
-                          </div>
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-[var(--violet)]" />}
+                        <Icon className={`w-5 h-5 ${isSelected ? type.color : 'text-zinc-500'}`} />
+                        <p className={`text-[11px] font-bold uppercase tracking-widest mt-2 ${isSelected ? 'text-white' : 'text-zinc-500'}`}>
+                          {type.label}
+                        </p>
                       </div>
                     )
                   })}
@@ -321,32 +298,32 @@ export default function AccountsPage() {
               </div>
 
               <div>
-                <label className="label">สกุลเงินหลัก *</label>
+                <label className={labelClass}>CURRENCY</label>
                 <select
-                  className="select text-sm"
+                  className={inputClass}
                   value={formData.currency}
                   onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                 >
-                  <option value="THB">THB — บาทไทย</option>
-                  <option value="USD">USD — ดอลลาร์สหรัฐ</option>
-                  <option value="EUR">EUR — ยูโร</option>
-                  <option value="SGD">SGD — ดอลลาร์สิงคโปร์</option>
-                  <option value="JPY">JPY — เยนญี่ปุ่น</option>
+                  <option value="THB">THB</option>
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="SGD">SGD</option>
+                  <option value="JPY">JPY</option>
                 </select>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2.5">
-                <button type="button" onClick={() => setModalOpen(false)} className="btn btn-ghost text-xs py-2 px-3.5">
-                  ยกเลิก
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setModalOpen(false)} className="px-5 py-2.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white transition-colors">
+                  Cancel
                 </button>
-                <button type="submit" disabled={submitting} className="btn btn-primary text-xs py-2 px-5 flex items-center gap-2">
+                <button type="submit" disabled={submitting} className="bg-white text-black hover:bg-zinc-200 px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors min-w-[120px] justify-center">
                   {submitting ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>กำลังบันทึก...</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
                     </>
                   ) : (
-                    <span>{editingAccount ? 'บันทึกการแก้ไข' : 'สร้างบัญชี'}</span>
+                    <span>{editingAccount ? 'Save Changes' : 'Create Account'}</span>
                   )}
                 </button>
               </div>
