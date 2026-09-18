@@ -37,8 +37,9 @@ export async function GET(req: NextRequest) {
   const txnType = searchParams.get('txnType')
   const from = searchParams.get('from')
   const to = searchParams.get('to')
+  const search = searchParams.get('search')?.trim() || searchParams.get('q')?.trim() || ''
 
-  const where = {
+  const where: any = {
     userId: session.user.id,
     ...(accountId && { accountId }),
     ...(assetId && { assetId }),
@@ -49,6 +50,15 @@ export async function GET(req: NextRequest) {
         ...(to && { lte: new Date(to) }),
       },
     } : {}),
+  }
+
+  if (search) {
+    where.OR = [
+      { asset: { ticker: { contains: search, mode: 'insensitive' } } },
+      { asset: { assetName: { contains: search, mode: 'insensitive' } } },
+      { note: { contains: search, mode: 'insensitive' } },
+      { account: { accountName: { contains: search, mode: 'insensitive' } } },
+    ]
   }
 
   const [transactions, total] = await prisma.$transaction([
@@ -68,7 +78,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     data: transactions,
     transactions,
-    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
   })
 }
 

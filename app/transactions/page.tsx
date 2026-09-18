@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
@@ -45,6 +45,7 @@ export default function TransactionsPage() {
   const [page, setPage] = useState(1)
   const [limit] = useState(25)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedAccount, setSelectedAccount] = useState('')
   const [selectedType, setSelectedType] = useState('')
   const [quickAddOpen, setQuickAddOpen] = useState(false)
@@ -71,18 +72,28 @@ export default function TransactionsPage() {
   const { data: accountsData } = useSWR('/api/accounts')
   const accounts = parseAccountsPayload(accountsData)
 
+  // Debounce search query to backend
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const queryParams = new URLSearchParams({
     page: page.toString(),
     limit: limit.toString(),
     ...(selectedAccount && { accountId: selectedAccount }),
     ...(selectedType && { txnType: selectedType }),
+    ...(debouncedSearch.trim() && { search: debouncedSearch.trim() }),
   })
 
   const { data: txnData, isLoading, error } = useSWR(`/api/transactions?${queryParams.toString()}`)
   const rawTxns = txnData?.transactions ?? txnData?.data ?? []
   const transactions = Array.isArray(rawTxns) ? rawTxns : []
   const pagination = txnData?.pagination ?? { page: 1, totalPages: 1, total: 0 }
-  const hasAnyTransactions = (pagination.total ?? 0) > 0 || transactions.length > 0
+  const hasAnyTransactions = (pagination.total ?? 0) > 0 || transactions.length > 0 || !!debouncedSearch || !!selectedAccount || !!selectedType
 
   const filteredTransactions = transactions.filter((t: any) => {
     if (!search.trim()) return true
@@ -90,7 +101,8 @@ export default function TransactionsPage() {
     const ticker = t.asset?.ticker?.toLowerCase() ?? ''
     const assetName = t.asset?.assetName?.toLowerCase() ?? ''
     const note = t.note?.toLowerCase() ?? ''
-    return ticker.includes(q) || assetName.includes(q) || note.includes(q)
+    const accountName = t.account?.accountName?.toLowerCase() ?? ''
+    return ticker.includes(q) || assetName.includes(q) || note.includes(q) || accountName.includes(q)
   })
 
   // Group totals by currency (USD vs THB)
@@ -342,11 +354,31 @@ export default function TransactionsPage() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              className={`${inputClass} pl-9`}
+              className={`${inputClass} pl-9 ${search ? 'pr-8' : ''}`}
               placeholder="ค้นหา Ticker, ชื่อสินทรัพย์, โน้ต..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setDebouncedSearch(search)
+                  setPage(1)
+                }
+              }}
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('')
+                  setDebouncedSearch('')
+                  setPage(1)
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title="ล้างคำค้นหา"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
