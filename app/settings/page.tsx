@@ -387,6 +387,22 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+
+        {/* ─── SECTION 4: ABOUT & CREDITS ────────────────────────── */}
+        <div className="bg-[#12151C] border border-white/[0.08] rounded-2xl p-6 shadow-xl shadow-black/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-bold text-white tracking-wide">Investment Pro (Executive Edition)</h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              แพลตฟอร์มบริหารจัดการพอร์ตการลงทุน วิเคราะห์สินทรัพย์ และคาดการณ์ผลตอบแทนด้วย AI
+            </p>
+          </div>
+          <div className="text-left sm:text-right shrink-0">
+            <span className="text-[10px] text-slate-500 font-medium block">ผู้พัฒนาและออกแบบระบบ</span>
+            <span className="text-xs font-mono font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1 rounded-lg inline-block mt-0.5">
+              Created by MIKPURINUT
+            </span>
+          </div>
+        </div>
       </div>
     </AppShell>
   )

@@ -243,6 +243,13 @@ function LoginForm() {
             สมัครสมาชิก
           </Link>
         </p>
+
+        {/* Creator Credit */}
+        <div className="mt-8 pt-4 border-t border-white/[0.06] text-center">
+          <p className="text-[11px] text-slate-500 font-mono">
+            Created by <span className="text-slate-300 font-semibold">MIKPURINUT</span>
+          </p>
+        </div>
       </div>
     </div>
   )
