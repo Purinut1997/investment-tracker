@@ -101,7 +101,7 @@ function DashboardErrorState() {
 }
 
 export default function DashboardPage() {
-  const [timeframe, setTimeframe] = useState('6M')
+  const [timeframe, setTimeframe] = useState('1M')
   const { data: summary, error: summaryError, isLoading: sumLoading } = useSWR('/api/portfolio/summary', { refreshInterval: 60000 })
   const { data: holdingsData, error: holdingsError, isLoading: holdLoading } = useSWR('/api/portfolio/holdings', { refreshInterval: 60000 })
   const { data: accountsData, error: accountsError, isLoading: accLoading } = useSWR('/api/accounts')
@@ -187,9 +187,24 @@ export default function DashboardPage() {
   }))
 
   // Real performance milestones calculated from transactions vs S&P 500 benchmark
-  const performanceData: { month: string; value: number; benchmark: number }[] = Array.isArray(summary?.performanceData)
+  const allPerformanceData: { month: string; value: number; benchmark: number }[] = Array.isArray(summary?.performanceData)
     ? summary.performanceData
     : []
+
+  // Slice data according to selected timeframe
+  // performanceData is monthly (1 point per month), so map timeframe -> month count
+  const monthLimits: Record<string, number> = {
+    '1D': 2,   // show latest 2 months (no daily data available)
+    '1W': 2,   // show latest 2 months
+    '1M': 3,   // show latest 3 months
+    '6M': 6,   // show latest 6 months
+    '1Y': 12,  // show latest 12 months
+    'ALL': Infinity,
+  }
+  const limit = monthLimits[timeframe] ?? Infinity
+  const performanceData = limit === Infinity
+    ? allPerformanceData
+    : allPerformanceData.slice(-limit)
 
   const isHighGrade = (healthScore?.score ?? 0) >= 80
   const isMidGrade  = (healthScore?.score ?? 0) >= 60
