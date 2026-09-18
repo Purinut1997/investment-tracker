@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     prisma.transaction.findMany({
       where,
       include: {
-        asset: { select: { ticker: true, assetName: true, assetType: true, market: true } },
+        asset: { select: { ticker: true, assetName: true, assetType: true, market: true, currency: true } },
         account: { select: { accountName: true, currency: true } },
       },
       orderBy: { txnDate: 'desc' },
@@ -122,14 +122,76 @@ export async function POST(req: NextRequest) {
         source: data.source,
       },
       include: {
-        asset: { select: { ticker: true, assetName: true } },
-        account: { select: { accountName: true } },
+        asset: { select: { ticker: true, assetName: true, currency: true } },
+        account: { select: { accountName: true, currency: true } },
       },
     })
 
     return NextResponse.json(transaction, { status: 201 })
   } catch (error) {
     console.error('[transactions POST]', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const body = await req.json()
+    const { ids, clearAll, accountId, resetCashBalance } = body as {
+      ids?: string[]
+      clearAll?: boolean
+      accountId?: string
+      resetCashBalance?: boolean
+    }
+
+    // 1. Batch delete specific transaction IDs
+    if (Array.isArray(ids) && ids.length > 0) {
+      const result = await prisma.transaction.deleteMany({
+        where: {
+          id: { in: ids },
+          userId: session.user.id,
+        },
+      })
+      return NextResponse.json({ success: true, count: result.count })
+    }
+
+    // 2. Clear all transactions (scoped or global for user)
+    if (clearAll) {
+      const whereClause: any = { userId: session.user.id }
+      if (accountId && accountId !== 'ALL') {
+        whereClause.accountId = accountId
+      }
+
+      const result = await prisma.transaction.deleteMany({
+        where: whereClause,
+      })
+
+      // Optionally reset cash balance for the cleared account(s)
+      if (resetCashBalance) {
+        if (accountId && accountId !== 'ALL') {
+          await prisma.investmentAccount.update({
+            where: { id: accountId, userId: session.user.id },
+            data: { cashBalance: 0 },
+          })
+        } else {
+          await prisma.investmentAccount.updateMany({
+            where: { userId: session.user.id },
+            data: { cashBalance: 0 },
+          })
+        }
+      }
+
+      return NextResponse.json({ success: true, count: result.count })
+    }
+
+    return NextResponse.json({ error: 'Invalid delete request' }, { status: 400 })
+  } catch (error) {
+    console.error('[transactions DELETE]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

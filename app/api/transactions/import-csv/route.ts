@@ -1,6 +1,6 @@
 /**
  * POST /api/transactions/import-csv
- * Import transactions from CSV with duplicate detection.
+ * Import transactions from CSV with duplicate detection and smart wallet auto-routing.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -27,27 +27,77 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { accountId, rows } = body as { accountId: string; rows: CsvRow[] }
-
-    if (!accountId || !Array.isArray(rows) || rows.length === 0) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    const {
+      accountId,
+      autoRoute = true,
+      usdAccountId,
+      thbAccountId,
+      rows,
+    } = body as {
+      accountId?: string
+      autoRoute?: boolean
+      usdAccountId?: string
+      thbAccountId?: string
+      rows: CsvRow[]
     }
 
-    // Verify account ownership
-    const account = await prisma.investmentAccount.findFirst({
-      where: { id: accountId, userId: session.user.id },
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return NextResponse.json({ error: 'ไม่พบรายการข้อมูลในไฟล์' }, { status: 400 })
+    }
+
+    // Fetch user's existing accounts
+    const userAccounts = await prisma.investmentAccount.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: 'asc' },
     })
-    if (!account) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
+
+    if (userAccounts.length === 0) {
+      return NextResponse.json({ error: 'ไม่พบบัญชีลงทุนในระบบ กรุณาสร้างบัญชีก่อนนำเข้า' }, { status: 400 })
     }
 
-    const results = { imported: 0, skipped: 0, errors: [] as string[] }
+    // Resolve USD Account
+    let resolvedUsdAccount = userAccounts.find(
+      (a) => a.id === usdAccountId || a.currency === 'USD' || a.accountName.toLowerCase().includes('usd')
+    )
+
+    // If autoRoute is enabled and no USD account exists, automatically create Dime! USD
+    if (autoRoute && !resolvedUsdAccount) {
+      resolvedUsdAccount = await prisma.investmentAccount.create({
+        data: {
+          userId: session.user.id,
+          accountName: 'Dime! USD',
+          accountType: 'brokerage',
+          currency: 'USD',
+          cashBalance: 0,
+        },
+      })
+    }
+
+    // Resolve THB Account
+    const resolvedThbAccount =
+      userAccounts.find(
+        (a) => a.id === thbAccountId || a.accountName.toLowerCase().includes('save') || a.currency === 'THB'
+      ) ||
+      userAccounts.find((a) => a.currency === 'THB') ||
+      userAccounts[0]
+
+    // Fallback single account
+    const fallbackAccount =
+      userAccounts.find((a) => a.id === accountId) || resolvedThbAccount || userAccounts[0]
+
+    const results = {
+      imported: 0,
+      skipped: 0,
+      usdCount: 0,
+      thbCount: 0,
+      errors: [] as string[],
+    }
 
     for (const [i, row] of rows.entries()) {
       try {
         const txnDate = new Date(row.txnDate)
         if (isNaN(txnDate.getTime())) {
-          results.errors.push(`Row ${i + 1}: วันที่ไม่ถูกต้อง "${row.txnDate}"`)
+          results.errors.push(`แถวที่ ${i + 1}: วันที่ไม่ถูกต้อง "${row.txnDate}"`)
           continue
         }
 
@@ -57,38 +107,71 @@ export async function POST(req: NextRequest) {
         const taxWithheld = parseFloat(row.taxWithheld ?? '0') || 0
 
         if (isNaN(quantity) || isNaN(pricePerUnit)) {
-          results.errors.push(`Row ${i + 1}: จำนวนหรือราคาไม่ถูกต้อง`)
+          results.errors.push(`แถวที่ ${i + 1}: จำนวนหรือราคาไม่ถูกต้อง`)
           continue
+        }
+
+        const rawTicker = (row.ticker || '').trim().toUpperCase()
+        if (!rawTicker) {
+          results.errors.push(`แถวที่ ${i + 1}: ไม่พบรหัสหุ้น (Ticker)`)
+          continue
+        }
+
+        // Determine Market & Currency
+        const explicitMarket = (row.market || '').trim().toUpperCase()
+        const isExplicitTh = explicitMarket === 'TH' || rawTicker.endsWith('.BK')
+        const isUs = !isExplicitTh // Default to US if not explicit Thai (Dime is mostly US equities for foreign stocks)
+
+        const resolvedMarket = isUs ? 'US' : 'TH'
+        const resolvedCurrency = isUs ? 'USD' : 'THB'
+
+        // Choose target account based on autoRoute
+        let targetAccount = fallbackAccount
+        if (autoRoute) {
+          if (isUs && resolvedUsdAccount) {
+            targetAccount = resolvedUsdAccount
+          } else if (!isUs && resolvedThbAccount) {
+            targetAccount = resolvedThbAccount
+          }
         }
 
         // Find or create asset
         let asset = await prisma.asset.findFirst({
           where: {
-            ticker: row.ticker.toUpperCase(),
-            ...(row.market && { market: row.market as any }),
+            ticker: rawTicker,
+            market: resolvedMarket as any,
           },
         })
 
         if (!asset) {
           asset = await prisma.asset.create({
             data: {
-              ticker: row.ticker.toUpperCase(),
-              assetName: row.ticker.toUpperCase(),
+              ticker: rawTicker,
+              assetName: rawTicker,
               assetType: 'stock',
-              market: (row.market as any) ?? 'US',
-              currency: account.currency,
+              market: resolvedMarket as any,
+              currency: resolvedCurrency,
             },
+          })
+        } else if (resolvedMarket === 'US' && asset.currency !== 'USD') {
+          // Auto-heal existing asset currency if it was wrongly saved as THB before
+          asset = await prisma.asset.update({
+            where: { id: asset.id },
+            data: { currency: 'USD', market: 'US' },
           })
         }
 
-        // Duplicate detection: same date + asset + quantity + price
+        // Duplicate detection: same date + asset + quantity + price (approx within 1 min or exact)
         const duplicate = await prisma.transaction.findFirst({
           where: {
             userId: session.user.id,
             assetId: asset.id,
-            txnDate: txnDate,
             quantity: quantity,
             pricePerUnit: pricePerUnit,
+            txnDate: {
+              gte: new Date(txnDate.getTime() - 60000),
+              lte: new Date(txnDate.getTime() + 60000),
+            },
           },
         })
 
@@ -108,7 +191,7 @@ export async function POST(req: NextRequest) {
         await prisma.transaction.create({
           data: {
             userId: session.user.id,
-            accountId,
+            accountId: targetAccount.id,
             assetId: asset.id,
             txnDate,
             txnType: upperType,
@@ -122,29 +205,33 @@ export async function POST(req: NextRequest) {
           },
         })
 
-        // Adjust cash balance of the account
+        // Adjust cash balance of the target account
         let cashDelta = 0
         if (upperType === 'BUY' || upperType === 'WITHDRAW' || upperType === 'FEE') {
           cashDelta = -totalAmount
         } else if (upperType === 'SELL' || upperType === 'DEPOSIT' || upperType === 'DIVIDEND') {
           cashDelta = totalAmount
         }
+
         if (cashDelta !== 0) {
           await prisma.investmentAccount.update({
-            where: { id: accountId },
+            where: { id: targetAccount.id },
             data: { cashBalance: { increment: cashDelta } },
           })
         }
 
+        if (isUs) results.usdCount++
+        else results.thbCount++
+
         results.imported++
-      } catch (rowError) {
-        results.errors.push(`Row ${i + 1}: ${String(rowError)}`)
+      } catch (rowError: any) {
+        results.errors.push(`แถวที่ ${i + 1}: ${rowError?.message || String(rowError)}`)
       }
     }
 
     return NextResponse.json(results)
   } catch (error) {
     console.error('[import-csv]', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'เกิดข้อผิดพลาดภายในระบบ' }, { status: 500 })
   }
 }
