@@ -213,6 +213,28 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* ─── Vivid Profit / Loss / Status Styles inside Custom Table ─── */
+.custom-table .text-emerald-400,
+.custom-table td.text-emerald-400,
+.custom-table td .text-emerald-400 {
+  color: #34d399 !important;
+}
+.custom-table .text-emerald-300,
+.custom-table td.text-emerald-300,
+.custom-table td .text-emerald-300 {
+  color: #6ee7b7 !important;
+}
+.custom-table .text-rose-400,
+.custom-table td.text-rose-400,
+.custom-table td .text-rose-400 {
+  color: #fb7185 !important;
+}
+.custom-table .text-rose-300,
+.custom-table td.text-rose-300,
+.custom-table td .text-rose-300 {
+  color: #fda4af !important;
+}
+
 /* ─── Shared UI & Legacy Compatibility Tokens ────────────────── */
 .card {
   background: var(--bg-surface);

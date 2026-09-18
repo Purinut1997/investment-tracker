@@ -18,8 +18,10 @@ import {
   Coins,
   Activity,
   RefreshCw,
-  Check
+  Check,
+  ExternalLink
 } from 'lucide-react'
+import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
   ResponsiveContainer,
   PieChart,
@@ -102,6 +104,11 @@ function DashboardErrorState() {
 
 export default function DashboardPage() {
   const [timeframe, setTimeframe] = useState('1M')
+  const [selectedStock, setSelectedStock] = useState<{
+    symbol: string
+    name?: string
+    market?: string
+  } | null>(null)
   const { data: summary, error: summaryError, isLoading: sumLoading } = useSWR('/api/portfolio/summary', { refreshInterval: 60000 })
   const { data: holdingsData, error: holdingsError, isLoading: holdLoading } = useSWR('/api/portfolio/holdings', { refreshInterval: 60000 })
   const { data: accountsData, error: accountsError, isLoading: accLoading } = useSWR('/api/accounts')
@@ -586,9 +593,14 @@ export default function DashboardPage() {
 
         {/* ── BOTTOM ROW: HOLDINGS TABLE ─────────────────────── */}
         <div className="glass-panel rounded-3xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/40">
+          <div className="px-6 py-4 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 bg-slate-900/40">
             <div>
-              <h3 className="text-sm font-bold text-white tracking-wide">สินทรัพย์ที่ถือครองในพอร์ต (Holdings)</h3>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h3 className="text-sm sm:text-base font-bold text-white tracking-wide">สินทรัพย์ที่ถือครองในพอร์ต (Holdings)</h3>
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-full">
+                  💡 คลิกที่รายการเพื่อดูการ์ดหุ้น & กราฟเทคนิค
+                </span>
+              </div>
               <p className="text-xs text-slate-400 mt-0.5">แสดงรายการสินทรัพย์ ต้นทุน ราคาปิดตลาดล่าสุด และกำไรขาดทุนสะสม</p>
             </div>
             <div className="flex items-center gap-2.5">
@@ -627,14 +639,14 @@ export default function DashboardPage() {
               <table className="custom-table text-left">
                 <thead>
                   <tr>
-                    <th>สินทรัพย์</th>
-                    <th className="hidden sm:table-cell">ตลาด</th>
-                    <th className="text-center hidden md:table-cell">แนวโน้ม</th>
-                    <th className="text-right">จำนวน</th>
-                    <th className="text-right hidden lg:table-cell">ต้นทุนเฉลี่ย</th>
-                    <th className="text-right">ราคาปัจจุบัน</th>
-                    <th className="text-right">มูลค่ารวม</th>
-                    <th className="text-right hidden sm:table-cell">กำไร/ขาดทุน</th>
+                    <th className="!text-xs !font-bold !text-slate-300">สินทรัพย์</th>
+                    <th className="hidden sm:table-cell !text-xs !font-bold !text-slate-300">ตลาด</th>
+                    <th className="text-center hidden md:table-cell !text-xs !font-bold !text-slate-300">แนวโน้ม</th>
+                    <th className="text-right !text-xs !font-bold !text-slate-300">จำนวน</th>
+                    <th className="text-right hidden lg:table-cell !text-xs !font-bold !text-slate-300">ต้นทุนเฉลี่ย</th>
+                    <th className="text-right !text-xs !font-bold !text-slate-300">ราคาปัจจุบัน</th>
+                    <th className="text-right !text-xs !font-bold !text-slate-300">มูลค่ารวม</th>
+                    <th className="text-right hidden sm:table-cell !text-xs !font-bold !text-slate-300">กำไร/ขาดทุน</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -643,51 +655,85 @@ export default function DashboardPage() {
                     const sym = isUsd ? '$' : '฿'
                     const hProfit = (h.unrealizedPnLBase ?? h.unrealizedPnL) >= 0
                     return (
-                      <tr key={h.assetId} className="transition-colors group">
+                      <tr 
+                        key={h.assetId} 
+                        onClick={() => setSelectedStock({
+                          symbol: h.ticker,
+                          name: h.assetName,
+                          market: h.market || (isUsd ? 'US' : 'TH')
+                        })}
+                        className="transition-all duration-150 group cursor-pointer hover:bg-indigo-950/25 border-b border-slate-800/40"
+                        title={`คลิกเพื่อดูการ์ดหุ้นและกราฟเทคนิค ${h.ticker}`}
+                      >
                         <td>
                           <div className="flex items-center gap-3">
-                            <StockLogo ticker={h.ticker} name={h.assetName} size={34} />
+                            <StockLogo ticker={h.ticker} name={h.assetName} size={38} />
                             <div className="min-w-0">
-                              <div className="font-bold text-white group-hover:text-indigo-300 transition-colors">{h.ticker}</div>
-                              <div className="text-[11px] text-slate-400 truncate max-w-[140px]">{h.assetName}</div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-extrabold text-sm sm:text-base text-white group-hover:text-indigo-300 transition-colors tracking-tight">
+                                  {h.ticker}
+                                </span>
+                                <span className="hidden group-hover:inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-300 bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded transition-all">
+                                  การ์ดหุ้น <ExternalLink className="w-2.5 h-2.5" />
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-300 truncate max-w-[150px] sm:max-w-[200px] mt-0.5 font-medium">
+                                {h.assetName}
+                              </div>
                             </div>
                           </div>
                         </td>
                         <td className="hidden sm:table-cell">
-                          <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-md border ${isUsd ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-slate-800/80 text-slate-300 border-slate-700/60'}`}>
+                          <span className={`text-xs font-mono font-bold uppercase px-2.5 py-1 rounded-md border ${
+                            isUsd ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
+                          }`}>
                             {h.market || (isUsd ? 'US' : 'TH')}
                           </span>
                         </td>
                         <td className="text-center hidden md:table-cell">
                           <div className="flex justify-center">
-                            <Sparkline seed={h.ticker} trend={hProfit ? 'up' : 'down'} width={56} height={18} />
+                            <Sparkline seed={h.ticker} trend={hProfit ? 'up' : 'down'} width={60} height={20} />
                           </div>
                         </td>
-                        <td className="text-right font-mono text-xs text-slate-200" title={String(h.quantity)}>
+                        <td className="text-right font-mono text-sm font-semibold text-slate-100" title={String(h.quantity)}>
                           {Number(h.quantity).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}
                         </td>
-                        <td className="text-right font-mono text-xs text-slate-300 hidden lg:table-cell" title={`${sym}${Number(h.avgCost).toFixed(4)}`}>
+                        <td className="text-right font-mono text-sm font-semibold text-slate-200 hidden lg:table-cell" title={`${sym}${Number(h.avgCost).toFixed(4)}`}>
                           {sym}{Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                         </td>
-                        <td className="text-right font-mono text-xs text-white font-semibold">
+                        <td className="text-right font-mono text-sm sm:text-base text-white font-bold">
                           {sym}{Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="text-right font-mono text-sm font-bold text-white">
-                          <div>฿{Number(h.currentValueBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        <td className="text-right font-mono">
+                          <div className="text-sm sm:text-base font-extrabold text-white">
+                            ฿{Number(h.currentValueBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
                           {isUsd && (
-                            <div className="text-[10px] text-indigo-400 font-normal mt-0.5">
+                            <div className="text-xs text-indigo-400 font-semibold mt-0.5">
                               ${Number(h.currentValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           )}
                         </td>
-                        <td className={`text-right font-mono text-xs hidden sm:table-cell ${hProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          <div className="font-bold">
+                        <td className="text-right font-mono hidden sm:table-cell">
+                          {/* Main Profit/Loss Amount - prominent font and bright green/red */}
+                          <div className={`text-sm sm:text-base font-extrabold tracking-tight ${
+                            hProfit ? 'text-emerald-400 !text-emerald-400' : 'text-rose-400 !text-rose-400'
+                          }`}>
                             {hProfit ? '+' : ''}{sym}{Number(h.unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
-                          <div className="text-[10px] opacity-80 mt-0.5 flex items-center justify-end gap-1">
-                            <span>{hProfit ? '+' : ''}{h.unrealizedPnLPercent.toFixed(2)}%</span>
+                          {/* Percentage badge and converted THB amount */}
+                          <div className="mt-1 flex items-center justify-end gap-1.5 flex-wrap">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold border ${
+                              hProfit
+                                ? 'bg-emerald-500/15 text-emerald-300 !text-emerald-300 border-emerald-500/30'
+                                : 'bg-rose-500/15 text-rose-300 !text-rose-300 border-rose-500/30'
+                            }`}>
+                              {hProfit ? '+' : ''}{h.unrealizedPnLPercent.toFixed(2)}%
+                            </span>
                             {isUsd && (
-                              <span className="text-slate-400">
+                              <span className={`text-xs font-semibold ${
+                                hProfit ? 'text-emerald-400/90 !text-emerald-400/90' : 'text-rose-400/90 !text-rose-400/90'
+                              }`}>
                                 (≈ {hProfit ? '+' : ''}฿{Number(h.unrealizedPnLBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                               </span>
                             )}
@@ -714,6 +760,15 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* Interactive Stock Detail & Technical Insights Modal */}
+        <StockDetailModal
+          isOpen={Boolean(selectedStock)}
+          onClose={() => setSelectedStock(null)}
+          symbol={selectedStock?.symbol ?? null}
+          initialName={selectedStock?.name}
+          market={selectedStock?.market}
+        />
 
       </div>
     </AppShell>

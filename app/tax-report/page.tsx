@@ -42,6 +42,8 @@ export default function TaxReportPage() {
   const [selectedYear, setSelectedYear] = useState<number>(currentYear)
   // showTHB = true -> show THB equivalent everywhere, false -> show native currency (USD for US stocks)
   const [showTHB, setShowTHB] = useState(false)
+  // repatriated = true -> user brought money back to Thailand (affects tax liability for foreign gains)
+  const [repatriated, setRepatriated] = useState(false)
 
   const { data: report, isLoading, error } = useSWR(`/api/tax-report/generate?year=${selectedYear}`)
 
@@ -120,6 +122,7 @@ export default function TaxReportPage() {
         body: JSON.stringify({
           year: selectedYear,
           usdThbRate,
+          repatriated,
           dividends: {
             totalDividendGrossUSD: report.dividends.totalDividendGrossUSD,
             totalTaxWithheldUSD: report.dividends.totalTaxWithheldUSD,
@@ -206,26 +209,49 @@ export default function TaxReportPage() {
           }
         />
 
-        {/* Legal Disclaimer Banner */}
+        {/* Legal Disclaimer Banner — correct Thai tax rules per ป.161/2566 */}
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3 text-xs text-amber-200/90 leading-relaxed shadow-lg shadow-amber-500/5">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold text-amber-300">ข้อควรทราบทางกฎหมายและการยื่นแบบภาษี:</span>
-            <p className="mt-0.5">
-              รายงานนี้สร้างขึ้นเพื่ออำนวยความสะดวกในการจัดระเบียบข้อมูลการลงทุนส่วนบุคคลด้วยวิธีเข้าก่อน-ออกก่อน (FIFO) เท่านั้น ไม่ถือเป็นการยื่นแบบภาษีจริง และคำอธิบายจาก AI ไม่ใช่คำแนะนำทางกฎหมาย ผู้เสียภาษีมีหน้าที่ตรวจสอบความถูกต้องกับเอกสารรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ) จากโบรกเกอร์ก่อนยื่นต่อกรมสรรพากร
+            <span className="font-bold text-amber-300">ข้อควรทราบทางภาษีตาม ป.161/2566 (กรมสรรพากร):</span>
+            <p className="mt-1 leading-relaxed">
+              <span className="text-amber-200 font-semibold">กำไรหุ้นต่างประเทศ (Capital Gains):</span>{' '}
+              นักลงทุนต่างชาติไม่มีภาระภาษีในสหรัฐฯ •{' '}
+              เงินที่ลงทุน<span className="font-semibold">ก่อนปี 2567</span> และ<span className="font-semibold">ไม่นำกลับไทย</span> → ไม่ต้องเสียภาษีไทย •{' '}
+              เงินที่ลงทุน<span className="font-semibold">ตั้งแต่ปี 2567</span> → ต้องยื่นภาษีไทยไม่ว่าจะนำกลับหรือไม่
+            </p>
+            <p className="mt-1">
+              <span className="text-amber-200 font-semibold">เงินปันผล:</span>{' '}
+              ถูกหัก ณ ที่จ่าย 15% (W-8BEN) ในสหรัฐฯ — สามารถนำมาเป็นเครดิตภาษีไทยได้
             </p>
           </div>
         </div>
 
-        {/* FX Rate info bar */}
+        {/* Info bar: FX Rate + Repatriation toggle */}
         {report && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#181C25] border border-white/[0.06] w-fit text-xs text-slate-400">
-            <span className="text-slate-500">อัตราแลกเปลี่ยนอ้างอิง:</span>
-            <span className="font-mono font-semibold text-slate-300">1 USD = ฿{usdThbRate.toFixed(2)} THB</span>
-            <span className="w-px h-4 bg-white/10 mx-1" />
-            <span className={showTHB ? 'text-amber-400 font-semibold' : 'text-slate-500'}>
-              {showTHB ? '⚡ โหมดแสดงผลแบบเงินบาท' : 'โหมดแสดงสกุลเงินเดิม'}
-            </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#181C25] border border-white/[0.06] text-xs text-slate-400">
+              <span className="text-slate-500">อัตราแลกเปลี่ยนอ้างอิง:</span>
+              <span className="font-mono font-semibold text-slate-300">1 USD = ฿{usdThbRate.toFixed(2)} THB</span>
+              <span className="w-px h-4 bg-white/10 mx-1" />
+              <span className={showTHB ? 'text-amber-400 font-semibold' : 'text-slate-500'}>
+                {showTHB ? '⚡ โหมดเงินบาท' : 'โหมดสกุลเงินเดิม'}
+              </span>
+            </div>
+            {/* Repatriation toggle — key for correct tax liability display */}
+            <button
+              type="button"
+              onClick={() => { setRepatriated(v => !v); setAiExplanation(null) }}
+              className={`text-xs font-semibold px-3 py-2 rounded-xl border flex items-center gap-2 transition-all cursor-pointer ${
+                repatriated
+                  ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+              }`}
+              title="กดเพื่อบอกระบบว่าคุณนำเงินกลับไทยหรือไม่ — ส่งผลต่อการแสดงภาระภาษี"
+            >
+              <span>{repatriated ? '🔴' : '🟢'}</span>
+              <span>{repatriated ? 'นำเงินกลับไทยแล้ว → มีภาระภาษีไทย' : 'ยังไม่นำเงินกลับไทย → ไม่มีภาระภาษีไทย (ก่อนปี 2567)'}</span>
+            </button>
           </div>
         )}
 
@@ -268,7 +294,7 @@ export default function TaxReportPage() {
               </div>
               <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
                 <div className="flex justify-between">
-                  <span>ภาษีหัก ณ ที่จ่าย (10%):</span>
+                  <span>ภาษีหัก ณ ที่จ่าย W-8BEN (15% สหรัฐฯ):</span>
                   <span className="font-bold text-rose-400">
                     {showTHB
                       ? `-฿${Number(report.dividends.totalTaxWithheldTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
@@ -315,47 +341,80 @@ export default function TaxReportPage() {
             </div>
 
             {/* Category 3: Foreign & Crypto Gains */}
-            <div className="p-6 rounded-2xl bg-[#12151C] border border-white/[0.08] space-y-4 flex flex-col justify-between min-h-[160px] shadow-xl shadow-black/30">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
-                  <Receipt className="w-4 h-4" /> กำไรหุ้นต่างประเทศและคริปโต
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 font-mono text-slate-400">
-                  {report.foreignAndCryptoGains.trades.length} รายการขาย
-                </span>
-              </div>
-              <div>
-                <span className="text-xs text-slate-400">กำไรรับรู้จริงสะสม (FIFO Realized)</span>
-                <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono mt-0.5">
-                  {showTHB
-                    ? `฿${Number(report.foreignAndCryptoGains.totalRealizedGainTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-                    : `$${Number(report.foreignAndCryptoGains.totalRealizedGainUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+            {(() => {
+              const isNewRuleYear = selectedYear >= 2024
+              const isTaxableInThailand = isNewRuleYear || repatriated
+              const hasForeignGain = report.foreignAndCryptoGains.trades.length > 0
+              return (
+                <div className="p-6 rounded-2xl bg-[#12151C] border border-white/[0.08] space-y-4 flex flex-col justify-between min-h-[160px] shadow-xl shadow-black/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-blue-400 flex items-center gap-1.5">
+                      <Receipt className="w-4 h-4" /> กำไรหุ้นต่างประเทศและคริปโต
+                    </span>
+                    {hasForeignGain ? (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-mono border font-semibold ${
+                        isTaxableInThailand
+                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      }`}>
+                        {isTaxableInThailand
+                          ? isNewRuleYear ? '⚠️ ต้องยื่นภาษีไทย (ปี 2567+)' : '⚠️ นำเงินกลับไทย'
+                          : '✅ ไม่ต้องเสียภาษีไทย'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 font-mono text-slate-400">
+                        {report.foreignAndCryptoGains.trades.length} รายการขาย
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400">กำไรรับรู้จริงสะสม (FIFO Realized) — บันทึกเพื่อวางแผนภาษี</span>
+                    <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono mt-0.5">
+                      {showTHB
+                        ? `฿${Number(report.foreignAndCryptoGains.totalRealizedGainTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                        : `$${Number(report.foreignAndCryptoGains.totalRealizedGainUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                    </div>
+                    {!showTHB && (
+                      <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        ≈ ฿{Number(report.foreignAndCryptoGains.totalRealizedGainTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })} THB
+                      </p>
+                    )}
+                    {/* Tax note */}
+                    <p className={`text-[11px] mt-1.5 font-semibold ${
+                      isTaxableInThailand ? 'text-rose-400' : 'text-emerald-400'
+                    }`}>
+                      {isTaxableInThailand
+                        ? isNewRuleYear
+                          ? '⚠️ ปี 2567+ ต้องยื่นภาษีเงินได้บุคคลธรรมดาไทย (ก้าวหน้า 0-35%)'
+                          : '⚠️ นำเงินกลับไทย → ต้องยื่นภาษี ภ.ง.ด. (อัตราก้าวหน้า 0-35%)'
+                        : '✅ ยังไม่นำเงินกลับไทย + ลงทุนก่อนปี 2567 → ไม่มีภาระภาษีไทย'}
+                    </p>
+                  </div>
+                  <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
+                    <div className="flex justify-between">
+                      <span>ยอดขายรวม:</span>
+                      <span className="font-bold text-white">
+                        {showTHB
+                          ? `฿${Number(report.foreignAndCryptoGains.totalProceedsTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                          : `$${Number(report.foreignAndCryptoGains.totalProceedsUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>ต้นทุน FIFO:</span>
+                      <span className="font-bold text-slate-300">
+                        {showTHB
+                          ? `฿${Number(report.foreignAndCryptoGains.totalCostTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                          : `$${Number(report.foreignAndCryptoGains.totalCostUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">ภาษีสหรัฐฯ (Capital Gains):</span>
+                      <span className="text-emerald-400 font-bold">ไม่ต้องเสีย $0</span>
+                    </div>
+                  </div>
                 </div>
-                {!showTHB && (
-                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                    ≈ ฿{Number(report.foreignAndCryptoGains.totalRealizedGainTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })} THB
-                  </p>
-                )}
-              </div>
-              <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
-                <div className="flex justify-between">
-                  <span>ยอดขายรวม:</span>
-                  <span className="font-bold text-white">
-                    {showTHB
-                      ? `฿${Number(report.foreignAndCryptoGains.totalProceedsTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-                      : `$${Number(report.foreignAndCryptoGains.totalProceedsUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>ต้นทุน FIFO:</span>
-                  <span className="font-bold text-slate-300">
-                    {showTHB
-                      ? `฿${Number(report.foreignAndCryptoGains.totalCostTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-                      : `$${Number(report.foreignAndCryptoGains.totalCostUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                  </span>
-                </div>
-              </div>
-            </div>
+              )
+            })()}
           </div>
         ) : null}
 
