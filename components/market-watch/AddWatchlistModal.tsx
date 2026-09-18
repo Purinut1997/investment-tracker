@@ -68,6 +68,7 @@ export function AddWatchlistModal({
   const [category, setCategory] = useState<MarketCategory>('US')
   const [searchQuery, setSearchQuery] = useState('')
   const [customName, setCustomName] = useState('')
+  const [hasUserEditedName, setHasUserEditedName] = useState(false)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [previewQuote, setPreviewQuote] = useState<MarketQuote | null>(null)
   const [detectedItemType, setDetectedItemType] = useState<string>('stock')
@@ -81,6 +82,7 @@ export function AddWatchlistModal({
     if (isOpen) {
       setSearchQuery('')
       setCustomName('')
+      setHasUserEditedName(false)
       setPreviewQuote(null)
       setErrorMessage(null)
       setHasSearched(false)
@@ -125,7 +127,7 @@ export function AddWatchlistModal({
         setPreviewQuote(data.previewQuote)
         setDetectedItemType(data.itemType || typeParam)
         setResolvedMarket(data.market || (cat === 'TH' ? 'TH' : 'US'))
-        if (!customName) {
+        if (!hasUserEditedName) {
           setCustomName(data.previewQuote.name || '')
         }
       } else {
@@ -138,7 +140,7 @@ export function AddWatchlistModal({
     } finally {
       setIsLoadingPreview(false)
     }
-  }, [customName])
+  }, [hasUserEditedName])
 
   // Effect for typing debounce
   useEffect(() => {
@@ -167,6 +169,7 @@ export function AddWatchlistModal({
   const handleSelectSuggestion = (sym: string) => {
     setSearchQuery(sym)
     setCustomName('')
+    setHasUserEditedName(false)
     fetchLiveQuote(sym, category)
   }
 
@@ -412,7 +415,10 @@ export function AddWatchlistModal({
                 <input
                   type="text"
                   value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
+                  onChange={(e) => {
+                    setCustomName(e.target.value)
+                    setHasUserEditedName(true)
+                  }}
                   placeholder="เช่น NVIDIA, ปตท., หรือชื่อที่ต้องการ"
                   className="w-full bg-[#12151C] border border-white/[0.08] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
                 />

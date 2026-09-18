@@ -555,67 +555,51 @@ function WatchlistCard({
   const isZero = changePercent === 0
 
   return (
-    <div className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-amber-500/20 hover:border-amber-500/40 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[135px] relative">
+    <div className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-amber-500/20 hover:border-amber-500/40 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[148px] relative">
+      {/* Top Header: Badge & Delete Button */}
       <div>
-        <div className="flex items-start justify-between mb-2">
-          <div className="min-w-0 pr-2">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-white text-base group-hover:text-amber-300 transition-colors truncate font-mono">
-                {item.symbol}
-              </span>
-              <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold">
-                {item.market === 'TH'
-                  ? 'TH'
-                  : item.itemType === 'crypto'
-                  ? 'CRYPTO'
-                  : item.itemType === 'gold'
-                  ? 'GOLD'
-                  : 'US'}
-              </span>
-            </div>
-            <span className="text-[11px] text-slate-400 truncate block mt-1">
-              {item.displayName || quote?.name || item.symbol}
-            </span>
-          </div>
+        <div className="flex items-center justify-between gap-2 mb-2.5">
+          <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold tracking-wider">
+            {item.market === 'TH'
+              ? 'TH'
+              : item.itemType === 'crypto'
+              ? 'CRYPTO'
+              : item.itemType === 'gold'
+              ? 'GOLD'
+              : 'US'}
+          </span>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            {/* Change badge */}
-            <span
-              className={`flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold border ${
-                isZero
-                  ? 'bg-slate-800 text-slate-400 border-slate-700'
-                  : isPositive
-                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                  : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-              }`}
-            >
-              {isPositive ? (
-                <ArrowUpRight className="w-3 h-3" />
-              ) : (
-                <ArrowDownRight className="w-3 h-3" />
-              )}
-              {isPositive ? '+' : ''}
-              {changePercent.toFixed(2)}%
-            </span>
+          {/* Unstar / Delete Button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            title="ถอนออกจากรายการจับตา"
+            className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 flex items-center justify-center transition-all cursor-pointer opacity-70 hover:opacity-100 shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
-            {/* Unstar / Delete Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete()
-              }}
-              title="ถอนออกจากรายการจับตา"
-              className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 flex items-center justify-center transition-all cursor-pointer opacity-70 hover:opacity-100"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        {/* Ticker Symbol & Company Name (Full Width, never squeezed by buttons) */}
+        <div className="min-w-0">
+          <h4 className="font-bold text-white text-base sm:text-lg group-hover:text-amber-300 transition-colors font-mono tracking-tight truncate">
+            {item.symbol}
+          </h4>
+          <p
+            className="text-[11px] text-slate-400 truncate mt-0.5 font-normal"
+            title={item.displayName || quote?.name || item.symbol}
+          >
+            {item.displayName || quote?.name || item.symbol}
+          </p>
         </div>
       </div>
 
-      <div className="mt-3 pt-2.5 border-t border-white/[0.04] flex items-baseline justify-between">
-        <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums">
+      {/* Bottom Row: Price and % Change */}
+      <div className="mt-3 pt-2.5 border-t border-white/[0.05] flex items-center justify-between gap-1">
+        <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums tracking-tight">
           {price !== undefined ? (
             <>
               {quote?.currency === 'THB' ? '฿' : '$'}
@@ -625,11 +609,26 @@ function WatchlistCard({
               })}
             </>
           ) : (
-            <span className="text-slate-500 text-sm font-normal">กำลังดึงราคา...</span>
+            <span className="text-slate-500 text-xs font-normal">กำลังดึงราคา...</span>
           )}
         </span>
-        <span className="text-[10px] text-slate-500 font-mono uppercase">
-          {quote?.currency ?? 'USD'}
+
+        <span
+          className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border shrink-0 ${
+            isZero
+              ? 'bg-slate-800 text-slate-400 border-slate-700'
+              : isPositive
+              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+              : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+          }`}
+        >
+          {isPositive ? (
+            <ArrowUpRight className="w-3 h-3" />
+          ) : (
+            <ArrowDownRight className="w-3 h-3" />
+          )}
+          {isPositive ? '+' : ''}
+          {changePercent.toFixed(2)}%
         </span>
       </div>
     </div>
