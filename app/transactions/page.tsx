@@ -547,6 +547,7 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
           quantity: (r.quantity || r.Quantity || r.Shares || r.shares || '0').toString(),
           pricePerUnit: (r.pricePerUnit || r.Price || r.price || '0').toString(),
           fee: (r.fee || r.Fee || '0').toString(),
+          taxWithheld: (r.taxWithheld || r.TaxWithheld || r.tax || '0').toString(),
           note: r.note || r.Note || '',
         }))
         setRows(parsedRows)

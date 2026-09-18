@@ -97,7 +97,13 @@ export async function POST(req: NextRequest) {
           continue
         }
 
-        const totalAmount = quantity * pricePerUnit + fee
+        const upperType = (row.txnType?.toUpperCase() ?? 'BUY') as any
+        let totalAmount = quantity * pricePerUnit + fee
+        if (upperType === 'SELL') {
+          totalAmount = Math.max(0, quantity * pricePerUnit - fee)
+        } else if (upperType === 'DIVIDEND') {
+          totalAmount = Math.max(0, quantity * pricePerUnit - taxWithheld)
+        }
 
         await prisma.transaction.create({
           data: {
@@ -105,7 +111,7 @@ export async function POST(req: NextRequest) {
             accountId,
             assetId: asset.id,
             txnDate,
-            txnType: (row.txnType?.toUpperCase() ?? 'BUY') as any,
+            txnType: upperType,
             quantity,
             pricePerUnit,
             fee,
@@ -115,6 +121,20 @@ export async function POST(req: NextRequest) {
             source: 'csv_import',
           },
         })
+
+        // Adjust cash balance of the account
+        let cashDelta = 0
+        if (upperType === 'BUY' || upperType === 'WITHDRAW' || upperType === 'FEE') {
+          cashDelta = -totalAmount
+        } else if (upperType === 'SELL' || upperType === 'DEPOSIT' || upperType === 'DIVIDEND') {
+          cashDelta = totalAmount
+        }
+        if (cashDelta !== 0) {
+          await prisma.investmentAccount.update({
+            where: { id: accountId },
+            data: { cashBalance: { increment: cashDelta } },
+          })
+        }
 
         results.imported++
       } catch (rowError) {
