@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import useSWR from 'swr'
 import {
   X,
@@ -62,6 +63,23 @@ export function StockDetailModal({
   const [aiInsight, setAiInsight] = useState<string | null>(null)
   const [aiModelUsed, setAiModelUsed] = useState<string | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Lock background body scroll while modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
 
   // Reset state when modal opens or symbol changes
   useEffect(() => {
@@ -180,21 +198,21 @@ export function StockDetailModal({
     }
   }
 
-  if (!isOpen || !symbol) return null
+  if (!isOpen || !symbol || !mounted) return null
 
   const currencySymbol = data?.currency === 'THB' ? '฿' : '$'
   const isPositive = (data?.changePercent ?? 0) >= 0
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 animate-fade-in">
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity"
+        className="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity"
         onClick={onClose}
       />
 
-      {/* Modal Dialog (Slide-up on mobile, center card on desktop) */}
-      <div className="relative w-full max-w-2xl bg-[#0F1218] border border-white/[0.12] rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-black/90 z-10 flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden">
+      {/* Modal Dialog (Center card on all screens with smooth entrance) */}
+      <div className="relative w-full max-w-2xl bg-[#0F1218] border border-white/[0.12] rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/95 z-10 flex flex-col max-h-[90vh] sm:max-h-[88vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Glow Accent */}
         <div
           className={`absolute top-0 right-1/4 -translate-y-1/2 w-80 h-36 rounded-full blur-3xl pointer-events-none ${
@@ -879,4 +897,6 @@ export function StockDetailModal({
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }

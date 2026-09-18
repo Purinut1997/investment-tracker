@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X,
   Search,
@@ -72,6 +73,25 @@ export function AddWatchlistModal({
   const [hasUserEditedName, setHasUserEditedName] = useState(false)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [previewQuote, setPreviewQuote] = useState<MarketQuote | null>(null)
+  const [selectedAssetType, setSelectedAssetType] = useState<string>('all')
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
+
   const [detectedItemType, setDetectedItemType] = useState<string>('stock')
   const [resolvedMarket, setResolvedMarket] = useState<string>('US')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -219,16 +239,18 @@ export function AddWatchlistModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-fade-in">
+  if (!isOpen || !mounted) return null
+
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity"
+        className="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity"
         onClick={onClose}
       />
 
       {/* Modal Dialog */}
-      <div className="relative w-full max-w-xl bg-[#12151C] border border-white/[0.12] rounded-3xl shadow-2xl shadow-black/80 p-6 sm:p-7 overflow-hidden z-10 flex flex-col gap-5 max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-xl bg-[#12151C] border border-white/[0.12] rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/95 p-6 sm:p-7 overflow-hidden z-10 flex flex-col gap-5 max-h-[90vh] overflow-y-auto my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Glow Accent */}
         <div className="absolute top-0 right-1/4 -translate-y-1/2 w-72 h-36 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -479,4 +501,6 @@ export function AddWatchlistModal({
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }
