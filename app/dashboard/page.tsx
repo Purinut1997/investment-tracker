@@ -631,11 +631,11 @@ export default function DashboardPage() {
                             <Sparkline seed={h.ticker} trend={hProfit ? 'up' : 'down'} width={56} height={18} />
                           </div>
                         </td>
-                        <td className="text-right font-mono text-xs text-slate-200">
-                          {Number(h.quantity).toLocaleString()}
+                        <td className="text-right font-mono text-xs text-slate-200" title={String(h.quantity)}>
+                          {Number(h.quantity).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}
                         </td>
-                        <td className="text-right font-mono text-xs text-slate-300 hidden lg:table-cell">
-                          {sym}{Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td className="text-right font-mono text-xs text-slate-300 hidden lg:table-cell" title={`${sym}${Number(h.avgCost).toFixed(4)}`}>
+                          {sym}{Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                         </td>
                         <td className="text-right font-mono text-xs text-white font-semibold">
                           {sym}{Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

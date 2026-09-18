@@ -50,13 +50,18 @@ export async function calculateUserHoldings(
     },
   })
 
-  // 2. Aggregate quantity and cost per asset using average cost basis
+  // 2. Aggregate quantity and cost per asset using FIFO (First-In, First-Out) matching
+  // Matches Dime and US brokerage cost-basis standard (without fee mixing)
+  interface BuyLot {
+    quantity: number
+    pricePerUnit: number
+  }
+
   const assetMap = new Map<
     string,
     {
       asset: any
-      quantity: number
-      totalCost: number
+      lots: BuyLot[]
     }
   >()
 
@@ -65,27 +70,29 @@ export async function calculateUserHoldings(
     if (!assetMap.has(assetId)) {
       assetMap.set(assetId, {
         asset: txn.asset,
-        quantity: 0,
-        totalCost: 0,
+        lots: [],
       })
     }
 
     const state = assetMap.get(assetId)!
     const qty = Number(txn.quantity)
     const price = Number(txn.pricePerUnit)
-    const fee = Number(txn.fee || 0)
 
     if (txn.txnType === 'BUY') {
-      state.quantity += qty
-      state.totalCost += qty * price + fee
+      state.lots.push({
+        quantity: qty,
+        pricePerUnit: price,
+      })
     } else if (txn.txnType === 'SELL') {
-      if (state.quantity > 0) {
-        const avg = state.totalCost / state.quantity
-        state.quantity -= qty
-        state.totalCost -= qty * avg
-        if (state.quantity <= 0.000001) {
-          state.quantity = 0
-          state.totalCost = 0
+      let qtyToSell = qty
+      while (qtyToSell > 0.0000001 && state.lots.length > 0) {
+        const lot = state.lots[0]
+        if (lot.quantity <= qtyToSell) {
+          qtyToSell -= lot.quantity
+          state.lots.shift()
+        } else {
+          lot.quantity -= qtyToSell
+          qtyToSell = 0
         }
       }
     }
@@ -100,20 +107,23 @@ export async function calculateUserHoldings(
   let totalCostBase = 0
 
   for (const [assetId, data] of assetMap.entries()) {
-    if (data.quantity <= 0.00001) continue
+    const remainingQty = data.lots.reduce((acc, lot) => acc + lot.quantity, 0)
+    if (remainingQty <= 0.00001) continue
+
+    const totalCost = data.lots.reduce((acc, lot) => acc + lot.quantity * lot.pricePerUnit, 0)
+    const avgCost = remainingQty > 0 ? totalCost / remainingQty : 0
 
     const priceData = await getCachedOrFetchPrice(assetId)
-    const currentPrice = priceData?.price ?? (data.totalCost / data.quantity)
-    const avgCost = data.quantity > 0 ? data.totalCost / data.quantity : 0
-    const currentValue = data.quantity * currentPrice
-    const unrealizedPnL = currentValue - data.totalCost
-    const unrealizedPnLPercent = data.totalCost > 0 ? (unrealizedPnL / data.totalCost) * 100 : 0
+    const currentPrice = priceData?.price ?? avgCost
+    const currentValue = remainingQty * currentPrice
+    const unrealizedPnL = currentValue - totalCost
+    const unrealizedPnLPercent = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0
 
     // Convert to base currency
     const isUsd = data.asset.currency === 'USD' || data.asset.market === 'US'
     const fx = isUsd ? usdThbRate : 1.0
     const currentValueBase = currentValue * fx
-    const costBase = data.totalCost * fx
+    const costBase = totalCost * fx
     const unrealizedPnLBase = currentValueBase - costBase
 
     totalValueBase += currentValueBase
@@ -126,9 +136,9 @@ export async function calculateUserHoldings(
       market: data.asset.market,
       assetType: data.asset.assetType,
       currency: isUsd ? 'USD' : (data.asset.currency || 'THB'),
-      quantity: data.quantity,
+      quantity: remainingQty,
       avgCost,
-      totalCost: data.totalCost,
+      totalCost,
       currentPrice,
       currentValue,
       currentValueBase,
