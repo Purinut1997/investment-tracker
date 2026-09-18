@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+
+export const maxDuration = 60 // Allow longer processing for extensive reports
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -14,33 +17,143 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid prompt' }, { status: 400 })
     }
 
-    const aiPrompt = `
-ข้อความบันทึกธุรกรรมการลงทุนของผู้ใช้:
-"${prompt}"
+    // Fetch user's existing accounts to help AI match account names accurately
+    const userAccounts = await prisma.investmentAccount.findMany({
+      where: { userId: session.user.id },
+      select: { id: true, accountName: true, currency: true, accountType: true },
+    })
 
-กรุณาแกะข้อมูลจากข้อความนี้ให้อยู่ในรูปแบบ JSON อย่างเคร่งครัด (ตอบเฉพาะ JSON object เท่านั้น ไม่ต้องมี markdown หรือคำอธิบายเพิ่มเติม):
+    const accountsListStr =
+      userAccounts.length > 0
+        ? userAccounts
+            .map((a) => `- ชื่อบัญชี: "${a.accountName}" (สกุลเงิน: ${a.currency}, ประเภท: ${a.accountType}) [ID: ${a.id}]`)
+            .join('\n')
+        : 'ผู้ใช้ยังไม่มีบัญชีในระบบ (แนะนำชื่อบัญชีมาตรฐาน เช่น Dime! USD, Dime! Save, InnovestX)'
+
+    const systemPrompt = `คุณคือ AI ผู้เชี่ยวชาญด้านการเงินและการลงทุนที่ทำหน้าที่วิเคราะห์ข้อความ, รายงานสรุปการซื้อขาย หรือ Statement ทางการเงิน
+หน้าที่ของคุณคือสกัดข้อมูลธุรกรรมการลงทุนทั้งหมดที่พบในข้อความ ไม่ว่าจะระบุหุ้นตัวเดียว หรือหลายหุ้น หลายรายการพร้อมกัน
+
+กฎการประมวลผลอย่างเคร่งครัด:
+1. สกัดข้อมูลธุรกรรม "ทั้งหมด" ที่พบในข้อความลงใน Array "transactions" ไม่จำกัดจำนวนรายการ
+2. หากข้อความมีหลายหุ้น (เช่น ซื้อ NVDA, ขาย MU, รับปันผล GOOGL, ซื้อ AAPL) ให้แยกเป็นแต่ละรายการธุรกรรมอย่างชัดเจน
+3. จัดหมวดหมู่ txnType:
+   - "BUY": ซื้อหุ้น, เข้าซื้อ, DCA, เติมพอร์ต
+   - "SELL": ขายหุ้น, ขายทำกำไร, ตัดขาดทุน
+   - "DIVIDEND": ได้รับเงินปันผล (Dividend)
+   - "FEE": ค่าธรรมเนียมเดี่ยว (เช่น ค่าธรรมเนียมโอน/จัดการ)
+   - "DEPOSIT": ฝากเงินเข้าบัญชี
+   - "WITHDRAW": ถอนเงินออกจากบัญชี
+4. การแปลงวันที่และปี พ.ศ. เป็น ค.ศ. (ISO 8601 String):
+   - ในภาษาไทย หากระบุปี พ.ศ. เช่น "2568" = ค.ศ. 2025, "2569" = ค.ศ. 2026, "2567" = ค.ศ. 2024 (ลบด้วย 543)
+   - ตัวย่อปี พ.ศ. เช่น "68" = 2025, "69" = 2026
+   - เดือนไทย: ม.ค.=01, ก.พ.=02, มี.ค.=03, เม.ย.=04, พ.ค.=05, มิ.ย.=06, ก.ค.=07, ส.ค.=08, ก.ย.=09, ต.ค.=10, พ.ย.=11, ธ.ค.=12
+   - หากไม่ระบุเวลา ให้ใช้วันที่ที่ระบุพร้อมเวลา 10:00:00+07:00 หากไม่ระบุวันที่ ให้ใช้วันที่ปัจจุบัน
+5. สินทรัพย์และตลาด:
+   - Ticker: สัญลักษณ์ย่อตัวพิมพ์ใหญ่ เช่น AAPL, NVDA, GOOGL, PTT, BTC
+   - Market: "US" สำหรับหุ้นสหรัฐ, "TH" สำหรับหุ้นไทย, "CRYPTO" สำหรับคริปโต
+   - Currency: "USD" สำหรับหุ้น US, "THB" สำหรับหุ้นไทย
+6. ยอดเงินและค่าธรรมเนียม:
+   - quantity: จำนวนหุ้น (ทศนิยมหรือจำนวนเต็ม เช่น 10 หรือ 0.31911)
+   - pricePerUnit: ราคาต่อหุ้น
+   - fee: ค่าคอมมิชชันหรือค่าธรรมเนียมซื้อขาย (ถ้าไม่มีให้เป็น 0)
+   - taxWithheld: ภาษีหัก ณ ที่จ่าย (สำหรับเงินปันผล ถ้าไม่มีให้เป็น 0)
+   - totalAmount: มูลค่ารวมธุรกรรม (เช่น quantity * pricePerUnit + fee)
+7. การจับคู่บัญชี (matchedAccountId):
+   - เทียบเคียงกับรายชื่อบัญชีของผู้ใช้ด้านล่าง หากระบุหรือตรงกับบัญชีใด ให้ใส่ ID ของบัญชีนั้น
+   - หากไม่ระบุบัญชี แต่เป็นหุ้น US ให้พิจารณาบัญชีสกุลเงิน USD (เช่น Dime! USD)
+8. ตอบกลับเป็น JSON Object เท่านั้น ห้ามมีคำอธิบายหรือ Markdown อื่นใด`
+
+    const userPrompt = `ข้อความหรือรายงานธุรกรรมการลงทุนของผู้ใช้:
+"""
+${prompt}
+"""
+
+รายชื่อบัญชีของผู้ใช้ที่มีในระบบ:
+${accountsListStr}
+
+กรุณาวิเคราะห์และคืนค่าเป็น JSON Object ตาม Schema นี้เท่านั้น:
 {
-  "txnType": "BUY" | "SELL" | "DIVIDEND" | "DEPOSIT" | "WITHDRAW" | "FEE",
-  "ticker": "string (สัญลักษณ์หุ้นหรือคริปโตตัวพิมพ์ใหญ่ เช่น AAPL, PTT, BTC)",
-  "quantity": number,
-  "pricePerUnit": number,
-  "fee": number (ถ้ามี ถ้าไม่มีให้ใส่ 0),
-  "note": "string (ข้อความบันทึกย่อ)",
-  "confidence": number (0.0 ถึง 1.0)
-}
-`
+  "summary": "สรุปสั้นๆ เช่น พบ 3 รายการธุรกรรม: ซื้อ NVDA, ขาย MU, รับปันผล GOOGL",
+  "transactions": [
+    {
+      "id": "txn_1",
+      "txnType": "BUY" | "SELL" | "DIVIDEND" | "FEE" | "DEPOSIT" | "WITHDRAW",
+      "ticker": "NVDA",
+      "assetName": "NVIDIA Corporation",
+      "market": "US" | "TH" | "CRYPTO",
+      "assetType": "stock" | "fund" | "crypto" | "bond" | "gold",
+      "quantity": 10,
+      "pricePerUnit": 120,
+      "fee": 2,
+      "taxWithheld": 0,
+      "totalAmount": 1202,
+      "currency": "USD",
+      "txnDate": "2026-09-18T10:00:00+07:00",
+      "matchedAccountId": "string (ไอดีบัญชีที่ตรงกัน)",
+      "accountName": "Dime! USD",
+      "note": "string (ข้อความเพิ่มเติมหรือหมายเหตุ)",
+      "confidence": 0.95
+    }
+  ],
+  "cashBalances": [
+    {
+      "matchedAccountId": "string",
+      "accountName": "Dime! Save",
+      "currency": "THB",
+      "cashAmount": 0,
+      "accruedInterest": 0
+    }
+  ]
+}`
 
     const { text } = await callGemini({
       userId: session.user.id,
-      prompt: aiPrompt,
+      prompt: userPrompt,
       logType: 'quick_add_multimodal',
-      systemInstruction:
-        'คุณเป็น AI Parser ที่ทำหน้าที่แปลงข้อความบันทึกการลงทุนเป็น JSON ตาม Schema ที่กำหนดอย่างแม่นยำ ตอบเฉพาะ valid JSON เท่านั้น',
+      systemInstruction: systemPrompt,
     })
 
     // Extract JSON block
     const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim()
     const parsed = JSON.parse(cleanText)
+
+    // Ensure backwards compatibility if model returns single transaction object
+    if (!parsed.transactions && parsed.ticker) {
+      parsed.transactions = [
+        {
+          id: 'txn_1',
+          txnType: parsed.txnType || 'BUY',
+          ticker: parsed.ticker,
+          assetName: parsed.assetName || parsed.ticker,
+          market: parsed.market || 'US',
+          assetType: parsed.assetType || 'stock',
+          quantity: Number(parsed.quantity || 0),
+          pricePerUnit: Number(parsed.pricePerUnit || 0),
+          fee: Number(parsed.fee || 0),
+          taxWithheld: Number(parsed.taxWithheld || 0),
+          totalAmount: Number(parsed.totalAmount || (parsed.quantity * parsed.pricePerUnit + (parsed.fee || 0))),
+          currency: parsed.currency || 'USD',
+          txnDate: parsed.txnDate || new Date().toISOString(),
+          matchedAccountId: userAccounts[0]?.id || '',
+          accountName: userAccounts[0]?.accountName || 'Dime! USD',
+          note: parsed.note || '',
+          confidence: parsed.confidence || 0.9,
+        },
+      ]
+      parsed.summary = `พบ 1 รายการ: ${parsed.txnType || 'ซื้อ'} ${parsed.ticker}`
+    }
+
+    if (!Array.isArray(parsed.transactions)) {
+      parsed.transactions = []
+    }
+
+    if (!Array.isArray(parsed.cashBalances)) {
+      parsed.cashBalances = []
+    }
+
+    if (!parsed.summary) {
+      parsed.summary = `พบ ${parsed.transactions.length} รายการธุรกรรม`
+    }
 
     return NextResponse.json(parsed)
   } catch (error: any) {

@@ -282,6 +282,22 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       return
     }
 
+    // Validation for transactions
+    for (const t of selectedTxns) {
+      if (!t.ticker.trim()) {
+        setError('กรุณาระบุชื่อย่อสินทรัพย์ (Ticker) ให้ครบทุกรายการที่เลือก')
+        return
+      }
+      if (Number(t.quantity) <= 0) {
+        setError(`จำนวนหุ้นของ "${t.ticker}" ต้องมากกว่า 0`)
+        return
+      }
+      if (Number(t.pricePerUnit) < 0) {
+        setError(`ราคาต่อหน่วยของ "${t.ticker}" ต้องไม่ติดลบ`)
+        return
+      }
+    }
+
     setSubmitting(true)
     setError('')
 
@@ -290,23 +306,28 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transactions: selectedTxns.map((t) => ({
-            accountId: t.matchedAccountId || undefined,
-            accountName: t.accountName,
-            currency: t.currency,
-            ticker: t.ticker,
-            assetName: t.assetName,
-            market: t.market,
-            assetType: t.assetType,
-            txnDate: t.txnDate,
-            txnType: t.txnType,
-            quantity: t.quantity,
-            pricePerUnit: t.pricePerUnit,
-            fee: t.fee,
-            taxWithheld: t.taxWithheld,
-            totalAmount: t.totalAmount,
-            note: t.note,
-          })),
+          transactions: selectedTxns.map((t) => {
+            const rawDate = t.txnDate || new Date().toISOString()
+            const dateObj = new Date(rawDate)
+            const isoDate = isNaN(dateObj.getTime()) ? new Date().toISOString() : dateObj.toISOString()
+            return {
+              accountId: t.matchedAccountId || accounts[0]?.id || undefined,
+              accountName: t.accountName || accounts[0]?.accountName || 'Dime! USD',
+              currency: t.currency || (t.market === 'TH' ? 'THB' : 'USD'),
+              ticker: t.ticker.trim().toUpperCase(),
+              assetName: t.assetName || t.ticker.trim().toUpperCase(),
+              market: t.market || (t.currency === 'THB' ? 'TH' : 'US'),
+              assetType: t.assetType || 'stock',
+              txnDate: isoDate,
+              txnType: t.txnType,
+              quantity: Number(t.quantity),
+              pricePerUnit: Number(t.pricePerUnit),
+              fee: Number(t.fee || 0),
+              taxWithheld: Number(t.taxWithheld || 0),
+              totalAmount: Number(t.totalAmount || (Number(t.quantity) * Number(t.pricePerUnit) + Number(t.fee || 0) - Number(t.taxWithheld || 0))),
+              note: t.note || undefined,
+            }
+          }),
           cashBalances: selectedCash.map((c) => ({
             accountId: c.matchedAccountId || undefined,
             accountName: c.accountName,
@@ -340,6 +361,66 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Helper functions for Batch Transactions Editor
+  function handleAddBlankRow() {
+    const defaultAcc = accounts[0]
+    const newTxn: ExtractedTxn = {
+      id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      selected: true,
+      txnType: 'BUY',
+      ticker: '',
+      assetName: '',
+      market: 'US',
+      assetType: 'stock',
+      quantity: 1,
+      pricePerUnit: 0,
+      fee: 0,
+      taxWithheld: 0,
+      totalAmount: 0,
+      currency: defaultAcc?.currency === 'THB' ? 'THB' : 'USD',
+      txnDate: new Date().toISOString().split('T')[0],
+      matchedAccountId: defaultAcc?.id || '',
+      accountName: defaultAcc?.accountName || 'Dime! USD',
+      note: '',
+      confidence: 1.0,
+    }
+    setExtractedTxns((prev) => [...prev, newTxn])
+  }
+
+  function handleRemoveTxn(idx: number) {
+    setExtractedTxns((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  function handleUpdateTxn(idx: number, patch: Partial<ExtractedTxn>) {
+    setExtractedTxns((prev) =>
+      prev.map((item, i) => {
+        if (i !== idx) return item
+        const updated = { ...item, ...patch }
+        if (patch.ticker !== undefined) {
+          updated.ticker = patch.ticker.toUpperCase()
+        }
+        if (
+          patch.quantity !== undefined ||
+          patch.pricePerUnit !== undefined ||
+          patch.fee !== undefined ||
+          patch.taxWithheld !== undefined
+        ) {
+          const q = Number(updated.quantity) || 0
+          const p = Number(updated.pricePerUnit) || 0
+          const f = Number(updated.fee) || 0
+          const t = Number(updated.taxWithheld) || 0
+          updated.totalAmount = Math.max(0, q * p + f - t)
+        }
+        return updated
+      })
+    )
+  }
+
+  function handleToggleAll(select: boolean) {
+    setExtractedTxns((prev) => prev.map((t) => ({ ...t, selected: select })))
+    setExtractedCash((prev) => prev.map((c) => ({ ...c, selected: select })))
   }
 
   // Account creation handler
@@ -377,7 +458,7 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
     }
   }
 
-  // Single NLP AI Parser Handler
+  // Multi-Stock & Multi-Transaction NLP AI Parser Handler
   async function handleSingleAIParse(e: React.FormEvent) {
     e.preventDefault()
     if (!nlText.trim()) return
@@ -393,24 +474,64 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         body: JSON.stringify({ prompt: nlText }),
       })
 
+      const json = await res.json()
       if (!res.ok) {
-        throw new Error('AI Parser ยังไม่พร้อมทำงาน กรุณากรอกแบบฟอร์มด้วยตนเอง')
+        throw new Error(json.error || 'AI Parser ยังไม่พร้อมทำงาน กรุณาลองใหม่อีกครั้ง')
       }
 
-      const parsed = await res.json()
+      const rawTxns = Array.isArray(json.transactions)
+        ? json.transactions
+        : json.ticker
+        ? [json]
+        : []
 
-      setFormData((prev) => ({
-        ...prev,
-        ticker: parsed.ticker || prev.ticker,
-        txnType: parsed.txnType || prev.txnType,
-        quantity: parsed.quantity?.toString() || prev.quantity,
-        pricePerUnit: parsed.pricePerUnit?.toString() || prev.pricePerUnit,
-        fee: parsed.fee?.toString() || prev.fee,
-        note: parsed.note || prev.note,
+      const txns: ExtractedTxn[] = rawTxns.map((t: any, i: number) => ({
+        id: t.id || `txn_nlp_${Date.now()}_${i + 1}`,
+        selected: true,
+        txnType: (t.txnType as TransactionType) || 'BUY',
+        ticker: (t.ticker || '').toUpperCase(),
+        assetName: t.assetName || t.ticker || 'Asset',
+        market: (t.market as Market) || (t.currency === 'THB' ? 'TH' : 'US'),
+        assetType: (t.assetType as AssetType) || 'stock',
+        quantity: Number(t.quantity || 0),
+        pricePerUnit: Number(t.pricePerUnit || 0),
+        fee: Number(t.fee || 0),
+        taxWithheld: Number(t.taxWithheld || 0),
+        totalAmount: Number(
+          t.totalAmount ||
+            Number(t.quantity || 0) * Number(t.pricePerUnit || 0) +
+              Number(t.fee || 0) -
+              Number(t.taxWithheld || 0)
+        ),
+        currency: t.currency || (t.market === 'TH' ? 'THB' : 'USD'),
+        txnDate: t.txnDate || new Date().toISOString(),
+        matchedAccountId: t.matchedAccountId || accounts[0]?.id || '',
+        accountName: t.accountName || accounts[0]?.accountName || 'Dime! USD',
+        note: t.note || '',
+        confidence: Number(t.confidence || 0.95),
       }))
 
-      setSuccessMsg('AI วิเคราะห์ข้อมูลเรียบร้อยแล้ว ตรวจสอบและกดยืนยันบันทึก')
-      setTab('manual')
+      const cash: ExtractedCash[] = (json.cashBalances || []).map((c: any) => ({
+        matchedAccountId: c.matchedAccountId || accounts[0]?.id || '',
+        accountName: c.accountName || 'Dime! Save',
+        accountType: (c.accountType as AccountTypeValue) || 'bank',
+        currency: c.currency || 'THB',
+        cashAmount: Number(c.cashAmount || 0),
+        accruedInterest: Number(c.accruedInterest || 0),
+        interestDays: c.interestDays ?? 104,
+        balanceDate: c.balanceDate || new Date().toISOString(),
+        selected: true,
+      }))
+
+      if (txns.length > 0 || cash.length > 0) {
+        setExtractedTxns(txns)
+        setExtractedCash(cash)
+        setAiSummaryText(json.summary || `พบ ${txns.length} รายการธุรกรรมจากข้อความ`)
+        setHasExtracted(true)
+        setSuccessMsg(`AI วิเคราะห์ข้อมูลสำเร็จ! พบ ${txns.length} รายการ ตรวจสอบและบันทึกทั้งหมดได้ทันที`)
+      } else {
+        setError('ไม่พบข้อมูลธุรกรรมในข้อความ กรุณาระบุรายละเอียด เช่น ชื่อย่อหุ้น จำนวน ราคา หรือคำสั่งซื้อขาย')
+      }
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการวิเคราะห์ข้อความ'))
     } finally {
@@ -513,10 +634,16 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
               <Plus className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white tracking-tight">บันทึกรายการธุรกรรม</h2>
+              <h2 className="text-base font-semibold text-white tracking-tight">
+                {hasExtracted ? 'ตรวจสอบและยืนยันรายการธุรกรรม' : 'บันทึกรายการธุรกรรม'}
+              </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
-                {tab === 'photos'
+                {hasExtracted
+                  ? `พบ ${extractedTxns.length} รายการธุรกรรม ตรวจสอบและบันทึกพร้อมกันได้ทันที`
+                  : tab === 'photos'
                   ? 'อัปโหลดสลิปหลายภาพให้ AI แกะข้อมูลอัตโนมัติ'
+                  : tab === 'ai'
+                  ? 'พิมพ์หรือวางสรุปรายงาน AI จะดึงข้อมูลทุกหุ้นพร้อมกัน'
                   : 'เพิ่มธุรกรรมเข้าสู่พอร์ตโฟลิโอ'}
               </p>
             </div>
@@ -529,45 +656,47 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
           </button>
         </div>
 
-        {/* Tab Switcher (3 Tabs) */}
-        <div className="flex bg-[#181C25] p-1.5 gap-1.5 mx-6 mt-4 rounded-xl border border-white/[0.06]">
-          <button
-            type="button"
-            onClick={() => setTab('photos')}
-            className={`flex-1 min-h-9 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 rounded-lg transition-all cursor-pointer ${
-              tab === 'photos'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>สแกนสลิปหลายภาพ (AI)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('ai')}
-            className={`flex-1 min-h-9 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 rounded-lg transition-all cursor-pointer ${
-              tab === 'ai'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>พิมพ์ข้อความ AI</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('manual')}
-            className={`flex-1 min-h-9 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 rounded-lg transition-all cursor-pointer ${
-              tab === 'manual'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>กรอกฟอร์มมาตรฐาน</span>
-          </button>
-        </div>
+        {/* Tab Switcher (3 Tabs) - only show when not in batch review mode */}
+        {!hasExtracted && (
+          <div className="flex bg-[#181C25] p-1.5 gap-1.5 mx-6 mt-4 rounded-xl border border-white/[0.06]">
+            <button
+              type="button"
+              onClick={() => setTab('photos')}
+              className={`flex-1 min-h-9 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 rounded-lg transition-all cursor-pointer ${
+                tab === 'photos'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>สแกนสลิปหลายภาพ (AI)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('ai')}
+              className={`flex-1 min-h-9 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 rounded-lg transition-all cursor-pointer ${
+                tab === 'ai'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>พิมพ์ข้อความ AI (ดึงหลายหุ้น)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('manual')}
+              className={`flex-1 min-h-9 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 rounded-lg transition-all cursor-pointer ${
+                tab === 'manual'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>กรอกฟอร์มมาตรฐาน</span>
+            </button>
+          </div>
+        )}
 
         {/* Modal Body */}
         <div className="px-6 py-5 overflow-y-auto flex-1 space-y-5">
@@ -585,11 +714,347 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
             </div>
           )}
 
-          {/* ════════════════ TAB 1: MULTI-IMAGE SCAN (AI) ════════════════ */}
-          {tab === 'photos' && (
+          {/* ════════════════ COMMON BATCH REVIEW & SAVE SCREEN ════════════════ */}
+          {hasExtracted ? (
             <div className="space-y-4">
-              {!hasExtracted ? (
-                <>
+              {/* Summary Bar */}
+              <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white">ผลการจัดเตรียมธุรกรรม</p>
+                    <p className="text-[11px] text-zinc-300">{aiSummaryText}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAddBlankRow}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-300 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>เพิ่มรายการใหม่</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHasExtracted(false)}
+                    className="text-xs text-zinc-400 hover:text-white px-2.5 py-1.5 underline cursor-pointer"
+                  >
+                    ย้อนกลับ
+                  </button>
+                </div>
+              </div>
+
+              {/* Extracted Transactions Review Table */}
+              {extractedTxns.length > 0 ? (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between px-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white uppercase tracking-wider">
+                        รายการซื้อขาย & ปันผล ({extractedTxns.length} รายการ)
+                      </span>
+                      <span className="text-[11px] text-zinc-400">
+                        เลือก {extractedTxns.filter((t) => t.selected).length} จาก {extractedTxns.length}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAll(true)}
+                        className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                      >
+                        เลือกทั้งหมด
+                      </button>
+                      <span className="text-zinc-600">•</span>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAll(false)}
+                        className="text-[11px] text-zinc-400 hover:text-zinc-300 transition-colors cursor-pointer"
+                      >
+                        ยกเลิกทั้งหมด
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                    {extractedTxns.map((txn, idx) => {
+                      return (
+                        <div
+                          key={txn.id}
+                          className={`p-3.5 rounded-xl border transition-all space-y-3 ${
+                            txn.selected
+                              ? 'bg-[#181C25] border-white/10'
+                              : 'bg-[#14161E]/40 border-white/5 opacity-60'
+                          }`}
+                        >
+                          {/* Top Row: Checkbox, Type, Ticker, Account Selector, Trash */}
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 flex-1 min-w-[240px]">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateTxn(idx, { selected: !txn.selected })}
+                                className="text-zinc-400 hover:text-white shrink-0 cursor-pointer"
+                                title={txn.selected ? 'ยกเลิกการเลือก' : 'เลือกรายการนี้'}
+                              >
+                                {txn.selected ? (
+                                  <CheckSquare className="w-4 h-4 text-indigo-400" />
+                                ) : (
+                                  <Square className="w-4 h-4" />
+                                )}
+                              </button>
+
+                              {/* Transaction Type Selector */}
+                              <select
+                                value={txn.txnType}
+                                onChange={(e) => handleUpdateTxn(idx, { txnType: e.target.value as TransactionType })}
+                                className={`text-xs font-bold px-2 py-1 rounded-lg border focus:outline-none cursor-pointer ${
+                                  txn.txnType === 'BUY'
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                    : txn.txnType === 'SELL'
+                                    ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                    : txn.txnType === 'DIVIDEND'
+                                    ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                                    : txn.txnType === 'FEE'
+                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                    : 'bg-zinc-700 text-zinc-300 border-zinc-600'
+                                }`}
+                              >
+                                <option value="BUY" className="bg-[#181C25] text-emerald-400">ซื้อ (BUY)</option>
+                                <option value="SELL" className="bg-[#181C25] text-rose-400">ขาย (SELL)</option>
+                                <option value="DIVIDEND" className="bg-[#181C25] text-blue-400">ปันผล (DIVIDEND)</option>
+                                <option value="FEE" className="bg-[#181C25] text-amber-400">ค่าธรรมเนียม (FEE)</option>
+                                <option value="DEPOSIT" className="bg-[#181C25] text-white">ฝากเงิน (DEPOSIT)</option>
+                                <option value="WITHDRAW" className="bg-[#181C25] text-white">ถอนเงิน (WITHDRAW)</option>
+                              </select>
+
+                              {/* Ticker Input */}
+                              <div className="relative flex-1 min-w-[100px] max-w-[150px]">
+                                <input
+                                  type="text"
+                                  value={txn.ticker}
+                                  onChange={(e) => handleUpdateTxn(idx, { ticker: e.target.value.toUpperCase() })}
+                                  placeholder="ชื่อย่อหุ้น"
+                                  className="w-full uppercase font-mono font-bold text-xs bg-[#12151C] border border-white/10 rounded-lg px-2.5 py-1 text-white focus:outline-none focus:border-indigo-500"
+                                />
+                              </div>
+
+                              {/* Asset Name */}
+                              <span className="text-[11px] text-zinc-400 truncate hidden md:inline max-w-[140px]">
+                                {txn.assetName}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Account Dropdown */}
+                              <select
+                                value={txn.matchedAccountId}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  const matched = accounts.find((a) => a.id === val)
+                                  handleUpdateTxn(idx, {
+                                    matchedAccountId: val,
+                                    accountName: matched?.accountName || txn.accountName,
+                                    currency: matched?.currency || txn.currency,
+                                  })
+                                }}
+                                className="text-[11px] bg-[#12151C] border border-white/10 rounded-lg px-2 py-1 text-zinc-300 focus:outline-none cursor-pointer max-w-[160px] truncate"
+                              >
+                                {accounts.map((acc) => (
+                                  <option key={acc.id} value={acc.id}>
+                                    {acc.accountName} ({acc.currency})
+                                  </option>
+                                ))}
+                              </select>
+
+                              {/* Delete Row Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTxn(idx)}
+                                className="p-1 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                title="ลบรายการนี้"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Bottom Row: Quantity, Price, Fee, Date, Calculated Total */}
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-white/[0.04] text-xs">
+                            <div>
+                              <label className="text-[10px] text-zinc-400 block mb-0.5">จำนวนหุ้น</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={txn.quantity}
+                                onChange={(e) => handleUpdateTxn(idx, { quantity: parseFloat(e.target.value) || 0 })}
+                                className="w-full bg-[#12151C] border border-white/10 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-zinc-400 block mb-0.5">ราคาต่อหน่วย ({txn.currency})</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={txn.pricePerUnit}
+                                onChange={(e) => handleUpdateTxn(idx, { pricePerUnit: parseFloat(e.target.value) || 0 })}
+                                className="w-full bg-[#12151C] border border-white/10 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-zinc-400 block mb-0.5">ค่าคอมฯ/ธรรมเนียม</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={txn.fee}
+                                onChange={(e) => handleUpdateTxn(idx, { fee: parseFloat(e.target.value) || 0 })}
+                                className="w-full bg-[#12151C] border border-white/10 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-zinc-400 block mb-0.5">วันที่ทำรายการ</label>
+                              <input
+                                type="date"
+                                value={txn.txnDate ? txn.txnDate.split('T')[0] : ''}
+                                onChange={(e) => handleUpdateTxn(idx, { txnDate: e.target.value })}
+                                className="w-full bg-[#12151C] border border-white/10 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+
+                            <div className="col-span-2 sm:col-span-1 flex flex-col justify-end text-right">
+                              <span className="text-[10px] text-zinc-400">มูลค่ารวม</span>
+                              <span className="font-mono font-bold text-white text-xs tabular-nums">
+                                {txn.currency === 'USD' ? '$' : '฿'}
+                                {Number(txn.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                                {txn.currency}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 rounded-xl bg-[#181C25] border border-white/10 text-xs text-zinc-400 space-y-3">
+                  <p>ยังไม่มีรายการธุรกรรมในชุดนี้</p>
+                  <button
+                    type="button"
+                    onClick={handleAddBlankRow}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>เพิ่มรายการแรก</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Extracted Cash Balances Review */}
+              {extractedCash.length > 0 && (
+                <div className="p-3.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs font-bold text-white">
+                        อัปเดตยอดกระเป๋าเงินสด ({extractedCash.length} บัญชี)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {extractedCash.map((cash, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded-lg bg-[#181C25] border border-white/10 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExtractedCash((prev) =>
+                                prev.map((c, i) => (i === idx ? { ...c, selected: !c.selected } : c))
+                              )
+                            }}
+                            className="text-zinc-400 hover:text-white cursor-pointer"
+                          >
+                            {cash.selected ? (
+                              <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Square className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <span className="font-semibold text-white">{cash.accountName}</span>
+                          <span className="text-[10px] text-zinc-400">({cash.currency})</span>
+                        </div>
+                        <div className="text-right font-mono">
+                          <span className="font-bold text-emerald-300">
+                            {cash.cashAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {cash.currency}
+                          </span>
+                          {cash.accruedInterest > 0 && (
+                            <p className="text-[10px] text-zinc-400">
+                              ดอกเบี้ยสะสม: {cash.accruedInterest} {cash.currency}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Batch Save Action Bar */}
+              <div className="pt-2 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setHasExtracted(false)}
+                  className="text-xs text-zinc-400 hover:text-white px-3 py-2 cursor-pointer"
+                >
+                  ย้อนกลับ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddBlankRow}
+                  className="inline-flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white px-3 py-2 border border-white/10 rounded-xl hover:bg-white/[0.04] transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>เพิ่มอีกรายการ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchSave}
+                  disabled={submitting || (extractedTxns.filter((t) => t.selected).length === 0 && extractedCash.filter((c) => c.selected).length === 0)}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/25 cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>กำลังบันทึกทุกรายการ...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>
+                        บันทึกทุกรายการเข้าสู่ระบบ (
+                        {extractedTxns.filter((t) => t.selected).length +
+                          extractedCash.filter((c) => c.selected).length}{' '}
+                        รายการ)
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ════════════════ TAB 1: MULTI-IMAGE SCAN (AI) ════════════════ */}
+              {tab === 'photos' && (
+                <div className="space-y-4">
                   {/* Drag and Drop Zone */}
                   <div
                     onDragOver={(e) => {
@@ -704,302 +1169,122 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                       </button>
                     </div>
                   )}
-                </>
-              ) : (
-                /* ── BATCH REVIEW SCREEN ── */
-                <div className="space-y-4">
-                  {/* Summary Bar */}
-                  <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-                      <div>
-                        <p className="text-xs font-bold text-white">วิเคราะห์ผลสำเร็จ!</p>
-                        <p className="text-[11px] text-zinc-300">{aiSummaryText}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setHasExtracted(false)}
-                      className="text-xs text-indigo-300 hover:text-white underline"
-                    >
-                      เลือกภาพใหม่
-                    </button>
-                  </div>
-
-                  {/* Extracted Transactions Review Table */}
-                  {extractedTxns.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white uppercase tracking-wider">
-                          รายการซื้อขาย & ปันผล ({extractedTxns.length} รายการ)
-                        </span>
-                        <span className="text-[11px] text-zinc-400">
-                          เลือก {extractedTxns.filter((t) => t.selected).length} / {extractedTxns.length}
-                        </span>
-                      </div>
-
-                      <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                        {extractedTxns.map((txn, idx) => {
-                          const isBuy = txn.txnType === 'BUY'
-                          const isSell = txn.txnType === 'SELL'
-                          const isDiv = txn.txnType === 'DIVIDEND'
-                          const isFee = txn.txnType === 'FEE'
-
-                          let badgeColor = 'bg-zinc-700 text-zinc-300'
-                          let badgeText: string = txn.txnType
-                          if (isBuy) {
-                            badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                            badgeText = 'ซื้อ'
-                          } else if (isSell) {
-                            badgeColor = 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                            badgeText = 'ขาย'
-                          } else if (isDiv) {
-                            badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                            badgeText = 'ปันผล'
-                          } else if (isFee) {
-                            badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                            badgeText = 'ค่าธรรมเนียม'
-                          }
-
-                          return (
-                            <div
-                              key={txn.id}
-                              className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                                txn.selected
-                                  ? 'bg-[#181C25] border-white/10'
-                                  : 'bg-[#14161E]/50 border-white/5 opacity-60'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setExtractedTxns((prev) =>
-                                      prev.map((t, i) => (i === idx ? { ...t, selected: !t.selected } : t))
-                                    )
-                                  }}
-                                  className="text-zinc-400 hover:text-white shrink-0 cursor-pointer"
-                                >
-                                  {txn.selected ? (
-                                    <CheckSquare className="w-4 h-4 text-indigo-400" />
-                                  ) : (
-                                    <Square className="w-4 h-4" />
-                                  )}
-                                </button>
-
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeColor}`}>
-                                      {badgeText}
-                                    </span>
-                                    <span className="font-bold text-white text-xs font-mono">
-                                      {txn.ticker}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-400 truncate hidden sm:inline">
-                                      {txn.assetName}
-                                    </span>
-                                  </div>
-                                  <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex flex-wrap items-center gap-x-2">
-                                    <span>
-                                      {txn.quantity} หุ้น @ ${txn.pricePerUnit.toFixed(2)}
-                                    </span>
-                                    {txn.fee > 0 && <span>(ค่าคอมฯ ${txn.fee.toFixed(2)})</span>}
-                                    {txn.taxWithheld > 0 && <span>(ภาษี ${txn.taxWithheld.toFixed(2)})</span>}
-                                    <span className="text-zinc-400 font-sans">
-                                      • {new Date(txn.txnDate).toLocaleDateString('th-TH')}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Right: Total Amount & Account Selection */}
-                              <div className="text-right shrink-0">
-                                <span className="font-bold text-white text-xs font-mono tabular-nums">
-                                  ${txn.totalAmount.toFixed(2)} {txn.currency}
-                                </span>
-                                <div className="mt-1">
-                                  <select
-                                    value={txn.matchedAccountId}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      setExtractedTxns((prev) =>
-                                        prev.map((t, i) =>
-                                          i === idx ? { ...t, matchedAccountId: val } : t
-                                        )
-                                      )
-                                    }}
-                                    className="text-[10px] bg-[#12151C] border border-white/10 rounded px-1.5 py-0.5 text-zinc-300 focus:outline-none"
-                                  >
-                                    {accounts.map((acc) => (
-                                      <option key={acc.id} value={acc.id}>
-                                        {acc.accountName}
-                                      </option>
-                                    ))}
-                                    <option value="">สร้างบัญชีใหม่ตามสลิป ({txn.accountName})</option>
-                                  </select>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Extracted Cash Balances Review */}
-                  {extractedCash.length > 0 && (
-                    <div className="p-3.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Coins className="w-4 h-4 text-emerald-400" />
-                          <span className="text-xs font-bold text-white">
-                            อัปเดตยอดกระเป๋าเงินสด ({extractedCash.length} บัญชี)
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        {extractedCash.map((cash, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between p-2 rounded-lg bg-[#181C25] border border-white/10 text-xs"
-                          >
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setExtractedCash((prev) =>
-                                    prev.map((c, i) => (i === idx ? { ...c, selected: !c.selected } : c))
-                                  )
-                                }}
-                                className="text-zinc-400 hover:text-white cursor-pointer"
-                              >
-                                {cash.selected ? (
-                                  <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-                                ) : (
-                                  <Square className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                              <span className="font-semibold text-white">{cash.accountName}</span>
-                              <span className="text-[10px] text-zinc-400">({cash.currency})</span>
-                            </div>
-                            <div className="text-right font-mono">
-                              <span className="font-bold text-emerald-300">
-                                {cash.cashAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {cash.currency}
-                              </span>
-                              {cash.accruedInterest > 0 && (
-                                <p className="text-[10px] text-zinc-400">
-                                  ดอกเบี้ยสะสม: {cash.accruedInterest} {cash.currency}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Batch Save Action Bar */}
-                  <div className="pt-2 flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setHasExtracted(false)}
-                      className="text-xs text-zinc-400 hover:text-white px-3 py-2"
-                    >
-                      ย้อนกลับ
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleBatchSave}
-                      disabled={submitting}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/25 cursor-pointer"
-                    >
-                      {submitting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>กำลังบันทึกทุกรายการ...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-4 h-4" />
-                          <span>
-                            บันทึกทุกรายการเข้าสู่ระบบ (
-                            {extractedTxns.filter((t) => t.selected).length +
-                              extractedCash.filter((c) => c.selected).length}{' '}
-                            รายการ)
-                          </span>
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* ════════════════ TAB 2: AI TEXT PROMPT ════════════════ */}
-          {tab === 'ai' && (
-            <form onSubmit={handleSingleAIParse} className="space-y-4">
-              <div>
-                <label className={labelClass}>รายละเอียดธุรกรรม (ภาษาธรรมชาติ)</label>
-                <textarea
-                  className={`${inputClass} min-h-[100px] resize-none`}
-                  placeholder="เช่น: ซื้อ GOOGL 1 หุ้น ราคา 328.94 ดอลลาร์ ค่าคอม 0.53 บัญชี Dime เมื่อวานนี้"
-                  value={nlText}
-                  onChange={(e) => setNlText(e.target.value)}
-                  disabled={parsing}
-                  autoFocus
-                />
-              </div>
+              {/* ════════════════ TAB 2: AI TEXT PROMPT ════════════════ */}
+              {tab === 'ai' && (
+                <form onSubmit={handleSingleAIParse} className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className={labelClass}>รายละเอียดธุรกรรม (ภาษาธรรมชาติ / สรุปรายงานหลายหุ้น)</label>
+                      <span className="text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                        ดึงได้หลายหุ้นพร้อมกัน
+                      </span>
+                    </div>
+                    <textarea
+                      className={`${inputClass} min-h-[140px] resize-none font-mono text-xs`}
+                      placeholder="วางข้อความรายงานสรุป หรือพิมพ์หลายรายการ เช่น:&#10;• ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2&#10;• ขาย MU 0.319 หุ้น ราคา 1034 USD&#10;• รับปันผล GOOGL 0.44 USD วันที่ 15 ก.ย. 69 บัญชี Dime! USD&#10;• หรือคัดลอกข้อความสรุปจาก Statement มาวางได้เลย AI จะดึงทุกหุ้นให้ทันที"
+                      value={nlText}
+                      onChange={(e) => setNlText(e.target.value)}
+                      disabled={parsing}
+                      autoFocus
+                    />
+                  </div>
 
-              <div className="p-3.5 rounded-xl bg-[#181C25] border border-white/[0.06] text-xs text-zinc-400 space-y-1.5">
-                <p className="font-semibold text-indigo-400 flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
-                  <HelpCircle className="w-3.5 h-3.5" />
-                  ตัวอย่างข้อความ
-                </p>
-                <p>• ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2</p>
-                <p>• ขาย MU 0.319 หุ้น ราคา 1034 USD</p>
-                <p>• รับปันผล GOOGL 0.44 USD หักภาษี 0.06</p>
-              </div>
+                  <div className="p-3.5 rounded-xl bg-[#181C25] border border-white/[0.06] text-xs text-zinc-400 space-y-1.5">
+                    <p className="font-semibold text-indigo-400 flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      รองรับการบันทึกทีเดียวหลายหุ้นหลายรายการ
+                    </p>
+                    <p className="text-[11px]">• สามารถวางสรุปรายงานการซื้อขายประจำเดือน/ปี (แปลง พ.ศ. 2568, 2569 เป็น ค.ศ. อัตโนมัติ)</p>
+                    <p className="text-[11px]">• สกัดทุกหุ้นและประเภทธุรกรรม (ซื้อ, ขาย, ปันผล, ค่าธรรมเนียม) ลงตารางให้อัตโนมัติ</p>
+                    <p className="text-[11px]">• คุณสามารถตรวจสอบ ปรับเปลี่ยนราคา/จำนวน หรือเพิ่มรายการเองได้ก่อนบันทึก</p>
+                  </div>
 
-              <button
-                type="submit"
-                disabled={parsing || !nlText.trim()}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 py-2.5 rounded-xl font-medium text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
-              >
-                {parsing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>AI กำลังวิเคราะห์ข้อความ...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>วิเคราะห์ข้อความด้วย AI</span>
-                  </>
-                )}
-              </button>
-            </form>
-          )}
+                  <button
+                    type="submit"
+                    disabled={parsing || !nlText.trim()}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
+                  >
+                    {parsing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>AI กำลังวิเคราะห์ข้อความและแยกทุกรายการธุรกรรม...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 text-amber-300" />
+                        <span>วิเคราะห์ข้อความด้วย AI (ดึงทุกหุ้นพร้อมกัน)</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
 
-          {/* ════════════════ TAB 3: MANUAL STANDARD FORM ════════════════ */}
-          {tab === 'manual' && (
-            <form onSubmit={handleManualSubmit} id="manual-form" className="space-y-4">
-              {/* Account Selection */}
-              <div>
-                <label className={labelClass}>บัญชีการเงิน *</label>
-                <select
-                  className={inputClass}
-                  value={accountId}
-                  onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
-                  required
-                >
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.accountName} ({accountTypeLabel(acc.accountType)} — {acc.currency})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* ════════════════ TAB 3: MANUAL STANDARD FORM ════════════════ */}
+              {tab === 'manual' && (
+                <div className="space-y-4">
+                  {/* Multi-Row Batch Switcher Banner */}
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
+                    <div className="flex items-center gap-2.5">
+                      <Layers className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-white">ต้องการบันทึกหลายหุ้นพร้อมกัน?</p>
+                        <p className="text-[11px] text-zinc-400">เปิดตารางกรอกหลายรายการ เพื่อเพิ่ม 2, 3, 5+ หุ้นและบันทึกทีเดียว</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const initialItem: ExtractedTxn = {
+                          id: `manual_${Date.now()}_1`,
+                          selected: true,
+                          txnType: formData.txnType,
+                          ticker: formData.ticker.trim().toUpperCase() || '',
+                          assetName: formData.assetName.trim() || formData.ticker.trim().toUpperCase() || '',
+                          market: formData.market,
+                          assetType: formData.assetType,
+                          quantity: quantityNum > 0 ? quantityNum : 1,
+                          pricePerUnit: priceNum > 0 ? priceNum : 0,
+                          fee: feeNum,
+                          taxWithheld: taxNum,
+                          totalAmount: Number(totalAmount) || 0,
+                          currency: formData.market === 'TH' ? 'THB' : 'USD',
+                          txnDate: formData.txnDate || new Date().toISOString().split('T')[0],
+                          matchedAccountId: accountId,
+                          accountName: accounts.find((a) => a.id === accountId)?.accountName || 'Dime! USD',
+                          note: formData.note,
+                          confidence: 1.0,
+                        }
+                        setExtractedTxns([initialItem])
+                        setAiSummaryText('โหมดกรอกข้อมูลหลายรายการพร้อมกัน (Multi-Entry Table)')
+                        setHasExtracted(true)
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-md shadow-indigo-600/20 shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>เปิดตารางหลายรายการ</span>
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleManualSubmit} id="manual-form" className="space-y-4">
+                    {/* Account Selection */}
+                    <div>
+                      <label className={labelClass}>บัญชีการเงิน *</label>
+                      <select
+                        className={inputClass}
+                        value={accountId}
+                        onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+                        required
+                      >
+                        {accounts.map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.accountName} ({accountTypeLabel(acc.accountType)} — {acc.currency})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
               {/* Transaction Type & Date */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -1168,9 +1453,12 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                 </button>
               </div>
             </form>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+          </div>
+        )}
+      </>
+    )}
+  </div>
+</div>
+</div>
+)
 }
