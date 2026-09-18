@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Play,
   RotateCcw,
+  Clock,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -40,6 +41,15 @@ export default function ForecastPage() {
   const [aiExplanation, setAiExplanation] = useState<string | null>(null)
   const [modelUsed, setModelUsed] = useState<string>('')
 
+  // Load persistent latest AI explanation from database
+  const { data: aiForecastData, mutate: mutateAiForecast } = useSWR('/api/ai-advisor/explain-forecast', {
+    revalidateOnFocus: false,
+  })
+
+  const currentExplanation = aiExplanation || aiForecastData?.explanation
+  const currentModel = modelUsed || aiForecastData?.modelUsed
+  const currentUpdatedAt = aiForecastData?.updatedAt
+
   useEffect(() => {
     if (summary?.totalValue && summary.totalValue > 0) {
       setInitialAmount(Math.round(summary.totalValue))
@@ -57,7 +67,7 @@ export default function ForecastPage() {
       numSimulations: 500,
     })
     setResult(sim)
-    setAiExplanation(null)
+    // Keep currentExplanation visible so the user can continue reading past analysis
   }
 
   useEffect(() => {
@@ -68,29 +78,25 @@ export default function ForecastPage() {
     if (!result) return
     setAiLoading(true)
     try {
-      const res = await fetch('/api/forecast/explain', {
+      const res = await fetch('/api/ai-advisor/explain-forecast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           initialAmount,
           monthlyContribution,
           years,
-          annualReturn,
-          annualVolatility,
+          finalP10: result.finalP10,
+          finalP50: result.finalP50,
+          finalP90: result.finalP90,
           targetAmount,
-          result: {
-            p10: result.finalP10,
-            p50: result.finalP50,
-            p90: result.finalP90,
-            probability: result.probabilityOfReachingTarget,
-            totalContributed: result.totalContributed,
-          },
+          probabilityOfReachingTarget: result.probabilityOfReachingTarget,
         }),
       })
       const data = await res.json()
       if (data.explanation) {
         setAiExplanation(data.explanation)
         setModelUsed(data.modelUsed || '')
+        await mutateAiForecast(data, false)
       }
     } catch {
       setAiExplanation('เกิดข้อผิดพลาดในการขอคำแนะนำจาก AI กรุณาลองใหม่อีกครั้ง')
@@ -282,22 +288,31 @@ export default function ForecastPage() {
         )}
 
         {/* AI Explanation Box */}
-        {aiExplanation && (
-          <div className="p-6 rounded-2xl bg-[#12151C] border border-indigo-500/30 space-y-4 animate-fade-in shadow-xl shadow-black/40">
-            <div className="flex items-center justify-between">
+        {currentExplanation && (
+          <div className="p-6 rounded-3xl glass-panel border border-indigo-500/30 space-y-4 animate-fade-in shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 relative z-10">
               <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm">
                 <Sparkles className="w-4 h-4" />
-                <span>คำแนะนำเชิงกลยุทธ์จาก AI Advisor</span>
+                <span>คำแนะนำเชิงกลยุทธ์จาก AI Advisor (การวิเคราะห์ล่าสุด)</span>
               </div>
-              {modelUsed && (
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-mono">
-                  {modelUsed}
-                </span>
-              )}
+              <div className="flex items-center gap-2.5">
+                {currentUpdatedAt && (
+                  <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-white/[0.03] px-2.5 py-1 rounded-xl border border-white/[0.06]">
+                    <Clock className="w-3.5 h-3.5 text-slate-500" />
+                    {new Date(currentUpdatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                  </span>
+                )}
+                {currentModel && (
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-mono">
+                    {currentModel}
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="p-5 rounded-xl bg-[#181C25] border border-white/[0.06] text-xs text-slate-200 leading-relaxed space-y-2 whitespace-pre-line">
-              {aiExplanation}
+            <div className="p-5 rounded-2xl bg-black/30 border border-white/[0.06] text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line relative z-10">
+              {currentExplanation}
             </div>
           </div>
         )}

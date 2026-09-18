@@ -1,6 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+
+export const maxDuration = 45
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(req.url)
+  const year = searchParams.get('year') || String(new Date().getFullYear())
+
+  try {
+    const latestLog = await prisma.aiAdviceLog.findFirst({
+      where: {
+        userId: session.user.id,
+        logType: 'tax_explain',
+        prompt: { contains: `[ปีภาษี: ${year}]` },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { response: true, modelUsed: true, createdAt: true },
+    })
+
+    return NextResponse.json({
+      explanation: latestLog?.response ?? null,
+      modelUsed: latestLog?.modelUsed ?? null,
+      updatedAt: latestLog?.createdAt ? latestLog.createdAt.toISOString() : null,
+    })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to fetch tax explanation' }, { status: 500 })
+  }
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -15,7 +48,6 @@ export async function POST(req: NextRequest) {
       dividends,
       thaiSetCapitalGains,
       foreignAndCryptoGains,
-      // Optional: user declares whether they repatriated funds to Thailand
       repatriated = false,
     } = await req.json()
 
@@ -40,13 +72,11 @@ export async function POST(req: NextRequest) {
     const hasForeignGain = foreignGainUSD !== 0 || foreignGainTHB !== 0
     const hasDivUSD = divGrossUSD > 0
 
-    // Determine if foreign capital gains are taxable in Thailand based on rules
-    // Rule: เงินลงทุนก่อนปี 2567 → ต้องเสียภาษีไทยเฉพาะเมื่อนำเงินกลับไทย
-    //       เงินลงทุนตั้งแต่ปี 2567 → ต้องเสียภาษีไทยไม่ว่าจะนำกลับหรือไม่
     const isNewRuleYear = year >= taxYear2024
     const foreignGainTaxableInThailand = isNewRuleYear || repatriated
 
     const prompt = `
+[ปีภาษี: ${year}]
 คุณเป็นผู้เชี่ยวชาญด้านภาษีการลงทุนสำหรับบุคคลธรรมดาในประเทศไทย ที่มีความเข้าใจลึกซึ้งในกฎภาษีการลงทุนต่างประเทศ
 กรุณาวิเคราะห์และอธิบายสรุปรายงานภาษีปี ${year} ของผู้ลงทุนเป็นภาษาไทยที่เข้าใจง่าย
 
@@ -90,9 +120,9 @@ ${hasForeignGain
   : '   - ไม่มีรายการขายหุ้นต่างประเทศในปีนี้'}
 
 === กรุณาวิเคราะห์และแนะนำ 3 ประเด็นต่อไปนี้ ===
-1. สรุปภาระภาษีจริงของปีนี้ — หมวดไหนที่ "ต้องเสีย" หมวดไหนที่ "ไม่ต้องเสีย" และเพราะเหตุใด
-2. คำแนะนำเรื่องเงินปันผล — วิธีเลือกระหว่าง Final Tax 10% กับการขอเครดิตภาษีจาก W-8BEN 15%
-3. กลยุทธ์ภาษีที่แนะนำ — เช่น วิธีนำเงินกลับไทยโดยประหยัดภาษีสูงสุด (นำกลับเฉพาะส่วนทุน, ใช้เครดิตภาษี W-8BEN)
+1. 📋 **สรุปภาระภาษีจริงของปีนี้**: หมวดไหนที่ "ต้องเสีย" หมวดไหนที่ "ไม่ต้องเสีย" และเพราะเหตุใด
+2. 💵 **คำแนะนำเรื่องเงินปันผล**: วิธีเลือกระหว่าง Final Tax 10% กับการขอเครดิตภาษีจาก W-8BEN 15%
+3. 💡 **กลยุทธ์ภาษีที่แนะนำ**: วิธีบริหารจัดการเงินลงทุนเพื่อประหยัดภาษีสูงสุดอย่างถูกต้องตามกฎหมาย
 `
 
     const { text, modelUsed } = await callGemini({
@@ -110,6 +140,7 @@ ${hasForeignGain
       explanation: text,
       disclaimer,
       modelUsed,
+      updatedAt: new Date().toISOString(),
     })
   } catch (error: any) {
     console.error('[tax-report explain POST]', error)

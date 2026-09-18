@@ -1,6 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+
+export const maxDuration = 45
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const latestLog = await prisma.aiAdviceLog.findFirst({
+      where: {
+        userId: session.user.id,
+        logType: 'forecast_explain',
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { response: true, modelUsed: true, createdAt: true },
+    })
+
+    return NextResponse.json({
+      explanation: latestLog?.response ?? null,
+      modelUsed: latestLog?.modelUsed ?? null,
+      updatedAt: latestLog?.createdAt ? latestLog.createdAt.toISOString() : null,
+    })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to fetch forecast history' }, { status: 500 })
+  }
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -36,9 +65,11 @@ export async function POST(req: NextRequest) {
   • กรณีดีเยี่ยม (P90 - ตลาดกระทิงสดใส): ฿${Number(finalP90).toLocaleString()}
 
 กรุณาสรุป 3 ส่วน:
-1. ความหมายของตัวเลขเหล่านี้สำหรับผู้ลงทุน (ตีความเป็นภาษาคน ไม่ใช้ศัพท์สถิติซับซ้อน)
-2. การประเมินโอกาสที่จะบรรลุเป้าหมาย
-3. คำแนะนำที่ทำได้จริงเพื่อเพิ่มโอกาสสำเร็จ (เช่น การเพิ่มเงินออมรายเดือน หรือการปรับสัดส่วนสินทรัพย์)
+1. 📈 **ความหมายของตัวเลขเหล่านี้สำหรับผู้ลงทุน**: ตีความเป็นภาษาคน ไม่ใช้ศัพท์สถิติซับซ้อน
+2. 🎯 **การประเมินโอกาสที่จะบรรลุเป้าหมาย**: อธิบายโอกาสสำเร็จและปัจจัยหนุน
+3. 💡 **คำแนะนำที่ทำได้จริงเพื่อเพิ่มโอกาสสำเร็จ**: เช่น การเพิ่มเงินออมรายเดือน หรือการปรับสัดส่วนสินทรัพย์
+
+(ใช้ Bullet points และหัวข้อชัดเจน สละสลวย)
 `
 
     const { text, modelUsed } = await callGemini({
@@ -51,6 +82,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       explanation: text,
       modelUsed,
+      updatedAt: new Date().toISOString(),
     })
   } catch (error: any) {
     console.error('[explain-forecast POST]', error)

@@ -7,6 +7,35 @@ import { callGemini } from '@/lib/ai/gemini-client'
 
 export const maxDuration = 45
 
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const userId = session.user.id
+
+  try {
+    const latestLog = await prisma.aiAdviceLog.findFirst({
+      where: {
+        userId,
+        logType: 'advisor',
+        prompt: { contains: 'Investment Advisor AI' },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { response: true, modelUsed: true, createdAt: true },
+    })
+
+    return NextResponse.json({
+      advice: latestLog?.response ?? null,
+      modelUsed: latestLog?.modelUsed ?? null,
+      updatedAt: latestLog?.createdAt ? latestLog.createdAt.toISOString() : null,
+    })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to fetch latest advice' }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -16,6 +45,9 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id
 
   try {
+    const body = await req.json().catch(() => ({}))
+    const { presetName, targetAllocation } = body || {}
+
     // 1. Gather context
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
@@ -40,20 +72,22 @@ export async function POST(req: NextRequest) {
 
     const prompt = `
 คุณเป็นที่ปรึกษาการลงทุนอัจฉริยะส่วนบุคคล (Investment Advisor AI)
-วิเคราะห์ข้อมูลพอร์ตการลงทุนของผู้ใช้ต่อไปนี้ แล้วให้คำแนะนำภาษาไทยที่เข้าใจง่าย กระชับ และตรงประเด็น:
+วิเคราะห์ข้อมูลพอร์ตการลงทุนและแผนการจัดสรรสินทรัพย์ของผู้ใช้ต่อไปนี้ แล้วให้คำแนะนำภาษาไทยระดับมืออาชีพ ชัดเจน เข้าใจง่าย และตรงประเด็น:
 
-ข้อมูลพอร์ต:
+[ข้อมูลพอร์ตปัจจุบัน]
 - มูลค่ารวม: ${holdingsResult.totalValueBase.toLocaleString()} ${baseCurrency}
 - กำไร/ขาดทุนรวม: ${holdingsResult.unrealizedPnLPercent.toFixed(2)}%
 - Portfolio Health Score: ${healthScore.score}/100 (เกรด ${healthScore.grade})
-- รายการสินทรัพย์: ${JSON.stringify(holdingsSummary, null, 2)}
+- แผนการลงทุนที่เลือกใช้งาน: ${presetName || 'แผนมาตรฐาน'}
+${targetAllocation ? `- สัดส่วนเป้าหมายตามแผน: ${JSON.stringify(targetAllocation)}` : ''}
+- รายการสินทรัพย์ปัจจุบัน: ${JSON.stringify(holdingsSummary, null, 2)}
 
-กรุณาวิเคราะห์ 3 ด้าน:
-1. การกระจายความเสี่ยง (Diversification) และสินทรัพย์ที่กระจุกตัว
-2. ข้อแนะนำในการปรับสมดุลพอร์ต (Rebalancing Suggestions)
-3. ความเสี่ยงตลาดที่ควรจับตาในรอบนี้
+กรุณาวิเคราะห์ 3 ด้านสำคัญ:
+1. 🛡️ **การกระจายความเสี่ยง (Diversification & Concentration)**: ชี้จุดกระจุกตัวหรือจุดเปราะบางเทียบกับเป้าหมาย
+2. 🎯 **ข้อแนะนำในการปรับสมดุลพอร์ต (Rebalancing Action Steps)**: ระบุชัดเจนว่าควรทยอยเติมเงินหรือขายปรับสัดส่วนในกลุ่มใดเป็นพิเศษ
+3. 💡 **ความเสี่ยงตลาดและยุทธศาสตร์รับมือ (Market Risks & Defensive Strategy)**: ข้อคิดในการบริหารเงินลงทุนระยะยาว
 
-(คำตอบควรจัดหมวดหมู่อย่างสวยงาม ใช้ Bullet point และสรุปสั้นกระชับ)
+(คำตอบควรจัดหมวดหมู่ให้อ่านง่าย ใช้ Bullet points ชัดเจน ไม่พิมพ์เครื่องหมายกำกวม)
 `
 
     const systemInstruction =
@@ -73,6 +107,7 @@ export async function POST(req: NextRequest) {
       advice: text,
       disclaimer,
       modelUsed,
+      updatedAt: new Date().toISOString(),
       healthScore,
     })
   } catch (error: any) {

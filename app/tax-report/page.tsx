@@ -15,6 +15,8 @@ import {
   Receipt,
   CheckCircle2,
   DollarSign,
+  Clock,
+  RefreshCw,
 } from 'lucide-react'
 
 // Helper: format a number with the correct currency symbol
@@ -50,6 +52,16 @@ export default function TaxReportPage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiExplanation, setAiExplanation] = useState<string | null>(null)
   const [modelUsed, setModelUsed] = useState<string>('')
+
+  // Load persistent latest AI tax explanation for this year from database
+  const { data: cachedTaxAi, mutate: mutateCachedTaxAi } = useSWR(
+    `/api/tax-report/explain?year=${selectedYear}`,
+    { revalidateOnFocus: false }
+  )
+
+  const currentExplanation = aiExplanation || cachedTaxAi?.explanation
+  const currentModel = modelUsed || cachedTaxAi?.modelUsed
+  const currentUpdatedAt = cachedTaxAi?.updatedAt
 
   const usdThbRate: number = report?.usdThbRate ?? 35.5
 
@@ -146,6 +158,7 @@ export default function TaxReportPage() {
       if (data.explanation) {
         setAiExplanation(data.explanation)
         setModelUsed(data.modelUsed || '')
+        await mutateCachedTaxAi(data, false)
       }
     } catch {
       setAiExplanation('เกิดข้อผิดพลาดในการประมวลผลคำแนะนำจาก AI กรุณาลองใหม่อีกครั้ง')
@@ -419,8 +432,9 @@ export default function TaxReportPage() {
         ) : null}
 
         {/* AI Tax Advisor Card */}
-        <div className="p-6 rounded-2xl bg-[#12151C] border border-white/[0.08] space-y-5 shadow-xl shadow-black/40">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-6 rounded-3xl glass-panel border border-indigo-500/20 space-y-5 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
             <div>
               <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-indigo-400" />
@@ -431,34 +445,43 @@ export default function TaxReportPage() {
               </p>
             </div>
 
-            <button
-              onClick={handleExplainAI}
-              disabled={aiLoading || !report}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-600/25 active:scale-[0.98] cursor-pointer self-start sm:self-auto"
-            >
-              {aiLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>AI กำลังวิเคราะห์ข้อมูลภาษี...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>วิเคราะห์ภาษีด้วย AI</span>
-                </>
+            <div className="flex items-center gap-3 self-start sm:self-auto">
+              {currentUpdatedAt && (
+                <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-white/[0.03] px-3 py-1.5 rounded-xl border border-white/[0.06]">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
+                  วิเคราะห์ล่าสุด: {new Date(currentUpdatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                </span>
               )}
-            </button>
+              <button
+                type="button"
+                onClick={handleExplainAI}
+                disabled={aiLoading || !report}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-600/25 active:scale-[0.98] cursor-pointer"
+              >
+                {aiLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>AI กำลังวิเคราะห์ข้อมูลภาษี...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>{currentExplanation ? 'วิเคราะห์ภาษีใหม่ด้วย AI' : 'วิเคราะห์ภาษีด้วย AI'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
-          {aiExplanation && (
-            <div className="p-5 rounded-xl bg-[#181C25] border border-indigo-500/25 text-xs text-slate-200 leading-relaxed whitespace-pre-line animate-fade-in shadow-inner">
+          {currentExplanation && (
+            <div className="p-5 rounded-2xl bg-black/30 border border-indigo-500/25 text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line animate-fade-in relative z-10">
               <div className="flex justify-between items-center mb-3 pb-2 border-b border-white/[0.06]">
                 <span className="text-[11px] text-indigo-400 font-semibold flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> ผลการวิเคราะห์เสร็จสมบูรณ์
+                  <CheckCircle2 className="w-3.5 h-3.5" /> ผลการวิเคราะห์ล่าสุดปีภาษี {selectedYear}
                 </span>
-                <span className="text-[10px] text-slate-500 font-mono">{modelUsed}</span>
+                {currentModel && <span className="text-[10px] text-slate-500 font-mono">{currentModel}</span>}
               </div>
-              {aiExplanation}
+              {currentExplanation}
             </div>
           )}
         </div>

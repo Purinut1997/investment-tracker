@@ -1,6 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
+import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+
+export const maxDuration = 45
+
+export async function GET(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(req.url)
+  const symbol = searchParams.get('symbol')
+
+  if (!symbol) {
+    return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
+  }
+
+  try {
+    const latestLog = await prisma.aiAdviceLog.findFirst({
+      where: {
+        userId: session.user.id,
+        prompt: { contains: `(${symbol.toUpperCase()})` },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { response: true, modelUsed: true, createdAt: true },
+    })
+
+    return NextResponse.json({
+      insight: latestLog?.response ?? null,
+      modelUsed: latestLog?.modelUsed ?? null,
+      updatedAt: latestLog?.createdAt ? latestLog.createdAt.toISOString() : null,
+    })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to fetch stock insight history' }, { status: 500 })
+  }
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -27,9 +63,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
     }
 
+    const cleanSymbol = symbol.toUpperCase()
+
     const prompt = `
 โปรดวิเคราะห์หุ้น/สินทรัพย์นี้ในฐานะ Executive Investment Analyst:
-- ชื่อสินทรัพย์: ${name || symbol} (${symbol})
+- ชื่อสินทรัพย์: ${name || cleanSymbol} (${cleanSymbol})
 - ราคาปัจจุบัน: ${currentPrice} ${currency} (การเปลี่ยนแปลงวันนี้: ${changePercent ? `${changePercent}%` : 'N/A'})
 - อัตราส่วน P/E: ${pe ? `${pe}x` : 'N/A หรือ ETF/Crypto'}
 - อัตราผลตอบแทนเงินปันผล (Dividend Yield): ${dividendYield ? `${dividendYield}%` : 'N/A'}
@@ -54,6 +92,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       insight: result.text,
       modelUsed: result.modelUsed,
+      updatedAt: new Date().toISOString(),
       timestamp: Date.now(),
     })
   } catch (error: any) {

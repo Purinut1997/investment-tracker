@@ -24,6 +24,8 @@ import {
   Compass,
   Target,
   ShieldCheck,
+  Clock,
+  RefreshCw,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -91,6 +93,16 @@ export function StockDetailModal({
       setIsAiLoading(false)
     }
   }, [isOpen, symbol])
+
+  // Fetch persistent latest AI Insight for this symbol from database
+  const { data: cachedAiData, mutate: mutateCachedAi } = useSWR(
+    isOpen && symbol ? `/api/market-watch/ai-insight?symbol=${encodeURIComponent(symbol)}` : null,
+    { revalidateOnFocus: false }
+  )
+
+  const activeInsight = aiInsight || cachedAiData?.insight
+  const activeModelUsed = aiModelUsed || cachedAiData?.modelUsed
+  const activeUpdatedAt = cachedAiData?.updatedAt
 
   // ESC key to close
   useEffect(() => {
@@ -191,6 +203,7 @@ export function StockDetailModal({
 
       setAiInsight(resData.insight)
       setAiModelUsed(resData.modelUsed)
+      await mutateCachedAi(resData, false)
     } catch (err: any) {
       setAiError(err?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ AI')
     } finally {
@@ -797,7 +810,7 @@ export function StockDetailModal({
 
               {/* 6. GEMINI AI STOCK INSIGHTS */}
               <div className="p-5 rounded-2xl bg-gradient-to-br from-[#12151C] to-[#191D28] border border-amber-500/25 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
                       <Sparkles className="w-3.5 h-3.5" />
@@ -805,9 +818,9 @@ export function StockDetailModal({
                     <div>
                       <h4 className="text-xs font-bold text-white tracking-wide flex items-center gap-2">
                         <span>วิเคราะห์หุ้นเชิงลึกด้วย AI (Gemini Insights)</span>
-                        {aiModelUsed && (
+                        {activeModelUsed && (
                           <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-normal">
-                            {aiModelUsed}
+                            {activeModelUsed}
                           </span>
                         )}
                       </h4>
@@ -817,7 +830,14 @@ export function StockDetailModal({
                     </div>
                   </div>
 
-                  {!aiInsight && (
+                  <div className="flex items-center gap-2.5 self-start sm:self-auto">
+                    {activeUpdatedAt && (
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.06] font-mono">
+                        <Clock className="w-3 h-3 text-slate-500" />
+                        {new Date(activeUpdatedAt).toLocaleDateString('th-TH')} {new Date(activeUpdatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                      </span>
+                    )}
+
                     <button
                       type="button"
                       onClick={handleGenerateAiInsight}
@@ -829,6 +849,11 @@ export function StockDetailModal({
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           <span>กำลังประมวลผล...</span>
                         </>
+                      ) : activeInsight ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>วิเคราะห์ใหม่</span>
+                        </>
                       ) : (
                         <>
                           <Sparkles className="w-3.5 h-3.5" />
@@ -836,7 +861,7 @@ export function StockDetailModal({
                         </>
                       )}
                     </button>
-                  )}
+                  </div>
                 </div>
 
                 {/* AI Loading State */}
@@ -866,10 +891,10 @@ export function StockDetailModal({
                 )}
 
                 {/* AI Result View */}
-                {aiInsight && (
+                {activeInsight && (
                   <div className="space-y-3">
                     <div className="p-4 rounded-xl bg-[#0F1218] border border-white/[0.06] text-xs text-slate-200 leading-relaxed space-y-2 prose prose-invert max-w-none">
-                      {aiInsight.split('\n\n').map((paragraph, idx) => (
+                      {activeInsight.split('\n\n').map((paragraph: string, idx: number) => (
                         <p key={idx} className="whitespace-pre-line">
                           {paragraph}
                         </p>

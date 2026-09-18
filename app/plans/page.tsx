@@ -18,6 +18,8 @@ import {
   PieChart,
   ArrowRight,
   Sparkles,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react'
 
 const DEFAULT_CATEGORIES = ['US', 'TH', 'CRYPTO', 'GOLD', 'CASH']
@@ -89,6 +91,34 @@ export default function PlansPage() {
   const defaultPreset = presets.find((p) => p.isDefault) ?? presets[0]
   const [selectedPresetId, setSelectedPresetId] = useState<string>('')
   const activePreset = presets.find((p) => p.id === (selectedPresetId || defaultPreset?.id)) ?? defaultPreset
+
+  const { data: aiAdvisorData, mutate: mutateAiAdvisor } = useSWR('/api/ai-advisor/analyze', {
+    revalidateOnFocus: false,
+  })
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+
+  async function handleRunAiAdvisor() {
+    setIsAiAnalyzing(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/ai-advisor/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          presetName: activePreset?.presetName,
+          targetAllocation: activePreset?.targetAllocation,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'วิเคราะห์ไม่สำเร็จ')
+      await mutateAiAdvisor(result, false)
+    } catch (err: any) {
+      setAiError(err.message || 'เกิดข้อผิดพลาดในการวิเคราะห์')
+    } finally {
+      setIsAiAnalyzing(false)
+    }
+  }
 
   const [formData, setFormData] = useState({
     presetName: '',
@@ -336,6 +366,69 @@ export default function PlansPage() {
             </div>
           </div>
         )}
+
+        {/* ── AI Rebalance & Portfolio Advisor Card ─────────── */}
+        <div className="rounded-3xl glass-panel p-6 sm:p-7 border border-indigo-500/20 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.08] relative z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  AI Rebalance & Allocation Advisor
+                </h3>
+                <p className="text-xs text-slate-400">
+                  วิเคราะห์เปรียบเทียบสัดส่วนพอร์ตปัจจุบันกับแผน พร้อมยุทธศาสตร์ Rebalancing
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 self-start sm:self-auto">
+              {aiAdvisorData?.updatedAt && (
+                <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-white/[0.03] px-3 py-1.5 rounded-xl border border-white/[0.06]">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
+                  วิเคราะห์ล่าสุด: {new Date(aiAdvisorData.updatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleRunAiAdvisor}
+                disabled={isAiAnalyzing}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-all flex items-center gap-2 shadow-md shadow-indigo-600/25 active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${isAiAnalyzing ? 'animate-spin' : ''}`} />
+                <span>{isAiAnalyzing ? 'กำลังประมวลผล AI...' : aiAdvisorData?.advice ? 'วิเคราะห์ปรับพอร์ตใหม่ด้วย AI' : 'วิเคราะห์ปรับพอร์ตด้วย AI'}</span>
+              </button>
+            </div>
+          </div>
+
+          {aiError && (
+            <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{aiError}</span>
+            </div>
+          )}
+
+          {aiAdvisorData?.advice ? (
+            <div className="mt-5 space-y-4 relative z-10">
+              <div className="prose prose-invert max-w-none text-xs sm:text-sm text-slate-300 whitespace-pre-line leading-relaxed bg-black/30 rounded-2xl p-4 sm:p-6 border border-white/[0.06]">
+                {aiAdvisorData.advice}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {aiAdvisorData.disclaimer || '⚠️ ข้อมูลนี้เกิดจากการประมวลผลด้วย AI เพื่อเป็นแนวทางวิเคราะห์ส่วนบุคคลเท่านั้น ไม่ถือเป็นคำแนะนำทางการเงิน'}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 py-6 text-center space-y-3 relative z-10">
+              <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                ยังไม่มีประวัติการวิเคราะห์สัดส่วนพอร์ต — คลิกปุ่ม <strong>&quot;วิเคราะห์ปรับพอร์ตด้วย AI&quot;</strong> ด้านบน เพื่อรับคำแนะนำจัดสรรสินทรัพย์และลดความเสี่ยงแบบ Real-time
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Presets List */}
         <div className="space-y-4">
