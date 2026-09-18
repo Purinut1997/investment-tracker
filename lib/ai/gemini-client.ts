@@ -10,6 +10,12 @@ import { decrypt } from '@/lib/crypto'
 export interface CallGeminiOptions {
   userId: string
   prompt: string
+  images?: Array<{
+    inlineData: {
+      data: string
+      mimeType: string
+    }
+  }>
   logType:
     | 'advisor'
     | 'weekly_digest'
@@ -28,6 +34,7 @@ export interface CallGeminiResult {
 export async function callGemini({
   userId,
   prompt,
+  images,
   logType,
   systemInstruction,
 }: CallGeminiOptions): Promise<CallGeminiResult> {
@@ -72,7 +79,7 @@ export async function callGemini({
       modelsToTry = dbModels.map((m) => m.modelId)
     } else {
       // Hardcoded fallback list in case seed has not been run
-      modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash-exp']
+      modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash']
     }
   }
 
@@ -86,7 +93,11 @@ export async function callGemini({
         ...(systemInstruction ? { systemInstruction } : {}),
       })
 
-      const result = await model.generateContent(prompt)
+      const contentPayload = images && images.length > 0
+        ? [prompt, ...images]
+        : prompt
+
+      const result = await model.generateContent(contentPayload as any)
       const response = await result.response
       const text = response.text()
 

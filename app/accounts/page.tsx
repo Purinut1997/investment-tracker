@@ -25,12 +25,15 @@ import {
   type AccountTypeValue,
   type InvestmentAccountRecord,
 } from '@/lib/accounts'
+import { CashWalletCard } from '@/components/CashWalletCard'
+import { QuickAddModal } from '@/components/QuickAddModal'
 
 export default function AccountsPage() {
   const { data, isLoading, error } = useSWR('/api/accounts')
   const accounts = parseAccountsPayload(data)
 
   const [modalOpen, setModalOpen] = useState(false)
+  const [aiModalOpen, setAiModalOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<InvestmentAccountRecord | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [formError, setFormError] = useState('')
@@ -170,6 +173,9 @@ export default function AccountsPage() {
             })}
           </div>
         )}
+
+        {/* Multi-Currency Cash Wallet & Accrued Interest Section */}
+        <CashWalletCard onOpenAiScan={() => setAiModalOpen(true)} />
 
         {/* Content Section */}
         {isLoading ? (
@@ -354,6 +360,18 @@ export default function AccountsPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Multi-Image AI Quick Add Modal */}
+      {aiModalOpen && (
+        <QuickAddModal
+          initialTab="photos"
+          onClose={() => setAiModalOpen(false)}
+          onSuccess={() => {
+            mutate('/api/accounts')
+            mutate('/api/cash-wallet')
+          }}
+        />
       )}
     </AppShell>
   )

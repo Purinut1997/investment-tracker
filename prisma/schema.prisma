@@ -93,12 +93,15 @@ enum DigestDelivery {
 // 3. InvestmentAccount
 // ============================================================
 model InvestmentAccount {
-  id          String      @id @default(cuid())
-  userId      String
-  accountName String
-  accountType AccountType
-  currency    String      @default("THB")
-  createdAt   DateTime    @default(now())
+  id              String      @id @default(cuid())
+  userId          String
+  accountName     String
+  accountType     AccountType
+  currency        String      @default("THB")
+  cashBalance     Decimal     @default(0)
+  accruedInterest Decimal     @default(0)
+  interestDays    Int?        @default(0)
+  createdAt       DateTime    @default(now())
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
@@ -212,10 +215,12 @@ model TransactionEditHistory {
 // 7. CashBalance
 // ============================================================
 model CashBalance {
-  id          String   @id @default(cuid())
-  accountId   String
-  balanceDate DateTime
-  cashAmount  Decimal
+  id              String   @id @default(cuid())
+  accountId       String
+  balanceDate     DateTime
+  cashAmount      Decimal
+  accruedInterest Decimal? @default(0)
+  note            String?
 
   account InvestmentAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 

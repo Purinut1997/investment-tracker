@@ -30,16 +30,28 @@ export const metadata: Metadata = {
     title: 'Investment Pro',
     description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
     siteName: 'Investment Pro',
+    images: [
+      {
+        url: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/IMG_2283.JPG',
+        width: 694,
+        height: 702,
+        alt: 'Investment Pro Logo',
+      },
+    ],
   },
   icons: {
-    icon: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png',
-    shortcut: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png',
-    apple: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/LOGO%20SYSTEM.png',
+    icon: [
+      { url: '/logo.png', type: 'image/png' },
+      { url: 'https://raw.githubusercontent.com/Purinut1997/web-images/main/IMG_2283.JPG' },
+    ],
+    shortcut: '/logo.png',
+    apple: '/icons/apple-icon.png',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Investment Pro',
     description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
+    images: ['https://raw.githubusercontent.com/Purinut1997/web-images/main/IMG_2283.JPG'],
   },
 }
 
@@ -65,4 +77,3 @@ export default function RootLayout({
     </html>
   )
 }
-

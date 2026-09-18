@@ -102,10 +102,13 @@ export default function DashboardPage() {
   const { data: holdingsData, error: holdingsError, isLoading: holdLoading } = useSWR('/api/portfolio/holdings', { refreshInterval: 60000 })
   const { data: accountsData, error: accountsError, isLoading: accLoading } = useSWR('/api/accounts')
   const { data: plansData, error: plansError, isLoading: planLoading } = useSWR('/api/plans')
+  const { data: cashData } = useSWR('/api/cash-wallet')
 
   const holdings: HoldingItem[] = Array.isArray(holdingsData?.holdings) ? holdingsData.holdings : []
 
+  const totalCash = cashData?.totalCashBase ?? 0
   const totalValue = summary?.totalValue ?? 0
+  const netWorth = totalValue + totalCash
   const totalCost = summary?.totalCost ?? 0
   const unrealizedPnL = summary?.unrealizedPnL ?? 0
   const unrealizedPnLPercent = summary?.unrealizedPnLPercent ?? 0
@@ -215,16 +218,23 @@ export default function DashboardPage() {
 
             <div className="my-5">
               <p className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-none font-mono tabular-nums">
-                ฿<CountUp end={totalValue} duration={1.2} separator="," decimals={2} />
+                ฿<CountUp end={netWorth} duration={1.2} separator="," decimals={2} />
               </p>
-              <div className="flex items-center gap-3 mt-3">
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 mt-3">
                 <span className="text-xs text-slate-400 font-mono tabular-nums">
-                  ต้นทุนรวม: ฿{totalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  สินทรัพย์: ฿{totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
+                <span className="text-slate-600">•</span>
+                <Link
+                  href="/accounts"
+                  className="text-xs text-emerald-400 hover:text-emerald-300 font-mono tabular-nums flex items-center gap-1 transition-colors"
+                >
+                  <span>เงินสด: ฿{totalCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </Link>
                 <span className="text-slate-600">•</span>
                 <span className={`text-xs font-semibold flex items-center gap-0.5 ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {isProfit ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                  {unrealizedPnLPercent.toFixed(2)}% ผลตอบแทนรวม
+                  {unrealizedPnLPercent.toFixed(2)}% กำไรพอร์ต
                 </span>
               </div>
             </div>

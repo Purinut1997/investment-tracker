@@ -91,7 +91,7 @@ Last updated: 2026-09-17
   - ตาราง Holdings ผัง Micro-Sparklines แสดงทิศทางราคาของแต่ละสินทรัพย์
   - Inspiring Empty State พร้อมปุ่มแสงวิบวับ "✨ บันทึกธุรกรรมแรก"
 - **Market Watch Overhaul (`app/market-watch/page.tsx`)**: Luxury quote cards พร้อมไฟกะพริบสด Live Pulse และปุ่มสลับสกุลเงินหมุน Flip 180°
-- **Official Brand Logo Integration ("MIX THE ARCHITECT")**: ติดตั้งโลโก้ทางการของระบบที่ Desktop Sidebar, Mobile Top Header, Mobile Navigation Drawer, หน้ายืนยันตัวตนทั้งหมด (`/login`, `/register`, `/forgot-password`, `/reset-password`), PWA App Icons (`icon-192`, `icon-512`, `apple-icon`) และ Favicon metadata (`app/layout.tsx`)
+- **Official Brand Logo Integration ("Investment Pro - MX")**: อัปเดตและติดตั้งโลโก้ทางการของระบบตามไฟล์ภาพใหม่ (`IMG_2283.JPG`) ด้วยสัญลักษณ์กราฟพุ่งขึ้นสไตล์ "MX" โทน Dark Luxury ผสานกราเดียนต์น้ำเงิน-ม่วง ติดตั้งครบทุกจุด: Desktop Sidebar, Mobile Top Header, Mobile Navigation Drawer, หน้ายืนยันตัวตนทั้งหมด (`/login`, `/register`, `/forgot-password`, `/reset-password`), Ticker Tape, PWA App Icons (`icon-192`, `icon-512`, `apple-icon`), Favicon และ OpenGraph/Twitter social cards ใน `app/layout.tsx`
 
 ### 11. Phase 10: Glassmorphism 2.0 & Multi-Theme Switcher Overhaul ✅
 - **Multi-Theme Style Switcher (`components/ThemeStyleSelector.tsx`)**:
@@ -142,6 +142,29 @@ Last updated: 2026-09-17
   - ปรับการ์ดสรุปข้อมูลทั้งหมด (Row 1 KPI, Row 2 Area Chart & AI Digest, Row 3 Holdings Table) เป็น Codex Solid Surface Cards ป้องกันปัญหาการมองทะลุ (Scroll Bleed-through)
 - **Non-Bleeding Topbar & Ticker Tape (`components/TickerTape.tsx`)**:
   - เสริมความทึบของแถบด้านบน (`bg-[#0a0c10]/95` และ `bg-[#090a0f]/95`) พร้อม Backdrop Blur เพื่อให้เวลาเลื่อนหน้าจอ ตัวหนังสือและกราฟด้านล่างจะไม่ทะลุผ่านแถบด้านบน
+
+### 14. Phase 13: Multi-Image AI Slip Extraction & Multi-Currency Cash Wallet Architecture ✅
+- **Multi-Image AI Trade Extraction (`app/api/ai/extract-slips/route.ts` & `components/QuickAddModal.tsx`)**:
+  - รองรับการอัปโหลดหรือวางภาพ (Drag & Drop, Multi-file picker, Clipboard `Ctrl+V`) ได้พร้อมกันหลายภาพ
+  - ประมวลผลด้วย Gemini Vision Multimodal แกะสลักข้อมูลธุรกรรมทุกประเภทรวมในครั้งเดียว:
+    - คำสั่งซื้อ (BUY) เช่น GOOGL 1 หุ้น @ 328.94 USD รวมค่าคอมมิชชันและภาษี VAT 7%
+    - คำสั่งขาย (SELL) เช่น MU 0.3191112 หุ้น @ 1,034.12 USD พร้อมค่าธรรมเนียม TAF & SEC
+    - เงินปันผล (DIVIDEND) เช่น ปันผล GOOGL 0.44 USD พร้อมหักภาษี ณ ที่จ่าย 0.06 USD
+    - ค่าธรรมเนียมรอจ่าย (FEE) และยอดเงินสดในบัญชี (CASH_BALANCE)
+  - แปลงวันที่ปี พ.ศ. (เช่น 9 ก.ย. 69) เป็น ค.ศ. (2026-09-09) อย่างแม่นยำ
+  - ตาราง **Batch Review Grid** ให้ตรวจสอบ แก้ไข เลือกรายการ และกด **"บันทึกทุกรายการในคลิกเดียว"**
+- **Batch Transactions & Auto Balance Engine (`app/api/transactions/batch/route.ts`)**:
+  - สร้างหรือจับคู่ Asset และ InvestmentAccount อัตโนมัติ
+  - บันทึกทุกธุรกรรมใน 1 Database Transaction และปรับยอดเงินสดคงเหลือตามประเภทรายการโดยอัตโนมัติ (ซื้อตัดเงินสด, ขาย/ปันผลเพิ่มเงินสด)
+- **Multi-Currency Cash Wallet & Accrued Interest (`components/CashWalletCard.tsx` & `app/api/cash-wallet/route.ts`)**:
+  - ดีไซน์การ์ดเงินสดระดับ Luxury ถอดแบบจากหน้าจอ Dime! (ภาพที่ 4):
+    - บัญชีของฉัน: 🇹🇭 THB (Dime! Save), 🇺🇸 USD (Dime! USD), 🇺🇸 USD (Dime! FCD) และรองรับ 10+ สกุลเงิน
+    - แปลงมูลค่ารวมเป็นเงินบาท (THB) ตามอัตราแลกเปลี่ยนจริงแบบเรียลไทม์
+    - การ์ด **"ดอกเบี้ยสะสม" (Accrued Interest)** พร้อมตัวเลขนับถอยหลังรอบจ่ายดอกเบี้ย ("จ่ายครั้งถัดไปในอีก 104 วัน") และแยกยอดรายสกุลเงิน
+    - ปุ่มฝาก/ถอน/ปรับยอดเงินสดโดยตรง พร้อมปุ่มลัดสแกนหน้าเงินสดด้วย AI
+- **Dashboard Net Worth Integration (`app/dashboard/page.tsx`)**:
+  - คำนวณความมั่งคั่งสุทธิรวม (Total Net Worth = มูลค่าสินทรัพย์ลงทุน + เงินสดสำรองรวม) แสดงผลแบบสดใสบนการ์ด Hero
+- **Build Status**: `npm run build` ผ่าน 100% ครบทุก 49 Static/Dynamic routes โดยไม่มี Error หรือ Type Warning ใดๆ
 
 ---
 
