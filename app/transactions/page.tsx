@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import Papa from 'papaparse'
 import { parseAccountsPayload } from '@/lib/accounts'
+import { StatusModal, type StatusDetailItem } from '@/components/ui/StatusModal'
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   BUY: { label: 'BUY', color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' },
@@ -407,9 +408,19 @@ export default function TransactionsPage() {
 function EditTransactionModal({ txn, onClose, onSuccess }: { txn: any; onClose: () => void; onSuccess: () => void }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean
+    type: 'loading' | 'success' | 'error' | 'warning'
+    title: string
+    description?: string
+    details?: StatusDetailItem[]
+    primaryAction?: { label: string; onClick: () => void }
+    autoCloseMs?: number
+  } | null>(null)
+
   const [form, setForm] = useState({
-    txnDate: new Date(txn.txnDate).toISOString().split('T')[0],
     txnType: txn.txnType,
+    txnDate: new Date(txn.txnDate).toISOString().split('T')[0],
     quantity: txn.quantity.toString(),
     pricePerUnit: txn.pricePerUnit.toString(),
     fee: (txn.fee ?? 0).toString(),
@@ -513,6 +524,26 @@ function EditTransactionModal({ txn, onClose, onSuccess }: { txn: any; onClose: 
           </div>
         </form>
       </div>
+
+      {statusModal && (
+        <StatusModal
+          isOpen={statusModal.isOpen}
+          type={statusModal.type}
+          title={statusModal.title}
+          description={statusModal.description}
+          details={statusModal.details}
+          primaryAction={statusModal.primaryAction}
+          onClose={() => {
+            const wasSuccess = statusModal.type === 'success'
+            setStatusModal(null)
+            if (wasSuccess) {
+              onSuccess()
+              onClose()
+            }
+          }}
+          autoCloseMs={statusModal.autoCloseMs}
+        />
+      )}
     </div>
   )
 }
@@ -525,6 +556,16 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null)
   const [error, setError] = useState('')
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean
+    type: 'loading' | 'success' | 'error' | 'warning'
+    title: string
+    description?: string
+    progressStep?: string
+    details?: StatusDetailItem[]
+    primaryAction?: { label: string; onClick: () => void }
+    autoCloseMs?: number
+  } | null>(null)
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -562,6 +603,14 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
     if (!selectedAccountId || rows.length === 0) return
     setImporting(true)
     setError('')
+    setStatusModal({
+      isOpen: true,
+      type: 'loading',
+      title: 'กำลังนำเข้าข้อมูลจาก CSV...',
+      description: `กำลังประมวลผลข้อมูล ${rows.length} รายการจากไฟล์`,
+      progressStep: 'กำลังตรวจสอบรายการซ้ำและบันทึกลงระบบ...',
+    })
+
     try {
       const res = await fetch('/api/transactions/import-csv', {
         method: 'POST',
@@ -571,9 +620,39 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Import failed')
       setResult(data)
-      if (data.imported > 0) setTimeout(() => onSuccess(), 1200)
+
+      setStatusModal({
+        isOpen: true,
+        type: 'success',
+        title: 'นำเข้าข้อมูลสำเร็จเรียบร้อย!',
+        description: 'บันทึกรายการธุรกรรมลงในบัญชีเรียบร้อยแล้ว',
+        details: [
+          { label: 'นำเข้าสำเร็จ', value: `${data.imported} รายการ`, color: 'text-emerald-400' },
+          { label: 'ข้ามรายการซ้ำ', value: `${data.skipped || 0} รายการ`, color: 'text-amber-400' },
+          { label: 'ไฟล์', value: fileName || 'CSV', color: 'text-indigo-400' },
+        ],
+        autoCloseMs: 3500,
+        primaryAction: {
+          label: 'ดูรายการทั้งหมด',
+          onClick: () => {
+            setStatusModal(null)
+            onSuccess()
+            onClose()
+          },
+        },
+      })
     } catch (err: any) {
       setError(err.message)
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'นำเข้าไม่สำเร็จ',
+        description: err.message || 'เกิดข้อผิดพลาดในการประมวลผลไฟล์ CSV',
+        primaryAction: {
+          label: 'ปิด',
+          onClick: () => setStatusModal(null),
+        },
+      })
     } finally {
       setImporting(false)
     }
@@ -673,6 +752,27 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
           </button>
         </div>
       </div>
+
+      {statusModal && (
+        <StatusModal
+          isOpen={statusModal.isOpen}
+          type={statusModal.type}
+          title={statusModal.title}
+          description={statusModal.description}
+          progressStep={statusModal.progressStep}
+          details={statusModal.details}
+          primaryAction={statusModal.primaryAction}
+          onClose={() => {
+            const wasSuccess = statusModal.type === 'success'
+            setStatusModal(null)
+            if (wasSuccess) {
+              onSuccess()
+              onClose()
+            }
+          }}
+          autoCloseMs={statusModal.autoCloseMs}
+        />
+      )}
     </div>
   )
 }

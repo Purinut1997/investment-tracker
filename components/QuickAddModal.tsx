@@ -32,6 +32,7 @@ import {
   parseAccountsPayload,
   type AccountTypeValue,
 } from '@/lib/accounts'
+import { StatusModal, type StatusDetailItem } from '@/components/ui/StatusModal'
 
 type TransactionType = 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'FEE'
 type Market = 'US' | 'TH' | 'CRYPTO'
@@ -106,6 +107,19 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
+
+  // Animated Status Modal (Loading / Success / Error)
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean
+    type: 'loading' | 'success' | 'error' | 'warning'
+    title: string
+    description?: string
+    progressStep?: string
+    details?: StatusDetailItem[]
+    primaryAction?: { label: string; onClick: () => void; icon?: React.ReactNode }
+    secondaryAction?: { label: string; onClick: () => void }
+    autoCloseMs?: number
+  } | null>(null)
 
   // Multi-Image State
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; size: number; base64: string; mimeType: string }>>([])
@@ -232,6 +246,13 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
     setParsing(true)
     setError('')
     setSuccessMsg('')
+    setStatusModal({
+      isOpen: true,
+      type: 'loading',
+      title: 'กำลังสแกนและวิเคราะห์สลิป...',
+      description: `ระบบกำลังถอดรหัสภาพสลิปจำนวน ${uploadedFiles.length} รูป และสกัดรายการลงทุน`,
+      progressStep: 'AI Vision & Multimodal Extraction...',
+    })
 
     try {
       const res = await fetch('/api/ai/extract-slips', {
@@ -285,8 +306,15 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       if (txns.length === 0 && cash.length === 0) {
         setError('ไม่พบข้อมูลธุรกรรมหรือเงินสดในภาพที่ส่งมา กรุณาตรวจสอบความคมชัดของภาพ')
       }
-    } catch (err: any) {
-      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการวิเคราะห์สลิป'))
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'การวิเคราะห์ภาพถ่ายล้มเหลว'))
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'การวิเคราะห์ภาพถ่ายล้มเหลว',
+        description: getErrorMessage(err, 'ไม่สามารถสกัดข้อมูลจากภาพได้ กรุณาลองใหม่อีกครั้ง'),
+        primaryAction: { label: 'ลองใหม่', onClick: () => setStatusModal(null) },
+      })
     } finally {
       setParsing(false)
     }
@@ -345,6 +373,13 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
 
     setSubmitting(true)
     setError('')
+    setStatusModal({
+      isOpen: true,
+      type: 'loading',
+      title: 'กำลังบันทึกรายการธุรกรรม...',
+      description: 'กำลังตรวจสอบข้อมูล ปรับปรุงยอดกระเป๋าเงินสด และคำนวณต้นทุนพอร์ต',
+      progressStep: `กำลังบันทึก ${sanitizedTxns.length + selectedCash.length} รายการ`,
+    })
 
     try {
       const res = await fetch('/api/transactions/batch', {
@@ -395,10 +430,58 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       mutate((key) => typeof key === 'string' && key.startsWith('/api/cash-wallet'))
       mutate((key) => typeof key === 'string' && key.startsWith('/api/portfolio'))
 
-      if (onSuccess) onSuccess()
-      onClose()
+      const totalCount = sanitizedTxns.length + selectedCash.length
+      const totalInvested = sanitizedTxns.reduce((sum, t) => sum + (Number(t.totalAmount) || 0), 0)
+      const primaryCurr = sanitizedTxns[0]?.currency || 'USD'
+
+      setStatusModal({
+        isOpen: true,
+        type: 'success',
+        title: '🎉 บันทึกรายการเรียบร้อยแล้ว!',
+        description: `ระบบได้บันทึกธุรกรรมทั้งหมด ${totalCount} รายการเข้าสู่พอร์ตของคุณเรียบร้อยแล้ว พร้อมอัปเดตยอดกระเป๋าเงินสดและต้นทุนเฉลี่ยทันที`,
+        details: [
+          { label: 'จำนวนรายการ', value: `${totalCount} รายการ`, color: 'text-emerald-400' },
+          {
+            label: 'ยอดรวมธุรกรรม',
+            value: `${primaryCurr === 'USD' ? '$' : '฿'}${totalInvested.toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })} ${primaryCurr}`,
+            color: 'text-white',
+          },
+          { label: 'สถานะระบบ', value: 'อัปเดตพอร์ตแล้ว', color: 'text-cyan-400' },
+        ],
+        primaryAction: {
+          label: 'ดูประวัติธุรกรรม',
+          onClick: () => {
+            setStatusModal(null)
+            if (onSuccess) onSuccess()
+            onClose()
+            window.location.href = '/transactions'
+          },
+        },
+        secondaryAction: {
+          label: 'ปิด',
+          onClick: () => {
+            setStatusModal(null)
+            if (onSuccess) onSuccess()
+            onClose()
+          },
+        },
+        autoCloseMs: 4000,
+      })
     } catch (err: any) {
       setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกรายการ'))
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'บันทึกไม่สำเร็จ',
+        description: getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกรายการ กรุณาตรวจสอบข้อมูล'),
+        primaryAction: {
+          label: 'ปิดหน้าต่าง',
+          onClick: () => setStatusModal(null),
+        },
+      })
     } finally {
       setSubmitting(false)
     }
@@ -509,6 +592,13 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
     setParsing(true)
     setError('')
     setSuccessMsg('')
+    setStatusModal({
+      isOpen: true,
+      type: 'loading',
+      title: 'AI กำลังวิเคราะห์ข้อมูล...',
+      description: 'ระบบกำลังอ่านข้อความธุรกรรม จับคู่หุ้น และแปลงอัตราแลกเปลี่ยน',
+      progressStep: 'กำลังประมวลผลด้วย Gemini AI...',
+    })
 
     try {
       const res = await fetch('/api/ai-advisor/quick-add', {
@@ -586,11 +676,14 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         setAiSummaryText(json.summary || `พบ ${txns.length} รายการธุรกรรมจากข้อความ`)
         setHasExtracted(true)
         setSuccessMsg(`AI วิเคราะห์ข้อมูลสำเร็จ! พบ ${txns.length} รายการ ตรวจสอบและบันทึกทั้งหมดได้ทันที`)
+        setStatusModal(null)
       } else {
         setError('ไม่พบข้อมูลธุรกรรมในข้อความ กรุณาระบุรายละเอียด เช่น ชื่อย่อหุ้น จำนวน ราคา หรือคำสั่งซื้อขาย')
+        setStatusModal(null)
       }
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการวิเคราะห์ข้อความ'))
+      setStatusModal(null)
     } finally {
       setParsing(false)
     }
@@ -662,10 +755,48 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       mutate((key) => typeof key === 'string' && key.startsWith('/api/cash-wallet'))
       mutate((key) => typeof key === 'string' && key.startsWith('/api/portfolio'))
 
-      if (onSuccess) onSuccess()
-      onClose()
+      setStatusModal({
+        isOpen: true,
+        type: 'success',
+        title: 'บันทึกธุรกรรมเรียบร้อยแล้ว!',
+        description: `บันทึกรายการ ${formData.txnType} หุ้น ${formData.ticker.toUpperCase()} จำนวน ${formData.quantity} หุ้น เข้าสู่ระบบเรียบร้อยแล้ว`,
+        details: [
+          { label: 'ประเภท', value: formData.txnType, color: 'text-indigo-400' },
+          { label: 'หุ้น', value: formData.ticker.toUpperCase(), color: 'text-emerald-400' },
+          {
+            label: 'ยอดรวม',
+            value: `$${Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+            color: 'text-white',
+          },
+        ],
+        primaryAction: {
+          label: 'ดูรายการในพอร์ต',
+          onClick: () => {
+            setStatusModal(null)
+            if (onSuccess) onSuccess()
+            onClose()
+            window.location.href = '/transactions'
+          },
+        },
+        secondaryAction: {
+          label: 'เสร็จสิ้น',
+          onClick: () => {
+            setStatusModal(null)
+            if (onSuccess) onSuccess()
+            onClose()
+          },
+        },
+        autoCloseMs: 3000,
+      })
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึก'))
+      setStatusModal({
+        isOpen: true,
+        type: 'error',
+        title: 'บันทึกไม่สำเร็จ',
+        description: getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึก'),
+        primaryAction: { label: 'ปิด', onClick: () => setStatusModal(null) },
+      })
     } finally {
       setSubmitting(false)
     }
@@ -1523,6 +1654,29 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
     )}
   </div>
 </div>
-</div>
-)
+
+      {/* ── Status Modal (Loading / Success / Error Popups) ── */}
+      {statusModal && (
+        <StatusModal
+          isOpen={statusModal.isOpen}
+          type={statusModal.type}
+          title={statusModal.title}
+          description={statusModal.description}
+          progressStep={statusModal.progressStep}
+          details={statusModal.details}
+          primaryAction={statusModal.primaryAction}
+          secondaryAction={statusModal.secondaryAction}
+          onClose={() => {
+            const wasSuccess = statusModal.type === 'success'
+            setStatusModal(null)
+            if (wasSuccess) {
+              if (onSuccess) onSuccess()
+              onClose()
+            }
+          }}
+          autoCloseMs={statusModal.autoCloseMs}
+        />
+      )}
+    </div>
+  )
 }
