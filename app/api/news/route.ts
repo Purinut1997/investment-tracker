@@ -45,15 +45,21 @@ export async function GET(req: NextRequest) {
       take: 40,
     })
 
-    // If cache is empty or sparse, trigger fresh fetch in background
+    // If cache is empty or sparse, trigger fresh fetch and re-query
     if (items.length < 5) {
       if (category === 'general') {
-        fetchMarketNews()
+        await fetchMarketNews()
       } else if (userTickers.length > 0) {
-        for (const t of userTickers.slice(0, 3)) {
-          fetchCompanyNews(t)
-        }
+        await Promise.all(userTickers.slice(0, 4).map((t) => fetchCompanyNews(t)))
+      } else {
+        await fetchMarketNews()
       }
+
+      items = await prisma.newsItem.findMany({
+        where: whereClause,
+        orderBy: { publishedAt: 'desc' },
+        take: 40,
+      })
     }
 
     return NextResponse.json({

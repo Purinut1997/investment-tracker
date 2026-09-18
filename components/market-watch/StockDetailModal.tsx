@@ -18,15 +18,24 @@ import {
   Layers,
   BarChart3,
   Percent,
+  CandlestickChart as CandleIcon,
+  LineChart as LineIcon,
+  Compass,
+  Target,
+  ShieldCheck,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
   AreaChart,
   Area,
+  Line,
+  ReferenceLine,
   XAxis,
   YAxis,
   Tooltip,
 } from 'recharts'
+import { StockLogo } from '@/components/StockLogo'
+import { CandlestickChart } from '@/components/market-watch/CandlestickChart'
 
 interface StockDetailModalProps {
   isOpen: boolean
@@ -46,6 +55,9 @@ export function StockDetailModal({
   market = 'US',
 }: StockDetailModalProps) {
   const [range, setRange] = useState<TimeRange>('1m')
+  const [chartType, setChartType] = useState<'area' | 'candle'>('area')
+  const [showSR, setShowSR] = useState(true)
+  const [showSMA, setShowSMA] = useState(true)
   const [isAiLoading, setIsAiLoading] = useState(false)
   const [aiInsight, setAiInsight] = useState<string | null>(null)
   const [aiModelUsed, setAiModelUsed] = useState<string | null>(null)
@@ -193,19 +205,25 @@ export function StockDetailModal({
         {/* ============================================================ */}
         {/* MODAL HEADER */}
         {/* ============================================================ */}
+        {/* ============================================================ */}
+        {/* MODAL HEADER */}
+        {/* ============================================================ */}
         <div className="p-5 sm:p-6 border-b border-white/[0.08] flex items-start justify-between gap-4 bg-[#12151C]/90 shrink-0">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl sm:text-2xl font-extrabold text-white font-mono tracking-tight">
-                {symbol}
-              </span>
-              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold">
-                {market === 'TH' ? 'TH' : symbol === 'BTC' || symbol === 'ETH' ? 'CRYPTO' : symbol === 'GOLD' ? 'GOLD' : 'US'}
-              </span>
+          <div className="flex items-center gap-3 min-w-0">
+            <StockLogo ticker={symbol || ''} name={data?.name || initialName} size={44} />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xl sm:text-2xl font-extrabold text-white font-mono tracking-tight">
+                  {symbol}
+                </span>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold">
+                  {market === 'TH' ? 'TH' : symbol === 'BTC' || symbol === 'ETH' ? 'CRYPTO' : symbol === 'GOLD' ? 'GOLD' : 'US'}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-400 truncate max-w-[280px] sm:max-w-md">
+                {data?.name || initialName || symbol}
+              </p>
             </div>
-            <p className="text-xs sm:text-sm text-slate-400 truncate max-w-[280px] sm:max-w-md">
-              {data?.name || initialName || symbol}
-            </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
@@ -262,10 +280,10 @@ export function StockDetailModal({
             </div>
           ) : (
             <>
-              {/* 1. CHART & TIMEFRAME SELECTOR */}
+              {/* 1. CHART & TIMEFRAME & TECHNICAL CONTROLS */}
               <div className="p-4 sm:p-5 rounded-2xl bg-[#141822] border border-white/[0.08] shadow-inner space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
                     <BarChart3 className="w-4 h-4 text-indigo-400" />
                     <span className="text-xs font-semibold text-slate-300">
                       แนวโน้มราคาช่วง {range.toUpperCase()}
@@ -280,105 +298,280 @@ export function StockDetailModal({
                     </span>
                   </div>
 
-                  {/* Timeframe Chips */}
-                  <div className="flex items-center gap-1 bg-[#0F1218] p-1 rounded-xl border border-white/[0.06]">
-                    {(['1d', '1w', '1m', '1y'] as TimeRange[]).map((t) => (
+                  {/* Right side: Chart Type + Technical Toggles + Timeframe */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Mode: Area vs Candlestick */}
+                    <div className="flex items-center bg-[#0F1218] p-0.5 rounded-xl border border-white/[0.08]">
                       <button
-                        key={t}
                         type="button"
-                        onClick={() => setRange(t)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
-                          range === t
-                            ? 'bg-indigo-600 text-white shadow-sm'
-                            : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                        onClick={() => setChartType('area')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-all ${
+                          chartType === 'area'
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                            : 'text-slate-400 hover:text-white'
                         }`}
+                        title="กราฟเส้น Area"
                       >
-                        {t.toUpperCase()}
+                        <LineIcon className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">เส้น</span>
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => setChartType('candle')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-all ${
+                          chartType === 'candle'
+                            ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                        title="กราฟแท่งเทียน Candlestick"
+                      >
+                        <CandleIcon className="w-3.5 h-3.5" />
+                        <span>แท่งเทียน</span>
+                      </button>
+                    </div>
+
+                    {/* Timeframe Chips */}
+                    <div className="flex items-center gap-0.5 bg-[#0F1218] p-0.5 rounded-xl border border-white/[0.06]">
+                      {(['1d', '1w', '1m', '1y'] as TimeRange[]).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setRange(t)}
+                          className={`px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                            range === t
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          {t.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* Area Chart Container */}
-                <div className="w-full h-48 sm:h-56 pt-2">
+                {/* Technical Indicator Filter Toggles */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/[0.04] text-xs">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowSR(!showSR)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all flex items-center gap-1.5 ${
+                        showSR
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:text-slate-300'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${showSR ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                      <span>แนวรับ-แนวต้าน (S/R)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSMA(!showSMA)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all flex items-center gap-1.5 ${
+                        showSMA
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                          : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:text-slate-300'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${showSMA ? 'bg-amber-400' : 'bg-slate-600'}`} />
+                      <span>เส้นเฉลี่ย SMA 20/50</span>
+                    </button>
+                  </div>
+
+                  {data?.technicalLevels && (
+                    <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 hidden sm:flex">
+                      <span className="text-rose-400">R1: {currencySymbol}{data.technicalLevels.r1}</span>
+                      <span className="text-emerald-400">S1: {currencySymbol}{data.technicalLevels.s1}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chart Viewport: Candlestick or Area */}
+                <div className="w-full pt-2">
                   {hasChartData ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartPoints}>
-                        <defs>
-                          <linearGradient
-                            id="chartGradient"
-                            x1="0"
-                            y1="0"
-                            x2="0"
-                            y2="1"
-                          >
-                            <stop
-                              offset="5%"
-                              stopColor={isRangePositive ? '#10B981' : '#F43F5E'}
-                              stopOpacity={0.4}
+                    chartType === 'candle' ? (
+                      <CandlestickChart
+                        data={chartPoints}
+                        currencySymbol={currencySymbol}
+                        showSR={showSR}
+                        showSMA={showSMA}
+                        technicalLevels={data?.technicalLevels}
+                        height={260}
+                      />
+                    ) : (
+                      <div className="w-full h-56 sm:h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chartPoints}>
+                            <defs>
+                              <linearGradient
+                                id="chartGradient"
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                              >
+                                <stop
+                                  offset="5%"
+                                  stopColor={isRangePositive ? '#10B981' : '#F43F5E'}
+                                  stopOpacity={0.35}
+                                />
+                                <stop
+                                  offset="95%"
+                                  stopColor={isRangePositive ? '#10B981' : '#F43F5E'}
+                                  stopOpacity={0.0}
+                                />
+                              </linearGradient>
+                            </defs>
+                            <XAxis
+                              dataKey="time"
+                              stroke="#64748B"
+                              fontSize={10}
+                              tickLine={false}
+                              axisLine={false}
+                              minTickGap={25}
                             />
-                            <stop
-                              offset="95%"
-                              stopColor={isRangePositive ? '#10B981' : '#F43F5E'}
-                              stopOpacity={0.0}
+                            <YAxis
+                              domain={[minPrice, maxPrice]}
+                              stroke="#64748B"
+                              fontSize={10}
+                              tickLine={false}
+                              axisLine={false}
+                              orientation="right"
+                              tickFormatter={(val) => `${currencySymbol}${val}`}
                             />
-                          </linearGradient>
-                        </defs>
-                        <XAxis
-                          dataKey="time"
-                          stroke="#64748B"
-                          fontSize={10}
-                          tickLine={false}
-                          axisLine={false}
-                          minTickGap={25}
-                        />
-                        <YAxis
-                          domain={[minPrice, maxPrice]}
-                          stroke="#64748B"
-                          fontSize={10}
-                          tickLine={false}
-                          axisLine={false}
-                          orientation="right"
-                          tickFormatter={(val) => `${currencySymbol}${val}`}
-                        />
-                        <Tooltip
-                          content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                              const p = payload[0].payload
-                              return (
-                                <div className="p-2.5 rounded-xl bg-[#12151C] border border-white/[0.12] shadow-xl text-xs font-mono">
-                                  <span className="text-slate-400 block text-[10px]">
-                                    {p.time}
-                                  </span>
-                                  <span className="text-sm font-bold text-white mt-0.5 block">
-                                    {currencySymbol}
-                                    {Number(p.price).toLocaleString('en-US', {
-                                      minimumFractionDigits: 2,
-                                    })}
-                                  </span>
-                                </div>
-                              )
-                            }
-                            return null
-                          }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="price"
-                          stroke={isRangePositive ? '#10B981' : '#F43F5E'}
-                          strokeWidth={2}
-                          fillOpacity={1}
-                          fill="url(#chartGradient)"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                            <Tooltip
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  const p = payload[0].payload
+                                  return (
+                                    <div className="p-3 rounded-xl bg-[#12151C] border border-white/[0.12] shadow-xl text-xs font-mono space-y-1">
+                                      <span className="text-slate-400 block text-[10px]">{p.time}</span>
+                                      <div className="flex items-center justify-between gap-4">
+                                        <span className="text-slate-300">ราคา:</span>
+                                        <span className="font-bold text-white">{currencySymbol}{Number(p.price).toFixed(2)}</span>
+                                      </div>
+                                      {p.sma20 && (
+                                        <div className="flex items-center justify-between gap-4 text-amber-400 text-[11px]">
+                                          <span>SMA 20:</span>
+                                          <span>{currencySymbol}{Number(p.sma20).toFixed(2)}</span>
+                                        </div>
+                                      )}
+                                      {p.sma50 && (
+                                        <div className="flex items-center justify-between gap-4 text-cyan-400 text-[11px]">
+                                          <span>SMA 50:</span>
+                                          <span>{currencySymbol}{Number(p.sma50).toFixed(2)}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                }
+                                return null
+                              }}
+                            />
+                            {/* Support and Resistance Reference Lines */}
+                            {showSR && data?.technicalLevels && (
+                              <>
+                                <ReferenceLine y={data.technicalLevels.r2} stroke="#F43F5E" strokeDasharray="4 4" label={{ value: `R2: ${data.technicalLevels.r2}`, fill: '#F43F5E', fontSize: 9, position: 'insideTopRight' }} />
+                                <ReferenceLine y={data.technicalLevels.r1} stroke="#FB7185" strokeDasharray="3 3" label={{ value: `R1: ${data.technicalLevels.r1}`, fill: '#FB7185', fontSize: 9, position: 'insideTopRight' }} />
+                                <ReferenceLine y={data.technicalLevels.pivot} stroke="#94A3B8" strokeDasharray="2 2" label={{ value: `P: ${data.technicalLevels.pivot}`, fill: '#94A3B8', fontSize: 8.5, position: 'insideTopRight' }} />
+                                <ReferenceLine y={data.technicalLevels.s1} stroke="#34D399" strokeDasharray="3 3" label={{ value: `S1: ${data.technicalLevels.s1}`, fill: '#34D399', fontSize: 9, position: 'insideBottomRight' }} />
+                                <ReferenceLine y={data.technicalLevels.s2} stroke="#10B981" strokeDasharray="4 4" label={{ value: `S2: ${data.technicalLevels.s2}`, fill: '#10B981', fontSize: 9, position: 'insideBottomRight' }} />
+                              </>
+                            )}
+                            {/* Moving Average SMA Lines */}
+                            {showSMA && (
+                              <>
+                                <Line type="monotone" dataKey="sma20" stroke="#F59E0B" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                                <Line type="monotone" dataKey="sma50" stroke="#06B6D4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                              </>
+                            )}
+                            <Area
+                              type="monotone"
+                              dataKey="price"
+                              stroke={isRangePositive ? '#10B981' : '#F43F5E'}
+                              strokeWidth={2}
+                              fillOpacity={1}
+                              fill="url(#chartGradient)"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )
                   ) : (
-                    <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                    <div className="h-48 flex items-center justify-center text-slate-500 text-xs">
                       กำลังรวบรวมข้อมูลราคาสำหรับกราฟช่วงเวลานี้...
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* TECHNICAL LEVELS CARD: SUPPORT & RESISTANCE (2 LEVELS EACH) */}
+              {data?.technicalLevels && (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-[#121622] to-[#151A28] border border-white/[0.08] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Compass className="w-4 h-4 text-indigo-400" />
+                      <span className="text-xs font-bold text-white tracking-wide">
+                        ระดับเทคนิคสำคัญในการลงทุน (Support & Resistance Pivot)
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      ราคาปัจจุบัน: {currencySymbol}{data.currentPrice}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                    {/* Resistance 2 */}
+                    <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                      <div className="flex items-center justify-between text-[10px] text-rose-300 font-medium">
+                        <span>แนวต้าน 2 (R2)</span>
+                        <Target className="w-3 h-3" />
+                      </div>
+                      <div className="text-sm sm:text-base font-bold text-rose-200 font-mono mt-0.5">
+                        {currencySymbol}{data.technicalLevels.r2.toFixed(2)}
+                      </div>
+                      <span className="text-[9px] text-rose-300/70 block mt-0.5">เป้าหมายทำกำไรหลัก</span>
+                    </div>
+
+                    {/* Resistance 1 */}
+                    <div className="p-2.5 rounded-xl bg-rose-500/5 border border-rose-500/15">
+                      <div className="flex items-center justify-between text-[10px] text-rose-300 font-medium">
+                        <span>แนวต้าน 1 (R1)</span>
+                        <Target className="w-3 h-3" />
+                      </div>
+                      <div className="text-sm sm:text-base font-bold text-rose-300 font-mono mt-0.5">
+                        {currencySymbol}{data.technicalLevels.r1.toFixed(2)}
+                      </div>
+                      <span className="text-[9px] text-rose-300/70 block mt-0.5">ด่านทดสอบแรก</span>
+                    </div>
+
+                    {/* Support 1 */}
+                    <div className="p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
+                      <div className="flex items-center justify-between text-[10px] text-emerald-300 font-medium">
+                        <span>แนวรับ 1 (S1)</span>
+                        <ShieldCheck className="w-3 h-3" />
+                      </div>
+                      <div className="text-sm sm:text-base font-bold text-emerald-300 font-mono mt-0.5">
+                        {currencySymbol}{data.technicalLevels.s1.toFixed(2)}
+                      </div>
+                      <span className="text-[9px] text-emerald-300/70 block mt-0.5">จุดรับแรก</span>
+                    </div>
+
+                    {/* Support 2 */}
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                      <div className="flex items-center justify-between text-[10px] text-emerald-300 font-medium">
+                        <span>แนวรับ 2 (S2)</span>
+                        <ShieldCheck className="w-3 h-3" />
+                      </div>
+                      <div className="text-sm sm:text-base font-bold text-emerald-200 font-mono mt-0.5">
+                        {currencySymbol}{data.technicalLevels.s2.toFixed(2)}
+                      </div>
+                      <span className="text-[9px] text-emerald-300/70 block mt-0.5">แนวรับหลัก / จุดคัด</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* 2. 52-WEEK RANGE SLIDER BAR */}
               {data?.fiftyTwoWeekLow && data?.fiftyTwoWeekHigh ? (
@@ -460,7 +653,7 @@ export function StockDetailModal({
                   </span>
                   <span className="text-base sm:text-lg font-bold text-emerald-400 font-mono mt-0.5 block">
                     {data?.dividendYield !== null && data?.dividendYield !== undefined
-                      ? `${data.dividendYield}%`
+                      ? `${data.dividendYield.toFixed(2)}%`
                       : '0.00%'}
                   </span>
                   <span className="text-[10px] text-slate-500">อัตราผลตอบแทนต่อปี</span>
@@ -473,11 +666,13 @@ export function StockDetailModal({
                   </span>
                   <span className="text-base sm:text-lg font-bold text-white font-mono mt-0.5 block truncate">
                     {data?.marketCap
-                      ? data.marketCap >= 1000000
-                        ? `${(data.marketCap / 1000000).toFixed(2)}T`
-                        : data.marketCap >= 1000
-                        ? `${(data.marketCap / 1000).toFixed(1)}B`
-                        : `${data.marketCap}M`
+                      ? data.marketCap >= 1e12
+                        ? `${currencySymbol}${(data.marketCap / 1e12).toFixed(2)}T`
+                        : data.marketCap >= 1e9
+                        ? `${currencySymbol}${(data.marketCap / 1e9).toFixed(2)}B`
+                        : data.marketCap >= 1e6
+                        ? `${currencySymbol}${(data.marketCap / 1e6).toFixed(1)}M`
+                        : `${currencySymbol}${Number(data.marketCap).toLocaleString()}`
                       : 'N/A'}
                   </span>
                   <span className="text-[10px] text-slate-500">Market Cap</span>

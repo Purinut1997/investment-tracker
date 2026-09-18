@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import type { MarketQuote } from '@/lib/market-data/types'
 import { AddWatchlistModal } from '@/components/market-watch/AddWatchlistModal'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
+import { StockLogo } from '@/components/StockLogo'
 import {
   Coins,
   Building2,
@@ -617,17 +618,25 @@ function WatchlistCard({
           </button>
         </div>
 
-        {/* Ticker Symbol & Company Name (Full Width, never squeezed by buttons) */}
-        <div className="min-w-0">
-          <h4 className="font-bold text-white text-base sm:text-lg group-hover:text-amber-300 transition-colors font-mono tracking-tight truncate">
-            {item.symbol}
-          </h4>
-          <p
-            className="text-[11px] text-slate-400 truncate mt-0.5 font-normal"
-            title={item.displayName || quote?.name || item.symbol}
-          >
-            {item.displayName || quote?.name || item.symbol}
-          </p>
+        {/* Ticker Symbol & Company Name with Logo */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <StockLogo
+            ticker={item.symbol}
+            name={item.displayName || quote?.name}
+            size={36}
+            className="rounded-lg shrink-0"
+          />
+          <div className="min-w-0">
+            <h4 className="font-bold text-white text-base sm:text-lg group-hover:text-amber-300 transition-colors font-mono tracking-tight truncate">
+              {item.symbol}
+            </h4>
+            <p
+              className="text-[11px] text-slate-400 truncate mt-0.5 font-normal"
+              title={item.displayName || quote?.name || item.symbol}
+            >
+              {item.displayName || quote?.name || item.symbol}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -695,40 +704,48 @@ function QuoteCard({
     >
       <div>
         <div className="flex items-start justify-between mb-3">
-          <div className="min-w-0 pr-2">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-white text-sm sm:text-base group-hover:text-indigo-300 transition-colors truncate block">
-                {quote.symbol}
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <StockLogo
+              ticker={quote.symbol}
+              name={quote.name}
+              size={34}
+              className="rounded-lg shrink-0"
+            />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-white text-sm sm:text-base group-hover:text-indigo-300 transition-colors truncate block">
+                  {quote.symbol}
+                </span>
+                {/* Star toggle button */}
+                {onToggleStar && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onToggleStar()
+                    }}
+                    disabled={isStarring}
+                    title={isStarred ? 'ถอนออกจากรายการจับตา' : 'เพิ่มเข้าในรายการจับตา'}
+                    className="text-slate-500 hover:text-amber-400 p-0.5 rounded cursor-pointer transition-colors"
+                  >
+                    {isStarring ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    ) : (
+                      <Star
+                        className={`w-3.5 h-3.5 transition-transform active:scale-125 ${
+                          isStarred
+                            ? 'fill-amber-400 text-amber-400'
+                            : 'text-slate-500 hover:text-amber-400'
+                        }`}
+                      />
+                    )}
+                  </button>
+                )}
+              </div>
+              <span className="text-[11px] text-slate-400 truncate block mt-0.5">
+                {quote.name ?? quote.symbol}
               </span>
-              {/* Star toggle button */}
-              {onToggleStar && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onToggleStar()
-                  }}
-                  disabled={isStarring}
-                  title={isStarred ? 'ถอนออกจากรายการจับตา' : 'เพิ่มเข้าในรายการจับตา'}
-                  className="text-slate-500 hover:text-amber-400 p-0.5 rounded cursor-pointer transition-colors"
-                >
-                  {isStarring ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                  ) : (
-                    <Star
-                      className={`w-3.5 h-3.5 transition-transform active:scale-125 ${
-                        isStarred
-                          ? 'fill-amber-400 text-amber-400'
-                          : 'text-slate-500 hover:text-amber-400'
-                      }`}
-                    />
-                  )}
-                </button>
-              )}
             </div>
-            <span className="text-[11px] text-slate-400 truncate block mt-0.5">
-              {quote.name ?? quote.symbol}
-            </span>
           </div>
 
           <span

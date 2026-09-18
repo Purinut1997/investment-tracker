@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
 
+import { calculatePortfolioPerformance } from '@/lib/analytics/performance'
+
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -46,13 +48,20 @@ export async function GET(req: NextRequest) {
       0
     )
 
-    // 6. Latest Weekly Digest if exists
+    // 6. Calculate historical portfolio growth milestones vs SPX benchmark
+    const performanceData = await calculatePortfolioPerformance(
+      userId,
+      holdingsResult.totalValueBase,
+      baseCurrency
+    )
+
+    // 7. Latest Weekly Digest if exists
     const latestDigest = await prisma.weeklyDigest.findFirst({
       where: { userId },
       orderBy: { weekOf: 'desc' },
     })
 
-    // 7. Allocation Alert if unacknowledged exists
+    // 8. Allocation Alert if unacknowledged exists
     const unackAlert = await prisma.allocationAlert.findFirst({
       where: { userId, acknowledged: false },
       orderBy: { triggeredAt: 'desc' },
@@ -68,6 +77,7 @@ export async function GET(req: NextRequest) {
       totalDividends,
       assetCount: holdingsResult.holdings.length,
       healthScore,
+      performanceData,
       latestDigest,
       unackAlert,
       timestamp: Date.now(),

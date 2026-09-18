@@ -1,11 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { getYahooQuoteSummary } from '@/lib/market-data/yahoo-crumb'
 
-interface ChartPoint {
+export interface ChartPoint {
   time: string
   price: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
   timestamp: number
+  sma20?: number | null
+  sma50?: number | null
+}
+
+export interface TechnicalLevels {
+  pivot: number
+  r1: number
+  r2: number
+  s1: number
+  s2: number
+  periodHigh: number
+  periodLow: number
+  currentPrice: number
 }
 
 export async function GET(req: NextRequest) {
@@ -82,7 +101,7 @@ export async function GET(req: NextRequest) {
       .then((res) => (res.ok ? res.json() : null))
       .catch(() => null)
 
-    // 2. Fetch Finnhub data if available and applicable (mostly US equities)
+    // 2. Fetch Finnhub data if available
     const finnhubKey = process.env.FINNHUB_API_KEY
     const shouldFetchFinnhub =
       Boolean(finnhubKey) &&
@@ -123,7 +142,7 @@ export async function GET(req: NextRequest) {
           .catch(() => null)
       : Promise.resolve(null)
 
-    // 3. Fetch user's own position for this asset if in portfolio
+    // 3. Fetch user's own position for this asset
     const transactionsPromise = prisma.transaction.findMany({
       where: {
         userId: session.user.id,
@@ -146,16 +165,24 @@ export async function GET(req: NextRequest) {
     const result = yahooData?.chart?.result?.[0]
     const meta = result?.meta || {}
     const timestamps: number[] = result?.timestamp || []
-    const closes: (number | null)[] =
-      result?.indicators?.quote?.[0]?.close || []
+    const quote = result?.indicators?.quote?.[0] || {}
+    const opens: (number | null)[] = quote.open || []
+    const highs: (number | null)[] = quote.high || []
+    const lows: (number | null)[] = quote.low || []
+    const closes: (number | null)[] = quote.close || []
+    const volumes: (number | null)[] = quote.volume || []
 
-    // Build clean chart points
+    // Build clean chart points with OHLC
     const chartPoints: ChartPoint[] = []
-    const isIntraday = range === '1d' || range === '1w'
 
     for (let i = 0; i < timestamps.length; i++) {
-      const p = closes[i]
-      if (p !== null && p !== undefined && !isNaN(p)) {
+      const c = closes[i]
+      if (c !== null && c !== undefined && !isNaN(c)) {
+        const o = opens[i] ?? c
+        const h = highs[i] ?? Math.max(o, c)
+        const l = lows[i] ?? Math.min(o, c)
+        const v = volumes[i] ?? 0
+
         const dateObj = new Date(timestamps[i] * 1000)
         let timeLabel = ''
         if (range === '1d') {
@@ -176,9 +203,33 @@ export async function GET(req: NextRequest) {
 
         chartPoints.push({
           time: timeLabel,
-          price: Number(p.toFixed(2)),
+          price: Number(c.toFixed(2)),
+          open: Number(o.toFixed(2)),
+          high: Number(h.toFixed(2)),
+          low: Number(l.toFixed(2)),
+          close: Number(c.toFixed(2)),
+          volume: Number(v),
           timestamp: timestamps[i],
         })
+      }
+    }
+
+    // Calculate Moving Averages (SMA 20, SMA 50)
+    for (let i = 0; i < chartPoints.length; i++) {
+      if (i >= 19) {
+        const slice20 = chartPoints.slice(i - 19, i + 1)
+        const sum20 = slice20.reduce((acc, p) => acc + p.close, 0)
+        chartPoints[i].sma20 = Number((sum20 / 20).toFixed(2))
+      } else {
+        chartPoints[i].sma20 = null
+      }
+
+      if (i >= 49) {
+        const slice50 = chartPoints.slice(i - 49, i + 1)
+        const sum50 = slice50.reduce((acc, p) => acc + p.close, 0)
+        chartPoints[i].sma50 = Number((sum50 / 50).toFixed(2))
+      } else {
+        chartPoints[i].sma50 = null
       }
     }
 
@@ -187,6 +238,34 @@ export async function GET(req: NextRequest) {
     const prevClose = Number(meta.chartPreviousClose ?? chartPoints[0]?.price ?? currentPrice)
     const change = currentPrice - prevClose
     const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0
+
+    // Technical Levels: Support & Resistance (Pivot Points Standard & Extremes)
+    let technicalLevels: TechnicalLevels | null = null
+    if (chartPoints.length > 0) {
+      const allHighs = chartPoints.map((p) => p.high)
+      const allLows = chartPoints.map((p) => p.low)
+      const periodHigh = Math.max(...allHighs)
+      const periodLow = Math.min(...allLows)
+      const periodClose = chartPoints[chartPoints.length - 1].close
+
+      // Classic Pivot Point Formula
+      const pivot = (periodHigh + periodLow + periodClose) / 3
+      const r1 = 2 * pivot - periodLow
+      const s1 = 2 * pivot - periodHigh
+      const r2 = pivot + (periodHigh - periodLow)
+      const s2 = pivot - (periodHigh - periodLow)
+
+      technicalLevels = {
+        pivot: Number(pivot.toFixed(2)),
+        r1: Number(r1.toFixed(2)),
+        r2: Number(r2.toFixed(2)),
+        s1: Number(s1.toFixed(2)),
+        s2: Number(s2.toFixed(2)),
+        periodHigh: Number(periodHigh.toFixed(2)),
+        periodLow: Number(periodLow.toFixed(2)),
+        currentPrice: Number(currentPrice.toFixed(2)),
+      }
+    }
 
     // 52-Week Range
     const fiftyTwoWeekHigh = Number(
@@ -197,10 +276,20 @@ export async function GET(req: NextRequest) {
     )
 
     // Valuation & Dividend
-    const pe = finnhubMetric?.metric?.peBasicExclExtraItemsTTM ?? null
-    const dividendYield =
+    let pe: number | null = finnhubMetric?.metric?.peBasicExclExtraItemsTTM ?? null
+    let dividendYield: number | null =
       finnhubMetric?.metric?.dividendYieldIndicatedAnnual ?? null
-    const marketCap = finnhubMetric?.metric?.marketCapitalization ?? null
+    let marketCap: number | null = finnhubMetric?.metric?.marketCapitalization ?? null
+
+    // Fallback to Yahoo Quote Summary if Finnhub is not configured / returns null
+    if (!pe || !marketCap || dividendYield === null) {
+      const ySummary = await getYahooQuoteSummary(yfTicker)
+      if (ySummary) {
+        if (!pe && ySummary.pe) pe = ySummary.pe
+        if (!marketCap && ySummary.marketCap) marketCap = ySummary.marketCap
+        if (dividendYield === null && ySummary.dividendYield !== null) dividendYield = ySummary.dividendYield
+      }
+    }
 
     // Analyst Consensus & Target Price
     let analystTarget: {
@@ -234,7 +323,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // User Position Summary
+    // User Position Summary (Using FIFO)
     let userPosition: {
       shares: number
       avgCost: number
@@ -245,35 +334,38 @@ export async function GET(req: NextRequest) {
     } | null = null
 
     if (userTxns.length > 0) {
-      let totalShares = 0
-      let totalCostBasis = 0
+      const lots: { qty: number; price: number }[] = []
 
       for (const t of userTxns) {
         const qty = Number(t.quantity || 0)
-        const pricePerUnit = Number(t.pricePerUnit || 0)
+        const price = Number(t.pricePerUnit || 0)
         if (t.txnType === 'BUY') {
-          totalShares += qty
-          totalCostBasis += qty * pricePerUnit
+          lots.push({ qty, price })
         } else if (t.txnType === 'SELL') {
-          totalShares -= qty
-          // reduce cost basis proportionally
-          if (totalShares > 0) {
-            totalCostBasis = totalShares * (totalCostBasis / (totalShares + qty))
-          } else {
-            totalShares = 0
-            totalCostBasis = 0
+          let rem = qty
+          while (rem > 0.000001 && lots.length > 0) {
+            if (lots[0].qty <= rem) {
+              rem -= lots[0].qty
+              lots.shift()
+            } else {
+              lots[0].qty -= rem
+              rem = 0
+            }
           }
         }
       }
 
-      if (totalShares > 0) {
+      const totalShares = lots.reduce((acc, l) => acc + l.qty, 0)
+      const totalCostBasis = lots.reduce((acc, l) => acc + l.qty * l.price, 0)
+
+      if (totalShares > 0.00001) {
         const avg = totalCostBasis / totalShares
         const curVal = totalShares * currentPrice
         const gain = curVal - totalCostBasis
         const gainPct = totalCostBasis > 0 ? (gain / totalCostBasis) * 100 : 0
 
         userPosition = {
-          shares: totalShares,
+          shares: Number(totalShares.toFixed(4)),
           avgCost: Number(avg.toFixed(2)),
           totalCost: Number(totalCostBasis.toFixed(2)),
           currentValue: Number(curVal.toFixed(2)),
@@ -297,11 +389,12 @@ export async function GET(req: NextRequest) {
       fiftyTwoWeekHigh: fiftyTwoWeekHigh || null,
       fiftyTwoWeekLow: fiftyTwoWeekLow || null,
       pe: pe ? Number(pe.toFixed(2)) : null,
-      dividendYield: dividendYield ? Number(dividendYield.toFixed(2)) : null,
-      marketCap: marketCap ? Number(marketCap.toFixed(0)) : null,
+      dividendYield: dividendYield !== null ? Number(dividendYield.toFixed(2)) : null,
+      marketCap: marketCap ? Number(marketCap) : null,
       analystTarget,
       userPosition,
       chartPoints,
+      technicalLevels,
       range,
     })
   } catch (error) {
@@ -309,3 +402,4 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch stock detail' }, { status: 500 })
   }
 }
+

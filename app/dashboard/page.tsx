@@ -7,6 +7,7 @@ import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import { DashboardEmptyState } from '@/components/DashboardEmptyState'
 import { Sparkline } from '@/components/Sparkline'
+import { StockLogo } from '@/components/StockLogo'
 import {
   Sparkles,
   ArrowUpRight,
@@ -183,9 +184,10 @@ export default function DashboardPage() {
     color: PIE_COLORS[i % PIE_COLORS.length],
   }))
 
-  // Performance snapshots are not persisted yet. Keep this empty rather than
-  // fabricating a chart from today's portfolio value.
-  const performanceData: { month: string; value: number; benchmark: number }[] = []
+  // Real performance milestones calculated from transactions vs S&P 500 benchmark
+  const performanceData: { month: string; value: number; benchmark: number }[] = Array.isArray(summary?.performanceData)
+    ? summary.performanceData
+    : []
 
   const isHighGrade = (healthScore?.score ?? 0) >= 80
   const isMidGrade  = (healthScore?.score ?? 0) >= 60
@@ -618,8 +620,13 @@ export default function DashboardPage() {
                     return (
                       <tr key={h.assetId} className="transition-colors group">
                         <td>
-                          <div className="font-bold text-white group-hover:text-indigo-300 transition-colors">{h.ticker}</div>
-                          <div className="text-[11px] text-slate-400 truncate max-w-[140px]">{h.assetName}</div>
+                          <div className="flex items-center gap-3">
+                            <StockLogo ticker={h.ticker} name={h.assetName} size={34} />
+                            <div className="min-w-0">
+                              <div className="font-bold text-white group-hover:text-indigo-300 transition-colors">{h.ticker}</div>
+                              <div className="text-[11px] text-slate-400 truncate max-w-[140px]">{h.assetName}</div>
+                            </div>
+                          </div>
                         </td>
                         <td className="hidden sm:table-cell">
                           <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-md border ${isUsd ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-slate-800/80 text-slate-300 border-slate-700/60'}`}>

@@ -18,6 +18,7 @@ import {
   Landmark,
 } from 'lucide-react'
 import type { MarketQuote } from '@/lib/market-data/types'
+import { StockLogo } from '@/components/StockLogo'
 
 interface AddWatchlistModalProps {
   isOpen: boolean
@@ -369,18 +370,26 @@ export function AddWatchlistModal({
               </div>
 
               <div className="flex items-start justify-between pt-1">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-bold text-white font-mono">
-                      {previewQuote.symbol}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-medium">
-                      {resolvedMarket === 'TH' ? 'หุ้นไทย' : category === 'crypto' ? 'คริปโต' : category === 'gold' ? 'ทองคำ' : 'หุ้นสหรัฐฯ'}
-                    </span>
+                <div className="flex items-center gap-3">
+                  <StockLogo
+                    ticker={previewQuote.symbol}
+                    name={previewQuote.name}
+                    size={40}
+                    className="rounded-xl shadow-md shrink-0"
+                  />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-white font-mono">
+                        {previewQuote.symbol}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-medium">
+                        {resolvedMarket === 'TH' ? 'หุ้นไทย' : category === 'crypto' ? 'คริปโต' : category === 'gold' ? 'ทองคำ' : 'หุ้นสหรัฐฯ'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {previewQuote.name || previewQuote.symbol}
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {previewQuote.name || previewQuote.symbol}
-                  </p>
                 </div>
 
                 <div className="text-right">
