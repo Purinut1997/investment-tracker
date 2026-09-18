@@ -426,3 +426,22 @@ body {
 .animate-pulse-ring {
   animation: pulse-ring 2s ease-in-out infinite;
 }
+
+/* ─── Market Background Ambient Pulsing ──────────────────────── */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.05; transform: scale(1); }
+  50% { opacity: 0.12; transform: scale(1.06); }
+}
+
+@keyframes pulse-slower {
+  0%, 100% { opacity: 0.04; transform: scale(1); }
+  50% { opacity: 0.10; transform: scale(1.1); }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 9s ease-in-out infinite;
+}
+
+.animate-pulse-slower {
+  animation: pulse-slower 14s ease-in-out infinite;
+}

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
+import { MarketBackground } from './MarketBackground'
 import { parseAccountsPayload } from '@/lib/accounts'
 
 interface NavItem {
@@ -124,6 +125,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       className="app-shell min-h-screen text-slate-200 relative overflow-x-clip"
       style={{ '--sidebar-width': collapsed ? '72px' : '240px' } as React.CSSProperties}
     >
+      {/* ── HIGH-TECH STOCK MARKET AMBIENT BACKGROUND ──────── */}
+      <MarketBackground />
+
       {/* ── DESKTOP SIDEBAR ─────────────────────────────────── */}
       <aside
         className={`app-sidebar flex-col border-r border-white/10 bg-[#12151C] shrink-0 sticky top-0 h-screen z-40 transition-[width] duration-200 ease-out ${sidebarW}`}
