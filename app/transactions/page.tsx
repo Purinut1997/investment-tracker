@@ -24,6 +24,7 @@ import {
   Coins
 } from 'lucide-react'
 import Papa from 'papaparse'
+import { parseAccountsPayload } from '@/lib/accounts'
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   BUY: { label: 'BUY', color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' },
@@ -46,7 +47,7 @@ export default function TransactionsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const { data: accountsData } = useSWR('/api/accounts')
-  const accounts = accountsData?.accounts ?? []
+  const accounts = parseAccountsPayload(accountsData)
 
   const queryParams = new URLSearchParams({
     page: page.toString(),

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
+import { parseAccountsPayload } from '@/lib/accounts'
 
 interface NavItem {
   label: string
@@ -107,7 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userEmail = session?.user?.email || ''
   const { data: accountsData } = useSWR('/api/accounts')
   const { data: transactionsData } = useSWR('/api/transactions?limit=1')
-  const hasAccounts = (accountsData?.accounts?.length ?? 0) > 0
+  const hasAccounts = parseAccountsPayload(accountsData).length > 0
   const hasTransactions = (transactionsData?.transactions?.length ?? 0) > 0
   const ctaLabel = !hasAccounts ? 'สร้างบัญชีลงทุน' : hasTransactions ? 'บันทึกธุรกรรม' : 'เพิ่มธุรกรรมแรก'
   const ctaHref = !hasAccounts ? '/accounts' : '/transactions'

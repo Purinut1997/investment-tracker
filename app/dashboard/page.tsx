@@ -31,6 +31,7 @@ import {
 } from 'recharts'
 import { HealthScoreResult } from '@/lib/analytics/health-score'
 import { HoldingItem } from '@/lib/analytics/holdings'
+import { parseAccountsPayload } from '@/lib/accounts'
 import CountUp from 'react-countup'
 
 // Vibrant FinTech Palette for Portfolio Assets
@@ -120,7 +121,8 @@ export default function DashboardPage() {
       : null
   const isProfit = unrealizedPnL >= 0
 
-  const hasAccounts = (accountsData?.accounts?.length ?? 0) > 0
+  const accounts = parseAccountsPayload(accountsData)
+  const hasAccounts = accounts.length > 0
   const hasHoldings = holdings.length > 0 || totalCost > 0
   const hasPlans = (plansData?.presets?.length ?? 0) > 0
   const isLoading = sumLoading || holdLoading || accLoading || planLoading
