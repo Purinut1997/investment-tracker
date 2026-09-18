@@ -105,7 +105,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Calculate totalAmount
-    const totalAmount = data.quantity * data.pricePerUnit + data.fee
+    let totalAmount = data.quantity * data.pricePerUnit + data.fee
+    if (data.txnType === 'SELL') {
+      totalAmount = Math.max(0, data.quantity * data.pricePerUnit - data.fee - (data.taxWithheld || 0))
+    } else if (data.txnType === 'DIVIDEND') {
+      totalAmount = Math.max(0, data.quantity * data.pricePerUnit - data.fee - (data.taxWithheld || 0))
+    } else if (data.txnType === 'FEE') {
+      totalAmount = data.fee
+    }
 
     const transaction = await prisma.transaction.create({
       data: {

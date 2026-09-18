@@ -100,7 +100,7 @@ ${accountsListStr}
       "pricePerUnit": ราคาต่อหุ้นที่ได้จริง (เช่น 328.94 หรือ 1034.12),
       "fee": รวมค่าธรรมเนียมทั้งหมดที่เป็นบวก (เช่น 0.53),
       "taxWithheld": ภาษีหัก ณ ที่จ่ายถ้ามี (เช่น 0.06),
-      "totalAmount": ยอดรวมสุทธิของคำสั่ง (เช่น 329.47),
+      "totalAmount": ยอดรวมสุทธิของคำสั่ง (กรณีซื้อ: (หุ้น x ราคา) + ค่าธรรมเนียม, กรณีขาย: (หุ้น x ราคา) - ค่าธรรมเนียม - ภาษี เช่น 329.47),
       "currency": "USD" หรือ "THB",
       "txnDate": "ISO String เช่น 2026-09-09T22:29:00+07:00",
       "matchedAccountId": "ID ของบัญชีผู้ใช้ถ้าตรง หรือ null",
@@ -160,6 +160,17 @@ ${accountsListStr}
           if (match) {
             txn.matchedAccountId = match.id
             txn.accountName = match.accountName
+          }
+        }
+
+        const q = Number(txn.quantity || 0)
+        const p = Number(txn.pricePerUnit || 0)
+        const f = Number(txn.fee || 0)
+        const t = Number(txn.taxWithheld || 0)
+        if (txn.txnType === 'SELL' && q > 0 && p > 0 && f > 0) {
+          const gross = q * p
+          if (Number(txn.totalAmount) > gross || Number(txn.totalAmount) === gross + f) {
+            txn.totalAmount = Math.max(0, gross - f - t)
           }
         }
       })

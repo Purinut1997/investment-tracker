@@ -84,10 +84,20 @@ export async function PUT(
     })
 
     const updates = parsed.data
+    const newTxnType = updates.txnType ?? existing.txnType
     const newQuantity = updates.quantity ?? Number(existing.quantity)
     const newPrice = updates.pricePerUnit ?? Number(existing.pricePerUnit)
     const newFee = updates.fee ?? Number(existing.fee)
-    const newTotal = newQuantity * newPrice + newFee
+    const newTax = updates.taxWithheld ?? Number(existing.taxWithheld || 0)
+
+    let newTotal = newQuantity * newPrice + newFee
+    if (newTxnType === 'SELL') {
+      newTotal = Math.max(0, newQuantity * newPrice - newFee - newTax)
+    } else if (newTxnType === 'DIVIDEND') {
+      newTotal = Math.max(0, newQuantity * newPrice - newFee - newTax)
+    } else if (newTxnType === 'FEE') {
+      newTotal = newFee
+    }
 
     const updated = await prisma.transaction.update({
       where: { id },

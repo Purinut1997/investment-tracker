@@ -152,13 +152,20 @@ export async function POST(req: NextRequest) {
 
       // Calculate proper total amount
       let computedTotal = item.totalAmount
-      if (computedTotal === undefined || isNaN(computedTotal) || computedTotal === 0) {
+      if (
+        computedTotal === undefined ||
+        isNaN(computedTotal) ||
+        computedTotal === 0 ||
+        (item.txnType === 'SELL' && item.quantity > 0 && item.pricePerUnit > 0 && item.fee > 0 && computedTotal > item.quantity * item.pricePerUnit)
+      ) {
         if (item.txnType === 'BUY') {
           computedTotal = item.quantity * item.pricePerUnit + item.fee
         } else if (item.txnType === 'SELL') {
-          computedTotal = Math.max(0, item.quantity * item.pricePerUnit - item.fee)
+          computedTotal = Math.max(0, item.quantity * item.pricePerUnit - item.fee - (item.taxWithheld || 0))
         } else if (item.txnType === 'DIVIDEND') {
-          computedTotal = Math.max(0, item.quantity * item.pricePerUnit - item.taxWithheld)
+          computedTotal = Math.max(0, item.quantity * item.pricePerUnit - item.taxWithheld - item.fee)
+        } else if (item.txnType === 'FEE') {
+          computedTotal = item.fee
         } else {
           computedTotal = item.quantity * item.pricePerUnit
         }
@@ -167,7 +174,11 @@ export async function POST(req: NextRequest) {
       let effectiveQuantity = item.quantity > 0 ? item.quantity : 1
       let effectivePrice = item.pricePerUnit
       if (effectivePrice === 0 && computedTotal > 0) {
-        effectivePrice = Math.max(0, (computedTotal - item.fee) / effectiveQuantity)
+        if (item.txnType === 'SELL') {
+          effectivePrice = Math.max(0, (computedTotal + item.fee + (item.taxWithheld || 0)) / effectiveQuantity)
+        } else {
+          effectivePrice = Math.max(0, (computedTotal - item.fee) / effectiveQuantity)
+        }
       }
 
       const txnDate = new Date(item.txnDate)

@@ -55,14 +55,20 @@ export async function POST(req: NextRequest) {
 6. ยอดเงินและค่าธรรมเนียม:
    - กรณีระบุยอดเงินรวม (เช่น 'ซื้อ MU 690.00 USD' หรือ 'ขาย EOSE 94.66 USD') แต่ไม่ได้ระบุจำนวนหุ้นหรือราคาต่อหุ้น:
      * ให้ใส่ totalAmount เท่ากับยอดเงินนั้น (เช่น 690.00 หรือ 94.66)
-     * ห้ามใส่ quantity เป็น 0 เด็ดขาด! หากไม่ทราบราคาต่อหน่วย ให้ใส่ quantity: 1 และ pricePerUnit: (totalAmount - fee)
+     * ห้ามใส่ quantity เป็น 0 เด็ดขาด! หากไม่ทราบราคาต่อหน่วย:
+       - ซื้อ: ให้ใส่ quantity: 1 และ pricePerUnit: (totalAmount - fee)
+       - ขาย: ให้ใส่ quantity: 1 และ pricePerUnit: (totalAmount + fee)
    - กรณีระบุจำนวนหุ้นแต่ไม่ระบุยอดเงินรวม (เช่น 'ขาย NVDA 0.9432 หุ้น'):
      * ให้ใส่ quantity: 0.9432 และหากไม่ทราบราคาต่อหน่วยให้ประมาณการหรือใส่ราคาตามตลาด
    - quantity: จำนวนหุ้น (ต้องมากกว่า 0 เสมอ เช่น 10, 0.9432 หรือ 1)
    - pricePerUnit: ราคาต่อหุ้น
    - fee: ค่าคอมมิชชันหรือค่าธรรมเนียมซื้อขาย (ถ้าไม่มีให้เป็น 0)
    - taxWithheld: ภาษีหัก ณ ที่จ่าย (สำหรับเงินปันผล ถ้าไม่มีให้เป็น 0)
-   - totalAmount: มูลค่ารวมธุรกรรม (เช่น quantity * pricePerUnit + fee)
+   - totalAmount: มูลค่ารวมสุทธิของธุรกรรม
+     * กรณีซื้อ (BUY): (quantity * pricePerUnit) + fee
+     * กรณีขาย (SELL): (quantity * pricePerUnit) - fee - taxWithheld
+     * กรณีเงินปันผล (DIVIDEND): (quantity * pricePerUnit) - fee - taxWithheld
+     * กรณีค่าธรรมเนียม (FEE): fee
 7. การจับคู่บัญชี (matchedAccountId):
    - เทียบเคียงกับรายชื่อบัญชีของผู้ใช้ด้านล่าง หากระบุหรือตรงกับบัญชีใด ให้ใส่ ID ของบัญชีนั้น
    - หากไม่ระบุบัญชี แต่เป็นหุ้น US ให้พิจารณาบัญชีสกุลเงิน USD (เช่น Dime! USD)
@@ -159,7 +165,19 @@ ${accountsListStr}
           pricePerUnit: Number(parsed.pricePerUnit || 0),
           fee: Number(parsed.fee || 0),
           taxWithheld: Number(parsed.taxWithheld || 0),
-          totalAmount: Number(parsed.totalAmount || (parsed.quantity * parsed.pricePerUnit + (parsed.fee || 0))),
+          totalAmount: Number(
+            parsed.totalAmount ||
+              (parsed.txnType === 'SELL' || parsed.txnType === 'DIVIDEND'
+                ? Math.max(
+                    0,
+                    Number(parsed.quantity || 0) * Number(parsed.pricePerUnit || 0) -
+                      Number(parsed.fee || 0) -
+                      Number(parsed.taxWithheld || 0)
+                  )
+                : parsed.txnType === 'FEE'
+                ? Number(parsed.fee || 0)
+                : Number(parsed.quantity || 0) * Number(parsed.pricePerUnit || 0) + Number(parsed.fee || 0))
+          ),
           currency: parsed.currency || 'USD',
           txnDate: parsed.txnDate || new Date().toISOString(),
           matchedAccountId: userAccounts[0]?.id || '',
@@ -173,6 +191,19 @@ ${accountsListStr}
 
     if (!Array.isArray(parsed.transactions)) {
       parsed.transactions = []
+    } else {
+      parsed.transactions.forEach((txn: any) => {
+        const q = Number(txn.quantity || 0)
+        const p = Number(txn.pricePerUnit || 0)
+        const f = Number(txn.fee || 0)
+        const t = Number(txn.taxWithheld || 0)
+        if (txn.txnType === 'SELL' && q > 0 && p > 0 && f > 0) {
+          const gross = q * p
+          if (Number(txn.totalAmount) > gross || Number(txn.totalAmount) === gross + f) {
+            txn.totalAmount = Math.max(0, gross - f - t)
+          }
+        }
+      })
     }
 
     if (!Array.isArray(parsed.cashBalances)) {

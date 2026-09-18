@@ -100,6 +100,31 @@ async function parseResponseJson(res: Response, fallbackError: string) {
   }
 }
 
+function calculateTxnTotal(
+  txnType: TransactionType,
+  quantity: number,
+  pricePerUnit: number,
+  fee: number = 0,
+  taxWithheld: number = 0
+): number {
+  const q = Number(quantity) || 0
+  const p = Number(pricePerUnit) || 0
+  const f = Number(fee) || 0
+  const t = Number(taxWithheld) || 0
+
+  if (txnType === 'SELL') {
+    return Number(Math.max(0, q * p - f - t).toFixed(2))
+  }
+  if (txnType === 'DIVIDEND') {
+    return Number(Math.max(0, q * p - f - t).toFixed(2))
+  }
+  if (txnType === 'FEE') {
+    return Number(f.toFixed(2))
+  }
+  // BUY, DEPOSIT, WITHDRAW, etc.
+  return Number(Math.max(0, q * p + f).toFixed(2))
+}
+
 export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: QuickAddModalProps) {
   const [tab, setTab] = useState<'photos' | 'ai' | 'manual'>(initialTab)
   const [nlText, setNlText] = useState('')
@@ -162,7 +187,7 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
   const priceNum = parseFloat(formData.pricePerUnit) || 0
   const feeNum = parseFloat(formData.fee) || 0
   const taxNum = parseFloat(formData.taxWithheld) || 0
-  const totalAmount = (quantityNum * priceNum + feeNum - taxNum).toFixed(2)
+  const totalAmount = calculateTxnTotal(formData.txnType, quantityNum, priceNum, feeNum, taxNum).toFixed(2)
 
   // ESC key dismiss and body scroll lock
   useEffect(() => {
@@ -345,29 +370,40 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       // Auto-correct if quantity was 0 but totalAmount is known (e.g. Dime! dollar orders)
       if (q <= 0) {
         if (total > 0) {
+          const grossAmount = t.txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
           if (p > 0) {
-            q = Number(((total - fee) / p).toFixed(4))
+            q = Number((grossAmount / p).toFixed(4))
           } else {
             q = 1
-            p = Math.max(0, total - fee)
+            p = grossAmount
           }
         } else {
           throw new Error(`รายการ "${t.ticker}": กรุณาระบุจำนวนหุ้นหรือมูลค่ารวม`)
         }
       } else if (p <= 0 && total > 0) {
-        p = Math.max(0, Number(((total - fee) / q).toFixed(4)))
+        const grossAmount = t.txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
+        p = Math.max(0, Number((grossAmount / q).toFixed(4)))
       }
 
       if (p < 0) {
         throw new Error(`รายการ "${t.ticker}": ราคาต่อหน่วยต้องไม่ติดลบ`)
       }
 
-      const finalTotal = total > 0 ? total : Math.max(0, q * p + fee - tax)
+      let finalTotal = total
+      if (t.txnType === 'SELL' && q > 0 && p > 0 && fee > 0) {
+        const gross = q * p
+        if (finalTotal > gross || finalTotal === gross + fee) {
+          finalTotal = calculateTxnTotal(t.txnType, q, p, fee, tax)
+        }
+      } else if (finalTotal <= 0) {
+        finalTotal = calculateTxnTotal(t.txnType, q, p, fee, tax)
+      }
+
       return {
         ...t,
         quantity: q,
         pricePerUnit: p,
-        totalAmount: finalTotal,
+        totalAmount: Number(finalTotal.toFixed(2)),
       }
     })
 
@@ -529,14 +565,19 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
           patch.quantity !== undefined ||
           patch.pricePerUnit !== undefined ||
           patch.fee !== undefined ||
-          patch.taxWithheld !== undefined
+          patch.taxWithheld !== undefined ||
+          patch.txnType !== undefined
         ) {
           const q = Number(updated.quantity) || 0
           const p = Number(updated.pricePerUnit) || 0
           const f = Number(updated.fee) || 0
           const t = Number(updated.taxWithheld) || 0
-          if (q > 0 || p > 0) {
-            updated.totalAmount = Math.max(0, q * p + f - t)
+          if (q > 0 && p > 0) {
+            updated.totalAmount = calculateTxnTotal(updated.txnType, q, p, f, t)
+          } else if (updated.txnType === 'FEE') {
+            updated.totalAmount = f
+          } else {
+            updated.totalAmount = 0
           }
         }
         return updated
@@ -622,19 +663,29 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         const tax = Number(t.taxWithheld || 0)
         const total = Number(t.totalAmount || 0)
 
+        const txnType = (t.txnType as TransactionType) || 'BUY'
         // Auto-resolve zero quantity if total amount is present (e.g. Dime! dollar orders)
+        const grossAmount = txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
         if (q <= 0 && total > 0) {
           if (p > 0) {
-            q = Number(((total - fee) / p).toFixed(4))
+            q = Number((grossAmount / p).toFixed(4))
           } else {
             q = 1
-            p = Math.max(0, total - fee)
+            p = grossAmount
           }
         } else if (p <= 0 && total > 0 && q > 0) {
-          p = Math.max(0, Number(((total - fee) / q).toFixed(4)))
+          p = Math.max(0, Number((grossAmount / q).toFixed(4)))
         }
 
-        const calculatedTotal = total > 0 ? total : Math.max(0, q * p + fee - tax)
+        let calculatedTotal = total
+        if (txnType === 'SELL' && q > 0 && p > 0 && fee > 0) {
+          const gross = q * p
+          if (calculatedTotal > gross || calculatedTotal === gross + fee) {
+            calculatedTotal = calculateTxnTotal(txnType, q, p, fee, tax)
+          }
+        } else if (calculatedTotal <= 0) {
+          calculatedTotal = calculateTxnTotal(txnType, q, p, fee, tax)
+        }
 
         return {
           id: t.id || `txn_nlp_${Date.now()}_${i + 1}`,
@@ -1077,6 +1128,14 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                                 type="number"
                                 step="any"
                                 value={txn.quantity}
+                                onFocus={(e) => e.target.select()}
+                                onBlur={(e) => {
+                                  const num = parseFloat(e.target.value)
+                                  if (!isNaN(num)) {
+                                    e.target.value = num.toString()
+                                    handleUpdateTxn(idx, { quantity: num })
+                                  }
+                                }}
                                 onChange={(e) => handleUpdateTxn(idx, { quantity: parseFloat(e.target.value) || 0 })}
                                 className="w-full bg-[#12151C] border border-white/10 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
                               />
@@ -1088,6 +1147,14 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                                 type="number"
                                 step="any"
                                 value={txn.pricePerUnit}
+                                onFocus={(e) => e.target.select()}
+                                onBlur={(e) => {
+                                  const num = parseFloat(e.target.value)
+                                  if (!isNaN(num)) {
+                                    e.target.value = num.toString()
+                                    handleUpdateTxn(idx, { pricePerUnit: num })
+                                  }
+                                }}
                                 onChange={(e) => handleUpdateTxn(idx, { pricePerUnit: parseFloat(e.target.value) || 0 })}
                                 className="w-full bg-[#12151C] border border-white/10 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
                               />
@@ -1099,6 +1166,14 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                                 type="number"
                                 step="any"
                                 value={txn.fee}
+                                onFocus={(e) => e.target.select()}
+                                onBlur={(e) => {
+                                  const num = parseFloat(e.target.value)
+                                  if (!isNaN(num)) {
+                                    e.target.value = num.toString()
+                                    handleUpdateTxn(idx, { fee: num })
+                                  }
+                                }}
                                 onChange={(e) => handleUpdateTxn(idx, { fee: parseFloat(e.target.value) || 0 })}
                                 className="w-full bg-[#12151C] border border-white/10 rounded px-2 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
                               />
@@ -1598,12 +1673,19 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                     ยอดรวมโดยประมาณ
                   </p>
                   <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
-                    (จำนวน × ราคา) + ค่าธรรมเนียม - ภาษี
+                    {formData.txnType === 'SELL'
+                      ? '(จำนวน × ราคา) - ค่าธรรมเนียม - ภาษี'
+                      : formData.txnType === 'DIVIDEND'
+                      ? '(จำนวน × ราคา) - ภาษีหัก ณ ที่จ่าย'
+                      : formData.txnType === 'FEE'
+                      ? 'ค่าธรรมเนียม'
+                      : '(จำนวน × ราคา) + ค่าธรรมเนียม'}
                   </p>
                 </div>
                 <div className="text-right">
                   <span className="text-xl font-bold text-white font-mono tabular-nums">
-                    ${isNaN(Number(totalAmount)) ? '0.00' : Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formData.market === 'TH' ? '฿' : '$'}
+                    {isNaN(Number(totalAmount)) ? '0.00' : Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
