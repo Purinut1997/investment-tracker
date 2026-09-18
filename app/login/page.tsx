@@ -88,6 +88,7 @@ function LoginForm() {
   }
 
   async function handleGoogleLogin() {
+    setError('')
     setGoogleLoading(true)
     await signIn('google', {
       callbackUrl: params.get('callbackUrl') ?? '/dashboard',
