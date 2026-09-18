@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate } from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
@@ -15,7 +15,9 @@ import {
   ArrowRight,
   PieChart as PieIcon,
   Coins,
-  Activity
+  Activity,
+  RefreshCw,
+  Check
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -128,6 +130,33 @@ export default function DashboardPage() {
   const isLoading = sumLoading || holdLoading || accLoading || planLoading
   const hasError = summaryError || holdingsError || accountsError || plansError
 
+  const [refreshingPrices, setRefreshingPrices] = useState(false)
+  const [refreshToast, setRefreshToast] = useState<{ title: string; desc: string } | null>(null)
+
+  async function handleRefreshPrices() {
+    setRefreshingPrices(true)
+    try {
+      const res = await fetch('/api/portfolio/refresh-prices', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to refresh prices')
+
+      await Promise.all([
+        mutate('/api/portfolio/holdings'),
+        mutate('/api/portfolio/summary'),
+      ])
+
+      setRefreshToast({
+        title: 'อัปเดตราคาล่าสุดเรียบร้อย!',
+        desc: `ดึงราคาปิดตลาดล่าสุดของ ${data.updatedCount ?? 0} สินทรัพย์เรียบร้อยแล้ว`,
+      })
+      setTimeout(() => setRefreshToast(null), 4000)
+    } catch (err: any) {
+      alert(err.message || 'ไม่สามารถดึงราคาได้')
+    } finally {
+      setRefreshingPrices(false)
+    }
+  }
+
   if (isLoading) {
     return <DashboardLoadingState />
   }
@@ -171,13 +200,25 @@ export default function DashboardPage() {
           title="ภาพรวมพอร์ตการลงทุน"
           description="มูลค่าสินทรัพย์ ผลตอบแทนรวม และรายการที่ต้องตรวจสอบจากธุรกรรมของคุณ"
           action={
-            <Link
-              href="/plans"
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-[#181C25] hover:bg-[#202532] border border-white/[0.1] transition-all flex items-center gap-1.5"
-            >
-              <PieIcon className="w-3.5 h-3.5 text-indigo-400" />
-              <span>แผนปรับพอร์ต</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefreshPrices}
+                disabled={refreshingPrices}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-[#181C25] hover:bg-[#202532] border border-white/[0.1] transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                title="ดึงราคาปิดตลาดล่าสุดจาก Yahoo Finance และคำนวณกำไร/ขาดทุนใหม่"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${refreshingPrices ? 'animate-spin' : ''}`} />
+                <span>{refreshingPrices ? 'กำลังดึงราคาล่าสุด...' : 'รีเฟรชราคาหุ้น'}</span>
+              </button>
+              <Link
+                href="/plans"
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-[#181C25] hover:bg-[#202532] border border-white/[0.1] transition-all flex items-center gap-1.5"
+              >
+                <PieIcon className="w-3.5 h-3.5 text-indigo-400" />
+                <span>แผนปรับพอร์ต</span>
+              </Link>
+            </div>
           }
         />
 
@@ -521,14 +562,26 @@ export default function DashboardPage() {
           <div className="px-6 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/40">
             <div>
               <h3 className="text-sm font-bold text-white tracking-wide">สินทรัพย์ที่ถือครองในพอร์ต (Holdings)</h3>
-              <p className="text-xs text-slate-400 mt-0.5">แสดงรายการสินทรัพย์ ต้นทุน ราคาตลาด และกำไรขาดทุนสะสม</p>
+              <p className="text-xs text-slate-400 mt-0.5">แสดงรายการสินทรัพย์ ต้นทุน ราคาปิดตลาดล่าสุด และกำไรขาดทุนสะสม</p>
             </div>
-            <Link
-              href="/transactions"
-              className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1.5"
-            >
-              ประวัติทั้งหมด <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleRefreshPrices}
+                disabled={refreshingPrices}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                title="ดึงราคาปิดตลาดล่าสุดจาก Yahoo Finance"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${refreshingPrices ? 'animate-spin' : ''}`} />
+                <span>{refreshingPrices ? 'กำลังดึงราคา...' : 'รีเฟรชราคาล่าสุด'}</span>
+              </button>
+              <Link
+                href="/transactions"
+                className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1.5"
+              >
+                ประวัติทั้งหมด <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
 
           {holdings.length === 0 ? (
@@ -597,13 +650,13 @@ export default function DashboardPage() {
                         </td>
                         <td className={`text-right font-mono text-xs hidden sm:table-cell ${hProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
                           <div className="font-bold">
-                            {hProfit ? '+' : ''}฿{Number(h.unrealizedPnLBase ?? (h.unrealizedPnL * (isUsd ? 35.5 : 1))).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {hProfit ? '+' : ''}{sym}{Number(h.unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
-                          <div className="text-[10px] opacity-80 mt-0.5">
-                            {hProfit ? '+' : ''}{h.unrealizedPnLPercent.toFixed(2)}%
+                          <div className="text-[10px] opacity-80 mt-0.5 flex items-center justify-end gap-1">
+                            <span>{hProfit ? '+' : ''}{h.unrealizedPnLPercent.toFixed(2)}%</span>
                             {isUsd && (
-                              <span className="ml-1 text-slate-400">
-                                ({hProfit ? '+' : ''}${Number(h.unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                              <span className="text-slate-400">
+                                (≈ {hProfit ? '+' : ''}฿{Number(h.unrealizedPnLBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                               </span>
                             )}
                           </div>
@@ -616,6 +669,19 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Floating Toast for Refresh Notification */}
+        {refreshToast && (
+          <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-[#131722]/95 border border-emerald-500/40 shadow-2xl backdrop-blur-md flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+              <Check className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-white">{refreshToast.title}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">{refreshToast.desc}</p>
+            </div>
+          </div>
+        )}
 
       </div>
     </AppShell>
