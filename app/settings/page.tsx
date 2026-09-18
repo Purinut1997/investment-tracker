@@ -19,7 +19,9 @@ import {
   DollarSign,
   Bell,
   Cpu,
+  Palette,
 } from 'lucide-react'
+import { BackgroundThemeSelector } from '@/components/BackgroundThemeSelector'
 
 export default function SettingsPage() {
   const { data, isLoading } = useSWR('/api/settings')
@@ -340,6 +342,23 @@ export default function SettingsPage() {
                 onChange={(e) => setWeeklyDigest(e.target.checked)}
               />
             </div>
+          </div>
+
+          {/* ─── SECTION 3: APPEARANCE & BACKGROUND ANIMATION ────────── */}
+          <div className="bg-[#12151C] border border-white/[0.08] rounded-2xl p-6 sm:p-7 shadow-xl shadow-black/20 space-y-6">
+            <div className="flex items-center gap-3.5 pb-5 border-b border-white/[0.06]">
+              <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400">
+                <Palette className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-white">ธีมและภาพเคลื่อนไหวพื้นหลัง (Appearance & Animation)</h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  เลือกสไตล์กราฟิกภาพเคลื่อนไหวและปรับระดับแสงเรืองรองของระบบตามความชอบส่วนบุคคล
+                </p>
+              </div>
+            </div>
+
+            <BackgroundThemeSelector />
           </div>
 
           {/* Submit Button */}
