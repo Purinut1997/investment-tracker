@@ -76,6 +76,29 @@ interface QuickAddModalProps {
   initialTab?: 'photos' | 'ai' | 'manual'
 }
 
+async function parseResponseJson(res: Response, fallbackError: string) {
+  const contentType = res.headers.get('content-type') || ''
+  if (contentType.includes('application/json')) {
+    const json = await res.json()
+    if (!res.ok) {
+      throw new Error(json.error || json.message || fallbackError)
+    }
+    return json
+  }
+  const rawText = await res.text()
+  if (!res.ok) {
+    if (res.status === 504 || rawText.includes('timeout') || rawText.includes('FUNCTION_INVOCATION_TIMEOUT')) {
+      throw new Error('ระบบประมวลผลนานเกินกำหนด กรุณาลองใหม่อีกครั้ง หรือแบ่งข้อความเป็นชุดสั้นลง')
+    }
+    throw new Error(rawText.length < 150 && rawText.length > 0 ? rawText : fallbackError)
+  }
+  try {
+    return JSON.parse(rawText)
+  } catch {
+    throw new Error(fallbackError)
+  }
+}
+
 export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: QuickAddModalProps) {
   const [tab, setTab] = useState<'photos' | 'ai' | 'manual'>(initialTab)
   const [nlText, setNlText] = useState('')
@@ -219,10 +242,7 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         }),
       })
 
-      const json = await res.json()
-      if (!res.ok) {
-        throw new Error(json.error || 'การวิเคราะห์ภาพถ่ายล้มเหลว')
-      }
+      const json = await parseResponseJson(res, 'การวิเคราะห์ภาพถ่ายล้มเหลว')
 
       const txns: ExtractedTxn[] = (json.data?.transactions || []).map((t: any, i: number) => ({
         id: t.id || `txn_${i + 1}`,
@@ -342,10 +362,7 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         }),
       })
 
-      const json = await res.json()
-      if (!res.ok) {
-        throw new Error(json.error || 'บันทึกรายการแบบกลุ่มล้มเหลว')
-      }
+      const json = await parseResponseJson(res, 'บันทึกรายการแบบกลุ่มล้มเหลว')
 
       // Revalidate all caches
       mutate('/api/transactions')
@@ -444,8 +461,8 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
           currency: newAccountCurrency,
         }),
       })
-      const created = (await res.json()) as { id?: string; error?: string }
-      if (!res.ok || !created.id) throw new Error(created.error || 'สร้างบัญชีไม่สำเร็จ')
+      const created = await parseResponseJson(res, 'สร้างบัญชีไม่สำเร็จ')
+      if (!created.id) throw new Error(created.error || 'สร้างบัญชีไม่สำเร็จ')
 
       await mutate('/api/accounts')
       setFormData((prev) => ({ ...prev, accountId: created.id as string }))
@@ -474,10 +491,7 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         body: JSON.stringify({ prompt: nlText }),
       })
 
-      const json = await res.json()
-      if (!res.ok) {
-        throw new Error(json.error || 'AI Parser ยังไม่พร้อมทำงาน กรุณาลองใหม่อีกครั้ง')
-      }
+      const json = await parseResponseJson(res, 'AI Parser ยังไม่พร้อมทำงาน กรุณาลองใหม่อีกครั้ง')
 
       const rawTxns = Array.isArray(json.transactions)
         ? json.transactions

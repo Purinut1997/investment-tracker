@@ -111,11 +111,34 @@ ${accountsListStr}
       prompt: userPrompt,
       logType: 'quick_add_multimodal',
       systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
+      thinkingBudget: 0,
     })
 
-    // Extract JSON block
-    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim()
-    const parsed = JSON.parse(cleanText)
+    // Extract JSON block safely
+    let parsed: any
+    const cleanText = text.replace(/```json/gi, '').replace(/```/gi, '').trim()
+    try {
+      parsed = JSON.parse(cleanText)
+    } catch {
+      const firstBrace = text.indexOf('{')
+      const lastBrace = text.lastIndexOf('}')
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        parsed = JSON.parse(text.slice(firstBrace, lastBrace + 1))
+      } else {
+        const firstBracket = text.indexOf('[')
+        const lastBracket = text.lastIndexOf(']')
+        if (firstBracket !== -1 && lastBracket > firstBracket) {
+          parsed = { transactions: JSON.parse(text.slice(firstBracket, lastBracket + 1)) }
+        } else {
+          throw new Error('AI ไม่สามารถแปลงข้อความเป็นรูปแบบ JSON ได้ กรุณาลองใหม่อีกครั้ง')
+        }
+      }
+    }
+
+    if (Array.isArray(parsed)) {
+      parsed = { transactions: parsed }
+    }
 
     // Ensure backwards compatibility if model returns single transaction object
     if (!parsed.transactions && parsed.ticker) {

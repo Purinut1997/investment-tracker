@@ -25,6 +25,8 @@ export interface CallGeminiOptions {
     | 'quick_add_multimodal'
     | 'stock_insight'
   systemInstruction?: string
+  responseMimeType?: 'application/json' | 'text/plain'
+  thinkingBudget?: number
 }
 
 export interface CallGeminiResult {
@@ -38,6 +40,8 @@ export async function callGemini({
   images,
   logType,
   systemInstruction,
+  responseMimeType,
+  thinkingBudget,
 }: CallGeminiOptions): Promise<CallGeminiResult> {
   // 1. Get user settings and API key
   const userSettings = await prisma.userSettings.findUnique({
@@ -67,6 +71,9 @@ export async function callGemini({
   // 2. Determine models to try based on Auto or Manual mode
   let modelsToTry: string[] = []
 
+  // Deprecated models that return 404 in 2026
+  const deprecatedModels = new Set(['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'])
+
   if (userSettings?.aiModelMode === 'manual' && userSettings.selectedAiModel?.modelId) {
     modelsToTry = [userSettings.selectedAiModel.modelId]
   } else {
@@ -77,10 +84,11 @@ export async function callGemini({
     })
 
     if (dbModels.length > 0) {
-      modelsToTry = dbModels.map((m) => m.modelId)
-    } else {
-      // Hardcoded fallback list in case seed has not been run
-      modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash']
+      modelsToTry = dbModels.map((m) => m.modelId).filter((id) => !deprecatedModels.has(id))
+    }
+    
+    if (modelsToTry.length === 0) {
+      modelsToTry = ['gemini-2.5-flash', 'gemini-3-flash']
     }
   }
 
@@ -92,6 +100,14 @@ export async function callGemini({
       const model = ai.getGenerativeModel({
         model: modelId,
         ...(systemInstruction ? { systemInstruction } : {}),
+        generationConfig: {
+          ...(responseMimeType ? { responseMimeType } : {}),
+          ...(thinkingBudget !== undefined
+            ? { thinkingConfig: { thinkingBudget } }
+            : logType === 'quick_add_multimodal' || logType === 'csv_mapping'
+            ? { thinkingConfig: { thinkingBudget: 0 } }
+            : {}),
+        } as any,
       })
 
       const contentPayload = images && images.length > 0
