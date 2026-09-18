@@ -166,6 +166,25 @@ Last updated: 2026-09-17
   - คำนวณความมั่งคั่งสุทธิรวม (Total Net Worth = มูลค่าสินทรัพย์ลงทุน + เงินสดสำรองรวม) แสดงผลแบบสดใสบนการ์ด Hero
 - **Build Status**: `npm run build` ผ่าน 100% ครบทุก 49 Static/Dynamic routes โดยไม่มี Error หรือ Type Warning ใดๆ
 
+### 15. Phase 14: User Watchlist & Custom Asset Tracking (กระดานจับตาหุ้นส่วนตัว) ✅
+- **Custom Watchlist Section (`app/market-watch/page.tsx`)**:
+  - แสดงส่วน "⭐ หุ้นและสินทรัพย์ที่กำลังจับตา (Watchlist)" บนหน้าจอจับตาตลาด
+  - การ์ดราคาแบบ Real-time แสดงสัญลักษณ์, ชื่อบริษัท/สินทรัพย์, ตลาด (`US`, `TH`, `CRYPTO`, `GOLD`), ราคาล่าสุด, % Change และปุ่มถอนการติดตาม
+  - Empty state สวยงามพร้อมชิปเพิ่มด่วนยอดนิยม (`+ NVDA`, `+ AAPL`, `+ TSLA`, `+ PTT`, `+ DELTA`, `+ BTC`, `+ GOLD`)
+- **Add Watchlist Modal with Live Quote Preview (`components/market-watch/AddWatchlistModal.tsx`)**:
+  - ค้นหาและกรอก Ticker ได้ทุกหมวด (หุ้นสหรัฐฯ, หุ้นไทย SET, คริปโต, ทองคำ/สินค้าโภคภัณฑ์)
+  - ระบบ **Live Quote Preview & Validation**: ดึงราคาจริงและชื่อบริษัทมาแสดงพรีวิวแบบเรียลไทม์ พร้อมป้ายยืนยันความถูกต้องก่อนกดบันทึก
+  - สามารถกำหนดชื่อเรียกสินทรัพย์ได้เอง (Custom Display Name)
+- **1-Click Star Toggle (⭐)**:
+  - เพิ่มปุ่มไอคอนดาวบนการ์ดตลาดทั่วไปทุกใบ ให้ผู้ใช้คลิกติดดาวเพิ่มเข้าหรือถอดออกจาก Watchlist ได้ทันทีในคลิกเดียว
+- **REST APIs & Database**:
+  - `GET /api/watchlist`: ดึงรายการ Watchlist ของผู้ใช้พร้อมดึงราคาตลาดสดแบบคู่ขนาน
+  - `POST /api/watchlist`: ตรวจสอบและบันทึกรายการลงในตาราง `WatchlistItem` ของ Prisma
+  - `DELETE /api/watchlist/[id]`: ลบรายการที่สนใจของผู้ใช้
+  - `GET /api/watchlist/search`: API สำหรับค้นหาและพรีวิวราคาตลาดสด
+- **Unified Market Resolver (`lib/market-data/resolver.ts`)**: ตัวจัดการดึงราคาแบบครบวงจร รองรับ US, Thai Stocks, Crypto, Gold พร้อม In-memory cache
+- **Build Status**: `npm run build` ผ่าน 100% ครบทั้ง 51 Static/Dynamic routes
+
 ---
 
 ## วิธีการรันและทดสอบระบบ

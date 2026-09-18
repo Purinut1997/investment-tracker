@@ -23,6 +23,21 @@ const COIN_ID_MAP: Record<string, string> = {
   USDC: 'usd-coin',
 }
 
+const COIN_NAME_MAP: Record<string, string> = {
+  BTC: 'Bitcoin',
+  ETH: 'Ethereum',
+  SOL: 'Solana',
+  BNB: 'BNB',
+  XRP: 'XRP',
+  ADA: 'Cardano',
+  DOGE: 'Dogecoin',
+  AVAX: 'Avalanche',
+  DOT: 'Polkadot',
+  LINK: 'Chainlink',
+  USDT: 'Tether USD',
+  USDC: 'USD Coin',
+}
+
 export class CoinGeckoProvider implements MarketDataProvider {
   name = 'coingecko'
 
@@ -58,6 +73,7 @@ export class CoinGeckoProvider implements MarketDataProvider {
 
       return {
         symbol: cleanSymbol,
+        name: COIN_NAME_MAP[cleanSymbol] || cleanSymbol,
         price: usdPrice,
         change: (usdPrice * change24h) / 100,
         changePercent: change24h,

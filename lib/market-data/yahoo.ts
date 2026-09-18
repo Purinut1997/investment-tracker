@@ -76,6 +76,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
 
       const quote: MarketQuote = {
         symbol: rawSymbol,
+        name: meta.shortName || meta.longName || rawSymbol,
         price,
         change,
         changePercent,
