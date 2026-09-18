@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
 const BatchTransactionItemSchema = z.object({
   accountId: z.string().optional(),
@@ -262,6 +263,8 @@ export async function POST(req: NextRequest) {
 
       updatedCashAccounts.push(updated)
     }
+
+    invalidateUserHoldingsCache(userId)
 
     return NextResponse.json({
       success: true,

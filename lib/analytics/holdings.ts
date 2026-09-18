@@ -36,19 +36,96 @@ export interface PortfolioHoldingsResult {
   baseCurrency: string
 }
 
+// In-memory cache for computed user holdings (60-second TTL)
+// Key: `${userId}_${baseCurrency}`
+interface HoldingsCacheEntry {
+  result: PortfolioHoldingsResult
+  timestamp: number
+}
+
+const userHoldingsCache = new Map<string, HoldingsCacheEntry>()
+const inFlightHoldings = new Map<string, Promise<PortfolioHoldingsResult>>()
+const HOLDINGS_CACHE_TTL_MS = 60 * 1000
+
+// In-memory cache for computed user summary (60-second TTL)
+const userSummaryCache = new Map<string, { result: any; timestamp: number }>()
+const inFlightSummary = new Map<string, Promise<any>>()
+const SUMMARY_CACHE_TTL_MS = 60 * 1000
+
+export function getUserSummaryCache(userId: string, baseCurrency: string) {
+  const entry = userSummaryCache.get(`${userId}_${baseCurrency}`)
+  if (entry && Date.now() - entry.timestamp < SUMMARY_CACHE_TTL_MS) {
+    return entry.result
+  }
+  return null
+}
+
+export function setUserSummaryCache(userId: string, baseCurrency: string, result: any) {
+  userSummaryCache.set(`${userId}_${baseCurrency}`, { result, timestamp: Date.now() })
+}
+
+export function getInFlightSummary(userId: string, baseCurrency: string) {
+  return inFlightSummary.get(`${userId}_${baseCurrency}`) || null
+}
+
+export function setInFlightSummary(userId: string, baseCurrency: string, promise: Promise<any>) {
+  const key = `${userId}_${baseCurrency}`
+  inFlightSummary.set(key, promise)
+  promise.finally(() => inFlightSummary.delete(key))
+}
+
+export function invalidateUserPortfolioCache(userId?: string) {
+  if (userId) {
+    for (const key of userHoldingsCache.keys()) {
+      if (key.startsWith(`${userId}_`)) {
+        userHoldingsCache.delete(key)
+      }
+    }
+    for (const key of userSummaryCache.keys()) {
+      if (key.startsWith(`${userId}_`)) {
+        userSummaryCache.delete(key)
+      }
+    }
+  } else {
+    userHoldingsCache.clear()
+    userSummaryCache.clear()
+  }
+}
+
+export const invalidateUserHoldingsCache = invalidateUserPortfolioCache
+
 export async function calculateUserHoldings(
   userId: string,
-  baseCurrency = 'THB'
+  baseCurrency = 'THB',
+  forceRefresh = false
 ): Promise<PortfolioHoldingsResult> {
-  // 1. Fetch all user transactions ordered chronologically
-  const txns = await prisma.transaction.findMany({
-    where: { userId },
-    orderBy: { txnDate: 'asc' },
-    include: {
-      asset: true,
-      account: true,
-    },
-  })
+  const cacheKey = `${userId}_${baseCurrency}`
+  const now = Date.now()
+
+  // Return cached result if available and fresh (<60s)
+  if (!forceRefresh) {
+    const cached = userHoldingsCache.get(cacheKey)
+    if (cached && now - cached.timestamp < HOLDINGS_CACHE_TTL_MS) {
+      return cached.result
+    }
+  }
+
+  // Deduplicate concurrent in-flight requests for the same user
+  if (inFlightHoldings.has(cacheKey)) {
+    return inFlightHoldings.get(cacheKey)!
+  }
+
+  const computePromise = (async () => {
+    try {
+      // 1. Fetch all user transactions ordered chronologically
+      const txns = await prisma.transaction.findMany({
+        where: { userId },
+        orderBy: { txnDate: 'asc' },
+        include: {
+          asset: true,
+          account: true,
+        },
+      })
 
   // 2. Aggregate quantity and cost per asset using FIFO (First-In, First-Out) matching
   // Matches Dime and US brokerage cost-basis standard (without fee mixing)
@@ -99,21 +176,29 @@ export async function calculateUserHoldings(
   }
 
   // 3. Fetch FX exchange rate if asset currency differs from baseCurrency
-  const usdThbRate = await getExchangeRate('USD', baseCurrency) ?? 35.5
+  const usdThbRate = (await getExchangeRate('USD', baseCurrency)) ?? 35.5
 
-  // 4. Enrich active holdings with live market prices
+  // 4. Filter active holdings with remaining quantity > 0
+  const activeEntries = Array.from(assetMap.entries()).filter(([_, data]) => {
+    const remainingQty = data.lots.reduce((acc, lot) => acc + lot.quantity, 0)
+    return remainingQty > 0.00001
+  })
+
+  // Parallelize price fetching for all active assets concurrently
+  const priceResults = await Promise.all(
+    activeEntries.map(([assetId]) => getCachedOrFetchPrice(assetId, undefined, forceRefresh))
+  )
+
   const activeHoldings: HoldingItem[] = []
   let totalValueBase = 0
   let totalCostBase = 0
 
-  for (const [assetId, data] of assetMap.entries()) {
+  activeEntries.forEach(([assetId, data], idx) => {
     const remainingQty = data.lots.reduce((acc, lot) => acc + lot.quantity, 0)
-    if (remainingQty <= 0.00001) continue
-
     const totalCost = data.lots.reduce((acc, lot) => acc + lot.quantity * lot.pricePerUnit, 0)
     const avgCost = remainingQty > 0 ? totalCost / remainingQty : 0
 
-    const priceData = await getCachedOrFetchPrice(assetId)
+    const priceData = priceResults[idx]
     const currentPrice = priceData?.price ?? avgCost
     const currentValue = remainingQty * currentPrice
     const unrealizedPnL = currentValue - totalCost
@@ -148,7 +233,7 @@ export async function calculateUserHoldings(
       allocationPercent: 0, // calculated below
       isStale: priceData?.isStale ?? false,
     })
-  }
+  })
 
   // 5. Calculate % allocation
   if (totalValueBase > 0) {
@@ -163,7 +248,7 @@ export async function calculateUserHoldings(
   const unrealizedPnLBase = totalValueBase - totalCostBase
   const unrealizedPnLPercent = totalCostBase > 0 ? (unrealizedPnLBase / totalCostBase) * 100 : 0
 
-  return {
+  const result: PortfolioHoldingsResult = {
     holdings: activeHoldings,
     totalValueBase,
     totalCostBase,
@@ -171,4 +256,16 @@ export async function calculateUserHoldings(
     unrealizedPnLPercent,
     baseCurrency,
   }
+
+    // Cache computed result
+    userHoldingsCache.set(cacheKey, { result, timestamp: now })
+
+    return result
+  } finally {
+    inFlightHoldings.delete(cacheKey)
+  }
+})()
+
+inFlightHoldings.set(cacheKey, computePromise)
+return computePromise
 }

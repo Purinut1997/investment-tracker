@@ -9,6 +9,8 @@ import { prisma } from '@/lib/prisma'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 import { stooqProvider } from '@/lib/market-data/stooq'
+import { invalidatePriceCache } from '@/lib/market-data/cache-layer'
+import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -47,6 +49,7 @@ export async function POST(req: NextRequest) {
     const dateKey = new Date()
     dateKey.setUTCHours(0, 0, 0, 0)
 
+    // Parallelize external fetches for all active assets
     const updatedPrices: Array<{
       ticker: string
       market: string
@@ -57,64 +60,70 @@ export async function POST(req: NextRequest) {
       source: string
     }> = []
 
-    for (const asset of activeAssets) {
-      try {
-        let quote: any = null
+    await Promise.all(
+      activeAssets.map(async (asset) => {
+        try {
+          let quote: any = null
 
-        if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
-          quote = await coinGeckoProvider.getQuote(asset.ticker)
-        } else if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
-          quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH')
-          if (!quote) quote = await stooqProvider.getQuote(asset.ticker, 'TH')
-        } else {
-          // US / Global
-          quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US')
-          if (!quote) quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US')
-        }
-
-        if (quote && quote.price > 0) {
-          // Upsert into PriceHistory
-          await prisma.priceHistory.upsert({
-            where: {
-              assetId_priceDate: {
-                assetId: asset.id,
-                priceDate: dateKey,
-              },
-            },
-            update: {
-              closePrice: quote.price,
-              sourceProvider: quote.provider || 'yahoo',
-            },
-            create: {
-              assetId: asset.id,
-              priceDate: dateKey,
-              closePrice: quote.price,
-              sourceProvider: quote.provider || 'yahoo',
-            },
-          })
-
-          // Ensure asset has correct currency and market
-          if (asset.market === 'US' && asset.currency !== 'USD') {
-            await prisma.asset.update({
-              where: { id: asset.id },
-              data: { currency: 'USD' },
-            })
+          if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
+            quote = await coinGeckoProvider.getQuote(asset.ticker)
+          } else if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
+            quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH')
+            if (!quote) quote = await stooqProvider.getQuote(asset.ticker, 'TH')
+          } else {
+            // US / Global
+            quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US')
+            if (!quote) quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US')
           }
 
-          updatedPrices.push({
-            ticker: asset.ticker,
-            market: asset.market,
-            currency: quote.currency || (asset.market === 'US' ? 'USD' : 'THB'),
-            price: quote.price,
-            change: quote.change || 0,
-            changePercent: quote.changePercent || 0,
-            source: quote.provider || 'yahoo',
-          })
+          if (quote && quote.price > 0) {
+            // Upsert into PriceHistory
+            await prisma.priceHistory.upsert({
+              where: {
+                assetId_priceDate: {
+                  assetId: asset.id,
+                  priceDate: dateKey,
+                },
+              },
+              update: {
+                closePrice: quote.price,
+                sourceProvider: quote.provider || 'yahoo',
+              },
+              create: {
+                assetId: asset.id,
+                priceDate: dateKey,
+                closePrice: quote.price,
+                sourceProvider: quote.provider || 'yahoo',
+              },
+            })
+
+            // Ensure asset has correct currency and market
+            if (asset.market === 'US' && asset.currency !== 'USD') {
+              await prisma.asset.update({
+                where: { id: asset.id },
+                data: { currency: 'USD' },
+              })
+            }
+
+            updatedPrices.push({
+              ticker: asset.ticker,
+              market: asset.market,
+              currency: quote.currency || (asset.market === 'US' ? 'USD' : 'THB'),
+              price: quote.price,
+              change: quote.change || 0,
+              changePercent: quote.changePercent || 0,
+              source: quote.provider || 'yahoo',
+            })
+          }
+        } catch (assetError) {
+          console.error(`[refresh-prices] Failed for ${asset.ticker}:`, assetError)
         }
-      } catch (assetError) {
-        console.error(`[refresh-prices] Failed for ${asset.ticker}:`, assetError)
-      }
-    }
+      })
+    )
+
+    // Clear caches so downstream APIs immediately reflect latest prices
+    invalidatePriceCache()
+    invalidateUserHoldingsCache(session.user.id)
 
     return NextResponse.json({
       success: true,

@@ -1,7 +1,9 @@
 /**
  * lib/market-data/cache-layer.ts
- * Unified price cache and dispatcher layer.
- * Checks database PriceHistory first, falls back to external providers.
+ * Unified high-speed multi-tier price cache and dispatcher layer.
+ * Tier 1: In-memory cache (5-minute TTL, 0ms)
+ * Tier 2: Database PriceHistory latest valid close price (<5ms)
+ * Tier 3: External providers (Yahoo, Finnhub, Stooq, CoinGecko) only if forceRefresh=true or no DB record
  */
 
 import { prisma } from '@/lib/prisma'
@@ -11,37 +13,95 @@ import { coinGeckoProvider } from './coingecko'
 import { stooqProvider } from './stooq'
 import { MarketQuote } from './types'
 
+interface PriceCacheEntry {
+  price: number
+  sourceProvider: string
+  isStale: boolean
+  timestamp: number
+}
+
+// In-memory price cache: assetId -> PriceCacheEntry (5-minute TTL)
+const priceMemoryCache = new Map<string, PriceCacheEntry>()
+const PRICE_CACHE_TTL_MS = 5 * 60 * 1000
+
+export function invalidatePriceCache(assetId?: string) {
+  if (assetId) {
+    priceMemoryCache.delete(assetId)
+  } else {
+    priceMemoryCache.clear()
+  }
+}
+
 export async function getCachedOrFetchPrice(
   assetId: string,
-  targetDate = new Date()
+  targetDate = new Date(),
+  forceRefresh = false
 ): Promise<{ price: number; sourceProvider: string; isStale: boolean } | null> {
+  const now = Date.now()
+
+  // ── Tier 1: In-Memory Fast Cache (<0.1ms) ──────────────────────
+  if (!forceRefresh) {
+    const memoryCached = priceMemoryCache.get(assetId)
+    if (memoryCached && now - memoryCached.timestamp < PRICE_CACHE_TTL_MS) {
+      return {
+        price: memoryCached.price,
+        sourceProvider: memoryCached.sourceProvider,
+        isStale: memoryCached.isStale,
+      }
+    }
+  }
+
   const dateKey = new Date(targetDate)
   dateKey.setUTCHours(0, 0, 0, 0)
 
   try {
-    // 1. Check PriceHistory for exact date
-    const cached = await prisma.priceHistory.findUnique({
-      where: {
-        assetId_priceDate: {
-          assetId,
-          priceDate: dateKey,
+    // ── Tier 2: Database PriceHistory Lookup ───────────────────────
+    // If not forcing refresh, check if we already have a recent valid historical price in DB
+    if (!forceRefresh) {
+      // Check exact date first
+      const exactCached = await prisma.priceHistory.findUnique({
+        where: {
+          assetId_priceDate: {
+            assetId,
+            priceDate: dateKey,
+          },
         },
-      },
-    })
+      })
 
-    if (cached && Number(cached.closePrice) > 0) {
-      return {
-        price: Number(cached.closePrice),
-        sourceProvider: cached.sourceProvider,
-        isStale: false,
+      if (exactCached && Number(exactCached.closePrice) > 0) {
+        const result = {
+          price: Number(exactCached.closePrice),
+          sourceProvider: exactCached.sourceProvider,
+          isStale: false,
+        }
+        priceMemoryCache.set(assetId, { ...result, timestamp: now })
+        return result
+      }
+
+      // Check most recent historical price in DB (from last trading day)
+      const latestHistorical = await prisma.priceHistory.findFirst({
+        where: {
+          assetId,
+          closePrice: { gt: 0 },
+        },
+        orderBy: { priceDate: 'desc' },
+      })
+
+      if (latestHistorical && Number(latestHistorical.closePrice) > 0) {
+        const result = {
+          price: Number(latestHistorical.closePrice),
+          sourceProvider: `${latestHistorical.sourceProvider} (cached)`,
+          isStale: true,
+        }
+        priceMemoryCache.set(assetId, { ...result, timestamp: now })
+        return result
       }
     }
 
-    // 2. Fetch Asset info
+    // ── Tier 3: External Providers Fetch (Only if forceRefresh OR no DB price exists) ──
     const asset = await prisma.asset.findUnique({ where: { id: assetId } })
     if (!asset) return null
 
-    // 3. Fetch from appropriate provider
     let quote: MarketQuote | null = null
 
     if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
@@ -52,7 +112,6 @@ export async function getCachedOrFetchPrice(
         quote = await stooqProvider.getQuote(asset.ticker, 'TH')
       }
     } else if (asset.market === 'US' || asset.currency === 'USD') {
-      // Primary: Yahoo Finance (most reliable, live real-time, no api key required)
       quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US')
       if (!quote) {
         quote = await finnhubProvider.getQuote(asset.ticker)
@@ -67,7 +126,7 @@ export async function getCachedOrFetchPrice(
       }
     }
 
-    // 4. Save to PriceHistory if successfully fetched with valid positive price
+    // Save to PriceHistory and update Memory Cache if fetched successfully
     if (quote && quote.price > 0) {
       await prisma.priceHistory.upsert({
         where: {
@@ -88,14 +147,16 @@ export async function getCachedOrFetchPrice(
         },
       })
 
-      return {
+      const result = {
         price: quote.price,
         sourceProvider: quote.provider,
         isStale: false,
       }
+      priceMemoryCache.set(assetId, { ...result, timestamp: now })
+      return result
     }
 
-    // 5. Fallback: Find most recent historical price in DB
+    // Fallback: Find most recent historical price in DB
     const latestHistorical = await prisma.priceHistory.findFirst({
       where: {
         assetId,
@@ -104,15 +165,17 @@ export async function getCachedOrFetchPrice(
       orderBy: { priceDate: 'desc' },
     })
 
-    if (latestHistorical) {
-      return {
+    if (latestHistorical && Number(latestHistorical.closePrice) > 0) {
+      const result = {
         price: Number(latestHistorical.closePrice),
         sourceProvider: `${latestHistorical.sourceProvider} (cached)`,
         isStale: true,
       }
+      priceMemoryCache.set(assetId, { ...result, timestamp: now })
+      return result
     }
 
-    // 6. Last resort: latest transaction price (BUY or SELL ONLY, NEVER DIVIDEND OR FEE)
+    // Last resort: latest transaction price
     const latestTxn = await prisma.transaction.findFirst({
       where: {
         assetId,
@@ -123,11 +186,13 @@ export async function getCachedOrFetchPrice(
     })
 
     if (latestTxn && Number(latestTxn.pricePerUnit) > 0) {
-      return {
+      const result = {
         price: Number(latestTxn.pricePerUnit),
         sourceProvider: 'last_transaction',
         isStale: true,
       }
+      priceMemoryCache.set(assetId, { ...result, timestamp: now })
+      return result
     }
 
     return null

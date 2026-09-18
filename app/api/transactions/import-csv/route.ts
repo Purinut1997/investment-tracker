@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
 interface CsvRow {
   txnDate: string
@@ -228,6 +229,8 @@ export async function POST(req: NextRequest) {
         results.errors.push(`แถวที่ ${i + 1}: ${rowError?.message || String(rowError)}`)
       }
     }
+
+    invalidateUserHoldingsCache(session.user.id)
 
     return NextResponse.json(results)
   } catch (error) {

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
 const UpdateSchema = z.object({
   txnDate: z.string().datetime({ offset: true }).optional(),
@@ -102,6 +103,8 @@ export async function PUT(
       },
     })
 
+    invalidateUserHoldingsCache(session.user.id)
+
     return NextResponse.json(updated)
   } catch (error) {
     console.error('[transactions PUT]', error)
@@ -123,6 +126,8 @@ export async function DELETE(
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   await prisma.transaction.delete({ where: { id } })
+
+  invalidateUserHoldingsCache(session.user.id)
 
   return NextResponse.json({ success: true })
 }

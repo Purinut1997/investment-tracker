@@ -27,6 +27,9 @@ export interface TechnicalLevels {
   currentPrice: number
 }
 
+const stockDetailMemoryCache = new Map<string, { data: any; timestamp: number }>()
+const STOCK_DETAIL_CACHE_TTL_MS = 60 * 1000 // 60 seconds in-memory cache
+
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -40,6 +43,13 @@ export async function GET(req: NextRequest) {
 
   if (!rawSymbol) {
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
+  }
+
+  const cacheKey = `${session.user.id}_${rawSymbol}_${market}_${range}`
+  const now = Date.now()
+  const cached = stockDetailMemoryCache.get(cacheKey)
+  if (cached && now - cached.timestamp < STOCK_DETAIL_CACHE_TTL_MS) {
+    return NextResponse.json(cached.data)
   }
 
   // Map timeframe to Yahoo parameters
@@ -96,6 +106,7 @@ export async function GET(req: NextRequest) {
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         Accept: 'application/json',
       },
+      signal: AbortSignal.timeout(3500),
       next: { revalidate: 60 },
     })
       .then((res) => (res.ok ? res.json() : null))
@@ -114,7 +125,10 @@ export async function GET(req: NextRequest) {
           `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(
             rawSymbol
           )}&metric=all&token=${finnhubKey}`,
-          { next: { revalidate: 3600 } }
+          {
+            signal: AbortSignal.timeout(3000),
+            next: { revalidate: 3600 },
+          }
         )
           .then((res) => (res.ok ? res.json() : null))
           .catch(() => null)
@@ -125,7 +139,10 @@ export async function GET(req: NextRequest) {
           `https://finnhub.io/api/v1/stock/price-target?symbol=${encodeURIComponent(
             rawSymbol
           )}&token=${finnhubKey}`,
-          { next: { revalidate: 3600 } }
+          {
+            signal: AbortSignal.timeout(3000),
+            next: { revalidate: 3600 },
+          }
         )
           .then((res) => (res.ok ? res.json() : null))
           .catch(() => null)
@@ -136,7 +153,10 @@ export async function GET(req: NextRequest) {
           `https://finnhub.io/api/v1/stock/recommendation?symbol=${encodeURIComponent(
             rawSymbol
           )}&token=${finnhubKey}`,
-          { next: { revalidate: 3600 } }
+          {
+            signal: AbortSignal.timeout(3000),
+            next: { revalidate: 3600 },
+          }
         )
           .then((res) => (res.ok ? res.json() : null))
           .catch(() => null)
@@ -375,7 +395,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const payload = {
       symbol: rawSymbol,
       name: meta.longName || meta.shortName || rawSymbol,
       currency: meta.currency || (market === 'TH' ? 'THB' : 'USD'),
@@ -396,7 +416,11 @@ export async function GET(req: NextRequest) {
       chartPoints,
       technicalLevels,
       range,
-    })
+    }
+
+    stockDetailMemoryCache.set(cacheKey, { data: payload, timestamp: now })
+
+    return NextResponse.json(payload)
   } catch (error) {
     console.error('[stock-detail GET error]', error)
     return NextResponse.json({ error: 'Failed to fetch stock detail' }, { status: 500 })

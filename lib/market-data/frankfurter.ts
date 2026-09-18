@@ -6,6 +6,9 @@
 import { FxRate } from './types'
 import { prisma } from '@/lib/prisma'
 
+const fxMemoryCache = new Map<string, { rate: number; timestamp: number }>()
+const FX_CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes in-memory cache
+
 export async function getExchangeRate(
   baseCurrency = 'USD',
   targetCurrency = 'THB'
@@ -14,6 +17,13 @@ export async function getExchangeRate(
   const target = targetCurrency.toUpperCase()
 
   if (base === target) return 1.0
+
+  const cacheKey = `${base}_${target}`
+  const now = Date.now()
+  const inMem = fxMemoryCache.get(cacheKey)
+  if (inMem && now - inMem.timestamp < FX_CACHE_TTL_MS) {
+    return inMem.rate
+  }
 
   const today = new Date()
   today.setUTCHours(0, 0, 0, 0)

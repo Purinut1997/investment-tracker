@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
 // ─── Zod Schemas ──────────────────────────────────────────
 const CreateTransactionSchema = z.object({
@@ -127,6 +128,8 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    invalidateUserHoldingsCache(session.user.id)
+
     return NextResponse.json(transaction, { status: 201 })
   } catch (error) {
     console.error('[transactions POST]', error)
@@ -157,6 +160,7 @@ export async function DELETE(req: NextRequest) {
           userId: session.user.id,
         },
       })
+      invalidateUserHoldingsCache(session.user.id)
       return NextResponse.json({ success: true, count: result.count })
     }
 
@@ -186,6 +190,7 @@ export async function DELETE(req: NextRequest) {
         }
       }
 
+      invalidateUserHoldingsCache(session.user.id)
       return NextResponse.json({ success: true, count: result.count })
     }
 

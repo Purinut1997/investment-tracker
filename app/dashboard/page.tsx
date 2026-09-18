@@ -137,8 +137,8 @@ export default function DashboardPage() {
   const hasAccounts = accounts.length > 0
   const hasHoldings = holdings.length > 0 || totalCost > 0
   const hasPlans = (plansData?.presets?.length ?? 0) > 0
-  const isLoading = sumLoading || holdLoading || accLoading || planLoading
-  const hasError = summaryError || holdingsError || accountsError || plansError
+  const isInitialLoading = !summary && !holdingsData && (sumLoading || holdLoading)
+  const hasFatalError = Boolean((summaryError && !summary) && (holdingsError && !holdingsData))
 
   const [refreshingPrices, setRefreshingPrices] = useState(false)
   const [refreshToast, setRefreshToast] = useState<{ title: string; desc: string } | null>(null)
@@ -167,11 +167,11 @@ export default function DashboardPage() {
     }
   }
 
-  if (isLoading) {
+  if (isInitialLoading) {
     return <DashboardLoadingState />
   }
 
-  if (hasError || !summary || !accountsData || !holdingsData || !plansData) {
+  if (hasFatalError) {
     return <DashboardErrorState />
   }
 

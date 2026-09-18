@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCachedOrFetchPrice } from '@/lib/market-data/cache-layer'
+import { getCachedOrFetchPrice, invalidatePriceCache } from '@/lib/market-data/cache-layer'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
 export const maxDuration = 60 // Allow 60 seconds on Vercel
 
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
     // 4. Update prices with a small delay between requests to be polite with rate limits
     for (const item of distinctAssets) {
       try {
-        const priceResult = await getCachedOrFetchPrice(item.assetId, today)
+        const priceResult = await getCachedOrFetchPrice(item.assetId, today, true)
         if (priceResult) {
           results.syncedAssets++
         }
@@ -55,6 +56,10 @@ export async function GET(req: NextRequest) {
         results.errors.push(`Asset ${item.assetId} error: ${err.message}`)
       }
     }
+
+    // Invalidate caches so users immediately see updated prices
+    invalidatePriceCache()
+    invalidateUserHoldingsCache()
 
     // 5. Log Cron execution to AuditLog
     await prisma.auditLog.create({

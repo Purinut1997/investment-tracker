@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { calculateUserHoldings } from '@/lib/analytics/holdings'
+import {
+  calculateUserHoldings,
+  getUserSummaryCache,
+  setUserSummaryCache,
+  getInFlightSummary,
+  setInFlightSummary,
+} from '@/lib/analytics/holdings'
 import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
 import { calculatePortfolioPerformance } from '@/lib/analytics/performance'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
@@ -13,6 +19,7 @@ export async function GET(req: NextRequest) {
   }
 
   const userId = session.user.id
+  const forceRefresh = req.nextUrl.searchParams.get('refresh') === 'true'
 
   try {
     // 1. Get user settings for baseCurrency
@@ -21,108 +28,117 @@ export async function GET(req: NextRequest) {
     })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
 
-    // 2. Fetch live FX rate (USD -> baseCurrency, typically THB)
-    const usdThbRate = (await getExchangeRate('USD', baseCurrency)) ?? 35.5
+    // 2. Check in-memory cache (<0.5ms)
+    if (!forceRefresh) {
+      const cached = getUserSummaryCache(userId, baseCurrency)
+      if (cached) {
+        return NextResponse.json(cached)
+      }
 
-    // 3. Calculate holdings & live value
-    const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
+      const inFlight = getInFlightSummary(userId, baseCurrency)
+      if (inFlight) {
+        const result = await inFlight
+        return NextResponse.json(result)
+      }
+    }
 
-    // 4. Calculate health score
-    const healthScore = calculatePortfolioHealthScore(holdingsResult.holdings)
+    const computePromise = (async () => {
+      // 3. Parallel fetch FX rate, holdings, sell transactions, dividend transactions, digest, and alert
+      const [
+        usdThbRateRaw,
+        holdingsResult,
+        sellTxns,
+        divTxns,
+        latestDigest,
+        unackAlert,
+      ] = await Promise.all([
+        getExchangeRate('USD', baseCurrency).catch(() => 35.5),
+        calculateUserHoldings(userId, baseCurrency, forceRefresh),
+        prisma.transaction.findMany({
+          where: { userId, txnType: 'SELL' },
+          include: {
+            asset: { select: { currency: true, market: true } },
+          },
+        }),
+        prisma.transaction.findMany({
+          where: { userId, txnType: 'DIVIDEND' },
+          include: {
+            asset: { select: { currency: true, market: true } },
+          },
+        }),
+        prisma.weeklyDigest.findFirst({
+          where: { userId },
+          orderBy: { weekOf: 'desc' },
+        }),
+        prisma.allocationAlert.findFirst({
+          where: { userId, acknowledged: false },
+          orderBy: { triggeredAt: 'desc' },
+        }),
+      ])
 
-    // 5. Calculate total REALIZED GAIN from SELL transactions using FIFO
-    //    We use the holdings FIFO engine which already tracks cost basis.
-    //    Here we calculate it from raw transactions for accuracy:
-    //    Gain = SUM of (SELL proceeds in native currency) - (cost basis matched FIFO)
-    //    For simplicity, we use the SELL totalAmount as "proceeds" and compute gain via FIFO lots.
-    //
-    //    Instead of re-running full FIFO engine, we pull all SELLs with their asset info
-    //    and sum up (sell proceeds) converted to base currency.
-    //    The accurate realized gain is: sum of (totalAmount * fxRate) - (FIFO cost in base currency)
-    //    But since we don't have per-trade FIFO cost here, we approximate by:
-    //    totalRealizedGainBase = sum of sell_proceeds_in_base - sum of cost_in_base
-    //    We fetch SELL txns with asset currency to convert properly.
-    const sellTxns = await prisma.transaction.findMany({
-      where: { userId, txnType: 'SELL' },
-      include: {
-        asset: { select: { currency: true, market: true } },
-      },
-    })
+      const usdThbRate = usdThbRateRaw ?? 35.5
 
-    // Convert each SELL proceeds to base currency, then sum
-    // Note: We use totalAmount as the net proceeds (after fee deduction).
-    // Realized gain is complicated without running full FIFO again,
-    // so we store "total sell proceeds in base currency" and mark it clearly.
-    const totalRealizedProceedsBase = sellTxns.reduce((sum, t) => {
-      const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
-      const fx = isUSD ? usdThbRate : 1.0
-      return sum + Number(t.totalAmount || 0) * fx
-    }, 0)
+      // 4. Calculate health score
+      const healthScore = calculatePortfolioHealthScore(holdingsResult.holdings)
 
-    // Also compute the USD-only proceeds for display
-    const totalRealizedProceedsUSD = sellTxns.reduce((sum, t) => {
-      const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
-      return sum + (isUSD ? Number(t.totalAmount || 0) : 0)
-    }, 0)
+      // 5. Calculate total REALIZED GAIN from SELL transactions
+      const totalRealizedProceedsBase = sellTxns.reduce((sum, t) => {
+        const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
+        const fx = isUSD ? usdThbRate : 1.0
+        return sum + Number(t.totalAmount || 0) * fx
+      }, 0)
 
-    // 6. Total dividends received — convert to base currency
-    const divTxns = await prisma.transaction.findMany({
-      where: { userId, txnType: 'DIVIDEND' },
-      include: {
-        asset: { select: { currency: true, market: true } },
-      },
-    })
+      const totalRealizedProceedsUSD = sellTxns.reduce((sum, t) => {
+        const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
+        return sum + (isUSD ? Number(t.totalAmount || 0) : 0)
+      }, 0)
 
-    const totalDividendsBase = divTxns.reduce((sum, t) => {
-      const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
-      const fx = isUSD ? usdThbRate : 1.0
-      return sum + Number(t.totalAmount || 0) * fx
-    }, 0)
+      // 6. Total dividends received
+      const totalDividendsBase = divTxns.reduce((sum, t) => {
+        const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
+        const fx = isUSD ? usdThbRate : 1.0
+        return sum + Number(t.totalAmount || 0) * fx
+      }, 0)
 
-    const totalDividendsUSD = divTxns.reduce((sum, t) => {
-      const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
-      return sum + (isUSD ? Number(t.totalAmount || 0) : 0)
-    }, 0)
+      const totalDividendsUSD = divTxns.reduce((sum, t) => {
+        const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
+        return sum + (isUSD ? Number(t.totalAmount || 0) : 0)
+      }, 0)
 
-    // 7. Calculate historical portfolio growth milestones vs SPX benchmark
-    const performanceData = await calculatePortfolioPerformance(
-      userId,
-      holdingsResult.totalValueBase,
-      baseCurrency
-    )
+      // 7. Calculate historical portfolio growth milestones vs SPX benchmark
+      const performanceData = await calculatePortfolioPerformance(
+        userId,
+        holdingsResult.totalValueBase,
+        baseCurrency
+      )
 
-    // 8. Latest Weekly Digest if exists
-    const latestDigest = await prisma.weeklyDigest.findFirst({
-      where: { userId },
-      orderBy: { weekOf: 'desc' },
-    })
+      const summaryPayload = {
+        baseCurrency,
+        usdThbRate,
+        totalValue: holdingsResult.totalValueBase,
+        totalCost: holdingsResult.totalCostBase,
+        unrealizedPnL: holdingsResult.unrealizedPnLBase,
+        unrealizedPnLPercent: holdingsResult.unrealizedPnLPercent,
+        totalRealizedGain: totalRealizedProceedsBase,
+        totalRealizedGainUSD: totalRealizedProceedsUSD,
+        totalDividends: totalDividendsBase,
+        totalDividendsUSD,
+        assetCount: holdingsResult.holdings.length,
+        healthScore,
+        performanceData,
+        latestDigest,
+        unackAlert,
+        timestamp: Date.now(),
+      }
 
-    // 9. Allocation Alert if unacknowledged exists
-    const unackAlert = await prisma.allocationAlert.findFirst({
-      where: { userId, acknowledged: false },
-      orderBy: { triggeredAt: 'desc' },
-    })
+      setUserSummaryCache(userId, baseCurrency, summaryPayload)
+      return summaryPayload
+    })()
 
-    return NextResponse.json({
-      baseCurrency,
-      usdThbRate,
-      totalValue: holdingsResult.totalValueBase,
-      totalCost: holdingsResult.totalCostBase,
-      unrealizedPnL: holdingsResult.unrealizedPnLBase,
-      unrealizedPnLPercent: holdingsResult.unrealizedPnLPercent,
-      // Realized proceeds (sell income) in base currency (THB)
-      totalRealizedGain: totalRealizedProceedsBase,
-      totalRealizedGainUSD: totalRealizedProceedsUSD,
-      // Dividends in base currency (THB) and also as USD raw
-      totalDividends: totalDividendsBase,
-      totalDividendsUSD,
-      assetCount: holdingsResult.holdings.length,
-      healthScore,
-      performanceData,
-      latestDigest,
-      unackAlert,
-      timestamp: Date.now(),
-    })
+    setInFlightSummary(userId, baseCurrency, computePromise)
+    const summaryPayload = await computePromise
+
+    return NextResponse.json(summaryPayload)
   } catch (error) {
     console.error('[portfolio summary GET]', error)
     return NextResponse.json({ error: 'Failed to calculate portfolio summary' }, { status: 500 })

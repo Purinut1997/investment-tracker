@@ -14,6 +14,9 @@ export interface ResolvedQuoteResult {
   market: 'US' | 'TH' | 'GLOBAL'
 }
 
+const resolverCache = new Map<string, { result: ResolvedQuoteResult; timestamp: number }>()
+const RESOLVER_CACHE_TTL_MS = 60 * 1000 // 60 seconds
+
 export async function resolveMarketQuote(
   rawSymbol: string,
   hintType?: WatchlistType | string,
@@ -24,6 +27,25 @@ export async function resolveMarketQuote(
     return { quote: null, itemType: 'stock', market: 'US' }
   }
 
+  const cacheKey = `${symbol}_${hintType || ''}_${hintMarket || ''}`
+  const now = Date.now()
+  const cached = resolverCache.get(cacheKey)
+  if (cached && now - cached.timestamp < RESOLVER_CACHE_TTL_MS) {
+    return cached.result
+  }
+
+  const result = await doResolveMarketQuote(symbol, hintType, hintMarket)
+  if (result && result.quote) {
+    resolverCache.set(cacheKey, { result, timestamp: now })
+  }
+  return result
+}
+
+async function doResolveMarketQuote(
+  symbol: string,
+  hintType?: WatchlistType | string,
+  hintMarket?: string
+): Promise<ResolvedQuoteResult> {
   // 1. Explicit or detected Crypto
   if (hintType === 'crypto' || CRYPTO_SYMBOLS.has(symbol)) {
     const quote = await coinGeckoProvider.getQuote(symbol)
