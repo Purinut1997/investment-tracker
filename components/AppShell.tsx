@@ -22,6 +22,7 @@ import {
   X,
   Plus,
   Sparkles,
+  Radar,
   PanelLeft,
   PanelLeftClose,
 } from 'lucide-react'
@@ -60,6 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     groupName: 'วางแผน',
     items: [
+      { label: 'เรดาร์โอกาส & ความเสี่ยง', href: '/radar', icon: Radar, badge: 'AI PRO' },
       { label: 'แผนการลงทุน',     href: '/plans',        icon: PieChart },
       { label: 'พยากรณ์พอร์ต',   href: '/forecast',     icon: Sparkles, badge: 'AI' },
     ]
