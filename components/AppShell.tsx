@@ -91,6 +91,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen]   = useState(false)
   const [quickAddOpen, setQuickAddOpen]       = useState(false)
   const [collapsed, setCollapsed]             = useState(false)
+  const [loggingOut, setLoggingOut]           = useState(false)
+
+  const handleLogout = async () => {
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      // 1. Explicitly clear all session cookies on server
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+      // 2. Clear NextAuth client session
+      await signOut({ redirect: false }).catch(() => {})
+      // 3. Clear client-side sessionStorage
+      try {
+        sessionStorage.clear()
+      } catch {}
+    } finally {
+      // 4. Force hard navigation to /login to ensure all state is reloaded
+      window.location.href = '/login'
+    }
+  }
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -261,8 +280,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {userName.slice(0, 2).toUpperCase()}
               </div>
               <button
-                onClick={() => signOut({ callbackUrl: '/login' })}
-                className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
                 title="ออกจากระบบ"
               >
                 <LogOut className="w-4 h-4" />
@@ -280,8 +300,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
               <button
-                onClick={() => signOut({ callbackUrl: '/login' })}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0 disabled:opacity-50"
                 title="ออกจากระบบ"
               >
                 <LogOut className="w-4 h-4" />
@@ -447,8 +468,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 </div>
                 <button
-                  onClick={() => signOut({ callbackUrl: '/login' })}
-                  className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/20 text-xs font-medium flex items-center gap-1.5"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/20 text-xs font-medium flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   ออกจากระบบ

@@ -90,7 +90,12 @@ export default function SettingsPage() {
     setInvalidating(true)
     try {
       await fetch('/api/auth/invalidate-sessions', { method: 'POST' })
-      signOut({ callbackUrl: '/login' })
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+      await signOut({ redirect: false }).catch(() => {})
+      try {
+        sessionStorage.clear()
+      } catch {}
+      window.location.href = '/login'
     } catch (err) {
       alert('ออกจากระบบในทุกอุปกรณ์ไม่สำเร็จ')
       setInvalidating(false)
