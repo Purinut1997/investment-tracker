@@ -6,6 +6,7 @@ import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import type { MarketQuote } from '@/lib/market-data/types'
 import { AddWatchlistModal } from '@/components/market-watch/AddWatchlistModal'
+import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
   Coins,
   Building2,
@@ -61,6 +62,11 @@ export default function MarketWatchPage() {
   const [isFlipping, setIsFlipping] = useState(false)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [starringSymbol, setStarringSymbol] = useState<string | null>(null)
+  const [selectedStock, setSelectedStock] = useState<{
+    symbol: string
+    name?: string
+    market?: string
+  } | null>(null)
 
   const watchlistItems: WatchlistWithQuote[] = watchlistData?.items ?? []
   const existingSymbols = watchlistItems.map((item) => item.symbol)
@@ -345,6 +351,13 @@ export default function MarketWatchPage() {
                   key={item.id}
                   item={item}
                   onDelete={() => handleDeleteWatchlistItem(item.id)}
+                  onSelect={() =>
+                    setSelectedStock({
+                      symbol: item.symbol,
+                      name: item.displayName || item.quote?.name,
+                      market: item.market,
+                    })
+                  }
                 />
               ))}
             </div>
@@ -516,6 +529,13 @@ export default function MarketWatchPage() {
                           onToggleStar={() =>
                             handleToggleStar(q, section.itemType, section.market)
                           }
+                          onSelect={() =>
+                            setSelectedStock({
+                              symbol: q.symbol,
+                              name: q.name,
+                              market: section.market,
+                            })
+                          }
                         />
                       )
                     })}
@@ -534,6 +554,15 @@ export default function MarketWatchPage() {
         onSuccess={() => mutateWatchlist()}
         existingSymbols={existingSymbols}
       />
+
+      {/* Interactive Stock Detail & AI Insights Modal */}
+      <StockDetailModal
+        isOpen={Boolean(selectedStock)}
+        onClose={() => setSelectedStock(null)}
+        symbol={selectedStock?.symbol ?? null}
+        initialName={selectedStock?.name}
+        market={selectedStock?.market}
+      />
     </AppShell>
   )
 }
@@ -544,9 +573,11 @@ export default function MarketWatchPage() {
 function WatchlistCard({
   item,
   onDelete,
+  onSelect,
 }: {
   item: WatchlistWithQuote
   onDelete: () => void
+  onSelect?: () => void
 }) {
   const quote = item.quote
   const price = quote?.price
@@ -555,7 +586,10 @@ function WatchlistCard({
   const isZero = changePercent === 0
 
   return (
-    <div className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-amber-500/20 hover:border-amber-500/40 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[148px] relative">
+    <div
+      onClick={onSelect}
+      className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-amber-500/20 hover:border-amber-500/50 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[148px] relative cursor-pointer active:scale-[0.99]"
+    >
       {/* Top Header: Badge & Delete Button */}
       <div>
         <div className="flex items-center justify-between gap-2 mb-2.5">
@@ -643,17 +677,22 @@ function QuoteCard({
   isStarred,
   isStarring,
   onToggleStar,
+  onSelect,
 }: {
   quote: MarketQuote
   isStarred?: boolean
   isStarring?: boolean
   onToggleStar?: () => void
+  onSelect?: () => void
 }) {
   const isPositive = (quote.changePercent ?? 0) >= 0
   const isZero = (quote.changePercent ?? 0) === 0
 
   return (
-    <div className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-white/[0.08] hover:border-white/[0.16] hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[120px] relative">
+    <div
+      onClick={onSelect}
+      className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-white/[0.08] hover:border-indigo-500/40 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[120px] relative cursor-pointer active:scale-[0.99]"
+    >
       <div>
         <div className="flex items-start justify-between mb-3">
           <div className="min-w-0 pr-2">

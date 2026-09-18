@@ -23,6 +23,7 @@ export interface CallGeminiOptions {
     | 'tax_explain'
     | 'csv_mapping'
     | 'quick_add_multimodal'
+    | 'stock_insight'
   systemInstruction?: string
 }
 
@@ -110,7 +111,7 @@ export async function callGemini({
         .create({
           data: {
             userId,
-            logType,
+            logType: logType === 'stock_insight' ? 'advisor' : logType,
             prompt,
             response: text,
             modelUsed: modelId,
