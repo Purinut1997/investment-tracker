@@ -24,6 +24,7 @@ import {
   CheckSquare,
   Square,
   Edit2,
+  Calculator,
 } from 'lucide-react'
 import {
   ACCOUNT_TYPES,
@@ -181,6 +182,27 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
   })
 
   const accountId = formData.accountId || accounts[0]?.id || ''
+
+  // Fee Breakdown Calculator State
+  const [showFeeCalculator, setShowFeeCalculator] = useState(false)
+  const [feeBreakdown, setFeeBreakdown] = useState({
+    commission: '',
+    otherFees: '',
+    secFee: '',
+    tafFee: '',
+  })
+
+  const isThaiMarket = formData.market === 'TH'
+  const isSellTxn = formData.txnType === 'SELL'
+  const commNum = parseFloat(feeBreakdown.commission) || 0
+  const otherFeesNum = parseFloat(feeBreakdown.otherFees) || 0
+  const secFeeNum = parseFloat(feeBreakdown.secFee) || 0
+  const tafFeeNum = parseFloat(feeBreakdown.tafFee) || 0
+
+  const vatCalculated = isThaiMarket ? (commNum + otherFeesNum) * 0.07 : commNum * 0.07
+  const totalBreakdownFee = isThaiMarket
+    ? commNum + otherFeesNum + vatCalculated
+    : commNum + vatCalculated + (isSellTxn ? secFeeNum + tafFeeNum : 0)
 
   // Computed total for manual form
   const quantityNum = parseFloat(formData.quantity) || 0
@@ -1161,7 +1183,24 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                             </div>
 
                             <div>
-                              <label className="text-[10px] text-zinc-400 block mb-0.5">ค่าคอมฯ/ธรรมเนียม</label>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <label className="text-[10px] text-zinc-400">ค่าคอมฯ/ธรรมเนียม</label>
+                                <div className="group relative">
+                                  <HelpCircle className="w-3 h-3 text-zinc-500 hover:text-indigo-400 transition-colors cursor-pointer" />
+                                  <div className="absolute bottom-full right-0 mb-1.5 hidden group-hover:block w-56 p-2.5 bg-[#1F2430] border border-white/10 rounded-xl text-[10px] text-zinc-300 shadow-2xl z-30 pointer-events-none">
+                                    <p className="font-bold text-white mb-1">
+                                      {txn.currency === 'THB' ? '🇹🇭 หุ้นไทย (THB)' : '🇺🇸 หุ้นนอก (USD)'}
+                                    </p>
+                                    <p className="leading-relaxed">
+                                      {txn.currency === 'THB'
+                                        ? 'ยอดรวม = ค่าคอมมิชชั่น + ค่าธรรมเนียมอื่นๆ + VAT 7%'
+                                        : txn.txnType === 'SELL'
+                                        ? 'ยอดรวม = ค่าคอมฯ + VAT 7% + ค่าธรรมเนียมรอจ่าย (SEC Fee) + TAF Fee'
+                                        : 'ยอดรวม = ค่าคอมฯ + VAT 7%'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
                               <input
                                 type="number"
                                 step="any"
@@ -1643,7 +1682,17 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
               {/* Fee & Tax */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className={labelClass}>ค่าธรรมเนียม</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={labelClass}>ค่าธรรมเนียม</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowFeeCalculator(!showFeeCalculator)}
+                      className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-medium transition-colors cursor-pointer"
+                    >
+                      <Calculator className="w-3 h-3" />
+                      <span>{showFeeCalculator ? 'ซ่อนตัวช่วยคำนวณ' : 'แจกแจงค่าธรรมเนียม'}</span>
+                    </button>
+                  </div>
                   <input
                     type="number"
                     step="any"
@@ -1665,6 +1714,118 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                   />
                 </div>
               </div>
+
+              {/* Fee Breakdown Calculator Expandable Box */}
+              {showFeeCalculator && (
+                <div className="p-3.5 rounded-xl bg-[#141722] border border-indigo-500/20 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Calculator className="w-3.5 h-3.5 text-indigo-400" />
+                      แจกแจงค่าธรรมเนียม ({isThaiMarket ? 'หุ้นไทย THB' : 'หุ้นนอก USD'})
+                    </span>
+                    <span className="text-[10px] text-zinc-400 font-mono">VAT 7% อัตโนมัติ</span>
+                  </div>
+
+                  {isThaiMarket ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-zinc-400 block mb-0.5">ค่าคอมมิชชั่น (THB)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="0.00"
+                          value={feeBreakdown.commission}
+                          onChange={(e) => setFeeBreakdown({ ...feeBreakdown, commission: e.target.value })}
+                          className="w-full bg-[#12151C] border border-white/10 rounded px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-zinc-400 block mb-0.5">ค่าธรรมเนียมอื่นๆ ตลาดฯ (THB)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="0.00"
+                          value={feeBreakdown.otherFees}
+                          onChange={(e) => setFeeBreakdown({ ...feeBreakdown, otherFees: e.target.value })}
+                          className="w-full bg-[#12151C] border border-white/10 rounded px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div className="sm:col-span-2 text-[10px] text-zinc-400 font-mono">
+                        + VAT 7%: ฿{vatCalculated.toFixed(2)} THB
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-zinc-400 block mb-0.5">ค่าคอมมิชชั่น (USD)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="0.00"
+                          value={feeBreakdown.commission}
+                          onChange={(e) => setFeeBreakdown({ ...feeBreakdown, commission: e.target.value })}
+                          className="w-full bg-[#12151C] border border-white/10 rounded px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-zinc-400 block mb-0.5">VAT 7% (คำนวณจากคอมฯ)</label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={`$${vatCalculated.toFixed(4)}`}
+                          className="w-full bg-[#12151C]/60 border border-white/5 rounded px-2.5 py-1 text-zinc-400 font-mono text-xs cursor-not-allowed"
+                        />
+                      </div>
+                      {isSellTxn && (
+                        <>
+                          <div>
+                            <label className="text-[10px] text-zinc-400 block mb-0.5">ค่าธรรมเนียมตลาดฯ (SEC Fee)</label>
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="0.00"
+                              value={feeBreakdown.secFee}
+                              onChange={(e) => setFeeBreakdown({ ...feeBreakdown, secFee: e.target.value })}
+                              className="w-full bg-[#12151C] border border-white/10 rounded px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-zinc-400 block mb-0.5">ค่าธรรมเนียมการขาย (TAF Fee)</label>
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="0.00"
+                              value={feeBreakdown.tafFee}
+                              onChange={(e) => setFeeBreakdown({ ...feeBreakdown, tafFee: e.target.value })}
+                              className="w-full bg-[#12151C] border border-white/10 rounded px-2.5 py-1 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
+                    <div className="text-[11px] text-zinc-300 font-mono">
+                      รวมค่าธรรมเนียม:{' '}
+                      <span className="font-bold text-white">
+                        {isThaiMarket ? '฿' : '$'}
+                        {totalBreakdownFee.toFixed(2)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, fee: totalBreakdownFee.toFixed(2) })
+                        setShowFeeCalculator(false)
+                      }}
+                      className="px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors cursor-pointer"
+                    >
+                      นำไปใช้ในฟอร์ม
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Total Box */}
               <div className="p-4 rounded-xl bg-[#181C25] border border-white/[0.06] flex items-center justify-between gap-4">
