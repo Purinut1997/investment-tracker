@@ -22,7 +22,6 @@ import {
   DollarSign,
   TrendingDown,
   Coins,
-  Download
 } from 'lucide-react'
 import Papa from 'papaparse'
 import { parseAccountsPayload } from '@/lib/accounts'
@@ -700,17 +699,6 @@ function CsvImportModal({ accounts, onClose, onSuccess }: { accounts: any[]; onC
             </select>
           </div>
 
-          <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs">
-            <span className="text-slate-300">ไฟล์ CSV สลิป Dime! ที่เตรียมไว้:</span>
-            <a
-              href="/dime_transactions.csv"
-              download="dime_transactions.csv"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all shadow-sm cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>ดาวน์โหลดไฟล์ .CSV</span>
-            </a>
-          </div>
 
           <label className="border-2 border-dashed border-slate-700/80 hover:border-indigo-500/60 rounded-2xl p-7 text-center cursor-pointer transition-colors bg-slate-900/40 block">
             <input type="file" accept=".csv" onChange={handleFileChange} className="hidden" />

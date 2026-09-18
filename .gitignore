@@ -9,3 +9,5 @@ dist/
 .vercel
 *.tsbuildinfo
 .vscode/
+*.csv
+dime_transactions.csv
