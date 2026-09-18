@@ -302,21 +302,46 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       return
     }
 
-    // Validation for transactions
-    for (const t of selectedTxns) {
+    // Validation and auto-correction for transactions
+    const sanitizedTxns = selectedTxns.map((t, i) => {
       if (!t.ticker.trim()) {
-        setError('กรุณาระบุชื่อย่อสินทรัพย์ (Ticker) ให้ครบทุกรายการที่เลือก')
-        return
+        throw new Error(`รายการที่ ${i + 1}: กรุณาระบุชื่อย่อสินทรัพย์ (Ticker)`)
       }
-      if (Number(t.quantity) <= 0) {
-        setError(`จำนวนหุ้นของ "${t.ticker}" ต้องมากกว่า 0`)
-        return
+
+      let q = Number(t.quantity) || 0
+      let p = Number(t.pricePerUnit) || 0
+      const total = Number(t.totalAmount) || 0
+      const fee = Number(t.fee) || 0
+      const tax = Number(t.taxWithheld) || 0
+
+      // Auto-correct if quantity was 0 but totalAmount is known (e.g. Dime! dollar orders)
+      if (q <= 0) {
+        if (total > 0) {
+          if (p > 0) {
+            q = Number(((total - fee) / p).toFixed(4))
+          } else {
+            q = 1
+            p = Math.max(0, total - fee)
+          }
+        } else {
+          throw new Error(`รายการ "${t.ticker}": กรุณาระบุจำนวนหุ้นหรือมูลค่ารวม`)
+        }
+      } else if (p <= 0 && total > 0) {
+        p = Math.max(0, Number(((total - fee) / q).toFixed(4)))
       }
-      if (Number(t.pricePerUnit) < 0) {
-        setError(`ราคาต่อหน่วยของ "${t.ticker}" ต้องไม่ติดลบ`)
-        return
+
+      if (p < 0) {
+        throw new Error(`รายการ "${t.ticker}": ราคาต่อหน่วยต้องไม่ติดลบ`)
       }
-    }
+
+      const finalTotal = total > 0 ? total : Math.max(0, q * p + fee - tax)
+      return {
+        ...t,
+        quantity: q,
+        pricePerUnit: p,
+        totalAmount: finalTotal,
+      }
+    })
 
     setSubmitting(true)
     setError('')
@@ -326,7 +351,7 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transactions: selectedTxns.map((t) => {
+          transactions: sanitizedTxns.map((t) => {
             const rawDate = t.txnDate || new Date().toISOString()
             const dateObj = new Date(rawDate)
             const isoDate = isNaN(dateObj.getTime()) ? new Date().toISOString() : dateObj.toISOString()
@@ -344,7 +369,7 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
               pricePerUnit: Number(t.pricePerUnit),
               fee: Number(t.fee || 0),
               taxWithheld: Number(t.taxWithheld || 0),
-              totalAmount: Number(t.totalAmount || (Number(t.quantity) * Number(t.pricePerUnit) + Number(t.fee || 0) - Number(t.taxWithheld || 0))),
+              totalAmount: Number(t.totalAmount),
               note: t.note || undefined,
             }
           }),
@@ -428,7 +453,9 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
           const p = Number(updated.pricePerUnit) || 0
           const f = Number(updated.fee) || 0
           const t = Number(updated.taxWithheld) || 0
-          updated.totalAmount = Math.max(0, q * p + f - t)
+          if (q > 0 || p > 0) {
+            updated.totalAmount = Math.max(0, q * p + f - t)
+          }
         }
         return updated
       })
@@ -499,31 +526,48 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         ? [json]
         : []
 
-      const txns: ExtractedTxn[] = rawTxns.map((t: any, i: number) => ({
-        id: t.id || `txn_nlp_${Date.now()}_${i + 1}`,
-        selected: true,
-        txnType: (t.txnType as TransactionType) || 'BUY',
-        ticker: (t.ticker || '').toUpperCase(),
-        assetName: t.assetName || t.ticker || 'Asset',
-        market: (t.market as Market) || (t.currency === 'THB' ? 'TH' : 'US'),
-        assetType: (t.assetType as AssetType) || 'stock',
-        quantity: Number(t.quantity || 0),
-        pricePerUnit: Number(t.pricePerUnit || 0),
-        fee: Number(t.fee || 0),
-        taxWithheld: Number(t.taxWithheld || 0),
-        totalAmount: Number(
-          t.totalAmount ||
-            Number(t.quantity || 0) * Number(t.pricePerUnit || 0) +
-              Number(t.fee || 0) -
-              Number(t.taxWithheld || 0)
-        ),
-        currency: t.currency || (t.market === 'TH' ? 'THB' : 'USD'),
-        txnDate: t.txnDate || new Date().toISOString(),
-        matchedAccountId: t.matchedAccountId || accounts[0]?.id || '',
-        accountName: t.accountName || accounts[0]?.accountName || 'Dime! USD',
-        note: t.note || '',
-        confidence: Number(t.confidence || 0.95),
-      }))
+      const txns: ExtractedTxn[] = rawTxns.map((t: any, i: number) => {
+        let q = Number(t.quantity || 0)
+        let p = Number(t.pricePerUnit || 0)
+        const fee = Number(t.fee || 0)
+        const tax = Number(t.taxWithheld || 0)
+        const total = Number(t.totalAmount || 0)
+
+        // Auto-resolve zero quantity if total amount is present (e.g. Dime! dollar orders)
+        if (q <= 0 && total > 0) {
+          if (p > 0) {
+            q = Number(((total - fee) / p).toFixed(4))
+          } else {
+            q = 1
+            p = Math.max(0, total - fee)
+          }
+        } else if (p <= 0 && total > 0 && q > 0) {
+          p = Math.max(0, Number(((total - fee) / q).toFixed(4)))
+        }
+
+        const calculatedTotal = total > 0 ? total : Math.max(0, q * p + fee - tax)
+
+        return {
+          id: t.id || `txn_nlp_${Date.now()}_${i + 1}`,
+          selected: true,
+          txnType: (t.txnType as TransactionType) || 'BUY',
+          ticker: (t.ticker || '').toUpperCase(),
+          assetName: t.assetName || t.ticker || 'Asset',
+          market: (t.market as Market) || (t.currency === 'THB' ? 'TH' : 'US'),
+          assetType: (t.assetType as AssetType) || 'stock',
+          quantity: q,
+          pricePerUnit: p,
+          fee,
+          taxWithheld: tax,
+          totalAmount: calculatedTotal,
+          currency: t.currency || (t.market === 'TH' ? 'THB' : 'USD'),
+          txnDate: t.txnDate || new Date().toISOString(),
+          matchedAccountId: t.matchedAccountId || accounts[0]?.id || '',
+          accountName: t.accountName || accounts[0]?.accountName || 'Dime! USD',
+          note: t.note || '',
+          confidence: Number(t.confidence || 0.95),
+        }
+      })
 
       const cash: ExtractedCash[] = (json.cashBalances || []).map((c: any) => ({
         matchedAccountId: c.matchedAccountId || accounts[0]?.id || '',
@@ -1019,6 +1063,14 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Error Alert placed directly above action buttons so user never misses it */}
+              {error && (
+                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-start gap-2.5 text-xs text-rose-300">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                  <span>{error}</span>
                 </div>
               )}
 

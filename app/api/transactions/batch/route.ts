@@ -14,8 +14,14 @@ const BatchTransactionItemSchema = z.object({
   assetType: z.enum(['stock', 'fund', 'crypto', 'bond', 'gold']).default('stock'),
   txnDate: z.string(),
   txnType: z.enum(['BUY', 'SELL', 'DIVIDEND', 'DEPOSIT', 'WITHDRAW', 'FEE']),
-  quantity: z.number().positive(),
-  pricePerUnit: z.number().nonnegative(),
+  quantity: z.preprocess((val) => {
+    const num = Number(val)
+    return isNaN(num) || num <= 0 ? 1 : num
+  }, z.number().positive()),
+  pricePerUnit: z.preprocess((val) => {
+    const num = Number(val)
+    return isNaN(num) || num < 0 ? 0 : num
+  }, z.number().nonnegative()),
   fee: z.number().nonnegative().default(0),
   taxWithheld: z.number().nonnegative().default(0),
   totalAmount: z.number().optional(),
@@ -145,16 +151,22 @@ export async function POST(req: NextRequest) {
 
       // Calculate proper total amount
       let computedTotal = item.totalAmount
-      if (computedTotal === undefined || isNaN(computedTotal)) {
+      if (computedTotal === undefined || isNaN(computedTotal) || computedTotal === 0) {
         if (item.txnType === 'BUY') {
           computedTotal = item.quantity * item.pricePerUnit + item.fee
         } else if (item.txnType === 'SELL') {
-          computedTotal = item.quantity * item.pricePerUnit - item.fee
+          computedTotal = Math.max(0, item.quantity * item.pricePerUnit - item.fee)
         } else if (item.txnType === 'DIVIDEND') {
-          computedTotal = item.quantity * item.pricePerUnit - item.taxWithheld
+          computedTotal = Math.max(0, item.quantity * item.pricePerUnit - item.taxWithheld)
         } else {
           computedTotal = item.quantity * item.pricePerUnit
         }
+      }
+
+      let effectiveQuantity = item.quantity > 0 ? item.quantity : 1
+      let effectivePrice = item.pricePerUnit
+      if (effectivePrice === 0 && computedTotal > 0) {
+        effectivePrice = Math.max(0, (computedTotal - item.fee) / effectiveQuantity)
       }
 
       const txnDate = new Date(item.txnDate)
@@ -166,13 +178,13 @@ export async function POST(req: NextRequest) {
           assetId: resolvedAssetId,
           txnDate: isNaN(txnDate.getTime()) ? new Date() : txnDate,
           txnType: item.txnType,
-          quantity: item.quantity,
-          pricePerUnit: item.pricePerUnit,
+          quantity: effectiveQuantity,
+          pricePerUnit: effectivePrice,
           fee: item.fee,
           taxWithheld: item.taxWithheld,
           totalAmount: computedTotal,
           note: item.note || undefined,
-          source: 'quick_add_photo',
+          source: 'quick_add',
         },
         include: {
           asset: { select: { ticker: true, assetName: true, market: true } },
