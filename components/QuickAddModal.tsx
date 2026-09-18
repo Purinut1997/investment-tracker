@@ -389,12 +389,11 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
 
       const json = await parseResponseJson(res, 'บันทึกรายการแบบกลุ่มล้มเหลว')
 
-      // Revalidate all caches
-      mutate('/api/transactions')
-      mutate('/api/accounts')
-      mutate('/api/cash-wallet')
-      mutate('/api/portfolio/summary')
-      mutate('/api/portfolio/holdings')
+      // Revalidate all caches including parameterized queries
+      mutate((key) => typeof key === 'string' && key.startsWith('/api/transactions'))
+      mutate((key) => typeof key === 'string' && key.startsWith('/api/accounts'))
+      mutate((key) => typeof key === 'string' && key.startsWith('/api/cash-wallet'))
+      mutate((key) => typeof key === 'string' && key.startsWith('/api/portfolio'))
 
       if (onSuccess) onSuccess()
       onClose()
@@ -658,11 +657,10 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
         throw new Error(errJson.error || 'บันทึกธุรกรรมล้มเหลว')
       }
 
-      mutate('/api/transactions')
-      mutate('/api/accounts')
-      mutate('/api/cash-wallet')
-      mutate('/api/portfolio/summary')
-      mutate('/api/portfolio/holdings')
+      mutate((key) => typeof key === 'string' && key.startsWith('/api/transactions'))
+      mutate((key) => typeof key === 'string' && key.startsWith('/api/accounts'))
+      mutate((key) => typeof key === 'string' && key.startsWith('/api/cash-wallet'))
+      mutate((key) => typeof key === 'string' && key.startsWith('/api/portfolio'))
 
       if (onSuccess) onSuccess()
       onClose()

@@ -109,7 +109,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: accountsData } = useSWR('/api/accounts')
   const { data: transactionsData } = useSWR('/api/transactions?limit=1')
   const hasAccounts = parseAccountsPayload(accountsData).length > 0
-  const hasTransactions = (transactionsData?.transactions?.length ?? 0) > 0
+  const txList = transactionsData?.transactions ?? transactionsData?.data ?? []
+  const hasTransactions = (Array.isArray(txList) ? txList.length : 0) > 0 || (transactionsData?.pagination?.total ?? 0) > 0
   const ctaLabel = !hasAccounts ? 'สร้างบัญชีลงทุน' : hasTransactions ? 'บันทึกธุรกรรม' : 'เพิ่มธุรกรรมแรก'
   const ctaHref = !hasAccounts ? '/accounts' : '/transactions'
   const openQuickAdd = () => {

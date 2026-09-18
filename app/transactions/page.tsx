@@ -57,9 +57,10 @@ export default function TransactionsPage() {
   })
 
   const { data: txnData, isLoading, error } = useSWR(`/api/transactions?${queryParams.toString()}`)
-  const transactions = txnData?.transactions ?? []
+  const rawTxns = txnData?.transactions ?? txnData?.data ?? []
+  const transactions = Array.isArray(rawTxns) ? rawTxns : []
   const pagination = txnData?.pagination ?? { page: 1, totalPages: 1, total: 0 }
-  const hasAnyTransactions = pagination.total > 0
+  const hasAnyTransactions = (pagination.total ?? 0) > 0 || transactions.length > 0
 
   const filteredTransactions = transactions.filter((t: any) => {
     if (!search.trim()) return true
