@@ -1,13 +1,12 @@
 /**
  * auth.ts — NextAuth v5 configuration
  * Supports: Google OAuth + Email/Password (Credentials)
- * Uses: Prisma Adapter, JWT strategy
+ * Uses: JWT session strategy with direct Prisma user persistence
  */
 
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
 import Credentials from 'next-auth/providers/credentials'
-import { PrismaAdapter } from '@auth/prisma-adapter'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
@@ -53,11 +52,12 @@ const CredentialsSchema = z.object({
 })
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 }, // 30 days
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  trustHost: true,
 
   providers: [
-    // ─── Google OAuth (Only enabled if credentials provided) ───
+    // ─── Google OAuth (Enabled if credentials provided) ─────────
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
           Google({
@@ -90,7 +90,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           )
         }
 
-        const user = await prisma.user.findUnique({ where: { email } })
+        const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
         if (!user || !user.passwordHash) {
           await recordLoginAttempt(email, ipAddress, false)
           await prisma.auditLog.create({
@@ -143,30 +143,74 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
 
   callbacks: {
-    // ─── Account Linking (Google + existing email/password) ───
+    // ─── Account Linking & Auto-Registration (Google + existing email/password) ───
     async signIn({ user, account, profile }) {
       if (account?.provider === 'google') {
-        // Verify Google email is verified
-        if (!profile?.email_verified) return false
+        const email = user.email?.toLowerCase().trim()
+        if (!email) return false
 
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email! },
+        const isVerified = (profile as any)?.email_verified !== false
+        if (!isVerified) return false
+
+        // 1. Find existing user by email
+        let dbUser = await prisma.user.findUnique({
+          where: { email },
         })
 
-        if (existingUser) {
-          // Link Google to existing credentials account
-          if (existingUser.authProvider === 'credentials') {
-            await prisma.user.update({
-              where: { id: existingUser.id },
-              data: {
-                authProvider: 'both',
-                avatarUrl: user.image ?? existingUser.avatarUrl,
-                emailVerified: new Date(),
-              },
-            })
+        if (!dbUser) {
+          // 2. Auto-create user on first Google sign in
+          dbUser = await prisma.user.create({
+            data: {
+              email,
+              name: user.name ?? (profile as any)?.name ?? email.split('@')[0],
+              avatarUrl: user.image ?? (profile as any)?.picture ?? null,
+              authProvider: 'google',
+              emailVerified: new Date(),
+              role: 'user',
+              status: 'active',
+            },
+          })
+
+          await prisma.userSettings.create({
+            data: { userId: dbUser.id },
+          })
+
+          await prisma.auditLog.create({
+            data: {
+              userId: dbUser.id,
+              action: 'USER_REGISTERED',
+              detail: { email, authProvider: 'google' },
+              ipAddress: 'google-oauth',
+            },
+          })
+        } else {
+          // 3. Existing user: check suspension
+          if (dbUser.status === 'suspended') {
+            return false
           }
-          // Auto-promote superadmin
-          await promoteSuperadminIfNeeded(existingUser.id, existingUser.email)
+
+          // Link Google to existing credentials account
+          const newAuthProvider = dbUser.authProvider === 'credentials' ? 'both' : dbUser.authProvider
+          await prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+              authProvider: newAuthProvider,
+              avatarUrl: user.image ?? dbUser.avatarUrl,
+              emailVerified: dbUser.emailVerified ?? new Date(),
+            },
+          })
+        }
+
+        // Auto-promote superadmin
+        await promoteSuperadminIfNeeded(dbUser.id, dbUser.email)
+
+        // Bind user object for jwt callback
+        const freshUser = await prisma.user.findUnique({ where: { id: dbUser.id } })
+        if (freshUser) {
+          user.id = freshUser.id
+          user.role = freshUser.role
+          user.sessionVersion = freshUser.sessionVersion
+          user.emailVerified = freshUser.emailVerified
         }
       }
       return true
@@ -179,6 +223,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role
         token.emailVerified = user.emailVerified ?? null
         token.sessionVersion = user.sessionVersion
+      }
+
+      // Safety resolution: map token.email to DB user if id is missing or not a cuid
+      if ((!token.id || typeof token.id !== 'string') && token.email) {
+        const dbUser = await prisma.user.findUnique({ where: { email: token.email } })
+        if (dbUser) {
+          token.id = dbUser.id
+          token.role = dbUser.role
+          token.emailVerified = dbUser.emailVerified
+          token.sessionVersion = dbUser.sessionVersion
+        }
       }
 
       // Refresh token on update
