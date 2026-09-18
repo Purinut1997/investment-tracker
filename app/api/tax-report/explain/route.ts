@@ -9,32 +9,55 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { year, dividends, thaiSetCapitalGains, foreignAndCryptoGains } = await req.json()
+    const { year, usdThbRate, dividends, thaiSetCapitalGains, foreignAndCryptoGains } = await req.json()
+
+    const fx = usdThbRate ?? 35.5
+
+    // Build human-readable values with correct currency labels
+    const divGrossUSD = Number(dividends?.totalDividendGrossUSD ?? 0)
+    const divTaxUSD = Number(dividends?.totalTaxWithheldUSD ?? 0)
+    const divNetUSD = Number(dividends?.totalDividendNetUSD ?? 0)
+    const divGrossTHB = Number(dividends?.totalDividendGrossTHB ?? 0)
+    const divTaxTHB = Number(dividends?.totalTaxWithheldTHB ?? 0)
+    const divNetTHB = Number(dividends?.totalDividendNetTHB ?? 0)
+
+    const thaiGain = Number(thaiSetCapitalGains?.totalRealizedGain ?? 0)
+    const thaiVolume = Number(thaiSetCapitalGains?.totalVolume ?? 0)
+
+    const foreignGainUSD = Number(foreignAndCryptoGains?.totalRealizedGainUSD ?? 0)
+    const foreignProceedsUSD = Number(foreignAndCryptoGains?.totalProceedsUSD ?? 0)
+    const foreignCostUSD = Number(foreignAndCryptoGains?.totalCostUSD ?? 0)
+    const foreignGainTHB = Number(foreignAndCryptoGains?.totalRealizedGainTHB ?? 0)
+
+    const hasForeignGain = foreignGainUSD !== 0 || foreignGainTHB !== 0
+    const hasDivUSD = divGrossUSD > 0
 
     const prompt = `
 คุณเป็นผู้เชี่ยวชาญด้านภาษีการลงทุนสำหรับบุคคลธรรมดาในประเทศไทย
 กรุณาวิเคราะห์และอธิบายสรุปรายงานภาษีปี ${year} ของผู้ลงทุนเป็นภาษาไทยที่เข้าใจง่าย:
 
-ข้อมูลภาษีปี ${year}:
+ข้อมูลภาษีปี ${year} (อัตราแลกเปลี่ยน 1 USD = ${fx.toFixed(2)} THB):
+
 1. เงินปันผล (Dividends):
-   - ยอดเงินปันผลรวม (Gross): ฿${Number(dividends?.totalDividendGross ?? 0).toLocaleString()}
-   - ภาษีหัก ณ ที่จ่ายรวม: ฿${Number(dividends?.totalTaxWithheld ?? 0).toLocaleString()}
-   - เงินปันผลสุทธิที่ได้รับ: ฿${Number(dividends?.totalDividendNet ?? 0).toLocaleString()}
+${hasDivUSD ? `   - หุ้นต่างประเทศ (USD): ยอดรวม $${divGrossUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD / ภาษีหัก -$${divTaxUSD.toFixed(2)} USD / สุทธิ $${divNetUSD.toFixed(2)} USD` : ''}
+   - เทียบเท่าเงินบาท: ฿${divGrossTHB.toLocaleString('en-US', { minimumFractionDigits: 2 })} THB (รวมทุกสกุล)
+   - ภาษีหัก ณ ที่จ่ายรวม (THB): ฿${divTaxTHB.toFixed(2)}
+   - เงินปันผลสุทธิ (THB): ฿${divNetTHB.toFixed(2)}
 
 2. กำไรจากหุ้นไทย (SET Capital Gains):
-   - กำไรส่วนต่างรวม: ฿${Number(thaiSetCapitalGains?.totalRealizedGain ?? 0).toLocaleString()}
-   - ปริมาณการขายรวม: ฿${Number(thaiSetCapitalGains?.totalVolume ?? 0).toLocaleString()}
-   - สถานะทางภาษี: ได้รับการยกเว้นภาษีเงินได้บุคคลธรรมดาในไทย
+   - กำไรส่วนต่างรวม: ฿${thaiGain.toLocaleString('en-US', { minimumFractionDigits: 2 })} THB
+   - ปริมาณการขายรวม: ฿${thaiVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })} THB
+   - สถานะทางภาษี: ได้รับการยกเว้นภาษีเงินได้บุคคลธรรมดาในไทย (ตาม พ.ร.บ. ตลาดหลักทรัพย์)
 
 3. กำไรจากการขายสินทรัพย์ต่างประเทศ / คริปโต (Foreign Stocks & Crypto):
-   - กำไรสุทธิรวม: ฿${Number(foreignAndCryptoGains?.totalRealizedGain ?? 0).toLocaleString()}
-   - ยอดขายรวม: ฿${Number(foreignAndCryptoGains?.totalProceeds ?? 0).toLocaleString()}
-   - ต้นทุนรวม: ฿${Number(foreignAndCryptoGains?.totalCost ?? 0).toLocaleString()}
+${hasForeignGain ? `   - กำไรสุทธิ: $${foreignGainUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD (≈ ฿${foreignGainTHB.toFixed(2)} THB)
+   - ยอดขายรวม: $${foreignProceedsUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+   - ต้นทุนรวม (FIFO): $${foreignCostUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD` : '   - ไม่มีรายการขายสินทรัพย์ต่างประเทศในปีนี้'}
 
 กรุณาอธิบาย 3 ประเด็น:
 1. ภาพรวมภาษีของปีนี้ หมวดไหนเด่น มีรายได้ที่ต้องนำไปคำนวณภาษีหรือไม่
-2. ข้อพิจารณาสำหรับเงินปันผล (เช่น การเลือก Final Tax 10% หรือการขอเครดิตภาษีเงินปันผล)
-3. ข้อควรระวังสำหรับหุ้นต่างประเทศ/คริปโตตามหลักเกณฑ์การนำเงินได้เข้าประเทศของกรมสรรพากร
+2. ข้อพิจารณาสำหรับเงินปันผล (เช่น การเลือก Final Tax 10% หรือการขอเครดิตภาษีเงินปันผล) — โดยเฉพาะกรณีหุ้นต่างประเทศที่มีภาษีหัก ณ ที่จ่ายในสหรัฐ (W-8BEN 15%) ซึ่งอาจนำมาหักเครดิตได้
+3. ข้อควรระวังสำหรับหุ้นต่างประเทศ/คริปโตตามหลักเกณฑ์การนำเงินได้เข้าประเทศของกรมสรรพากร (มาตรา 41 วรรค 2)
 `
 
     const { text, modelUsed } = await callGemini({
@@ -42,7 +65,7 @@ export async function POST(req: NextRequest) {
       prompt,
       logType: 'tax_explain',
       systemInstruction:
-        'คุณเป็นผู้ให้คำแนะนำด้านภาษีการลงทุนส่วนบุคคลในไทย ให้คำอธิบายที่ถูกต้องตามหลักการทางภาษีและเข้าใจง่าย',
+        'คุณเป็นผู้ให้คำแนะนำด้านภาษีการลงทุนส่วนบุคคลในไทย ให้คำอธิบายที่ถูกต้องตามหลักการทางภาษีและเข้าใจง่าย ใช้สกุลเงินที่ถูกต้องเสมอ: USD ($) สำหรับรายได้จากต่างประเทศ และ THB (฿) สำหรับรายได้ในไทย',
     })
 
     const disclaimer =

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateTaxReportFIFO } from '@/lib/analytics/tax-fifo'
+import { getExchangeRate } from '@/lib/market-data/frankfurter'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -23,11 +24,15 @@ export async function GET(req: NextRequest) {
             assetName: true,
             market: true,
             assetType: true,
+            currency: true,
           },
         },
       },
       orderBy: { txnDate: 'asc' },
     })
+
+    // Fetch live FX rate for conversion (USD -> THB)
+    const usdThbRate = (await getExchangeRate('USD', 'THB')) ?? 35.5
 
     const formattedTxns = txns.map((t) => ({
       id: t.id,
@@ -36,6 +41,7 @@ export async function GET(req: NextRequest) {
       assetName: t.asset.assetName,
       market: t.asset.market,
       assetType: t.asset.assetType,
+      currency: t.asset.currency || (t.asset.market === 'US' ? 'USD' : 'THB'),
       txnDate: t.txnDate,
       txnType: t.txnType,
       quantity: Number(t.quantity),
@@ -45,7 +51,7 @@ export async function GET(req: NextRequest) {
       totalAmount: Number(t.totalAmount),
     }))
 
-    const report = calculateTaxReportFIFO(formattedTxns, year)
+    const report = calculateTaxReportFIFO(formattedTxns, year, usdThbRate)
 
     return NextResponse.json(report)
   } catch (error) {

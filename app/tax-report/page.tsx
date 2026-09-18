@@ -6,7 +6,6 @@ import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import {
   Sparkles,
-  Download,
   AlertTriangle,
   Calendar,
   Loader2,
@@ -15,11 +14,34 @@ import {
   Building2,
   Receipt,
   CheckCircle2,
+  DollarSign,
 } from 'lucide-react'
+
+// Helper: format a number with the correct currency symbol
+function fmt(value: number, currency: 'USD' | 'THB', opts?: { prefix?: boolean }) {
+  const sym = currency === 'USD' ? '$' : '฿'
+  const formatted = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return `${sym}${formatted}`
+}
+
+function fmtWithSign(value: number, currency: 'USD' | 'THB') {
+  const sym = currency === 'USD' ? '$' : '฿'
+  const sign = value >= 0 ? '+' : '-'
+  const formatted = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return `${sign}${sym}${formatted}`
+}
 
 export default function TaxReportPage() {
   const currentYear = new Date().getFullYear()
   const [selectedYear, setSelectedYear] = useState<number>(currentYear)
+  // showTHB = true -> show THB equivalent everywhere, false -> show native currency (USD for US stocks)
+  const [showTHB, setShowTHB] = useState(false)
 
   const { data: report, isLoading, error } = useSWR(`/api/tax-report/generate?year=${selectedYear}`)
 
@@ -27,48 +49,60 @@ export default function TaxReportPage() {
   const [aiExplanation, setAiExplanation] = useState<string | null>(null)
   const [modelUsed, setModelUsed] = useState<string>('')
 
+  const usdThbRate: number = report?.usdThbRate ?? 35.5
+
   async function handleExportExcel() {
     if (!report) return
 
     const XLSX = await import('xlsx')
     const wb = XLSX.utils.book_new()
 
-    // 1. Dividends Sheet
+    // 1. Dividends Sheet — include both USD and THB columns
     const divRows = report.dividends.items.map((item: any) => ({
       'วันที่รับ': new Date(item.date).toLocaleDateString('th-TH'),
       'สัญลักษณ์ (Ticker)': item.ticker,
-      'เงินปันผลรวม (Gross)': item.amount,
-      'ภาษีหัก ณ ที่จ่าย': item.taxWithheld,
-      'เงินปันผลสุทธิ': item.amount - item.taxWithheld,
+      'สกุลเงิน': item.currency || 'USD',
+      'เงินปันผลรวม (Gross) - สกุลเดิม': item.amount,
+      'ภาษีหัก ณ ที่จ่าย - สกุลเดิม': item.taxWithheld,
+      'เงินปันผลสุทธิ - สกุลเดิม': item.amount - item.taxWithheld,
+      'เงินปันผลรวม (Gross) - THB (฿)': item.amountTHB ?? item.amount,
+      'ภาษีหัก ณ ที่จ่าย - THB (฿)': item.taxWithheldTHB ?? item.taxWithheld,
+      'เงินปันผลสุทธิ - THB (฿)': (item.amountTHB ?? item.amount) - (item.taxWithheldTHB ?? item.taxWithheld),
+      'อัตราแลกเปลี่ยนอ้างอิง (1 USD = THB)': usdThbRate,
     }))
     const wsDiv = XLSX.utils.json_to_sheet(divRows)
     XLSX.utils.book_append_sheet(wb, wsDiv, 'เงินปันผล (Dividends)')
 
-    // 2. Thai SET Capital Gains Sheet
+    // 2. Thai SET Capital Gains Sheet (always THB)
     const thaiRows = report.thaiSetCapitalGains.trades.map((t: any) => ({
       'วันที่ขาย': new Date(t.sellDate).toLocaleDateString('th-TH'),
       'Ticker': t.ticker,
       'จำนวนที่ขาย': t.quantity,
-      'ราคาขาย': t.sellPrice,
-      'ยอดขายรวม': t.sellProceeds,
-      'ต้นทุน FIFO': t.costBasis,
-      'กำไร/ขาดทุน': t.realizedGain,
-      'ค่าธรรมเนียม': t.fee,
+      'ราคาขาย (THB)': t.sellPrice,
+      'ยอดขายรวม (THB)': t.sellProceeds,
+      'ต้นทุน FIFO (THB)': t.costBasis,
+      'กำไร/ขาดทุน (THB)': t.realizedGain,
+      'ค่าธรรมเนียม (THB)': t.fee,
       'สถานะภาษี': 'ยกเว้นภาษี (Exempt)',
     }))
     const wsThai = XLSX.utils.json_to_sheet(thaiRows)
     XLSX.utils.book_append_sheet(wb, wsThai, 'กำไรหุ้นไทย (SET)')
 
-    // 3. Foreign & Crypto Sheet
+    // 3. Foreign & Crypto Sheet — include both USD and THB
     const foreignRows = report.foreignAndCryptoGains.trades.map((t: any) => ({
       'วันที่ขาย': new Date(t.sellDate).toLocaleDateString('th-TH'),
       'Ticker / ตลาด': `${t.ticker} (${t.market})`,
+      'สกุลเงิน': t.currency || 'USD',
       'จำนวนที่ขาย': t.quantity,
-      'ราคาขาย': t.sellPrice,
-      'ยอดขายรวม': t.sellProceeds,
-      'ต้นทุน FIFO': t.costBasis,
-      'กำไร/ขาดทุน': t.realizedGain,
-      'ค่าธรรมเนียม': t.fee,
+      'ราคาขาย - สกุลเดิม': t.sellPrice,
+      'ยอดขายรวม - สกุลเดิม': t.sellProceeds,
+      'ต้นทุน FIFO - สกุลเดิม': t.costBasis,
+      'กำไร/ขาดทุน - สกุลเดิม': t.realizedGain,
+      'ยอดขายรวม - THB (฿)': t.sellProceedsTHB ?? t.sellProceeds,
+      'ต้นทุน FIFO - THB (฿)': t.costBasisTHB ?? t.costBasis,
+      'กำไร/ขาดทุน - THB (฿)': t.realizedGainTHB ?? t.realizedGain,
+      'อัตราแลกเปลี่ยนอ้างอิง': usdThbRate,
+      'ค่าธรรมเนียม - สกุลเดิม': t.fee,
     }))
     const wsForeign = XLSX.utils.json_to_sheet(foreignRows)
     XLSX.utils.book_append_sheet(wb, wsForeign, 'หุ้นนอก & คริปโต')
@@ -83,7 +117,27 @@ export default function TaxReportPage() {
       const res = await fetch('/api/tax-report/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ report, year: selectedYear }),
+        body: JSON.stringify({
+          year: selectedYear,
+          usdThbRate,
+          dividends: {
+            totalDividendGrossUSD: report.dividends.totalDividendGrossUSD,
+            totalTaxWithheldUSD: report.dividends.totalTaxWithheldUSD,
+            totalDividendNetUSD: report.dividends.totalDividendNetUSD,
+            totalDividendGrossTHB: report.dividends.totalDividendGrossTHB,
+            totalTaxWithheldTHB: report.dividends.totalTaxWithheldTHB,
+            totalDividendNetTHB: report.dividends.totalDividendNetTHB,
+          },
+          thaiSetCapitalGains: report.thaiSetCapitalGains,
+          foreignAndCryptoGains: {
+            totalRealizedGainUSD: report.foreignAndCryptoGains.totalRealizedGainUSD,
+            totalProceedsUSD: report.foreignAndCryptoGains.totalProceedsUSD,
+            totalCostUSD: report.foreignAndCryptoGains.totalCostUSD,
+            totalRealizedGainTHB: report.foreignAndCryptoGains.totalRealizedGainTHB,
+            totalProceedsTHB: report.foreignAndCryptoGains.totalProceedsTHB,
+            totalCostTHB: report.foreignAndCryptoGains.totalCostTHB,
+          },
+        }),
       })
       const data = await res.json()
       if (data.explanation) {
@@ -108,7 +162,7 @@ export default function TaxReportPage() {
           title="รายงานภาษีและการจัดการส่วนบุคคล"
           description="จัดหมวดหมู่กระแสเงินสด เงินปันผล และผลกำไรตามหลักเกณฑ์ FIFO เพื่อเตรียมข้อมูลยื่นแบบแสดงรายการภาษี"
           action={
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <div className="flex items-center gap-2 bg-[#181C25] border border-white/[0.1] rounded-xl px-3 py-1.5">
                 <Calendar className="w-3.5 h-3.5 text-indigo-400" />
                 <select
@@ -126,6 +180,20 @@ export default function TaxReportPage() {
                   ))}
                 </select>
               </div>
+              {/* Currency Mode Switcher */}
+              <button
+                type="button"
+                onClick={() => setShowTHB((v) => !v)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer ${
+                  showTHB
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                    : 'bg-[#181C25] border-white/[0.1] text-slate-300 hover:text-white'
+                }`}
+                title={showTHB ? 'แสดงสกุลเงินเดิม (USD/THB)' : 'แปลงทุกรายการเป็นเงินบาท'}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                {showTHB ? 'แสดง: เงินบาท (฿ THB)' : 'แสดง: สกุลเงินเดิม'}
+              </button>
               <button
                 onClick={handleExportExcel}
                 disabled={!report}
@@ -148,6 +216,18 @@ export default function TaxReportPage() {
             </p>
           </div>
         </div>
+
+        {/* FX Rate info bar */}
+        {report && (
+          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#181C25] border border-white/[0.06] w-fit text-xs text-slate-400">
+            <span className="text-slate-500">อัตราแลกเปลี่ยนอ้างอิง:</span>
+            <span className="font-mono font-semibold text-slate-300">1 USD = ฿{usdThbRate.toFixed(2)} THB</span>
+            <span className="w-px h-4 bg-white/10 mx-1" />
+            <span className={showTHB ? 'text-amber-400 font-semibold' : 'text-slate-500'}>
+              {showTHB ? '⚡ โหมดแสดงผลแบบเงินบาท' : 'โหมดแสดงสกุลเงินเดิม'}
+            </span>
+          </div>
+        )}
 
         {/* 3 Main Tax Category KPI Cards */}
         {isLoading ? (
@@ -174,20 +254,37 @@ export default function TaxReportPage() {
               <div>
                 <span className="text-xs text-slate-400">ยอดเงินปันผลรวม (ก่อนหักภาษี)</span>
                 <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono mt-0.5">
-                  ฿{Number(report.dividends.totalDividendGross).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {showTHB
+                    ? `฿${Number(report.dividends.totalDividendGrossTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                    : report.dividends.totalDividendGrossUSD > 0
+                    ? `$${Number(report.dividends.totalDividendGrossUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                    : `฿${Number(report.dividends.totalDividendGrossTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                 </div>
+                {!showTHB && report.dividends.totalDividendGrossUSD > 0 && (
+                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                    ≈ ฿{Number(report.dividends.totalDividendGrossTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })} THB
+                  </p>
+                )}
               </div>
               <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
                 <div className="flex justify-between">
                   <span>ภาษีหัก ณ ที่จ่าย (10%):</span>
                   <span className="font-bold text-rose-400">
-                    -฿{Number(report.dividends.totalTaxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {showTHB
+                      ? `-฿${Number(report.dividends.totalTaxWithheldTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                      : report.dividends.totalTaxWithheldUSD > 0
+                      ? `-$${Number(report.dividends.totalTaxWithheldUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                      : `-฿${Number(report.dividends.totalTaxWithheldTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>เงินปันผลรับสุทธิ:</span>
                   <span className="font-bold text-emerald-400">
-                    ฿{Number(report.dividends.totalDividendNet).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {showTHB
+                      ? `฿${Number(report.dividends.totalDividendNetTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                      : report.dividends.totalDividendNetUSD > 0
+                      ? `$${Number(report.dividends.totalDividendNetUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                      : `฿${Number(report.dividends.totalDividendNetTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                   </span>
                 </div>
               </div>
@@ -230,20 +327,31 @@ export default function TaxReportPage() {
               <div>
                 <span className="text-xs text-slate-400">กำไรรับรู้จริงสะสม (FIFO Realized)</span>
                 <div className="text-3xl font-bold text-white tabular-nums tracking-tight font-mono mt-0.5">
-                  ฿{Number(report.foreignAndCryptoGains.totalRealizedGain).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {showTHB
+                    ? `฿${Number(report.foreignAndCryptoGains.totalRealizedGainTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                    : `$${Number(report.foreignAndCryptoGains.totalRealizedGainUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                 </div>
+                {!showTHB && (
+                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                    ≈ ฿{Number(report.foreignAndCryptoGains.totalRealizedGainTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })} THB
+                  </p>
+                )}
               </div>
               <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
                 <div className="flex justify-between">
                   <span>ยอดขายรวม:</span>
                   <span className="font-bold text-white">
-                    ฿{Number(report.foreignAndCryptoGains.totalProceeds).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {showTHB
+                      ? `฿${Number(report.foreignAndCryptoGains.totalProceedsTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                      : `$${Number(report.foreignAndCryptoGains.totalProceedsUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>ต้นทุน FIFO:</span>
                   <span className="font-bold text-slate-300">
-                    ฿{Number(report.foreignAndCryptoGains.totalCost).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {showTHB
+                      ? `฿${Number(report.foreignAndCryptoGains.totalCostTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                      : `$${Number(report.foreignAndCryptoGains.totalCostUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                   </span>
                 </div>
               </div>
@@ -317,29 +425,49 @@ export default function TaxReportPage() {
                       <tr>
                         <th>วันที่รับเงิน</th>
                         <th>สัญลักษณ์ (Ticker)</th>
+                        <th className="text-center">สกุลเงิน</th>
                         <th className="text-right">ยอดก่อนหักภาษี (Gross)</th>
                         <th className="text-right">ภาษีหัก ณ ที่จ่าย (10%)</th>
                         <th className="text-right">ยอดสุทธิ (Net)</th>
+                        {!showTHB && <th className="text-right text-amber-400/70">เทียบเท่า (฿ THB)</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {report.dividends.items.map((item: any, idx: number) => (
-                        <tr key={idx} className="transition-colors">
-                          <td className="font-mono text-xs text-slate-400">
-                            {new Date(item.date).toLocaleDateString('th-TH', { year: '2-digit', month: 'short', day: '2-digit' })}
-                          </td>
-                          <td className="font-bold text-white font-mono">{item.ticker}</td>
-                          <td className="text-right text-white tabular-nums font-mono">
-                            ฿{Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="text-right text-rose-400 tabular-nums font-mono">
-                            -฿{Number(item.taxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="text-right font-bold text-emerald-400 tabular-nums font-mono">
-                            ฿{Number(item.amount - item.taxWithheld).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      ))}
+                      {report.dividends.items.map((item: any, idx: number) => {
+                        const isUSD = item.currency === 'USD'
+                        const sym = showTHB ? '฿' : (isUSD ? '$' : '฿')
+                        const gross = showTHB ? (item.amountTHB ?? item.amount) : item.amount
+                        const tax = showTHB ? (item.taxWithheldTHB ?? item.taxWithheld) : item.taxWithheld
+                        const net = gross - tax
+
+                        return (
+                          <tr key={idx} className="transition-colors">
+                            <td className="font-mono text-xs text-slate-400">
+                              {new Date(item.date).toLocaleDateString('th-TH', { year: '2-digit', month: 'short', day: '2-digit' })}
+                            </td>
+                            <td className="font-bold text-white font-mono">{item.ticker}</td>
+                            <td className="text-center">
+                              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${isUSD ? 'text-blue-400 bg-blue-500/10' : 'text-emerald-400 bg-emerald-500/10'}`}>
+                                {item.currency || 'USD'}
+                              </span>
+                            </td>
+                            <td className="text-right text-white tabular-nums font-mono">
+                              {sym}{Number(gross).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="text-right text-rose-400 tabular-nums font-mono">
+                              -{sym}{Number(tax).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="text-right font-bold text-emerald-400 tabular-nums font-mono">
+                              {sym}{Number(net).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                            </td>
+                            {!showTHB && (
+                              <td className="text-right tabular-nums font-mono text-slate-500 text-[11px]">
+                                ≈ ฿{Number(item.amountTHB ?? item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </td>
+                            )}
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -369,11 +497,21 @@ export default function TaxReportPage() {
                         <th className="text-right">ยอดขายรวม</th>
                         <th className="text-right">ต้นทุน FIFO</th>
                         <th className="text-right">กำไร/ขาดทุนรับรู้</th>
+                        {!showTHB && <th className="text-right text-amber-400/70">กำไร (฿ THB)</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {report.foreignAndCryptoGains.trades.map((t: any, idx: number) => {
-                        const isGain = t.realizedGain >= 0
+                        const isUSD = t.currency === 'USD'
+                        const sym = showTHB ? '฿' : (isUSD ? '$' : '฿')
+                        const proceeds = showTHB ? (t.sellProceedsTHB ?? t.sellProceeds) : t.sellProceeds
+                        const cost = showTHB ? (t.costBasisTHB ?? t.costBasis) : t.costBasis
+                        const gain = showTHB ? (t.realizedGainTHB ?? t.realizedGain) : t.realizedGain
+                        const price = showTHB
+                          ? (t.sellProceedsTHB ?? t.sellProceeds) / t.quantity
+                          : t.sellPrice
+                        const isGain = gain >= 0
+
                         return (
                           <tr key={idx} className="transition-colors">
                             <td className="font-mono text-xs text-slate-400">
@@ -382,18 +520,21 @@ export default function TaxReportPage() {
                             <td className="font-bold text-white font-mono">
                               {t.ticker}
                               <span className="text-[10px] text-slate-500 ml-1 font-normal uppercase">({t.market})</span>
+                              {isUSD && (
+                                <span className="text-[10px] text-blue-400/80 ml-1 font-mono">USD</span>
+                              )}
                             </td>
                             <td className="text-right text-white tabular-nums font-mono">
-                              {Number(t.quantity).toLocaleString()}
+                              {Number(t.quantity).toLocaleString('en-US', { maximumFractionDigits: 6 })}
                             </td>
                             <td className="text-right text-slate-300 tabular-nums font-mono">
-                              ฿{Number(t.sellPrice).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              {sym}{Number(price).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                             <td className="text-right text-white tabular-nums font-mono">
-                              ฿{Number(t.sellProceeds).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              {sym}{Number(proceeds).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                             <td className="text-right text-slate-400 tabular-nums font-mono">
-                              ฿{Number(t.costBasis).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              {sym}{Number(cost).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                             <td
                               className={`text-right font-bold tabular-nums font-mono ${
@@ -401,8 +542,13 @@ export default function TaxReportPage() {
                               }`}
                             >
                               {isGain ? '+' : ''}
-                              ฿{Number(t.realizedGain).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              {sym}{Number(Math.abs(gain)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
+                            {!showTHB && (
+                              <td className="text-right tabular-nums font-mono text-slate-500 text-[11px]">
+                                {(t.realizedGainTHB ?? 0) >= 0 ? '+' : ''}฿{Number(Math.abs(t.realizedGainTHB ?? t.realizedGain)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </td>
+                            )}
                           </tr>
                         )
                       })}

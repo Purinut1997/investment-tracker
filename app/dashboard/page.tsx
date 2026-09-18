@@ -117,7 +117,9 @@ export default function DashboardPage() {
   const unrealizedPnL = summary?.unrealizedPnL ?? 0
   const unrealizedPnLPercent = summary?.unrealizedPnLPercent ?? 0
   const totalRealizedGain = summary?.totalRealizedGain ?? 0
+  const totalRealizedGainUSD = summary?.totalRealizedGainUSD ?? 0
   const totalDividends = summary?.totalDividends ?? 0
+  const totalDividendsUSD = summary?.totalDividendsUSD ?? 0
   const healthScore: HealthScoreResult | null =
     summary?.healthScore && typeof summary.healthScore.score === 'number'
       ? summary.healthScore
@@ -334,7 +336,7 @@ export default function DashboardPage() {
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">กำไรขายแล้ว + ปันผล</span>
-                <p className="text-xs text-slate-400 mt-0.5">Cash Flow Realized</p>
+                <p className="text-xs text-slate-400 mt-0.5">Cash Flow Realized (THB)</p>
               </div>
               <span className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center">
                 <Coins className="w-4 h-4" />
@@ -345,10 +347,18 @@ export default function DashboardPage() {
               <p className="text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tight leading-none font-mono">
                 ฿<CountUp end={totalRealizedGain + totalDividends} duration={1.2} separator="," decimals={2} />
               </p>
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex flex-col gap-1 mt-2">
                 <span className="text-xs text-slate-400 tabular-nums">
                   เงินปันผลสะสม: ฿{totalDividends.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {totalDividendsUSD > 0 && (
+                    <span className="text-slate-500 ml-1">(${totalDividendsUSD.toFixed(2)} USD)</span>
+                  )}
                 </span>
+                {totalRealizedGainUSD > 0 && (
+                  <span className="text-xs text-slate-500 tabular-nums">
+                    ยอดขายสะสม: ${totalRealizedGainUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                  </span>
+                )}
               </div>
             </div>
 

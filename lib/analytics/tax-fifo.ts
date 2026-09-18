@@ -5,6 +5,9 @@
  * 1. Dividends & Withheld Tax
  * 2. Thai SET Capital Gains (tax exempt for individuals)
  * 3. Foreign Stocks & Crypto Realized Capital Gains
+ *
+ * All values are stored in BOTH native currency (USD/THB) and THB equivalent
+ * so the UI can display correctly in either mode.
  */
 
 export interface TaxTxnInput {
@@ -12,10 +15,11 @@ export interface TaxTxnInput {
   assetId: string
   ticker: string
   assetName: string
-  market: string // 'TH' | 'US' | 'CRYPTO'
+  market: string   // 'TH' | 'US' | 'CRYPTO'
   assetType: string // 'stock' | 'fund' | 'crypto' | 'bond' | 'gold'
+  currency: string  // 'USD' | 'THB'
   txnDate: Date | string
-  txnType: string // 'BUY' | 'SELL' | 'DIVIDEND'
+  txnType: string  // 'BUY' | 'SELL' | 'DIVIDEND'
   quantity: number
   pricePerUnit: number
   fee: number
@@ -34,44 +38,64 @@ export interface RealizedTrade {
   sellDate: Date
   ticker: string
   market: string
+  currency: string      // native currency of the asset ('USD' | 'THB')
   quantity: number
-  sellPrice: number
-  sellProceeds: number
-  costBasis: number
-  realizedGain: number
+  sellPrice: number     // in native currency
+  sellProceeds: number  // in native currency
+  costBasis: number     // in native currency
+  realizedGain: number  // in native currency
+  sellProceedsTHB: number  // converted to THB
+  costBasisTHB: number     // converted to THB
+  realizedGainTHB: number  // converted to THB
   fee: number
+}
+
+export interface DividendItem {
+  date: Date
+  ticker: string
+  currency: string     // native currency ('USD' | 'THB')
+  amount: number       // gross in native currency
+  taxWithheld: number  // in native currency
+  amountTHB: number    // gross converted to THB
+  taxWithheldTHB: number
 }
 
 export interface TaxReportSummary {
   year: number
+  usdThbRate: number  // exchange rate used for conversion
   dividends: {
-    totalDividendGross: number
-    totalTaxWithheld: number
-    totalDividendNet: number
-    items: {
-      date: Date
-      ticker: string
-      amount: number
-      taxWithheld: number
-    }[]
+    // Native currency totals (USD for US stocks, THB for Thai)
+    totalDividendGrossUSD: number
+    totalTaxWithheldUSD: number
+    totalDividendNetUSD: number
+    totalDividendGrossTHB: number
+    totalTaxWithheldTHB: number
+    totalDividendNetTHB: number
+    items: DividendItem[]
   }
   thaiSetCapitalGains: {
-    totalRealizedGain: number
-    totalVolume: number
-    taxExempt: boolean // true for individuals in Thailand
+    totalRealizedGain: number  // THB (Thai stocks are always THB)
+    totalVolume: number        // THB
+    taxExempt: boolean         // true for individuals in Thailand
     trades: RealizedTrade[]
   }
   foreignAndCryptoGains: {
-    totalRealizedGain: number
-    totalProceeds: number
-    totalCost: number
+    // USD figures (native)
+    totalRealizedGainUSD: number
+    totalProceedsUSD: number
+    totalCostUSD: number
+    // THB equivalents (converted with FX rate)
+    totalRealizedGainTHB: number
+    totalProceedsTHB: number
+    totalCostTHB: number
     trades: RealizedTrade[]
   }
 }
 
 export function calculateTaxReportFIFO(
   transactions: TaxTxnInput[],
-  taxYear: number
+  taxYear: number,
+  usdThbRate = 35.5  // current exchange rate for conversion
 ): TaxReportSummary {
   // Sort all transactions chronologically
   const sorted = [...transactions].sort(
@@ -83,10 +107,14 @@ export function calculateTaxReportFIFO(
 
   const summary: TaxReportSummary = {
     year: taxYear,
+    usdThbRate,
     dividends: {
-      totalDividendGross: 0,
-      totalTaxWithheld: 0,
-      totalDividendNet: 0,
+      totalDividendGrossUSD: 0,
+      totalTaxWithheldUSD: 0,
+      totalDividendNetUSD: 0,
+      totalDividendGrossTHB: 0,
+      totalTaxWithheldTHB: 0,
+      totalDividendNetTHB: 0,
       items: [],
     },
     thaiSetCapitalGains: {
@@ -96,9 +124,12 @@ export function calculateTaxReportFIFO(
       trades: [],
     },
     foreignAndCryptoGains: {
-      totalRealizedGain: 0,
-      totalProceeds: 0,
-      totalCost: 0,
+      totalRealizedGainUSD: 0,
+      totalProceedsUSD: 0,
+      totalCostUSD: 0,
+      totalRealizedGainTHB: 0,
+      totalProceedsTHB: 0,
+      totalCostTHB: 0,
       trades: [],
     },
   }
@@ -107,6 +138,8 @@ export function calculateTaxReportFIFO(
     const txnDate = new Date(txn.txnDate)
     const year = txnDate.getUTCFullYear()
     const assetId = txn.assetId
+    const isUSD = txn.currency === 'USD' || txn.market === 'US' || txn.market === 'CRYPTO'
+    const fxRate = isUSD ? usdThbRate : 1.0  // THB assets don't need conversion
 
     if (!buyLots.has(assetId)) {
       buyLots.set(assetId, [])
@@ -121,16 +154,33 @@ export function calculateTaxReportFIFO(
       })
     } else if (txn.txnType === 'DIVIDEND') {
       if (year === taxYear) {
-        const gross = Number(txn.totalAmount) + Number(txn.taxWithheld || 0)
+        // totalAmount is the net after tax (what the user actually receives)
+        const netAmount = Number(txn.totalAmount)
         const withheld = Number(txn.taxWithheld || 0)
-        summary.dividends.totalDividendGross += gross
-        summary.dividends.totalTaxWithheld += withheld
-        summary.dividends.totalDividendNet += Number(txn.totalAmount)
+        const gross = netAmount + withheld  // reconstruct gross
+
+        const grossTHB = gross * fxRate
+        const withheldTHB = withheld * fxRate
+        const netTHB = netAmount * fxRate
+
+        if (isUSD) {
+          summary.dividends.totalDividendGrossUSD += gross
+          summary.dividends.totalTaxWithheldUSD += withheld
+          summary.dividends.totalDividendNetUSD += netAmount
+        }
+        // Always accumulate THB equivalent
+        summary.dividends.totalDividendGrossTHB += grossTHB
+        summary.dividends.totalTaxWithheldTHB += withheldTHB
+        summary.dividends.totalDividendNetTHB += netTHB
+
         summary.dividends.items.push({
           date: txnDate,
           ticker: txn.ticker,
+          currency: isUSD ? 'USD' : 'THB',
           amount: gross,
           taxWithheld: withheld,
+          amountTHB: grossTHB,
+          taxWithheldTHB: withheldTHB,
         })
       }
     } else if (txn.txnType === 'SELL') {
@@ -160,28 +210,39 @@ export function calculateTaxReportFIFO(
         const proceeds = txn.quantity * txn.pricePerUnit - (txn.fee || 0)
         const realizedGain = proceeds - totalCostBasis
 
+        const proceedsTHB = proceeds * fxRate
+        const costBasisTHB = totalCostBasis * fxRate
+        const realizedGainTHB = realizedGain * fxRate
+
         const trade: RealizedTrade = {
           sellDate: txnDate,
           ticker: txn.ticker,
           market: txn.market,
+          currency: isUSD ? 'USD' : 'THB',
           quantity: txn.quantity,
           sellPrice: txn.pricePerUnit,
           sellProceeds: proceeds,
           costBasis: totalCostBasis,
           realizedGain,
+          sellProceedsTHB: proceedsTHB,
+          costBasisTHB,
+          realizedGainTHB,
           fee: txn.fee || 0,
         }
 
         if (txn.market === 'TH') {
           summary.thaiSetCapitalGains.trades.push(trade)
-          summary.thaiSetCapitalGains.totalRealizedGain += realizedGain
-          summary.thaiSetCapitalGains.totalVolume += proceeds
+          summary.thaiSetCapitalGains.totalRealizedGain += realizedGain  // THB already
+          summary.thaiSetCapitalGains.totalVolume += proceeds             // THB already
         } else {
           // US Stocks, Crypto, Foreign
           summary.foreignAndCryptoGains.trades.push(trade)
-          summary.foreignAndCryptoGains.totalRealizedGain += realizedGain
-          summary.foreignAndCryptoGains.totalProceeds += proceeds
-          summary.foreignAndCryptoGains.totalCost += totalCostBasis
+          summary.foreignAndCryptoGains.totalRealizedGainUSD += realizedGain
+          summary.foreignAndCryptoGains.totalProceedsUSD += proceeds
+          summary.foreignAndCryptoGains.totalCostUSD += totalCostBasis
+          summary.foreignAndCryptoGains.totalRealizedGainTHB += realizedGainTHB
+          summary.foreignAndCryptoGains.totalProceedsTHB += proceedsTHB
+          summary.foreignAndCryptoGains.totalCostTHB += costBasisTHB
         }
       }
     }

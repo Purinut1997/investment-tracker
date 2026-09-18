@@ -8,7 +8,7 @@ import assert from 'assert'
 
 console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
 
-// Test Case 1: Simple Buy and Sell with FIFO lot matching
+// Test Case 1: Simple Buy and Sell with FIFO lot matching (US stocks in USD)
 {
   const txns: TaxTxnInput[] = [
     // Lot 1: Buy 100 shares @ $100 + $5 fee = $10,005
@@ -19,6 +19,7 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
       assetName: 'Apple Inc.',
       market: 'US',
       assetType: 'stock',
+      currency: 'USD',  // ← required new field
       txnDate: new Date('2026-01-10T10:00:00Z'),
       txnType: 'BUY',
       quantity: 100,
@@ -35,6 +36,7 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
       assetName: 'Apple Inc.',
       market: 'US',
       assetType: 'stock',
+      currency: 'USD',
       txnDate: new Date('2026-02-15T10:00:00Z'),
       txnType: 'BUY',
       quantity: 50,
@@ -51,6 +53,7 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
       assetName: 'Apple Inc.',
       market: 'US',
       assetType: 'stock',
+      currency: 'USD',
       txnDate: new Date('2026-06-20T10:00:00Z'),
       txnType: 'SELL',
       quantity: 120,
@@ -61,7 +64,7 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
     },
   ]
 
-  const report = calculateTaxReportFIFO(txns, 2026)
+  const report = calculateTaxReportFIFO(txns, 2026, 35.5)
   assert.strictEqual(report.foreignAndCryptoGains.trades.length, 1, 'Should have 1 foreign trade')
 
   const trade = report.foreignAndCryptoGains.trades[0]
@@ -74,6 +77,10 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
 
   // Realized Gain = 17,990 - 12,407 = 5,583
   assert.strictEqual(trade.realizedGain, 5583, 'Realized gain calculation')
+
+  // USD figures should be populated
+  assert.strictEqual(trade.currency, 'USD', 'US stock trade should have USD currency')
+  assert.ok(trade.realizedGainTHB > 0, 'THB equivalent should be calculated')
   console.log('✅ Test 1 Passed: FIFO partial lot consumption matches expected cost basis')
 }
 
@@ -87,6 +94,7 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
       assetName: 'PTT Public Company',
       market: 'TH',
       assetType: 'stock',
+      currency: 'THB',  // ← required new field
       txnDate: new Date('2026-03-01T10:00:00Z'),
       txnType: 'BUY',
       quantity: 1000,
@@ -102,6 +110,7 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
       assetName: 'PTT Public Company',
       market: 'TH',
       assetType: 'stock',
+      currency: 'THB',
       txnDate: new Date('2026-05-01T10:00:00Z'),
       txnType: 'SELL',
       quantity: 1000,
@@ -112,14 +121,14 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
     },
   ]
 
-  const report = calculateTaxReportFIFO(txns, 2026)
+  const report = calculateTaxReportFIFO(txns, 2026, 35.5)
   assert.strictEqual(report.thaiSetCapitalGains.trades.length, 1, 'Should record in Thai SET section')
   assert.strictEqual(report.thaiSetCapitalGains.taxExempt, true, 'Thai SET capital gains must be tax-exempt')
   assert.strictEqual(report.thaiSetCapitalGains.totalRealizedGain, 4960, 'Thai SET gain calculation')
   console.log('✅ Test 2 Passed: Thai SET capital gains correctly isolated and marked tax-exempt')
 }
 
-// Test Case 3: Dividend calculations and withholding tax aggregation
+// Test Case 3: Dividend calculations and withholding tax aggregation (THB)
 {
   const txns: TaxTxnInput[] = [
     {
@@ -129,6 +138,7 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
       assetName: 'CP ALL Public Co',
       market: 'TH',
       assetType: 'stock',
+      currency: 'THB',  // ← required new field
       txnDate: new Date('2026-04-15T10:00:00Z'),
       txnType: 'DIVIDEND',
       quantity: 0,
@@ -139,12 +149,15 @@ console.log('🧪 Starting FIFO Tax Calculation Unit Tests...\n')
     },
   ]
 
-  const report = calculateTaxReportFIFO(txns, 2026)
+  const report = calculateTaxReportFIFO(txns, 2026, 35.5)
   assert.strictEqual(report.dividends.items.length, 1, 'Should have 1 dividend item')
-  assert.strictEqual(report.dividends.totalDividendGross, 1000, 'Gross dividend should be 1000')
-  assert.strictEqual(report.dividends.totalTaxWithheld, 100, 'Tax withheld should be 100')
-  assert.strictEqual(report.dividends.totalDividendNet, 900, 'Net dividend should be 900')
-  console.log('✅ Test 3 Passed: Dividends gross, tax withheld, and net calculated accurately')
+  // THB dividend: gross = 900 + 100 = 1000
+  assert.strictEqual(report.dividends.totalDividendGrossTHB, 1000, 'Gross dividend THB should be 1000')
+  assert.strictEqual(report.dividends.totalTaxWithheldTHB, 100, 'Tax withheld THB should be 100')
+  assert.strictEqual(report.dividends.totalDividendNetTHB, 900, 'Net dividend THB should be 900')
+  // USD aggregation should be 0 for a THB dividend
+  assert.strictEqual(report.dividends.totalDividendGrossUSD, 0, 'THB dividend should not add to USD totals')
+  console.log('✅ Test 3 Passed: Dividends gross, tax withheld, and net calculated accurately (THB)')
 }
 
 console.log('\n🎉 ALL FIFO UNIT TESTS PASSED SUCCESSFULLY!')
