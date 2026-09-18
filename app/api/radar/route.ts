@@ -80,9 +80,13 @@ export async function GET(req: NextRequest) {
     const { baseCurrency, holdingsResult, totalCash, riskReport, opportunityReport } =
       await getPortfolioRadarData(userId)
 
-    // Fetch latest AI briefing
+    // Fetch latest AI briefing (specifically for Risk Sentinel)
     const latestAiLog = await prisma.aiAdviceLog.findFirst({
-      where: { userId, logType: 'advisor' },
+      where: {
+        userId,
+        logType: 'advisor',
+        prompt: { contains: 'AI Risk Sentinel' },
+      },
       orderBy: { createdAt: 'desc' },
       select: { response: true, modelUsed: true, createdAt: true },
     })

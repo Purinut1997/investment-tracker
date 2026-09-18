@@ -19,7 +19,8 @@ import {
   Activity,
   RefreshCw,
   Check,
-  ExternalLink
+  ExternalLink,
+  Radar,
 } from 'lucide-react'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
@@ -114,6 +115,7 @@ export default function DashboardPage() {
   const { data: accountsData, error: accountsError, isLoading: accLoading } = useSWR('/api/accounts')
   const { data: plansData, error: plansError, isLoading: planLoading } = useSWR('/api/plans')
   const { data: cashData } = useSWR('/api/cash-wallet')
+  const { data: radarData } = useSWR('/api/radar', { revalidateOnFocus: false })
 
   const holdings: HoldingItem[] = Array.isArray(holdingsData?.holdings) ? holdingsData.holdings : []
 
@@ -227,6 +229,13 @@ export default function DashboardPage() {
           description="มูลค่าสินทรัพย์ ผลตอบแทนรวม และรายการที่ต้องตรวจสอบจากธุรกรรมของคุณ"
           action={
             <div className="flex items-center gap-2">
+              <Link
+                href="/radar"
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+              >
+                <Radar className="w-3.5 h-3.5 text-indigo-400" />
+                <span>เรดาร์ความเสี่ยง AI</span>
+              </Link>
               <button
                 type="button"
                 onClick={handleRefreshPrices}
@@ -391,6 +400,53 @@ export default function DashboardPage() {
           </div>
 
         </div>
+
+        {/* ── AI RADAR & RISK SENTINEL QUICK WIDGET ─────────── */}
+        {radarData?.riskReport && (
+          <div className="rounded-3xl glass-panel p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl relative overflow-hidden border-indigo-500/20">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex items-center gap-3.5 relative z-10">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0">
+                <Radar className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-white tracking-wide">
+                    เรดาร์ความเสี่ยง & โอกาสลงทุน (AI Sentinel & Alpha Radar)
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    AI PRO
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5 text-xs text-slate-400">
+                  <span className="flex items-center gap-1.5">
+                    ระดับความเสี่ยง:
+                    <strong className={`font-semibold px-2 py-0.5 rounded-md ${
+                      radarData.riskReport.overallRiskLevel === 'CRITICAL' ? 'text-rose-400 bg-rose-500/10' :
+                      radarData.riskReport.overallRiskLevel === 'ELEVATED' ? 'text-orange-400 bg-orange-500/10' :
+                      radarData.riskReport.overallRiskLevel === 'MODERATE' ? 'text-amber-400 bg-amber-500/10' :
+                      'text-emerald-400 bg-emerald-500/10'
+                    }`}>
+                      {radarData.riskReport.overallRiskLevel} ({radarData.riskReport.overallRiskScore}/100)
+                    </strong>
+                  </span>
+                  <span className="text-slate-600">•</span>
+                  <span>กระสุนเงินสด: <strong className="text-emerald-400 font-mono">฿{Number(radarData.totalCash || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong> ({radarData.riskReport.liquidity?.cashRatioPercent?.toFixed(1)}%)</span>
+                  <span className="text-slate-600">•</span>
+                  <span>โอกาสตรวจพบ: <strong className="text-white font-mono">{radarData.opportunityReport?.opportunities?.length ?? 0} รายการ</strong></span>
+                </div>
+              </div>
+            </div>
+
+            <Link
+              href="/radar"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/25 transition-all active:scale-95 shrink-0 relative z-10"
+            >
+              <span>เปิดเรดาร์วิเคราะห์เต็มรูปแบบ</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
 
         {/* ── MIDDLE ROW: RETURN CHART & ALLOCATION ─────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
