@@ -5,6 +5,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { yahooFinanceProvider } from './yahoo'
 import { finnhubProvider } from './finnhub'
 import { coinGeckoProvider } from './coingecko'
 import { stooqProvider } from './stooq'
@@ -28,7 +29,7 @@ export async function getCachedOrFetchPrice(
       },
     })
 
-    if (cached) {
+    if (cached && Number(cached.closePrice) > 0) {
       return {
         price: Number(cached.closePrice),
         sourceProvider: cached.sourceProvider,
@@ -46,18 +47,27 @@ export async function getCachedOrFetchPrice(
     if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
       quote = await coinGeckoProvider.getQuote(asset.ticker)
     } else if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
-      quote = await stooqProvider.getQuote(asset.ticker, 'TH')
-    } else if (asset.market === 'US' || asset.currency === 'USD') {
-      quote = await finnhubProvider.getQuote(asset.ticker)
+      quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH')
       if (!quote) {
-        // Fallback to stooq for US stocks (e.g. AAPL.US)
+        quote = await stooqProvider.getQuote(asset.ticker, 'TH')
+      }
+    } else if (asset.market === 'US' || asset.currency === 'USD') {
+      // Primary: Yahoo Finance (most reliable, live real-time, no api key required)
+      quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US')
+      if (!quote) {
+        quote = await finnhubProvider.getQuote(asset.ticker)
+      }
+      if (!quote) {
         quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US')
       }
     } else if (asset.assetType === 'gold') {
-      quote = await stooqProvider.getQuote('GC.F', 'COMMODITY')
+      quote = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL')
+      if (!quote) {
+        quote = await stooqProvider.getQuote('GC.F', 'COMMODITY')
+      }
     }
 
-    // 4. Save to PriceHistory if successfully fetched
+    // 4. Save to PriceHistory if successfully fetched with valid positive price
     if (quote && quote.price > 0) {
       await prisma.priceHistory.upsert({
         where: {
@@ -87,7 +97,10 @@ export async function getCachedOrFetchPrice(
 
     // 5. Fallback: Find most recent historical price in DB
     const latestHistorical = await prisma.priceHistory.findFirst({
-      where: { assetId },
+      where: {
+        assetId,
+        closePrice: { gt: 0 },
+      },
       orderBy: { priceDate: 'desc' },
     })
 
@@ -99,14 +112,17 @@ export async function getCachedOrFetchPrice(
       }
     }
 
-    // 6. Last resort: latest transaction price
+    // 6. Last resort: latest transaction price (BUY or SELL ONLY, NEVER DIVIDEND OR FEE)
     const latestTxn = await prisma.transaction.findFirst({
-      where: { assetId },
+      where: {
+        assetId,
+        txnType: { in: ['BUY', 'SELL'] },
+      },
       orderBy: { txnDate: 'desc' },
       select: { pricePerUnit: true },
     })
 
-    if (latestTxn) {
+    if (latestTxn && Number(latestTxn.pricePerUnit) > 0) {
       return {
         price: Number(latestTxn.pricePerUnit),
         sourceProvider: 'last_transaction',

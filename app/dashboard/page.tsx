@@ -559,7 +559,9 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {holdings.map((h) => {
-                    const hProfit = h.unrealizedPnL >= 0
+                    const isUsd = h.currency === 'USD' || h.market === 'US'
+                    const sym = isUsd ? '$' : '฿'
+                    const hProfit = (h.unrealizedPnLBase ?? h.unrealizedPnL) >= 0
                     return (
                       <tr key={h.assetId} className="transition-colors group">
                         <td>
@@ -567,8 +569,8 @@ export default function DashboardPage() {
                           <div className="text-[11px] text-slate-400 truncate max-w-[140px]">{h.assetName}</div>
                         </td>
                         <td className="hidden sm:table-cell">
-                          <span className="text-[10px] font-mono text-slate-300 uppercase px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60">
-                            {h.market}
+                          <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-md border ${isUsd ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-slate-800/80 text-slate-300 border-slate-700/60'}`}>
+                            {h.market || (isUsd ? 'US' : 'TH')}
                           </span>
                         </td>
                         <td className="text-center hidden md:table-cell">
@@ -579,21 +581,31 @@ export default function DashboardPage() {
                         <td className="text-right font-mono text-xs text-slate-200">
                           {Number(h.quantity).toLocaleString()}
                         </td>
-                        <td className="text-right font-mono text-xs text-slate-400 hidden lg:table-cell">
-                          {Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td className="text-right font-mono text-xs text-slate-300 hidden lg:table-cell">
+                          {sym}{Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="text-right font-mono text-xs text-white font-medium">
-                          {Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td className="text-right font-mono text-xs text-white font-semibold">
+                          {sym}{Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="text-right font-mono text-sm font-bold text-white">
-                          ฿{Number(h.currentValueBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <div>฿{Number(h.currentValueBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                          {isUsd && (
+                            <div className="text-[10px] text-indigo-400 font-normal mt-0.5">
+                              ${Number(h.currentValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                          )}
                         </td>
                         <td className={`text-right font-mono text-xs hidden sm:table-cell ${hProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
                           <div className="font-bold">
-                            {hProfit ? '+' : ''}฿{Number(h.unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {hProfit ? '+' : ''}฿{Number(h.unrealizedPnLBase ?? (h.unrealizedPnL * (isUsd ? 35.5 : 1))).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                           <div className="text-[10px] opacity-80 mt-0.5">
                             {hProfit ? '+' : ''}{h.unrealizedPnLPercent.toFixed(2)}%
+                            {isUsd && (
+                              <span className="ml-1 text-slate-400">
+                                ({hProfit ? '+' : ''}${Number(h.unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                              </span>
+                            )}
                           </div>
                         </td>
                       </tr>

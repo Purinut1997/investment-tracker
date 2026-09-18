@@ -20,7 +20,8 @@ export interface HoldingItem {
   currentPrice: number
   currentValue: number
   currentValueBase: number // converted to user's base currency (THB)
-  unrealizedPnL: number
+  unrealizedPnL: number // in asset's native currency (e.g. USD)
+  unrealizedPnLBase: number // converted to base currency (THB)
   unrealizedPnLPercent: number
   allocationPercent: number
   isStale: boolean
@@ -109,9 +110,11 @@ export async function calculateUserHoldings(
     const unrealizedPnLPercent = data.totalCost > 0 ? (unrealizedPnL / data.totalCost) * 100 : 0
 
     // Convert to base currency
-    const fx = data.asset.currency === 'USD' ? usdThbRate : 1.0
+    const isUsd = data.asset.currency === 'USD' || data.asset.market === 'US'
+    const fx = isUsd ? usdThbRate : 1.0
     const currentValueBase = currentValue * fx
     const costBase = data.totalCost * fx
+    const unrealizedPnLBase = currentValueBase - costBase
 
     totalValueBase += currentValueBase
     totalCostBase += costBase
@@ -122,7 +125,7 @@ export async function calculateUserHoldings(
       assetName: data.asset.assetName,
       market: data.asset.market,
       assetType: data.asset.assetType,
-      currency: data.asset.currency,
+      currency: isUsd ? 'USD' : (data.asset.currency || 'THB'),
       quantity: data.quantity,
       avgCost,
       totalCost: data.totalCost,
@@ -130,6 +133,7 @@ export async function calculateUserHoldings(
       currentValue,
       currentValueBase,
       unrealizedPnL,
+      unrealizedPnLBase,
       unrealizedPnLPercent,
       allocationPercent: 0, // calculated below
       isStale: priceData?.isStale ?? false,
