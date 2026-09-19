@@ -92,6 +92,9 @@ export async function PATCH(req: NextRequest) {
     data: {
       ...(role && { role }),
       ...(status && { status }),
+      // Roles live in the JWT. Invalidate existing sessions whenever access
+      // changes so the next sign-in receives the new authority immediately.
+      sessionVersion: { increment: 1 },
     },
   })
 

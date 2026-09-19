@@ -124,8 +124,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const role = (session?.user as { role?: string } | undefined)?.role || 'USER'
-  const isSuperAdminOrAdmin = role === 'SUPERADMIN' || role === 'ADMIN'
+  const role = ((session?.user as { role?: string } | undefined)?.role || 'user').toLowerCase()
+  const isSuperAdminOrAdmin = role === 'superadmin' || role === 'admin'
   const userName  = session?.user?.name || session?.user?.email?.split('@')[0] || 'นักลงทุน'
   const userEmail = session?.user?.email || ''
   const { data: accountsData } = useSWR('/api/accounts')
