@@ -57,6 +57,32 @@ function renderBoldText(str: string) {
   })
 }
 
+const tickerExclusions = new Set(['AI', 'DCA', 'CASH', 'DRY', 'POWDER', 'RISK', 'TOP'])
+
+function renderBriefingText(str: string) {
+  const parts = str.split(/(\*\*.*?\*\*|\b[A-Z]{2,5}\b)/g)
+
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} className="font-semibold text-white">
+          {renderBriefingText(part.slice(2, -2))}
+        </strong>
+      )
+    }
+
+    if (/^[A-Z]{2,5}$/.test(part) && !tickerExclusions.has(part)) {
+      return (
+        <span key={i} className="mx-0.5 inline-flex items-center rounded-md border border-sky-400/30 bg-sky-400/10 px-1.5 py-0.5 align-baseline font-mono text-[11px] font-bold tracking-wide text-sky-200">
+          {part}
+        </span>
+      )
+    }
+
+    return <React.Fragment key={i}>{part}</React.Fragment>
+  })
+}
+
 function FormattedAiBriefing({ text }: { text: string }) {
   const lines = text.split('\n')
   const sections: { title: string; content: string[] }[] = []
@@ -111,23 +137,24 @@ function FormattedAiBriefing({ text }: { text: string }) {
       {sections.map((sec, idx) => (
         <div
           key={idx}
-          className="rounded-2xl bg-white/[0.02] border border-white/[0.07] p-4 sm:p-5 flex flex-col justify-between hover:border-white/10 transition-colors"
+          className="rounded-2xl bg-white/[0.02] border border-white/[0.07] p-5 sm:p-6 flex flex-col justify-between hover:border-white/10 transition-colors"
         >
           <div>
             <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-white/[0.06]">
               <span className="w-2 h-2 rounded-full bg-indigo-400" />
-              <h4 className="text-xs font-bold text-white tracking-wide">{sec.title}</h4>
+              <h4 className="text-sm font-bold text-white tracking-wide leading-6">{renderBriefingText(sec.title)}</h4>
             </div>
-            <div className="space-y-2.5 text-xs text-slate-300 leading-relaxed">
+            <div className="space-y-3 text-[13px] text-slate-300 leading-7">
               {sec.content.map((c, ci) => {
                 const isBullet = c.startsWith('-') || c.startsWith('*') || c.startsWith('•')
+                const isPositive = /(ซื้อ|เพิ่ม|สะสม|เข้าช้อน|DCA|ทยอย)/i.test(`${sec.title} ${c}`)
                 return (
-                  <div key={ci} className="flex items-start gap-2">
+                  <div key={ci} className={`flex items-start gap-2 rounded-lg ${isPositive ? 'border-l-2 border-emerald-400/70 bg-emerald-400/[0.06] px-3 py-1.5' : ''}`}>
                     {isBullet && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400/80 mt-1.5 shrink-0" />
+                      <span className={`w-1.5 h-1.5 rounded-full mt-2.5 shrink-0 ${isPositive ? 'bg-emerald-400' : 'bg-indigo-400/80'}`} />
                     )}
-                    <p className="flex-1 leading-relaxed text-slate-300">
-                      {renderBoldText(c.replace(/^[-*•]\s*/, ''))}
+                    <p className={`flex-1 leading-7 ${isPositive ? 'text-emerald-50' : 'text-slate-300'}`}>
+                      {renderBriefingText(c.replace(/^[-*•]\s*/, ''))}
                     </p>
                   </div>
                 )
@@ -725,15 +752,19 @@ export default function RadarPage() {
                   {opportunityReport.opportunities.map((opp) => (
                     <div
                       key={opp.id}
-                      className="rounded-3xl glass-panel p-6 shadow-xl hover:border-emerald-500/30 transition-all relative overflow-hidden group"
+                      className={`rounded-3xl glass-panel p-6 shadow-xl transition-all relative overflow-hidden group ${
+                        opp.opportunityScore >= 70
+                          ? 'border-emerald-500/40 shadow-emerald-950/30'
+                          : 'hover:border-emerald-500/30'
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1.5">
-                            <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                            <span className="text-sm font-bold px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono tracking-wide shadow-sm shadow-emerald-500/10">
                               {opp.ticker}
                             </span>
-                            <span className="text-xs font-semibold text-slate-400">
+                            <span className="text-[13px] font-semibold text-slate-400">
                               {opp.opportunityType === 'DCA_DOWN'
                                 ? 'โอกาสเฉลี่ยต้นทุนต่ำลง'
                                 : opp.opportunityType === 'REBALANCE_LAG'
@@ -741,33 +772,37 @@ export default function RadarPage() {
                                 : 'สินทรัพย์จับตาใน Watchlist'}
                             </span>
                           </div>
-                          <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors">
+                          <h4 className="text-base font-bold text-white leading-6 group-hover:text-emerald-300 transition-colors">
                             {opp.title}
                           </h4>
                         </div>
 
                         <div className="text-right shrink-0">
-                          <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 text-xs font-mono font-bold">
-                            <span>Score</span>
-                            <span>{opp.opportunityScore}</span>
+                          <div className={`inline-flex flex-col items-center min-w-[58px] px-2.5 py-1.5 rounded-xl border font-mono ${
+                            opp.opportunityScore >= 70
+                              ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                              : 'bg-indigo-500/10 border-indigo-500/25 text-indigo-300'
+                          }`}>
+                            <span className="text-[10px] uppercase tracking-wider opacity-80">Score</span>
+                            <span className="text-lg font-bold leading-5">{opp.opportunityScore}</span>
                           </div>
                         </div>
                       </div>
 
-                      <p className="text-xs text-slate-300 leading-relaxed bg-black/20 p-3.5 rounded-2xl border border-white/[0.04]">
+                      <p className="text-[13px] text-slate-300 leading-7 bg-black/20 p-3.5 rounded-2xl border border-white/[0.04]">
                         {opp.description}
                       </p>
 
                       <div className="mt-4 pt-3.5 border-t border-white/[0.05] flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-400">{opp.metricLabel}:</span>
-                          <span className="text-xs font-bold text-emerald-400 font-mono">{opp.metricValue}</span>
+                          <span className="text-[13px] text-slate-400">{opp.metricLabel}:</span>
+                          <span className="text-sm font-bold text-emerald-400 font-mono">{opp.metricValue}</span>
                         </div>
 
                         <button
                           type="button"
                           onClick={() => setQuickAddOpen(true)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/25 transition-all active:scale-95 cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-md shadow-emerald-600/25 transition-all active:scale-95 cursor-pointer"
                         >
                           <span>ซื้อทันที</span>
                           <ArrowRight className="w-3.5 h-3.5" />

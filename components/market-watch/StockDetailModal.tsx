@@ -40,6 +40,101 @@ import {
 import { StockLogo } from '@/components/StockLogo'
 import { CandlestickChart } from '@/components/market-watch/CandlestickChart'
 
+function renderInsightInline(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={index} className="font-semibold text-slate-100">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+
+    return <React.Fragment key={index}>{part}</React.Fragment>
+  })
+}
+
+function AiInsightContent({ content }: { content: string }) {
+  const lines = content.replace(/\r/g, '').split('\n')
+  const blocks: Array<
+    | { type: 'heading'; text: string; number?: string }
+    | { type: 'bullet'; text: string }
+    | { type: 'paragraph'; text: string }
+  > = []
+  let paragraph: string[] = []
+
+  const flushParagraph = () => {
+    if (paragraph.length > 0) {
+      blocks.push({ type: 'paragraph', text: paragraph.join(' ') })
+      paragraph = []
+    }
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line || line === '---') {
+      flushParagraph()
+      continue
+    }
+
+    const heading = line.match(/^#{1,3}\s+(.+)$/)
+    const numberedHeading = line.match(/^(\d+)\.\s+(.+)$/)
+    const bullet = line.match(/^(?:[-*•])\s+(.+)$/)
+
+    if (heading) {
+      flushParagraph()
+      blocks.push({ type: 'heading', text: heading[1] })
+    } else if (numberedHeading) {
+      flushParagraph()
+      blocks.push({ type: 'heading', number: numberedHeading[1], text: numberedHeading[2] })
+    } else if (bullet) {
+      flushParagraph()
+      blocks.push({ type: 'bullet', text: bullet[1] })
+    } else {
+      paragraph.push(line)
+    }
+  }
+  flushParagraph()
+
+  return (
+    <div className="space-y-4">
+      {blocks.map((block, index) => {
+        if (block.type === 'heading') {
+          return (
+            <div key={index} className="flex items-start gap-2 border-b border-white/[0.07] pb-2 pt-1">
+              {block.number && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-md bg-amber-500/15 px-1 text-[10px] font-bold text-amber-300">
+                  {block.number}
+                </span>
+              )}
+              <h5 className="text-[13px] font-bold leading-5 text-white">
+                {renderInsightInline(block.text)}
+              </h5>
+            </div>
+          )
+        }
+
+        if (block.type === 'bullet') {
+          return (
+            <div key={index} className="flex items-start gap-2 pl-1 text-[12px] leading-6 text-slate-300">
+              <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+              <p>{renderInsightInline(block.text)}</p>
+            </div>
+          )
+        }
+
+        return (
+          <p key={index} className="text-[12px] leading-6 text-slate-300">
+            {renderInsightInline(block.text)}
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
 interface StockDetailModalProps {
   isOpen: boolean
   onClose: () => void
@@ -893,12 +988,8 @@ export function StockDetailModal({
                 {/* AI Result View */}
                 {activeInsight && (
                   <div className="space-y-3">
-                    <div className="p-4 rounded-xl bg-[#0F1218] border border-white/[0.06] text-xs text-slate-200 leading-relaxed space-y-2 prose prose-invert max-w-none">
-                      {activeInsight.split('\n\n').map((paragraph: string, idx: number) => (
-                        <p key={idx} className="whitespace-pre-line">
-                          {paragraph}
-                        </p>
-                      ))}
+                    <div className="max-h-[55vh] overflow-y-auto rounded-xl border border-white/[0.06] bg-[#0F1218] p-4 pr-3 text-slate-200">
+                      <AiInsightContent content={activeInsight} />
                     </div>
 
                     <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
