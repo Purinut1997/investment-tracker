@@ -39,6 +39,114 @@ function fmtWithSign(value: number, currency: 'USD' | 'THB') {
   return `${sign}${sym}${formatted}`
 }
 
+function cleanMarkdownLabel(value: string) {
+  return value
+    .trim()
+    .replace(/^#{1,6}\s*/, '')
+    .replace(/^\*\*(.*?)\*\*$/, '$1')
+    .trim()
+}
+
+function renderTaxInline(value: string) {
+  return value.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={index} className="font-semibold text-white">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={index} className="rounded bg-indigo-500/10 px-1.5 py-0.5 font-mono text-[0.9em] text-indigo-200">
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+    return part
+  })
+}
+
+function TaxAdvisorReport({ content }: { content: string }) {
+  const blocks: React.ReactNode[] = []
+  const lines = content.replace(/\r\n/g, '\n').split('\n')
+  let pendingList: Array<{ text: string; ordered: boolean }> = []
+
+  const flushList = () => {
+    if (pendingList.length === 0) return
+    const ordered = pendingList[0].ordered
+    const List = ordered ? 'ol' : 'ul'
+    blocks.push(
+      <List
+        key={`list-${blocks.length}`}
+        className={`${ordered ? 'list-decimal' : 'list-disc'} ml-5 space-y-2.5 pl-1 text-sm sm:text-[15px] leading-7 text-slate-300 marker:text-indigo-400`}
+      >
+        {pendingList.map((item, index) => (
+          <li key={index} className="pl-1">
+            {renderTaxInline(item.text)}
+          </li>
+        ))}
+      </List>
+    )
+    pendingList = []
+  }
+
+  lines.forEach((rawLine, index) => {
+    const line = rawLine.trim()
+    if (!line) {
+      flushList()
+      return
+    }
+
+    if (/^-{3,}$/.test(line)) {
+      flushList()
+      blocks.push(<div key={`divider-${index}`} className="my-1 border-t border-white/[0.07]" />)
+      return
+    }
+
+    const heading = line.match(/^(#{2,6})\s+(.+)$/)
+    if (heading) {
+      flushList()
+      blocks.push(
+        <section key={`heading-${index}`} className="mt-2 rounded-xl border border-indigo-400/15 bg-indigo-500/[0.07] px-4 py-3 sm:px-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-300">ประเด็นวิเคราะห์</p>
+          <h4 className="mt-1 text-base font-bold leading-6 text-white sm:text-lg">{renderTaxInline(cleanMarkdownLabel(heading[2]))}</h4>
+        </section>
+      )
+      return
+    }
+
+    const bullet = line.match(/^[-*]\s+(.+)$/)
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/)
+    if (bullet || ordered) {
+      const isOrdered = Boolean(ordered)
+      if (pendingList.length > 0 && pendingList[0].ordered !== isOrdered) flushList()
+      pendingList.push({ text: bullet?.[1] ?? ordered?.[1] ?? line, ordered: isOrdered })
+      return
+    }
+
+    if (/^\*\*.+\*\*$/.test(line)) {
+      flushList()
+      blocks.push(
+        <h5 key={`subheading-${index}`} className="pt-2 text-[15px] font-bold leading-6 text-indigo-100 sm:text-base">
+          {renderTaxInline(cleanMarkdownLabel(line))}
+        </h5>
+      )
+      return
+    }
+
+    flushList()
+    blocks.push(
+      <p key={`paragraph-${index}`} className="text-sm leading-7 text-slate-300 sm:text-[15px]">
+        {renderTaxInline(line)}
+      </p>
+    )
+  })
+  flushList()
+
+  return <div className="space-y-3.5">{blocks}</div>
+}
+
 export default function TaxReportPage() {
   const currentYear = new Date().getFullYear()
   const [selectedYear, setSelectedYear] = useState<number>(currentYear)
@@ -474,15 +582,21 @@ export default function TaxReportPage() {
           </div>
 
           {currentExplanation && (
-            <div className="p-5 rounded-2xl bg-black/30 border border-indigo-500/25 text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line animate-fade-in relative z-10">
-              <div className="flex justify-between items-center mb-3 pb-2 border-b border-white/[0.06]">
-                <span className="text-[11px] text-indigo-400 font-semibold flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> ผลการวิเคราะห์ล่าสุดปีภาษี {selectedYear}
+            <article className="overflow-hidden rounded-2xl border border-indigo-500/25 bg-[#0d1018]/90 animate-fade-in relative z-10 shadow-inner shadow-black/30">
+              <div className="flex flex-col gap-2 border-b border-white/[0.07] bg-indigo-500/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <span className="text-sm font-semibold text-indigo-100 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-indigo-400" /> ผลการวิเคราะห์ล่าสุด · ปีภาษี {selectedYear}
                 </span>
-                {currentModel && <span className="text-[10px] text-slate-500 font-mono">{currentModel}</span>}
+                {currentModel && (
+                  <span className="self-start rounded-lg border border-white/[0.08] bg-black/20 px-2 py-1 font-mono text-[11px] text-slate-400 sm:self-auto">
+                    {currentModel}
+                  </span>
+                )}
               </div>
-              {currentExplanation}
-            </div>
+              <div className="p-4 sm:p-6">
+                <TaxAdvisorReport content={currentExplanation} />
+              </div>
+            </article>
           )}
         </div>
 
