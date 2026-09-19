@@ -89,7 +89,7 @@ const SUPERADMIN_NAV: NavItem[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { data: session } = useSession()
+  const { data: session, status: sessionStatus } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen]   = useState(false)
   const [quickAddOpen, setQuickAddOpen]       = useState(false)
   const [collapsed, setCollapsed]             = useState(false)
@@ -123,6 +123,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  // A role or account-status change invalidates the JWT by increasing its
+  // sessionVersion. Do not leave the shell visible while its data APIs reject
+  // that stale session; send the user through a clean sign-in instead.
+  useEffect(() => {
+    if (sessionStatus === 'authenticated' && !session?.user?.id) {
+      void signOut({ callbackUrl: '/login' })
+    }
+  }, [session?.user?.id, sessionStatus])
 
   const role = ((session?.user as { role?: string } | undefined)?.role || 'user').toLowerCase()
   const isSuperAdminOrAdmin = role === 'superadmin' || role === 'admin'
