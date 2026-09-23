@@ -188,8 +188,23 @@ function AiStructuredDashboardView({
   const currencySymbol = stock?.currency === 'THB' ? '฿' : '$'
   const isPositive = (stock?.changePercent ?? 0) >= 0
 
+  const isEnglishAnalysis = useMemo(() => {
+    const textToCheck = (aiData?.summary || '') + (aiData?.businessOverview || '') + rawFallback
+    return textToCheck.length > 50 && !/[ก-๙]/.test(textToCheck)
+  }, [aiData, rawFallback])
+
   return (
     <div className="space-y-5 animate-fade-in text-slate-200">
+      {/* Notice if previous analysis was English */}
+      {isEnglishAnalysis && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>ตรวจพบบทวิเคราะห์ภาษาอังกฤษเดิม — คลิกปุ่ม <strong>"วิเคราะห์ใหม่"</strong> ด้านบนเพื่อรับผลวิเคราะห์ฉบับภาษาไทย 100%</span>
+          </span>
+        </div>
+      )}
+
       {/* 1. Header Overview Bar: Ticker — Full Name | Price | Change | Dividend */}
       <div className="p-4 rounded-2xl bg-gradient-to-r from-[#171B26] via-[#1A2030] to-[#171B26] border border-amber-500/30 shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1356,11 +1371,26 @@ export function StockDetailModal({
                         type="button"
                         onClick={handleGenerateAiInsight}
                         disabled={isAiLoading}
-                        className="text-amber-400 hover:underline flex items-center gap-1 font-medium"
+                        className="text-amber-400 hover:underline flex items-center gap-1 font-medium cursor-pointer"
                       >
                         <Sparkles className="w-2.5 h-2.5" />
                         วิเคราะห์ซ้ำ
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Empty State (when no insight yet or invalidated non-Thai) */}
+                {!activeInsight && !isAiLoading && !aiError && (
+                  <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/[0.06] text-center space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div className="max-w-md mx-auto space-y-1">
+                      <h5 className="text-xs font-bold text-white">พร้อมวิเคราะห์เชิงลึกด้วย AI (ภาษาไทย 100%)</h5>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        คลิกปุ่ม <span className="text-amber-400 font-semibold">"วิเคราะห์ทันที"</span> ด้านบน เพื่อสังเคราะห์โมเดลธุรกิจ, ผลประกอบการ, จุดแข็ง, ความเสี่ยง และ Bull/Bear Scenarios ฉบับภาษาไทย
+                      </p>
                     </div>
                   </div>
                 )}
