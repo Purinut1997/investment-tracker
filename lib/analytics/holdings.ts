@@ -74,7 +74,10 @@ export function setInFlightSummary(userId: string, baseCurrency: string, promise
   promise.finally(() => inFlightSummary.delete(key))
 }
 
+import { invalidateAssetPerformanceCache } from '@/lib/analytics/asset-performance'
+
 export function invalidateUserPortfolioCache(userId?: string) {
+  invalidateAssetPerformanceCache(userId)
   if (userId) {
     for (const key of userHoldingsCache.keys()) {
       if (key.startsWith(`${userId}_`)) {

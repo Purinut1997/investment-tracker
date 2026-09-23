@@ -21,6 +21,7 @@ import {
   Check,
   ExternalLink,
   Radar,
+  BarChart3,
 } from 'lucide-react'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
@@ -659,7 +660,16 @@ export default function DashboardPage() {
               </div>
               <p className="text-xs text-slate-400 mt-0.5">แสดงรายการสินทรัพย์ ต้นทุน ราคาปิดตลาดล่าสุด และกำไรขาดทุนสะสม</p>
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+              <Link
+                href="/performance"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+                title="ดูผลตอบแทนตลอดชีพ แยกส่วนที่ขายแล้วและยังถืออยู่"
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+                <span>สรุปกำไรรายตัว (P&L)</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
               <button
                 type="button"
                 onClick={handleRefreshPrices}

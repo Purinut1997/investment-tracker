@@ -24,6 +24,7 @@ import {
   Sparkles,
   Radar,
   PanelLeft,
+  BarChart3,
   PanelLeftClose,
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
@@ -54,6 +55,7 @@ const NAV_GROUPS: NavGroup[] = [
     groupName: 'พอร์ตของฉัน',
     items: [
       { label: 'รายการธุรกรรม',   href: '/transactions', icon: ArrowLeftRight },
+      { label: 'ผลตอบแทนรายตัว',  href: '/performance',  icon: BarChart3 },
       { label: 'บัญชีการเงิน',    href: '/accounts',     icon: Wallet },
       { label: 'รายงานภาษี',      href: '/tax-report',   icon: ReceiptText },
     ]
