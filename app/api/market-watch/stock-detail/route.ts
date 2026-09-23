@@ -395,6 +395,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Always try to populate rich metrics from Yahoo Quote Summary
+    const ySummary = await getYahooQuoteSummary(yfTicker)
+    if (ySummary) {
+      if (!pe && ySummary.pe) pe = ySummary.pe
+      if (!marketCap && ySummary.marketCap) marketCap = ySummary.marketCap
+      if (dividendYield === null && ySummary.dividendYield !== null) dividendYield = ySummary.dividendYield
+    }
+
     const payload = {
       symbol: rawSymbol,
       name: meta.longName || meta.shortName || rawSymbol,
@@ -409,7 +417,15 @@ export async function GET(req: NextRequest) {
       fiftyTwoWeekHigh: fiftyTwoWeekHigh || null,
       fiftyTwoWeekLow: fiftyTwoWeekLow || null,
       pe: pe ? Number(pe.toFixed(2)) : null,
+      forwardPe: ySummary?.forwardPe ? Number(ySummary.forwardPe.toFixed(2)) : null,
+      pb: ySummary?.pb ? Number(ySummary.pb.toFixed(2)) : null,
+      evEbitda: ySummary?.evEbitda ? Number(ySummary.evEbitda.toFixed(2)) : null,
       dividendYield: dividendYield !== null ? Number(dividendYield.toFixed(2)) : null,
+      payoutRatio: ySummary?.payoutRatio !== null && ySummary?.payoutRatio !== undefined ? Number(ySummary.payoutRatio.toFixed(2)) : null,
+      revenue: ySummary?.revenue ?? null,
+      revenueGrowth: ySummary?.revenueGrowth !== null && ySummary?.revenueGrowth !== undefined ? Number(ySummary.revenueGrowth.toFixed(2)) : null,
+      eps: ySummary?.eps !== null && ySummary?.eps !== undefined ? Number(ySummary.eps.toFixed(2)) : null,
+      freeCashflow: ySummary?.freeCashflow ?? null,
       marketCap: marketCap ? Number(marketCap) : null,
       analystTarget,
       userPosition,

@@ -5,6 +5,19 @@ import { callGemini } from '@/lib/ai/gemini-client'
 
 export const maxDuration = 45
 
+function parseStructuredInsight(rawText: string | null | undefined) {
+  if (!rawText) return null
+  try {
+    const cleaned = rawText
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*$/g, '')
+      .trim()
+    return JSON.parse(cleaned)
+  } catch {
+    return null
+  }
+}
+
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -28,13 +41,19 @@ export async function GET(req: NextRequest) {
       select: { response: true, modelUsed: true, createdAt: true },
     })
 
+    const structuredInsight = parseStructuredInsight(latestLog?.response)
+
     return NextResponse.json({
       insight: latestLog?.response ?? null,
+      structuredInsight,
       modelUsed: latestLog?.modelUsed ?? null,
       updatedAt: latestLog?.createdAt ? latestLog.createdAt.toISOString() : null,
     })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Failed to fetch stock insight history' }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || 'Failed to fetch stock insight history' },
+      { status: 500 }
+    )
   }
 }
 
@@ -53,9 +72,17 @@ export async function POST(req: NextRequest) {
       currency = 'USD',
       changePercent,
       pe,
+      pb,
+      evEbitda,
       dividendYield,
+      payoutRatio,
       fiftyTwoWeekHigh,
       fiftyTwoWeekLow,
+      marketCap,
+      revenue,
+      revenueGrowth,
+      eps,
+      freeCashflow,
       analystTarget,
     } = body
 
@@ -66,22 +93,70 @@ export async function POST(req: NextRequest) {
     const cleanSymbol = symbol.toUpperCase()
 
     const prompt = `
-โปรดวิเคราะห์หุ้น/สินทรัพย์นี้ในฐานะ Executive Investment Analyst:
-- ชื่อสินทรัพย์: ${name || cleanSymbol} (${cleanSymbol})
-- ราคาปัจจุบัน: ${currentPrice} ${currency} (การเปลี่ยนแปลงวันนี้: ${changePercent ? `${changePercent}%` : 'N/A'})
-- อัตราส่วน P/E: ${pe ? `${pe}x` : 'N/A หรือ ETF/Crypto'}
-- อัตราผลตอบแทนเงินปันผล (Dividend Yield): ${dividendYield ? `${dividendYield}%` : 'N/A'}
-- กรอบราคา 52 สัปดาห์: ต่ำสุด ${fiftyTwoWeekLow || 'N/A'} - สูงสุด ${fiftyTwoWeekHigh || 'N/A'}
-- ความเห็นนักวิเคราะห์: ${analystTarget?.recommendation || 'N/A'}, ราคาเป้าหมายเฉลี่ย: ${analystTarget?.targetMean ? `${analystTarget.targetMean} ${currency} (Upside: ${analystTarget.upsidePercent}%)` : 'N/A'}
+คุณเป็น Senior Equity Research Analyst & Multi-Asset Portfolio Manager ระดับโลก
+กรุณาวิเคราะห์สินทรัพย์/หุ้นนี้แบบเจาะลึกรอบด้าน (Deep-Dive Institutional Grade Analysis):
+- สัญลักษณ์: ${cleanSymbol}
+- ชื่อสินทรัพย์: ${name || cleanSymbol}
+- ราคาล่าสุด: ${currentPrice} ${currency} (การเปลี่ยนแปลงวันนี้: ${
+      changePercent !== undefined ? `${changePercent}%` : 'N/A'
+    })
+- กรอบ 52 สัปดาห์: ต่ำสุด ${fiftyTwoWeekLow || 'N/A'} - สูงสุด ${fiftyTwoWeekHigh || 'N/A'}
+- มูลค่าตลาด (Market Cap): ${marketCap ? `${marketCap} ${currency}` : 'N/A'}
+- อัตราส่วนประเมินมูลค่า: P/E: ${pe ? `${pe}x` : 'N/A'}, P/B: ${pb ? `${pb}x` : 'N/A'}, EV/EBITDA: ${
+      evEbitda ? `${evEbitda}x` : 'N/A'
+    }
+- เงินปันผล: Dividend Yield: ${
+      dividendYield !== null && dividendYield !== undefined ? `${dividendYield}%` : 'N/A'
+    }, Payout Ratio: ${payoutRatio ? `${payoutRatio}%` : 'N/A'}
+- ผลประกอบการล่าสุด: รายได้รวม (Revenue): ${revenue ? `${revenue} ${currency}` : 'N/A'}, เติบโต: ${
+      revenueGrowth ? `${revenueGrowth}%` : 'N/A'
+    }, EPS: ${eps ?? 'N/A'}, กระแสเงินสดอิสระ (FCF): ${freeCashflow ? `${freeCashflow} ${currency}` : 'N/A'}
+- ความเห็นนักวิเคราะห์ Wall St.: ${analystTarget?.recommendation || 'N/A'}, ราคาเป้าหมายเฉลี่ย: ${
+      analystTarget?.targetMean
+        ? `${analystTarget.targetMean} ${currency} (Upside: ${analystTarget.upsidePercent}%)`
+        : 'N/A'
+    }
 
-กรุณาสรุปบทวิเคราะห์ภาษาไทย 3 ส่วน โดยใช้ฟอร์แมต Markdown ที่อ่านง่าย กระชับและทรงคุณค่า:
-1. 🚀 **จุดเด่นและปัจจัยขับเคลื่อนการเติบโต (Growth Drivers & Moat)**: สรุป 2-3 ข้อ โดยขึ้นต้นแต่ละข้อด้วยเครื่องหมายขีด และแยกคนละบรรทัด
-2. ⚠️ **ความเสี่ยงและจุดที่ต้องระวัง (Key Risks to Watch)**: สรุป 2-3 ข้อ โดยขึ้นต้นแต่ละข้อด้วยเครื่องหมายขีด และแยกคนละบรรทัด
-3. 💡 **มุมมองและกลยุทธ์การลงทุน (Investment Verdict)**: คำแนะนำสั้นๆ สำหรับการทยอยสะสม (DCA) หรือการเข้าซื้อ/ถือ/ลดน้ำหนัก
-เว้นบรรทัดระหว่างหัวข้อและรายการ และอย่าเขียนเป็นย่อหน้ายาวต่อเนื่อง
+กฎสำคัญอย่างยิ่ง:
+1. ห้ามเขียนคำทักทาย เช่น "เรียนท่านนักลงทุน" หรือ "ขออนุญาตวิเคราะห์"
+2. วิเคราะห์ด้วยเนื้อหาจริง ตรงไปตรงมา กระชับ ทรงคุณค่าทางวิชาการและนำไปใช้ตัดสินใจลงทุนได้ทันที
+3. ตอบกลับเป็น JSON Object ที่ถูกต้องเท่านั้น (ห้ามมีข้อความเกริ่นหรือข้อความปิดท้ายนอก JSON) ตามโครงสร้างดังนี้:
+{
+  "summary": "สรุปสาระสำคัญที่สุด 1-2 ประโยคสำหรับนักลงทุน",
+  "businessOverview": "อธิบายโมเดลธุรกิจ: บริษัททำอะไร / รายได้หลักมาจากไหน / ความได้เปรียบในการแข่งขัน (Moat) หรือถ้านี่คือกองทุน ETF ให้อธิบายนโยบายและดัชนีอ้างอิง",
+  "financialPerformance": {
+    "revenue": "สรุปตัวเลขรายได้และการเติบโต (เช่น $94.9B เติบโตตามคาด)",
+    "eps": "สรุปตัวเลขกำไรต่อหุ้น EPS และแนวโน้ม",
+    "growth": "อัตราการเติบโต YoY/QoQ และทิศทาง",
+    "fcf": "สรุปกระแสเงินสดอิสระ Free Cash Flow หรือสภาพคล่อง"
+  },
+  "valuationAndDividend": {
+    "pe": "วิเคราะห์ความถูกแพงของ P/E เมื่อเทียบกับค่าเฉลี่ยในอดีตหรือกลุ่ม",
+    "pb": "ระดับ P/B Ratio",
+    "evEbitda": "ระดับ EV/EBITDA",
+    "dividendYield": "อัตราผลตอบแทนเงินปันผล และความสม่ำเสมอ",
+    "payoutRatio": "ความปลอดภัยของ Payout Ratio และศักยภาพในการจ่ายปันผลต่อ"
+  },
+  "strengths": [
+    "จุดแข็งหรือปัจจัยขับเคลื่อนข้อที่ 1 พร้อมเหตุผลสั้นกระชับ",
+    "จุดแข็งหรือปัจจัยขับเคลื่อนข้อที่ 2 พร้อมเหตุผลสั้นกระชับ",
+    "จุดแข็งหรือปัจจัยขับเคลื่อนข้อที่ 3 พร้อมเหตุผลสั้นกระชับ"
+  ],
+  "risks": [
+    "ความเสี่ยงหรือปัจจัยเฝ้าระวังข้อที่ 1 พร้อมเหตุผลสั้นกระชับ",
+    "ความเสี่ยงหรือปัจจัยเฝ้าระวังข้อที่ 2 พร้อมเหตุผลสั้นกระชับ",
+    "ความเสี่ยงหรือปัจจัยเฝ้าระวังข้อที่ 3 พร้อมเหตุผลสั้นกระชับ"
+  ],
+  "scenarioAnalysis": {
+    "bull": "Bull Case (กรณีดีที่สุด): ปัจจัยบวกที่ผลักดันราคาและผลประกอบการทะลุเป้า",
+    "base": "Base Case (กรณีพื้นฐาน): ผลประกอบการตามคาดการณ์และมูลค่าที่เหมาะสม",
+    "bear": "Bear Case (กรณีแย่สุด): ปัจจัยลบหรือความเสี่ยงที่อาจฉุดรั้งราคา"
+  },
+  "latestNewsCatalyst": "ประเด็นข่าวล่าสุดหรือ Catalyst สำคัญที่ตลาดกำลังจับตามอง"
+}
 `
 
-    const systemInstruction = `คุณเป็น Senior Multi-Asset Portfolio Manager และ Equity Research Analyst ที่ปรึกษาการลงทุนระดับพรีเมียม ตอบเป็นภาษาไทยที่กระชับ ตรงประเด็น สละสลวย ใช้ตัวเลขและเหตุผลประกอบชัดเจน ไม่เยิ่นเย้อ`
+    const systemInstruction = `คุณเป็น Senior Multi-Asset Portfolio Manager และ Equity Research Analyst ที่ปรึกษาการลงทุนระดับพรีเมียม ตอบเป็น JSON ที่ถูกต้องตามโครงสร้างที่กำหนดเท่านั้น ไม่ใช้คำทักทายเยิ่นเย้อ ใช้ข้อมูลจริงและเหตุผลประกอบชัดเจน`
 
     const result = await callGemini({
       userId: session.user.id,
@@ -90,8 +165,11 @@ export async function POST(req: NextRequest) {
       logType: 'stock_insight',
     })
 
+    const structuredInsight = parseStructuredInsight(result.text)
+
     return NextResponse.json({
       insight: result.text,
+      structuredInsight,
       modelUsed: result.modelUsed,
       updatedAt: new Date().toISOString(),
       timestamp: Date.now(),
@@ -99,7 +177,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('[stock-ai-insight POST error]', error)
     return NextResponse.json(
-      { error: error?.message || 'ไม่สามารถวิเคราะห์ด้วย AI ได้ในขณะนี้' },
+      { error: error.message || 'Failed to generate AI stock insight' },
       { status: 500 }
     )
   }

@@ -54,8 +54,16 @@ export async function getYahooAuth(): Promise<{ cookie: string; crumb: string } 
 
 export async function getYahooQuoteSummary(symbol: string): Promise<{
   pe: number | null
+  forwardPe: number | null
+  pb: number | null
+  evEbitda: number | null
   marketCap: number | null
   dividendYield: number | null
+  payoutRatio: number | null
+  revenue: number | null
+  revenueGrowth: number | null
+  eps: number | null
+  freeCashflow: number | null
 } | null> {
   try {
     const auth = await getYahooAuth()
@@ -63,7 +71,7 @@ export async function getYahooQuoteSummary(symbol: string): Promise<{
 
     const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(
       symbol
-    )}?crumb=${encodeURIComponent(auth.crumb)}&modules=summaryDetail,defaultKeyStatistics`
+    )}?crumb=${encodeURIComponent(auth.crumb)}&modules=summaryDetail,defaultKeyStatistics,financialData`
 
     const res = await fetch(url, {
       headers: {
@@ -81,15 +89,33 @@ export async function getYahooQuoteSummary(symbol: string): Promise<{
 
     const detail = summary.summaryDetail || {}
     const stats = summary.defaultKeyStatistics || {}
+    const financial = summary.financialData || {}
 
-    const pe = detail.trailingPE?.raw ?? stats.trailingPE?.raw ?? detail.forwardPE?.raw ?? null
+    const pe = detail.trailingPE?.raw ?? stats.trailingPE?.raw ?? null
+    const forwardPe = detail.forwardPE?.raw ?? stats.forwardPE?.raw ?? null
+    const pb = stats.priceToBook?.raw ?? null
+    const evEbitda = stats.enterpriseToEbitda?.raw ?? null
     const marketCap = detail.marketCap?.raw ?? stats.enterpriseValue?.raw ?? null
     const dividendYield = detail.dividendYield?.raw ?? detail.trailingAnnualDividendYield?.raw ?? null
+    const payoutRatio = detail.payoutRatio?.raw ?? null
+
+    const revenue = financial.totalRevenue?.raw ?? null
+    const revenueGrowth = financial.revenueGrowth?.raw ?? null
+    const eps = stats.trailingEps?.raw ?? financial.revenuePerShare?.raw ?? null
+    const freeCashflow = financial.freeCashflow?.raw ?? financial.operatingCashflow?.raw ?? null
 
     return {
       pe: pe ? Number(pe) : null,
+      forwardPe: forwardPe ? Number(forwardPe) : null,
+      pb: pb ? Number(pb) : null,
+      evEbitda: evEbitda ? Number(evEbitda) : null,
       marketCap: marketCap ? Number(marketCap) : null,
       dividendYield: dividendYield ? Number(dividendYield) * 100 : null, // percentage
+      payoutRatio: payoutRatio ? Number(payoutRatio) * 100 : null, // percentage
+      revenue: revenue ? Number(revenue) : null,
+      revenueGrowth: revenueGrowth ? Number(revenueGrowth) * 100 : null, // percentage
+      eps: eps ? Number(eps) : null,
+      freeCashflow: freeCashflow ? Number(freeCashflow) : null,
     }
   } catch {
     return null
