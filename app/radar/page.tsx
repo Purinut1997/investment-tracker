@@ -27,6 +27,7 @@ import {
   ExternalLink,
   Info,
   SlidersHorizontal,
+  PieChart,
 } from 'lucide-react'
 import CountUp from 'react-countup'
 import Link from 'next/link'
@@ -39,7 +40,22 @@ import {
   ConcentrationRiskItem,
   DrawdownRiskItem,
   OpportunityItem,
+  SectorBreakdownItem,
 } from '@/lib/analytics/risk-sentinel'
+
+const SECTOR_COLORS: Record<string, { bar: string; text: string; bg: string; border: string }> = {
+  Technology: { bar: 'bg-blue-500', text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
+  'Defensive & Dividend': { bar: 'bg-emerald-500', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
+  Healthcare: { bar: 'bg-teal-500', text: 'text-teal-400', bg: 'bg-teal-500/10', border: 'border-teal-500/30' },
+  'Broad Market Index': { bar: 'bg-indigo-500', text: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/30' },
+  Financials: { bar: 'bg-amber-500', text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
+  'Consumer Staples': { bar: 'bg-purple-500', text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' },
+  'Gold & Commodities': { bar: 'bg-yellow-500', text: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
+  'Fixed Income & Bonds': { bar: 'bg-sky-500', text: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/30' },
+  Energy: { bar: 'bg-orange-500', text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
+  'Cash & Reserves': { bar: 'bg-slate-500', text: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/30' },
+  Other: { bar: 'bg-slate-600', text: 'text-slate-400', bg: 'bg-slate-600/10', border: 'border-slate-600/30' },
+}
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
@@ -440,6 +456,104 @@ export default function RadarPage() {
           </div>
         </div>
 
+        {/* ─── Sector Allocation & Cross-Sector Rotation Health ─────────── */}
+        {riskReport?.sectorBreakdown && riskReport.sectorBreakdown.length > 0 && (
+          <div className="rounded-3xl glass-panel p-6 sm:p-7 relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400">
+                  <PieChart className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    การกระจายตัวตามกลุ่มอุตสาหกรรม (Sector Allocation & Rotation Health)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    ตรวจจับการกระจุกตัวเชิงกลุ่มธุรกิจ (Cluster Risk) และประเมินจุด Overweight เพื่อวางแผนหมุนเวียนข้ามกลุ่มสินทรัพย์
+                  </p>
+                </div>
+              </div>
+
+              {riskReport.sectorBreakdown.some((s) => s.isOverweight) ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span>ตรวจพบกลุ่มที่ Overweight เกินเกณฑ์</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>สัดส่วนกลุ่มธุรกิจกระจายตัวสมดุลดี</span>
+                </div>
+              )}
+            </div>
+
+            {/* Visual Multi-segment Progress Bar */}
+            <div className="space-y-2 mb-6">
+              <div className="w-full h-3.5 bg-black/40 rounded-full overflow-hidden border border-white/10 flex p-0.5 gap-0.5">
+                {riskReport.sectorBreakdown.map((item, idx) => {
+                  const color = SECTOR_COLORS[item.sector]?.bar || 'bg-indigo-500'
+                  return (
+                    <div
+                      key={idx}
+                      className={`h-full rounded-sm transition-all duration-500 ${color}`}
+                      style={{ width: `${Math.max(1.5, item.percent)}%` }}
+                      title={`${item.sector}: ${item.percent.toFixed(1)}%`}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Sector Breakdown Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+              {riskReport.sectorBreakdown.map((item, idx) => {
+                const colors = SECTOR_COLORS[item.sector] || {
+                  bar: 'bg-indigo-500',
+                  text: 'text-indigo-400',
+                  bg: 'bg-indigo-500/10',
+                  border: 'border-indigo-500/30',
+                }
+                return (
+                  <div
+                    key={idx}
+                    className={`p-4 rounded-2xl border transition-all ${
+                      item.isOverweight
+                        ? 'bg-rose-500/[0.06] border-rose-500/30'
+                        : 'bg-white/[0.02] border-white/[0.06] hover:border-white/[0.12]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${colors.bar}`} />
+                        <span className="text-xs font-semibold text-white truncate max-w-[130px]" title={item.sector}>
+                          {item.sector}
+                        </span>
+                      </div>
+                      {item.isOverweight ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+                          Overweight ⚠️
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-white/[0.05] text-slate-400 shrink-0">
+                          Normal
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-baseline justify-between mt-2 pt-2 border-t border-white/[0.04]">
+                      <span className="text-lg font-bold font-mono text-white">
+                        {item.percent.toFixed(1)}%
+                      </span>
+                      <span className="text-xs font-mono text-slate-400">
+                        ฿{item.valueBase.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ─── Gemini AI Strategic Briefing ─────────────────────────── */}
         <div className="rounded-3xl glass-panel p-6 sm:p-7 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -761,11 +875,21 @@ export default function RadarPage() {
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1.5">
-                            <span className="text-sm font-bold px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono tracking-wide shadow-sm shadow-emerald-500/10">
+                            <span className={`text-sm font-bold px-3 py-1.5 rounded-lg font-mono tracking-wide shadow-sm ${
+                              opp.opportunityType === 'SECTOR_ROTATION'
+                                ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30 shadow-purple-500/10'
+                                : opp.opportunityType === 'DEFENSIVE_HEDGE'
+                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-amber-500/10'
+                                : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-emerald-500/10'
+                            }`}>
                               {opp.ticker}
                             </span>
                             <span className="text-[13px] font-semibold text-slate-400">
-                              {opp.opportunityType === 'DCA_DOWN'
+                              {opp.opportunityType === 'SECTOR_ROTATION'
+                                ? 'หมุนเวียนกลุ่มอุตสาหกรรม (Sector Rotation)'
+                                : opp.opportunityType === 'DEFENSIVE_HEDGE'
+                                ? 'สินทรัพย์ป้องกันความเสี่ยง (Defensive Hedge)'
+                                : opp.opportunityType === 'DCA_DOWN'
                                 ? 'โอกาสเฉลี่ยต้นทุนต่ำลง'
                                 : opp.opportunityType === 'REBALANCE_LAG'
                                 ? 'สัดส่วนยังขาดจากเป้าหมาย'

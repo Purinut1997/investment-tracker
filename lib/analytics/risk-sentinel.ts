@@ -1,6 +1,7 @@
 /**
  * lib/analytics/risk-sentinel.ts
  * Quantitative calculation engine for Risk Sentinel & Opportunity Radar.
+ * Includes Sector Classification, Correlation Awareness & Cross-Sector Rotation.
  */
 
 import { HoldingItem } from './holdings'
@@ -42,6 +43,13 @@ export interface LiquidityHealth {
   recommendation: string
 }
 
+export interface SectorBreakdownItem {
+  sector: string
+  valueBase: number
+  percent: number
+  isOverweight: boolean
+}
+
 export interface RiskSentinelReport {
   overallRiskLevel: 'LOW' | 'MODERATE' | 'ELEVATED' | 'CRITICAL'
   overallRiskScore: number // 0 - 100 (higher = riskier)
@@ -54,8 +62,17 @@ export interface RiskSentinelReport {
     percent: number
     isOverweight: boolean
   }>
+  sectorBreakdown: SectorBreakdownItem[]
   keyWarnings: string[]
 }
+
+export type OpportunityType =
+  | 'SECTOR_ROTATION'
+  | 'DEFENSIVE_HEDGE'
+  | 'DCA_DOWN'
+  | 'PULLBACK'
+  | 'REBALANCE_LAG'
+  | 'WATCHLIST_DIP'
 
 export interface OpportunityItem {
   id: string
@@ -65,7 +82,7 @@ export interface OpportunityItem {
   assetType: string
   currentPrice: number
   currency: string
-  opportunityType: 'DCA_DOWN' | 'PULLBACK' | 'REBALANCE_LAG' | 'WATCHLIST_DIP'
+  opportunityType: OpportunityType
   opportunityScore: number // 1-100
   title: string
   description: string
@@ -78,6 +95,119 @@ export interface OpportunityRadarReport {
   opportunities: OpportunityItem[]
   topPickSummary: string
   deployableCashBase: number
+}
+
+// ── Sector Mapping Database for Accurate Correlation & Skew Analysis ────────
+const KNOWN_SECTORS: Record<string, { detail: string; broad: string }> = {
+  // Technology & Semiconductors (High Beta / Cyclical / Growth)
+  AAPL: { detail: 'Technology / Hardware', broad: 'Technology' },
+  MSFT: { detail: 'Technology / Enterprise Software', broad: 'Technology' },
+  GOOGL: { detail: 'Technology / Digital Media & Search', broad: 'Technology' },
+  GOOG: { detail: 'Technology / Digital Media & Search', broad: 'Technology' },
+  NVDA: { detail: 'Technology / AI Accelerator Semiconductor', broad: 'Technology' },
+  MU: { detail: 'Technology / Memory Semiconductor', broad: 'Technology' },
+  AMD: { detail: 'Technology / Semiconductor', broad: 'Technology' },
+  TSM: { detail: 'Technology / Semiconductor Foundry', broad: 'Technology' },
+  AVGO: { detail: 'Technology / Semiconductor & Infrastructure', broad: 'Technology' },
+  META: { detail: 'Technology / Communication & Social Media', broad: 'Technology' },
+  AMZN: { detail: 'Consumer Discretionary / Cloud Services', broad: 'Technology' },
+  INTC: { detail: 'Technology / Semiconductor', broad: 'Technology' },
+  QCOM: { detail: 'Technology / Mobile Semiconductor', broad: 'Technology' },
+  ASML: { detail: 'Technology / Lithography Equipment', broad: 'Technology' },
+  DELTA: { detail: 'Technology / Power & Electronics', broad: 'Technology' },
+  HANA: { detail: 'Technology / Electronics Manufacturing', broad: 'Technology' },
+  KCE: { detail: 'Technology / PCB Electronics', broad: 'Technology' },
+
+  // Financials
+  JPM: { detail: 'Financials / Diversified Banking', broad: 'Financials' },
+  BAC: { detail: 'Financials / Banking', broad: 'Financials' },
+  V: { detail: 'Financials / Payment Processing', broad: 'Financials' },
+  MA: { detail: 'Financials / Payment Processing', broad: 'Financials' },
+  GS: { detail: 'Financials / Investment Banking', broad: 'Financials' },
+  SCB: { detail: 'Financials / Banking (TH)', broad: 'Financials' },
+  KBANK: { detail: 'Financials / Banking (TH)', broad: 'Financials' },
+  BBL: { detail: 'Financials / Banking (TH)', broad: 'Financials' },
+  KTB: { detail: 'Financials / Banking (TH)', broad: 'Financials' },
+  TISCO: { detail: 'Financials / Auto Loans & Dividend (TH)', broad: 'Financials' },
+
+  // Healthcare & Pharmaceuticals (Defensive Low-Beta)
+  UNH: { detail: 'Healthcare / Managed Care', broad: 'Healthcare' },
+  JNJ: { detail: 'Healthcare / Medical Devices & Pharma', broad: 'Healthcare' },
+  LLY: { detail: 'Healthcare / Pharmaceuticals', broad: 'Healthcare' },
+  PFE: { detail: 'Healthcare / Pharmaceuticals', broad: 'Healthcare' },
+  ABBV: { detail: 'Healthcare / Biotechnology', broad: 'Healthcare' },
+  MRK: { detail: 'Healthcare / Pharmaceuticals', broad: 'Healthcare' },
+  XLV: { detail: 'Healthcare / Health Care Select ETF', broad: 'Healthcare' },
+  BDMS: { detail: 'Healthcare / Hospital Network (TH)', broad: 'Healthcare' },
+  BH: { detail: 'Healthcare / Hospital (TH)', broad: 'Healthcare' },
+
+  // Consumer Staples & Dividend (Defensive Cash Flow)
+  PG: { detail: 'Consumer Staples / Household Products', broad: 'Defensive & Dividend' },
+  KO: { detail: 'Consumer Staples / Beverages', broad: 'Defensive & Dividend' },
+  PEP: { detail: 'Consumer Staples / Snacks & Beverages', broad: 'Defensive & Dividend' },
+  COST: { detail: 'Consumer Staples / Warehouse Club', broad: 'Defensive & Dividend' },
+  WMT: { detail: 'Consumer Staples / Retail', broad: 'Defensive & Dividend' },
+  SCHD: { detail: 'Dividend & Value / Schwab US Dividend ETF', broad: 'Defensive & Dividend' },
+  VYM: { detail: 'Dividend & Value / Vanguard High Dividend Yield ETF', broad: 'Defensive & Dividend' },
+  XLP: { detail: 'Consumer Staples / Consumer Staples Select ETF', broad: 'Defensive & Dividend' },
+  CPALL: { detail: 'Consumer Staples / Convenience Store (TH)', broad: 'Defensive & Dividend' },
+  CPAXT: { detail: 'Consumer Staples / Wholesale (TH)', broad: 'Defensive & Dividend' },
+
+  // Energy & Utilities
+  XOM: { detail: 'Energy / Integrated Oil & Gas', broad: 'Energy & Utilities' },
+  CVX: { detail: 'Energy / Integrated Oil & Gas', broad: 'Energy & Utilities' },
+  PTT: { detail: 'Energy / National Oil & Gas (TH)', broad: 'Energy & Utilities' },
+  PTTEP: { detail: 'Energy / E&P Oil & Gas (TH)', broad: 'Energy & Utilities' },
+  GULF: { detail: 'Utilities / Power Generation (TH)', broad: 'Energy & Utilities' },
+  GPSC: { detail: 'Utilities / Power Generation (TH)', broad: 'Energy & Utilities' },
+
+  // Broad Market & Global Index ETFs
+  VOO: { detail: 'Broad Index / Vanguard S&P 500 ETF', broad: 'Core Index' },
+  SPY: { detail: 'Broad Index / SPDR S&P 500 ETF', broad: 'Core Index' },
+  QQQ: { detail: 'Technology / Invesco QQQ Trust ETF', broad: 'Technology' },
+  VT: { detail: 'Global Equities / Vanguard Total World ETF', broad: 'Core Index' },
+  VTI: { detail: 'Broad Index / Vanguard Total Stock Market ETF', broad: 'Core Index' },
+
+  // Real Assets & Hedging
+  GOLD: { detail: 'Commodities / Physical Gold', broad: 'Gold & Commodities' },
+  XAU: { detail: 'Commodities / Gold Spot', broad: 'Gold & Commodities' },
+  GLD: { detail: 'Commodities / SPDR Gold Shares ETF', broad: 'Gold & Commodities' },
+  TLT: { detail: 'Fixed Income / 20+ Year Treasury Bond ETF', broad: 'Bonds & Fixed Income' },
+  BND: { detail: 'Fixed Income / Total Bond Market ETF', broad: 'Bonds & Fixed Income' },
+
+  // Cryptocurrencies
+  BTC: { detail: 'Cryptocurrency / Store of Value', broad: 'Crypto' },
+  ETH: { detail: 'Cryptocurrency / Smart Contract Platform', broad: 'Crypto' },
+  SOL: { detail: 'Cryptocurrency / High Throughput L1', broad: 'Crypto' },
+}
+
+export function classifySector(ticker: string, assetType?: string, market?: string) {
+  const clean = ticker.toUpperCase()
+  if (KNOWN_SECTORS[clean]) {
+    return KNOWN_SECTORS[clean]
+  }
+
+  const cleanNoDot = clean.replace('.BK', '')
+  if (KNOWN_SECTORS[cleanNoDot]) {
+    return KNOWN_SECTORS[cleanNoDot]
+  }
+
+  if (assetType === 'crypto' || clean.includes('BTC') || clean.includes('ETH')) {
+    return { detail: 'Cryptocurrency / Digital Asset', broad: 'Crypto' }
+  }
+  if (assetType === 'gold' || clean.includes('GOLD') || clean.includes('XAU')) {
+    return { detail: 'Commodities / Gold', broad: 'Gold & Commodities' }
+  }
+  if (assetType === 'bond') {
+    return { detail: 'Fixed Income / Debt Securities', broad: 'Bonds & Fixed Income' }
+  }
+  if (assetType === 'fund') {
+    return { detail: 'Fund / Collective Investment', broad: 'Core Index' }
+  }
+  if (market === 'TH') {
+    return { detail: 'Thai Equities (General)', broad: 'General Equities' }
+  }
+  return { detail: 'US Equities (General)', broad: 'General Equities' }
 }
 
 /**
@@ -109,13 +239,14 @@ export function analyzePortfolioRisks(
         keyWarnings.push(`ระวัง ${h.ticker} ครองสัดส่วน ${h.allocationPercent.toFixed(1)}% ของพอร์ตโฟลิโอ`)
       }
 
+      // Stress tests: Drop -10%, -20%, -30%
       const stressTests: StressTestScenario[] = [-10, -20, -30].map((drop) => {
-        const lossAmountBase = h.currentValueBase * (Math.abs(drop) / 100)
-        const portfolioImpactPercent = grandTotal > 0 ? (lossAmountBase / grandTotal) * 100 : 0
+        const lossAmount = Math.abs((h.currentValueBase * drop) / 100)
+        const impact = grandTotal > 0 ? (lossAmount / grandTotal) * 100 : 0
         return {
           dropPercent: drop,
-          lossAmountBase,
-          portfolioImpactPercent,
+          lossAmountBase: Math.round(lossAmount),
+          portfolioImpactPercent: Number(impact.toFixed(2)),
         }
       })
 
@@ -123,8 +254,8 @@ export function analyzePortfolioRisks(
         ticker: h.ticker,
         assetName: h.assetName,
         market: h.market,
-        allocationPercent: h.allocationPercent,
-        currentValueBase: h.currentValueBase,
+        allocationPercent: Number(h.allocationPercent.toFixed(1)),
+        currentValueBase: Math.round(h.currentValueBase),
         riskLevel,
         stressTests,
         recommendation,
@@ -132,48 +263,48 @@ export function analyzePortfolioRisks(
     }
   }
 
-  // ── B. Deep Drawdown / Heavy Loss Detector ─────────────────
+  // ── B. Drawdown Risk (Unrealized Loss Inspection) ───────────
   const drawdownRisks: DrawdownRiskItem[] = []
   for (const h of holdings) {
-    if (h.unrealizedPnLPercent <= -12) {
-      const isDanger = h.unrealizedPnLPercent <= -25
-      const severity: 'WARNING' | 'DANGER' = isDanger ? 'DANGER' : 'WARNING'
-      const thesisCheckNote = isDanger
-        ? 'ราคาปรับลดลงมากกว่า 25% ควรทบทวนว่าพื้นฐานของสินทรัพย์เปลี่ยนไปหรือไม่ หรือตั้งจุดตัดขาดทุน (Stop Loss)'
-        : 'ราคาติดลบปานกลาง หากเป็นสินทรัพย์แกนหลักที่พื้นฐานไม่เปลี่ยน อาจเป็นจังหวะสะสมต้นทุนเฉลี่ย'
+    if (h.unrealizedPnLPercent <= -15) {
+      const severity: 'WARNING' | 'DANGER' = h.unrealizedPnLPercent <= -25 ? 'DANGER' : 'WARNING'
+      const note =
+        severity === 'DANGER'
+          ? `ติดลบลึก ${h.unrealizedPnLPercent.toFixed(1)}% ควรทบทวนพื้นฐานบริษัททันทีว่าเหตุผลในการซื้อเปลี่ยนไปหรือไม่`
+          : `ย่อตัว ${h.unrealizedPnLPercent.toFixed(1)}% อยู่ในจุดที่ต้องติดตามระดับแนวรับอย่างใกล้ชิด`
 
       drawdownRisks.push({
         ticker: h.ticker,
         assetName: h.assetName,
         market: h.market,
-        unrealizedPnLPercent: h.unrealizedPnLPercent,
-        unrealizedPnLBase: h.unrealizedPnLBase,
-        currentValueBase: h.currentValueBase,
+        unrealizedPnLPercent: Number(h.unrealizedPnLPercent.toFixed(2)),
+        unrealizedPnLBase: Math.round(h.unrealizedPnLBase),
+        currentValueBase: Math.round(h.currentValueBase),
         severity,
-        thesisCheckNote,
+        thesisCheckNote: note,
       })
 
-      if (isDanger) {
-        keyWarnings.push(`🔴 ${h.ticker} ติดลบสูงถึง ${h.unrealizedPnLPercent.toFixed(1)}% ควรประเมินพื้นฐานเพื่อจำกัดการขาดทุน`)
+      if (severity === 'DANGER') {
+        keyWarnings.push(`${h.ticker} ติดลบถึง ${h.unrealizedPnLPercent.toFixed(1)}% แนะนำทบทวนสมมติฐานการลงทุน`)
       }
     }
   }
 
-  // ── C. Liquidity / Cash Buffer Health ───────────────────────
+  // ── C. Liquidity / Dry Powder Assessment ────────────────────
   const cashRatioPercent = grandTotal > 0 ? (cashTotalBase / grandTotal) * 100 : 0
   let liquidityStatus: 'LOW' | 'OPTIMAL' | 'HIGH' = 'OPTIMAL'
-  let statusLabel = 'สภาพคล่องพร้อมใช้ระดับเหมาะสม'
-  let liquidityRecommendation = 'สัดส่วนเงินสด 10-25% เหมาะสำหรับเตรียมช้อนซื้อเมื่อตลาดมีจังหวะย่อตัว'
+  let statusLabel = 'กระสุนเงินสดเหมาะสม'
+  let liquidityRecommendation = 'สัดส่วนเงินสดอยู่ในเกณฑ์สมดุล พร้อมเข้าช้อนซื้อเมื่อเกิดโอกาส'
 
-  if (cashRatioPercent < 5) {
+  if (cashRatioPercent < 10) {
     liquidityStatus = 'LOW'
-    statusLabel = 'กระสุนเงินสดสำรองอยู่ในระดับต่ำมาก'
-    liquidityRecommendation = 'เงินสดพร้อมใช้ต่ำกว่า 5% แนะนำทยอยเติมเงินสดสำรอง (Dry Powder) เพื่อไม่ให้เสียโอกาสเมื่อตลาดเกิดวิกฤต'
-    keyWarnings.push('💧 เงินสดสำรองพร้อมใช้ต่ำกว่า 5% ขาดความยืดหยุ่นในการช้อนซื้อของถูก')
+    statusLabel = 'กระสุนเงินสดเหลือน้อย'
+    liquidityRecommendation = 'เงินสดต่ำกว่า 10% ของพอร์ต แนะนำชะลอการซื้อหุ้นใหม่และเติมเงินสดสำรอง'
+    keyWarnings.push('⚠️ เงินสดสำรองต่ำกว่า 10% อาจขาดสภาพคล่องเมื่อตลาดปรับฐานแรง')
   } else if (cashRatioPercent > 35) {
     liquidityStatus = 'HIGH'
-    statusLabel = 'ถือเงินสดสูงเกินไป (Cash Drag)'
-    liquidityRecommendation = 'เงินสดสูงกว่า 35% อาจทำให้ผลตอบแทนแพ้เงินเฟ้อ แนะนำทยอยจัดสรรเข้าสินทรัพย์ตามแผนการลงทุน'
+    statusLabel = 'เงินสดสำรองล้นพอร์ต'
+    liquidityRecommendation = 'เงินสดสูงเกิน 35% ส่งผลให้เสียโอกาสการเติบโต ควรวางแผนทยอยสะสมสินทรัพย์เป้าหมาย'
   }
 
   const liquidity: LiquidityHealth = {
@@ -185,7 +316,7 @@ export function analyzePortfolioRisks(
     recommendation: liquidityRecommendation,
   }
 
-  // ── D. Asset Class & Market Skew ───────────────────────────
+  // ── D. Asset Class Breakdown ───────────────────────────────
   const categoryMap: Record<string, number> = {}
   for (const h of holdings) {
     const cat = h.assetType ? h.assetType.toUpperCase() : 'STOCK'
@@ -206,7 +337,43 @@ export function analyzePortfolioRisks(
     }
   })
 
-  // ── E. Overall Risk Score Calculation (0-100) ───────────────
+  // ── E. Sector Breakdown & Sector Overweight Detection ───────
+  const sectorMap: Record<string, number> = {}
+  for (const h of holdings) {
+    const sectorInfo = classifySector(h.ticker, h.assetType, h.market)
+    const sector = sectorInfo.broad
+    sectorMap[sector] = (sectorMap[sector] || 0) + h.currentValueBase
+  }
+  if (cashTotalBase > 0) {
+    sectorMap['Cash & Dry Powder'] = (sectorMap['Cash & Dry Powder'] || 0) + cashTotalBase
+  }
+
+  const sectorBreakdown: SectorBreakdownItem[] = Object.entries(sectorMap).map(
+    ([sector, valueBase]) => {
+      const percent = grandTotal > 0 ? (valueBase / grandTotal) * 100 : 0
+      const isOverweight = sector === 'Technology' ? percent > 40 : sector !== 'Cash & Dry Powder' && percent > 35
+      return {
+        sector,
+        valueBase,
+        percent: Number(percent.toFixed(1)),
+        isOverweight,
+      }
+    }
+  )
+
+  // Sort sectors by percentage descending
+  sectorBreakdown.sort((a, b) => b.percent - a.percent)
+
+  // Warn if any single sector is overweight
+  for (const sec of sectorBreakdown) {
+    if (sec.isOverweight && sec.sector !== 'Cash & Dry Powder') {
+      keyWarnings.push(
+        `⚠️ สัดส่วนกลุ่ม ${sec.sector} สูงถึง ${sec.percent}% ของพอร์ต (Overweight) เสี่ยงต่อความผันผวนเฉพาะกลุ่ม ควรพิจารณาทำ Sector Rotation ไปยังกลุ่มอื่น`
+      )
+    }
+  }
+
+  // ── F. Overall Risk Score Calculation (0-100) ───────────────
   let riskScore = 20 // baseline
   const maxAlloc = holdings.length > 0 ? Math.max(...holdings.map((h) => h.allocationPercent)) : 0
   if (maxAlloc > 50) riskScore += 35
@@ -216,6 +383,12 @@ export function analyzePortfolioRisks(
   if (concentrationRisks.some((c) => c.riskLevel === 'CRITICAL')) riskScore += 20
   if (drawdownRisks.some((d) => d.severity === 'DANGER')) riskScore += 15
   if (liquidityStatus === 'LOW') riskScore += 15
+
+  // Add risk penalty if single sector dominates > 50%
+  const dominantSector = sectorBreakdown.find((s) => s.sector !== 'Cash & Dry Powder' && s.percent > 50)
+  if (dominantSector) {
+    riskScore += 15
+  }
 
   riskScore = Math.min(100, Math.max(10, riskScore))
 
@@ -232,12 +405,14 @@ export function analyzePortfolioRisks(
     drawdownRisks,
     liquidity,
     assetClassBreakdown,
+    sectorBreakdown,
     keyWarnings,
   }
 }
 
 /**
  * 2. Scan Portfolio Opportunities (Opportunity Radar)
+ * Now includes Cross-Sector Rotation and Defensive Hedging Candidates!
  */
 export function scanPortfolioOpportunities(
   holdings: HoldingItem[],
@@ -247,6 +422,58 @@ export function scanPortfolioOpportunities(
   baseCurrency = 'THB'
 ): OpportunityRadarReport {
   const opportunities: OpportunityItem[] = []
+  const investedTotal = holdings.reduce((sum, h) => sum + h.currentValueBase, 0)
+  const grandTotal = investedTotal + cashTotalBase
+
+  // ── 0. Cross-Sector Rotation Candidates (If portfolio is Tech-Heavy) ──
+  const techValue = holdings
+    .filter((h) => classifySector(h.ticker, h.assetType, h.market).broad === 'Technology')
+    .reduce((sum, h) => sum + h.currentValueBase, 0)
+  const techPercent = grandTotal > 0 ? (techValue / grandTotal) * 100 : 0
+
+  if (techPercent >= 35) {
+    // Sector Rotation Target 1: High Quality Dividend Cash Flow
+    const hasSCHD = holdings.some((h) => h.ticker.toUpperCase() === 'SCHD' || h.ticker.toUpperCase() === 'VYM')
+    opportunities.push({
+      id: 'rot_dividend_cashflow',
+      ticker: 'SCHD / VYM',
+      assetName: 'กองทุนปันผลกระแสเงินสดมั่นคง (Dividend & Value Rotation)',
+      market: 'US',
+      assetType: 'fund',
+      currentPrice: 0,
+      currency: 'USD',
+      opportunityType: 'SECTOR_ROTATION',
+      opportunityScore: 97,
+      title: 'ยุทธศาสตร์หมุนเงินทุน (Sector Rotation) สู่ Dividend & Value',
+      description: `พอร์ตของคุณมีสัดส่วนกลุ่ม Technology สูงถึง ${techPercent.toFixed(1)}% การขายลดความเสี่ยงจากหุ้น Tech แล้วหมุนเงินเข้ากองทุนปันผลคุณภาพสูง (เช่น SCHD หรือ VYM) จะช่วยลดค่าความผันผวน (Beta) และสร้างกระแสเงินสดรองรับตลาดปรับฐาน`,
+      metricLabel: 'Tech Exposure ปัจจุบัน',
+      metricValue: `${techPercent.toFixed(1)}% (Overweight)`,
+      suggestedAction: hasSCHD ? 'เพิ่มน้ำหนัก SCHD ในพอร์ตเป็น 10-15%' : 'เปิดสถานะสะสมกองทุน SCHD หรือ VYM สัดส่วน 8-12% เพื่อกระจายความเสี่ยงข้ามกลุ่ม',
+    })
+
+    // Sector Rotation Target 2: Healthcare (Low-Beta Defensive)
+    const hasHealthcare = holdings.some(
+      (h) => classifySector(h.ticker, h.assetType, h.market).broad === 'Healthcare'
+    )
+    if (!hasHealthcare) {
+      opportunities.push({
+        id: 'rot_defensive_healthcare',
+        ticker: 'XLV / JNJ',
+        assetName: 'กลุ่มการแพทย์และสุขภาพ (Defensive Low-Beta Rotation)',
+        market: 'US',
+        assetType: 'stock',
+        currentPrice: 0,
+        currency: 'USD',
+        opportunityType: 'DEFENSIVE_HEDGE',
+        opportunityScore: 93,
+        title: 'เสริมเกราะป้องกันพอร์ตด้วยกลุ่ม Healthcare (XLV / JNJ)',
+        description: 'กลุ่มการแพทย์มีค่า Correlation กับหุ้นเทคโนโลยีต่ำมาก (~0.28) และมีความต้องการสม่ำเสมอในทุกช่วงเศรษฐกิจ ช่วยพยุงพอร์ตในยามที่หุ้นเติบโตเกิดฟองสบู่หรือถูกเทขาย',
+        metricLabel: 'Correlation กับ Tech',
+        metricValue: '~0.28 (ต่ำมาก)',
+        suggestedAction: 'แบ่งเงิน 5-8% ทยอยสะสมเพื่อทำหน้าที่เป็นถุงลมนิรภัยให้พอร์ต',
+      })
+    }
+  }
 
   // ── 1. DCA-Down Candidates (Assets trading below average cost) ──
   for (const h of holdings) {
@@ -264,10 +491,10 @@ export function scanPortfolioOpportunities(
         opportunityType: 'DCA_DOWN',
         opportunityScore: score,
         title: `โอกาสลดต้นทุนเฉลี่ย (DCA-Down) ใน ${h.ticker}`,
-        description: `ราคาปัจจุบัน ${h.currentPrice.toLocaleString()} ${h.currency} ต่ำกว่าต้นทุนเฉลี่ยของคุณ (${h.avgCost.toLocaleString()} ${h.currency}) อยู่ ${discount.toFixed(1)}% เป็นจังหวะดีในการสะสมเพื่อดึงต้นทุนลง`,
+        description: `ราคาปัจจุบัน ${h.currentPrice.toLocaleString()} ${h.currency} ต่ำกว่าต้นทุนเฉลี่ยของคุณ (${h.avgCost.toLocaleString()} ${h.currency}) อยู่ ${discount.toFixed(1)}% หากพื้นฐานยังไม่เปลี่ยน เป็นจังหวะดีในการสะสมเพื่อดึงต้นทุนลง`,
         metricLabel: 'ส่วนลดจากทุนเฉลี่ย',
         metricValue: `-${discount.toFixed(1)}%`,
-        suggestedAction: `ทยอยสะสม ${h.ticker} เพิ่มเพื่อเฉลี่ยต้นทุนพอร์ต`,
+        suggestedAction: `ทยอยสะสม ${h.ticker} เพิ่มเมื่อพอร์ตมีสัดส่วนกลุ่มรองรับเพียงพอ`,
       })
     }
   }
@@ -321,24 +548,23 @@ export function scanPortfolioOpportunities(
         currentPrice: 0,
         currency: 'USD',
         opportunityType: 'WATCHLIST_DIP',
-        opportunityScore: 75,
-        title: `สินทรัพย์ใน Watchlist: ${w.symbol}`,
-        description: `คุณกำลังจับตาสินทรัพย์นี้อยู่ (${w.displayName}) สภาพคล่องเงินสดในพอร์ตมี ${cashTotalBase.toLocaleString()} ${baseCurrency} พร้อมให้คุณเริ่มเปิด Position แรก`,
-        metricLabel: 'สถานะใน Watchlist',
-        metricValue: 'พร้อมจัดสรร',
-        suggestedAction: `วิเคราะห์จังหวะเข้าซื้อก้อนแรก (Initial Entry)`,
+        opportunityScore: 78,
+        title: `สินทรัพย์ใน Watchlist น่าจับตา: ${w.symbol}`,
+        description: `คุณกำลังติดตาม ${w.displayName} อยู่ หากมีกระสุนเงินสดสำรองเพียงพอ เป็นจังหวะดีในการศึกษาแนวรับเพื่อเริ่มไม้แรก (Initial Position)`,
+        metricLabel: 'สถานะ',
+        metricValue: 'ใน Watchlist',
+        suggestedAction: `วางแผนจุดเข้าซื้อไม้แรกใน ${w.symbol}`,
       })
     }
   }
 
-  // Sort opportunities by opportunityScore descending
+  // Sort opportunities by score descending
   opportunities.sort((a, b) => b.opportunityScore - a.opportunityScore)
 
-  let topPickSummary = 'พอร์ตของคุณมีสัดส่วนสมดุลดี แนะนำรักษาวินัยการลงทุนตามแผนแม่บท'
-  if (opportunities.length > 0) {
-    const top = opportunities[0]
-    topPickSummary = `โอกาสเด่นที่สุดในขณะนี้คือ ${top.title} เพื่อเพิ่มประสิทธิภาพผลตอบแทนของพอร์ต`
-  }
+  const topPick = opportunities[0]
+  const topPickSummary = topPick
+    ? `${topPick.title} (${topPick.suggestedAction})`
+    : 'โครงสร้างพอร์ตอยู่ในเกณฑ์สมดุล ยังไม่มีจุดเข้าซื้อที่มีนัยสำคัญ'
 
   return {
     opportunities,
