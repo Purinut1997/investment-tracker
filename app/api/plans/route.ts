@@ -28,19 +28,52 @@ export async function GET(req: NextRequest) {
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     })
 
+    const userSettings = await prisma.userSettings.findUnique({
+      where: { userId },
+      select: { baseCurrency: true },
+    })
+    const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+
+    // Fetch cash balances across user accounts
+    const accounts = await prisma.investmentAccount.findMany({
+      where: { userId },
+      select: { cashBalance: true, currency: true },
+    })
+    let totalCash = 0
+    for (const acc of accounts) {
+      totalCash += Number(acc.cashBalance) || 0
+    }
+
     // Calculate actual holdings to provide rebalancing feedback
-    const holdingsResult = await calculateUserHoldings(userId)
+    const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
     const actualAllocation: Record<string, number> = {}
+    const actualByTicker: Record<string, number> = {}
 
     for (const h of holdingsResult.holdings) {
-      const key = h.market || h.assetType || 'OTHER'
+      const key = (h.market || h.assetType || 'OTHER').toUpperCase()
       actualAllocation[key] = (actualAllocation[key] || 0) + h.allocationPercent
+
+      const tKey = h.ticker.toUpperCase()
+      actualByTicker[tKey] = (actualByTicker[tKey] || 0) + h.allocationPercent
+    }
+
+    // Add cash allocation
+    const totalPortfolioValue = holdingsResult.totalValueBase + totalCash
+    if (totalPortfolioValue > 0) {
+      const cashPct = (totalCash / totalPortfolioValue) * 100
+      actualAllocation['CASH'] = cashPct
+      actualByTicker['CASH'] = cashPct
     }
 
     return NextResponse.json({
       presets,
       actualAllocation,
-      totalPortfolioValue: holdingsResult.totalValueBase,
+      actualByTicker,
+      holdings: holdingsResult.holdings,
+      totalCash,
+      investedValue: holdingsResult.totalValueBase,
+      totalPortfolioValue,
+      baseCurrency,
     })
   } catch (error) {
     console.error('[plans GET]', error)

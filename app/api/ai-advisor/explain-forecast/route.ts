@@ -21,6 +21,15 @@ export async function GET(req: NextRequest) {
       select: { response: true, modelUsed: true, createdAt: true },
     })
 
+    const hasThai = latestLog?.response ? /[ก-๙]/.test(latestLog.response) : false
+    if (!hasThai && latestLog) {
+      return NextResponse.json({
+        explanation: null,
+        modelUsed: null,
+        updatedAt: null,
+      })
+    }
+
     return NextResponse.json({
       explanation: latestLog?.response ?? null,
       modelUsed: latestLog?.modelUsed ?? null,
@@ -47,36 +56,46 @@ export async function POST(req: NextRequest) {
       finalP90,
       targetAmount,
       probabilityOfReachingTarget,
+      adjustInflation,
+      finalRealP50,
+      retirementMonthlyIncome,
+      dividendMonthlyIncome,
+      milestonesSummary,
     } = await req.json()
 
     const prompt = `
-คุณเป็นผู้เชี่ยวชาญด้านการวางแผนการเงินส่วนบุคคล
-กรุณาอธิบายผลลัพธ์การจำลองการเติบโตของพอร์ตลงทุนแบบ Monte Carlo (500-1000 สถานการณ์จำลอง) ต่อไปนี้เป็นภาษาไทยที่เข้าใจง่ายและให้กำลังใจ:
+คุณเป็น Certified Financial Planner (CFP) และ Wealth Management Director ระดับสถาบันการเงินชั้นนำ
+กรุณาวิเคราะห์และสังเคราะห์ยุทธศาสตร์การเติบโตของพอร์ตลงทุน (Wealth Forecast & Retirement Horizon) จากผลจำลองสถิติ Monte Carlo 1,000 สถานการณ์จำลอง ต่อไปนี้เป็นภาษาไทยที่คมคาย เป็นรูปธรรม และนำไปใช้ปฏิบัติได้ทันที:
 
-ข้อมูลการจำลอง:
-- เงินต้นเริ่มต้น: ฿${Number(initialAmount).toLocaleString()}
-- เงินออมลงทุนเพิ่มต่อเดือน: ฿${Number(monthlyContribution).toLocaleString()}
-- ระยะเวลาลงทุน: ${years} ปี
-- เป้าหมายที่ต้องการ: ฿${Number(targetAmount).toLocaleString()}
-- โอกาสสำเร็จตามเป้าหมาย (Probability): ${probabilityOfReachingTarget ?? 'ไม่ได้ระบุ'}%
-- ผลลัพธ์สถานการณ์จำลอง (เมื่อครบ ${years} ปี):
-  • กรณีแย่ (P10 - โอกาสเกิด 10% จากตลาดซบเซา): ฿${Number(finalP10).toLocaleString()}
-  • กรณีกลาง (P50 - มัธยฐานตลาดทั่วไป): ฿${Number(finalP50).toLocaleString()}
-  • กรณีดีเยี่ยม (P90 - ตลาดกระทิงสดใส): ฿${Number(finalP90).toLocaleString()}
+📊 ข้อมูลแบบจำลองพอร์ต:
+- เงินต้นเริ่มต้นปัจจุบัน: ฿${Number(initialAmount).toLocaleString()}
+- วินัยการเติมเงินออม DCA รายเดือน: ฿${Number(monthlyContribution).toLocaleString()}/เดือน
+- ระยะเวลาเป้าหมาย: ${years} ปี
+- เป้าหมายเงินก้อนที่ต้องการ: ฿${Number(targetAmount).toLocaleString()}
+- ความน่าจะเป็นในการพิชิตเป้าหมาย (Probability of Success): ${probabilityOfReachingTarget ?? 'N/A'}%
+- ผลลัพธ์คาดการณ์เมื่อครบ ${years} ปี:
+  • กรณีตลาดแย่ (P10 Bear Market): ฿${Number(finalP10).toLocaleString()}
+  • กรณีมัธยฐานหลัก (P50 Expected Wealth): ฿${Number(finalP50).toLocaleString()}
+  • กรณีตลาดดีเยี่ยม (P90 Bull Market): ฿${Number(finalP90).toLocaleString()}
+${adjustInflation && finalRealP50 ? `- อำนาจซื้อแท้จริงหลังหักเงินเฟ้อ (Real Purchasing Power): ฿${Number(finalRealP50).toLocaleString()}` : ''}
+${retirementMonthlyIncome ? `- เงินเดือนเกษียณใช้ชีวิตตามกฎ 4% Rule: ฿${Number(retirementMonthlyIncome).toLocaleString()}/เดือน` : ''}
+${dividendMonthlyIncome ? `- กระแสเงินปันผลรับแท้จริงต่อเดือน: ฿${Number(dividendMonthlyIncome).toLocaleString()}/เดือน` : ''}
+${milestonesSummary ? `- ไทม์ไลน์หลักไมล์สำคัญ: ${milestonesSummary}` : ''}
 
-กรุณาสรุป 3 ส่วน:
-1. 📈 **ความหมายของตัวเลขเหล่านี้สำหรับผู้ลงทุน**: ตีความเป็นภาษาคน ไม่ใช้ศัพท์สถิติซับซ้อน
-2. 🎯 **การประเมินโอกาสที่จะบรรลุเป้าหมาย**: อธิบายโอกาสสำเร็จและปัจจัยหนุน
-3. 💡 **คำแนะนำที่ทำได้จริงเพื่อเพิ่มโอกาสสำเร็จ**: เช่น การเพิ่มเงินออมรายเดือน หรือการปรับสัดส่วนสินทรัพย์
-
-(ใช้ Bullet points และหัวข้อชัดเจน สละสลวย)
+⚠️ กฎเหล็ก:
+1. เขียนเนื้อหาทั้งหมดเป็น "ภาษาไทย 100%" สละสลวย ชัดเจน และทรงคุณค่า
+2. ไม่ทักทายเยิ่นเย้อ เช่น "สวัสดีครับ" หรือ "เรียนท่านนักลงทุน"
+3. สรุปเป็น 3 หัวข้อหลักด้วย Markdown ที่สวยงาม:
+   - 📈 **1. การตีความผลลัพธ์และความมั่นคงทางการเงิน (Executive Interpretation)**: วิเคราะห์ตัวเลขมัธยฐาน P50 เทียบกับเป้าหมาย และเงินเดือนเกษียณที่ถอนใช้ได้จริง
+   - 🎯 **2. ประเมินไทม์ไลน์และหลักไมล์สู่ความมั่งคั่ง (Milestone & Inflation Reality)**: วิเคราะห์ผลกระทบของเงินเฟ้อ และช่วงเวลาที่จะเกิด Compounding Effect (การทบต้นแบบก้าวกระโดด)
+   - 💡 **3. พิมพ์เขียวกลยุทธ์เร่งการเติบโต (Actionable Growth Blueprint)**: แนะนำ 2-3 ขั้นตอนปฏิบัติจริง เช่น การเพิ่มเงินออมตามรายได้ที่โตขึ้น (Step-up DCA) หรือการรักษาวินัยช่วงตลาดปรับฐาน
 `
 
     const { text, modelUsed } = await callGemini({
       userId: session.user.id,
       prompt,
       logType: 'forecast_explain',
-      systemInstruction: 'คุณเป็นที่ปรึกษาการวางแผนการเงินส่วนบุคคลที่เข้าใจง่าย ให้คำแนะนำที่เป็นรูปธรรม',
+      systemInstruction: 'คุณเป็นผู้อำนวยการฝ่ายวางแผนความมั่งคั่งและเกษียณอายุ (Wealth & Retirement Director) ตอบเป็นภาษาไทย 100% สละสลวย ชัดเจน ตรงประเด็น ใช้ตัวเลขประกอบการตัดสินใจจริง',
     })
 
     return NextResponse.json({
