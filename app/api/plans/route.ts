@@ -7,7 +7,7 @@ import { z } from 'zod'
 const PresetSchema = z.object({
   presetName: z.string().min(1).max(100),
   riskProfile: z.string().default('moderate'),
-  targetAllocation: z.record(z.string(), z.number()), // e.g. { "US": 50, "TH": 20, "CRYPTO": 15, "GOLD": 15 }
+  targetAllocation: z.record(z.string(), z.any()), // e.g. { "US": 50, "TH": 20, "_subTargets": { ... } }
   monthlyContribution: z.number().nonnegative().default(0),
   targetAmount: z.number().nonnegative().default(0),
   targetDate: z.string().optional(),

@@ -185,6 +185,21 @@ Last updated: 2026-09-17
 - **Unified Market Resolver (`lib/market-data/resolver.ts`)**: ตัวจัดการดึงราคาแบบครบวงจร รองรับ US, Thai Stocks, Crypto, Gold พร้อม In-memory cache
 - **Build Status**: `npm run build` ผ่าน 100% ครบทั้ง 51 Static/Dynamic routes
 
+### 16. Phase 15: Sub-Allocation Drill-Down, Tactical Monthly DCA & Executive AI Advisor Overhaul ✅
+- **Sub-Allocation Drill-Down Accordion (`components/plans/SubAllocationDrillDown.tsx` & `app/plans/page.tsx`)**:
+  - รองรับการคลิกคลี่ดูสัดส่วนหุ้นย่อยภายในแต่ละกลุ่ม (เช่น US, TH, CASH)
+  - กำหนดสัดส่วนย่อยรายตัวได้อิสระ (เช่น US มี VOO 30%, QQQM 30%, SCHD 30%, GOOGL 10%) และบันทึกลง Preset อัตโนมัติ
+  - เปรียบเทียบสัดส่วนจริง vs เป้าหมายย่อย พร้อมส่วนต่างขาด/เกิน
+  - ตรวจจับสัญญาณจังหวะราคาและแนวรับ: `🔥 ชนแนวรับ / น่าช้อนพิเศษ (Top Buy)`, `🟢 ขาดเป้าหมาย / ทยอยสะสม (Accumulate)`, `⏸️ โตเกินเป้า / งดซื้อชั่วคราว (Pause & Hold)`
+- **Smart Tactical Monthly DCA Budget Planner**:
+  - คำนวณแบ่งเงินงวดใหม่ (เช่น งบ ฿5,000 หรือปรับแต่งได้) ว่าควรลงตัวไหนกี่บาทอย่างเจาะจง
+  - คำนวณจำนวนหุ้นโดยประมาณตามราคาตลาด พร้อมเหตุผลประกอบและปุ่มคัดลอกแผนซื้อในคลิกเดียว
+- **Gemini AI Rebalance & Portfolio Advisor Overhaul (`components/plans/AiAdvisorDisplay.tsx` & `app/api/ai-advisor/analyze/route.ts`)**:
+  - ตัดคำทักทายเกริ่นนำเยิ่นเย้อออกทั้งหมด มุ่งเน้นยุทธศาสตร์ที่ปฏิบัติได้จริงทันที
+  - จัดหมวดหมู่ 5 กลุ่มสไตล์ Executive Cards: 🎯 สรุปยุทธศาสตร์ด่วน, 🟢 จุดน่าช้อนสะสม, ⏸️ สินทรัพย์ควรงดซื้อ, 💵 แผนจัดสรรเงินเดือนหน้า, 🛡️ เรดาร์บริหารความเสี่ยง
+  - ไฮไลต์ Ticker Pills และตัวเลขเงินบาทคมชัด
+- **Build Status**: `npm run build` ผ่าน 100% ครบทั้ง 60 Static/Dynamic routes โดยไม่มีข้อผิดพลาด
+
 ---
 
 ## วิธีการรันและทดสอบระบบ

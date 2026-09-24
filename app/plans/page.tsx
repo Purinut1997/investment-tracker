@@ -35,8 +35,12 @@ import {
   Wallet,
   Activity,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import CountUp from 'react-countup'
+import { SubAllocationDrillDown } from '@/components/plans/SubAllocationDrillDown'
+import { AiAdvisorDisplay } from '@/components/plans/AiAdvisorDisplay'
 import {
   calculatePortfolioRebalance,
   RebalanceMode,
@@ -71,6 +75,7 @@ interface AllocationPreset {
   presetName: string
   riskProfile: string
   targetAllocation: Record<string, number>
+  subTargets?: Record<string, Record<string, number>>
   monthlyContribution: number | string
   targetAmount: number | string
   targetDate: string | null
@@ -81,6 +86,7 @@ function asAllocation(value: unknown): Record<string, number> {
   if (!value || typeof value !== 'object') return {}
   const out: Record<string, number> = {}
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (key.startsWith('_')) continue
     const n = Number(raw)
     if (!Number.isNaN(n)) out[key] = n
   }
@@ -97,10 +103,18 @@ function parsePresets(data: unknown): AllocationPreset[] {
       const record = item as Record<string, unknown>
       return typeof record.id === 'string' && typeof record.presetName === 'string'
     })
-    .map((item) => ({
-      ...item,
-      targetAllocation: asAllocation(item.targetAllocation),
-    }))
+    .map((item) => {
+      const rawAlloc =
+        item.targetAllocation && typeof item.targetAllocation === 'object'
+          ? (item.targetAllocation as Record<string, any>)
+          : {}
+      const subTargets = rawAlloc._subTargets || {}
+      return {
+        ...item,
+        targetAllocation: asAllocation(item.targetAllocation),
+        subTargets,
+      }
+    })
 }
 
 export default function PlansPage() {
@@ -127,6 +141,44 @@ export default function PlansPage() {
   const [rebalanceMode, setRebalanceMode] = useState<RebalanceMode>('CASH_FLOW')
   const [toleranceBand, setToleranceBand] = useState<number>(3.0)
   const [copied, setCopied] = useState(false)
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({ US: true })
+
+  function toggleExpandCategory(catKey: string) {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [catKey]: !prev[catKey],
+    }))
+  }
+
+  async function handleSaveSubTargets(categoryKey: string, newSubTargets: Record<string, number>) {
+    if (!activePreset?.id) return
+    const key = categoryKey.toUpperCase()
+    const updatedSubTargets = {
+      ...(activePreset.subTargets || {}),
+      [key]: newSubTargets,
+    }
+    const updatedAllocation = {
+      ...activePreset.targetAllocation,
+      _subTargets: updatedSubTargets,
+    }
+
+    try {
+      const res = await fetch(`/api/plans/${activePreset.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetAllocation: updatedAllocation,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to update sub-targets')
+      }
+      await revalidate()
+    } catch (err: any) {
+      console.error('[save sub-targets]', err)
+    }
+  }
 
   // QuickAddModal integration
   const [quickAddOpen, setQuickAddOpen] = useState(false)
@@ -178,6 +230,8 @@ export default function PlansPage() {
         body: JSON.stringify({
           presetName: activePreset?.presetName,
           targetAllocation: activePreset?.targetAllocation,
+          monthlyContribution: cashInflow || Number(activePreset?.monthlyContribution) || 5000,
+          subAllocations: activePreset?.subTargets || undefined,
         }),
       })
       const result = await res.json()
@@ -899,7 +953,9 @@ export default function PlansPage() {
               </div>
 
               <div className="space-y-3">
-                {Object.entries(activePreset.targetAllocation).map(([key, targetPct]) => {
+                {Object.entries(activePreset.targetAllocation)
+                  .filter(([key]) => !key.startsWith('_'))
+                  .map(([key, targetPct]) => {
                   const upperKey = key.toUpperCase()
                   const cfg =
                     CATEGORY_CONFIG[upperKey] ?? {
@@ -922,6 +978,25 @@ export default function PlansPage() {
                   const absDiff = Math.abs(diff)
                   const diffAmount = (absDiff / 100) * totalValue
                   const isOnTarget = absDiff <= toleranceBand
+
+                  // Holdings matching this category
+                  const matchingHoldings = holdings.filter((h: any) => {
+                    const hMarket = (h.market || '').toUpperCase()
+                    const hType = (h.assetType || '').toUpperCase()
+                    if (upperKey === 'US') return hMarket === 'US' || (!hMarket && hType !== 'CRYPTO' && hType !== 'GOLD')
+                    if (upperKey === 'TH') return hMarket === 'TH' || h.ticker.endsWith('.BK')
+                    if (upperKey === 'CRYPTO') return hType === 'CRYPTO'
+                    if (upperKey === 'GOLD') return hType === 'GOLD'
+                    if (upperKey === 'CASH') return false
+                    return hMarket === upperKey || hType === upperKey
+                  })
+
+                  const categoryValue =
+                    upperKey === 'CASH'
+                      ? totalCash
+                      : matchingHoldings.reduce((sum: number, h: any) => sum + (h.currentValueBase || 0), 0)
+
+                  const isExpanded = !!expandedCategories[key] || !!expandedCategories[upperKey]
 
                   return (
                     <div
@@ -1024,6 +1099,47 @@ export default function PlansPage() {
                           </p>
                         </div>
                       )}
+
+                      {/* Drill-down Toggle Button */}
+                      <div className="pt-2 border-t border-white/[0.04]">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandCategory(key)}
+                          className="w-full py-1.5 flex items-center justify-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-semibold transition-colors cursor-pointer group"
+                        >
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp className="w-4 h-4 transition-transform group-hover:-translate-y-0.5" />
+                              <span>ซ่อนรายละเอียดสัดส่วนย่อยในกลุ่ม {key}</span>
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
+                              <span>
+                                ดูสัดส่วนหุ้นย่อยในกลุ่มนี้ ({matchingHoldings.length} รายการ) & แผนเติมเงินเดือนหน้า
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Sub-Allocation Drill-Down Content */}
+                      {isExpanded && (
+                        <SubAllocationDrillDown
+                          categoryKey={key}
+                          categoryLabel={cfg.label}
+                          categoryEmoji={cfg.emoji}
+                          holdings={holdings}
+                          categoryTotalValue={categoryValue}
+                          portfolioTotalValue={totalValue}
+                          baseCurrency={baseCurrency}
+                          targetCategoryPct={targetPct}
+                          actualCategoryPct={actualPct}
+                          defaultDcaBudget={Number(activePreset.monthlyContribution) || 5000}
+                          savedSubTargets={activePreset.subTargets?.[upperKey] || {}}
+                          onSaveSubTargets={(newSub) => handleSaveSubTargets(key, newSub)}
+                        />
+                      )}
                     </div>
                   )
                 })}
@@ -1089,14 +1205,15 @@ export default function PlansPage() {
           )}
 
           {aiAdvisorData?.advice ? (
-            <div className="mt-5 space-y-4 relative z-10">
-              <div className="prose prose-invert max-w-none text-xs sm:text-sm text-slate-300 whitespace-pre-line leading-relaxed bg-black/30 rounded-2xl p-4 sm:p-6 border border-white/[0.06]">
-                {aiAdvisorData.advice}
-              </div>
-              <p className="text-[11px] text-slate-500">
-                {aiAdvisorData.disclaimer ||
-                  '⚠️ ข้อมูลนี้เกิดจากการประมวลผลด้วย AI เพื่อเป็นแนวทางวิเคราะห์ส่วนบุคคลเท่านั้น ไม่ถือเป็นคำแนะนำทางการเงิน'}
-              </p>
+            <div className="mt-5 relative z-10">
+              <AiAdvisorDisplay
+                advice={aiAdvisorData.advice}
+                disclaimer={aiAdvisorData.disclaimer}
+                modelUsed={aiAdvisorData.modelUsed}
+                updatedAt={aiAdvisorData.updatedAt}
+                onRefresh={handleRunAiAdvisor}
+                isRefreshing={isAiAnalyzing}
+              />
             </div>
           ) : (
             <div className="mt-6 py-6 text-center space-y-3 relative z-10">

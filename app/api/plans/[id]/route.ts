@@ -6,7 +6,7 @@ import { z } from 'zod'
 const UpdatePresetSchema = z.object({
   presetName: z.string().min(1).optional(),
   riskProfile: z.string().optional(),
-  targetAllocation: z.record(z.string(), z.number()).optional(),
+  targetAllocation: z.record(z.string(), z.any()).optional(),
   monthlyContribution: z.number().nonnegative().optional(),
   targetAmount: z.number().nonnegative().optional(),
   targetDate: z.string().nullable().optional(),

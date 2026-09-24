@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}))
-    const { presetName, targetAllocation } = body || {}
+    const { presetName, targetAllocation, monthlyContribution, subAllocations } = body || {}
 
     // 1. Gather context
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
@@ -54,7 +54,17 @@ export async function POST(req: NextRequest) {
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
     const healthScore = calculatePortfolioHealthScore(holdingsResult.holdings)
 
-    if (holdingsResult.holdings.length === 0) {
+    // Fetch cash balances across user accounts
+    const accounts = await prisma.investmentAccount.findMany({
+      where: { userId },
+      select: { cashBalance: true, accountName: true, currency: true },
+    })
+    let totalCash = 0
+    accounts.forEach((acc) => {
+      totalCash += Number(acc.cashBalance) || 0
+    })
+
+    if (holdingsResult.holdings.length === 0 && totalCash === 0) {
       return NextResponse.json({
         advice: 'ยังไม่มีสินทรัพย์ในพอร์ต กรุณาเพิ่มรายการธุรกรรมซื้อ-ขายก่อนขอคำแนะนำจาก AI',
         disclaimer: 'ข้อมูลนี้ไม่ใช่คำแนะนำทางการเงินที่มีใบอนุญาต เป็นเพียงการวิเคราะห์เชิงสถิติ',
@@ -64,34 +74,55 @@ export async function POST(req: NextRequest) {
     // 2. Format holdings list for AI
     const holdingsSummary = holdingsResult.holdings.map((h) => ({
       ticker: h.ticker,
+      name: h.assetName,
       market: h.market,
       currentValue: `${h.currentValueBase.toLocaleString()} ${baseCurrency}`,
       allocationPercent: `${h.allocationPercent.toFixed(1)}%`,
       pnlPercent: `${h.unrealizedPnLPercent.toFixed(1)}%`,
     }))
 
+    const dcaBudget = Number(monthlyContribution) > 0 ? Number(monthlyContribution) : 5000
+
     const prompt = `
-คุณเป็นที่ปรึกษาการลงทุนอัจฉริยะส่วนบุคคล (Investment Advisor AI)
-วิเคราะห์ข้อมูลพอร์ตการลงทุนและแผนการจัดสรรสินทรัพย์ของผู้ใช้ต่อไปนี้ แล้วให้คำแนะนำภาษาไทยระดับมืออาชีพ ชัดเจน เข้าใจง่าย และตรงประเด็น:
+คุณเป็น Chief Investment Officer (CIO) และ AI Wealth Advisor ระดับสถาบันการเงิน
+วิเคราะห์ข้อมูลพอร์ตการลงทุนของผู้ใช้ และให้คำแนะนำเชิงยุทธศาสตร์ที่มีโครงสร้างชัดเจน เน้นประโยคสำคัญและตัวหนา (Bold) อ่านแล้วเห็นแนวทางปฏิบัติได้ทันที:
 
-[ข้อมูลพอร์ตปัจจุบัน]
-- มูลค่ารวม: ${holdingsResult.totalValueBase.toLocaleString()} ${baseCurrency}
+[ข้อมูลสถานะพอร์ตปัจจุบัน]
+- มูลค่าสินทรัพย์ลงทุน: ${holdingsResult.totalValueBase.toLocaleString()} ${baseCurrency}
+- เงินสดคงเหลือรวม: ${totalCash.toLocaleString()} ${baseCurrency}
+- มูลค่าพอร์ตสุทธิรวม: ${(holdingsResult.totalValueBase + totalCash).toLocaleString()} ${baseCurrency}
 - กำไร/ขาดทุนรวม: ${holdingsResult.unrealizedPnLPercent.toFixed(2)}%
-- Portfolio Health Score: ${healthScore.score}/100 (เกรด ${healthScore.grade})
-- แผนการลงทุนที่เลือกใช้งาน: ${presetName || 'แผนมาตรฐาน'}
-${targetAllocation ? `- สัดส่วนเป้าหมายตามแผน: ${JSON.stringify(targetAllocation)}` : ''}
-- รายการสินทรัพย์ปัจจุบัน: ${JSON.stringify(holdingsSummary, null, 2)}
+- Portfolio Health Score: ${healthScore.score}/100 (ระดับ ${healthScore.grade})
+- แผนการลงทุนที่เลือก: ${presetName || 'แผนมาตรฐาน'}
+- งบลงทุนใหม่รายเดือน (DCA Budget): ${dcaBudget.toLocaleString()} ${baseCurrency}
+${targetAllocation ? `- สัดส่วนเป้าหมายหลัก: ${JSON.stringify(targetAllocation)}` : ''}
+${subAllocations ? `- สัดส่วนเป้าหมายย่อยรายหุ้น: ${JSON.stringify(subAllocations)}` : ''}
+- รายการสินทรัพย์ที่ถือครองจริง:
+${JSON.stringify(holdingsSummary, null, 2)}
 
-กรุณาวิเคราะห์ 3 ด้านสำคัญ:
-1. 🛡️ **การกระจายความเสี่ยง (Diversification & Concentration)**: ชี้จุดกระจุกตัวหรือจุดเปราะบางเทียบกับเป้าหมาย
-2. 🎯 **ข้อแนะนำในการปรับสมดุลพอร์ต (Rebalancing Action Steps)**: ระบุชัดเจนว่าควรทยอยเติมเงินหรือขายปรับสัดส่วนในกลุ่มใดเป็นพิเศษ
-3. 💡 **ความเสี่ยงตลาดและยุทธศาสตร์รับมือ (Market Risks & Defensive Strategy)**: ข้อคิดในการบริหารเงินลงทุนระยะยาว
+[ข้อกำหนดสำคัญในการเขียนคำตอบ - ต้องปฏิบัติตามอย่างเคร่งครัด]:
+1. ห้ามมีคำทักทายเกริ่นนำใดๆ ทั้งสิ้น (ห้ามเขียน "เรียน ท่านนักลงทุน", "สวัสดีครับ", "ในฐานะ Investment Advisor...") ให้เริ่มเข้าสู่หัวข้อที่ 1 ทันที!
+2. จัดโครงสร้างเป็น 5 หมวดหมู่อย่างเคร่งครัด โดยใช้ Markdown Header '###' ดังนี้:
+   ### 🎯 สรุปยุทธศาสตร์พอร์ตด่วน (Executive Takeaways)
+   (สรุปภาพรวมสถานะพอร์ต จุดแข็ง และสิ่งที่ต้องจัดการทันทีใน 2-3 ประโยค เน้นตัวหนา)
 
-(คำตอบควรจัดหมวดหมู่ให้อ่านง่าย ใช้ Bullet points ชัดเจน ไม่พิมพ์เครื่องหมายกำกวม)
+   ### 🟢 สินทรัพย์ที่ต้องเร่งเติมเงิน / จุดน่าช้อน (Top Buying & Dip Priorities)
+   (ระบุชื่อหุ้นที่สัดส่วนยังขาดจากเป้าหมาย หรือราคาลงมาทดสอบแนวรับ/จุดย่อตัวที่น่าช้อน พร้อมบอกเหตุผลว่าทำไมถึงได้เปรียบ)
+
+   ### ⏸️ สินทรัพย์ที่ควรงดซื้อชั่วคราว (Pause & Hold)
+   (ระบุชื่อหุ้นที่สัดส่วนโตเกินเป้าไปมาก หรือราคาตึงตัว ให้คำแนะนำชะลอการซื้อเพื่อไม่ให้พอร์ตกระจุกตัว)
+
+   ### 💵 แผนจัดสรรเงินลงทุนเดือนหน้า (Monthly DCA Allocation Action Plan)
+   (แจกแจงแบ่งงบ DCA จำนวน ${dcaBudget.toLocaleString()} ${baseCurrency} ว่าควรนำไปซื้อหุ้นตัวไหน ตัวละกี่บาทอย่างเจาะจง พร้อมเหตุผลประกอบ)
+
+   ### 🛡️ เรดาร์บริหารความเสี่ยง (Risk Sentinel Alert)
+   (เตือนจุดเสี่ยง เช่น หุ้นตัวเดียวครองสัดส่วนสูงเกิน 25-30% หรือมีสินทรัพย์นอกแผนการลงทุน)
+
+3. ให้เน้นชื่อหุ้น สัญลักษณ์ (เช่น **VOO**, **SCHD**, **QQQM**, **GOOGL**) ตัวเลขเปอร์เซ็นต์ และจำนวนเงินบาท (เช่น **฿3,500**, **฿1,500**) ด้วยเครื่องหมาย **ตัวหนา** เสมอ เพื่อให้ผู้อ่านกวาดตาอ่านได้รวดเร็ว
 `
 
     const systemInstruction =
-      'คุณเป็น AI วิเคราะห์การลงทุน ให้คำตอบเป็นภาษาไทยที่เป็นมิตร สุภาพ มีเหตุผล และอิงหลักการลงทุนระยะยาว'
+      'คุณเป็น AI ที่ปรึกษาการลงทุนระดับมืออาชีพ ตอบเป็นภาษาไทยที่กระชับ ทรงพลัง ตรงประเด็น ไม่มีน้ำหรือคำทักทายเยิ่นเย้อ เน้นยุทธศาสตร์ที่ปฏิบัติได้จริง'
 
     const { text, modelUsed } = await callGemini({
       userId,
@@ -101,7 +132,7 @@ ${targetAllocation ? `- สัดส่วนเป้าหมายตาม�
     })
 
     const disclaimer =
-      '⚠️ ข้อสงวนสิทธิ์: ข้อมูลนี้เกิดจากการประมวลผลด้วย AI เพื่อการวิเคราะห์ส่วนบุคคลเท่านั้น ไม่ถือเป็นคำแนะนำทางการเงิน การลงทุน หรือการชักชวนให้ซื้อขายหลักทรัพย์ที่มีใบอนุญาต ผู้ลงทุนควรศึกษาข้อมูลและตัดสินใจด้วยตนเอง'
+      '⚠️ ข้อมูลนี้เกิดจากการประมวลผลด้วย AI เพื่อการวิเคราะห์ส่วนบุคคลเท่านั้น ไม่ถือเป็นคำแนะนำทางการเงิน การลงทุน หรือการชักชวนให้ซื้อขายหลักทรัพย์ที่มีใบอนุญาต ผู้ลงทุนควรศึกษาข้อมูลและตัดสินใจด้วยตนเอง'
 
     return NextResponse.json({
       advice: text,
