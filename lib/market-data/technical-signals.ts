@@ -179,51 +179,68 @@ export async function fetchSingleTickerTechnicalSignal(
     const pullbackFromHigh =
       fiftyTwoWeekHigh > 0 ? ((currentPrice - fiftyTwoWeekHigh) / fiftyTwoWeekHigh) * 100 : 0
 
-    // 5. Evaluate Proximity to Real Support
-    const isNearS1 = supportS1 !== null && currentPrice <= supportS1 * 1.025 && currentPrice >= supportS1 * 0.97
-    const isNearSMA50 = sma50 !== null && currentPrice <= sma50 * 1.02 && currentPrice >= sma50 * 0.98
-    const isNearSMA200 = sma200 !== null && currentPrice <= sma200 * 1.025 && currentPrice >= sma200 * 0.975
+    // 5. Evaluate Proximity to Real Support & Momentum Zones
+    const isNearS1 =
+      supportS1 !== null &&
+      currentPrice <= supportS1 * 1.01 &&
+      currentPrice >= supportS1 * 0.99
+    const isNearSMA50 =
+      sma50 !== null &&
+      currentPrice <= sma50 * 1.01 &&
+      currentPrice >= sma50 * 0.99
+    const isNearSMA200 =
+      sma200 !== null &&
+      currentPrice <= sma200 * 1.012 &&
+      currentPrice >= sma200 * 0.988
 
-    const isNearSupport = isNearS1 || isNearSMA50 || isNearSMA200
-    const isOversold = rsi14 !== null && rsi14 < 35
-    const isOverbought = rsi14 !== null && rsi14 > 68
+    // Real support only counts if the stock has experienced at least a mild pullback (-3.5% or more)
+    const isNearSupport = (pullbackFromHigh <= -3.5) && (isNearS1 || isNearSMA50 || isNearSMA200)
+    const isNearPeak = pullbackFromHigh >= -2.5
+    const isOversold = rsi14 !== null && rsi14 <= 35
+    const isOverbought = rsi14 !== null && rsi14 >= 68
 
-    // 6. Institutional Signal Classification
+    // 6. Institutional Signal Classification (Accurate & Truthful)
     let signalType: TechnicalSignal['signalType'] = 'NEUTRAL'
     let badgeText = '⚪ ราคาเคลื่อนไหวปกติ'
     let badgeClass = 'bg-slate-500/15 text-slate-300 border-white/[0.08]'
-    let technicalReason = 'ราคาแกว่งตัวในกรอบปกติ ไม่มีสัญญาณ Overbought หรือ Oversold รุนแรง'
+    let technicalReason = 'ราคาแกว่งตัวในกรอบปกติ ไม่มีสัญญาณ Overbought หรือ Oversold'
 
-    if (isOversold || (isNearSupport && pullbackFromHigh <= -7)) {
+    if (isOversold && isNearSupport) {
       signalType = 'STRONG_DIP_BUY'
-      badgeText = '🔥 ชนแนวรับจริง / RSI Oversold (น่าช้อน)'
+      badgeText = `🔥 RSI Oversold (${rsi14}) + ชนแนวรับ S1`
       badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs shadow-emerald-950/30'
-      technicalReason = `ราคา $${currentPrice.toFixed(2)} ย่อตัว ${pullbackFromHigh.toFixed(1)}% จากจุดสูงสุด 52W ${
-        rsi14 ? `(RSI ${rsi14} อยู่ในเขต Oversold)` : ''
-      } ${supportS1 ? `และทดสอบแนวรับ S1 ที่ $${supportS1}` : ''} เป็นจุดช้อนซื้อที่ได้เปรียบสูง`
+      technicalReason = `ราคา $${currentPrice.toFixed(2)} ย่อตัว ${pullbackFromHigh.toFixed(1)}% จากจุดสูงสุด 52W และ RSI อยู่ที่ ${rsi14} (Oversold) ชนแนวรับ S1 ($${supportS1}) เป็นจุดช้อนซื้อที่ได้เปรียบสูง`
+    } else if (isOversold) {
+      signalType = 'STRONG_DIP_BUY'
+      badgeText = `🔥 RSI Oversold (${rsi14}) / น่าช้อนพิเศษ`
+      badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs shadow-emerald-950/30'
+      technicalReason = `RSI อยู่ที่ ${rsi14} (เขตขายมากเกินไป) ย่อตัว ${pullbackFromHigh.toFixed(1)}% จากจุดสูงสุด มีโอกาสฟื้นตัวกลับ`
     } else if (isNearSupport) {
       signalType = 'NEAR_SUPPORT'
-      badgeText = '🟢 ทดสอบแนวรับสำคัญ (Test Support)'
+      badgeText = `🟢 ทดสอบแนวรับสำคัญ (${supportS1 ? `S1: $${supportS1}` : 'SMA50'})`
       badgeClass = 'bg-teal-500/20 text-teal-300 border-teal-500/30'
-      technicalReason = `ราคาทดสอบโซนแนวรับ ${supportS1 ? `S1 ($${supportS1})` : ''} ${
+      technicalReason = `ราคาย่อตัว ${pullbackFromHigh.toFixed(1)}% ลงมาทดสอบโซนแนวรับ ${supportS1 ? `S1 ($${supportS1})` : ''} ${
         sma50 ? `หรือ SMA50 ($${sma50})` : ''
       } มีแรงซื้อพยุง`
     } else if (isOverbought) {
       signalType = 'OVERBOUGHT_RESISTANCE'
-      badgeText = '⚠️ ชนแนวต้าน / RSI Overbought (ชะลอซื้อ)'
+      badgeText = `⚠️ RSI Overbought (${rsi14}) / ตึงตัว`
       badgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-      technicalReason = `RSI อยู่ที่ ${rsi14} (เขตซื้อมากเกินไป) ${
-        resistanceR1 ? `และใกล้แนวต้าน R1 ($${resistanceR1})` : ''
-      } เสี่ยงต่อการปรับฐานระยะสั้น ควรงดไล่ราคา`
-    } else if (pullbackFromHigh <= -5) {
+      technicalReason = `RSI อยู่ที่ ${rsi14} (เขตซื้อมากเกินไป) เสี่ยงต่อการพักฐานระยะสั้น ควรงดไล่ราคา`
+    } else if (isNearPeak) {
+      signalType = 'NEUTRAL'
+      badgeText = `🔵 เกาะใกล้จุดสูงสุด (ย่อเพียง ${pullbackFromHigh.toFixed(1)}%)`
+      badgeClass = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+      technicalReason = `ราคา $${currentPrice.toFixed(2)} อยู่ใกล้จุดสูงสุดรอบปี ($${fiftyTwoWeekHigh.toFixed(2)}) ย่อตัวเพียง ${pullbackFromHigh.toFixed(1)}% RSI ${rsi14 ?? 'ปกติ'} แนะนำสะสมตามแผน DCA สม่ำเสมอ`
+    } else if (pullbackFromHigh <= -6) {
       signalType = 'ACCUMULATE'
-      badgeText = '🔵 ย่อตัวระยะสั้น / ทยอยสะสม (Dip)'
+      badgeText = `🔵 ย่อตัวสะสม (${pullbackFromHigh.toFixed(1)}%)`
       badgeClass = 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-      technicalReason = `ราคาย่อตัวลงมา ${pullbackFromHigh.toFixed(1)}% จากจุดสูงสุดรอบปี ทยอยสะสมตามแผน DCA ได้`
+      technicalReason = `ราคาย่อตัวลงมา ${pullbackFromHigh.toFixed(1)}% จากจุดสูงสุด ทยอยสะสมตามแผน DCA ได้`
     }
 
     const metricSummary = [
-      rsi14 ? `RSI ${rsi14}` : null,
+      rsi14 ? `RSI ${rsi14} (${rsi14 <= 35 ? 'Oversold' : rsi14 >= 68 ? 'Overbought' : 'ปกติ'})` : null,
       supportS1 ? `แนวรับ S1: $${supportS1}` : null,
       pullbackFromHigh !== 0 ? `ย่อตัว ${pullbackFromHigh.toFixed(1)}%` : null,
     ]

@@ -200,21 +200,29 @@ Last updated: 2026-09-17
   - ไฮไลต์ Ticker Pills และตัวเลขเงินบาทคมชัด
 - **Build Status**: `npm run build` ผ่าน 100% ครบทั้ง 60 Static/Dynamic routes โดยไม่มีข้อผิดพลาด
 
-### 17. Phase 16: Live Technical Signals Engine (RSI 14, SMA 50/200, Pivot Support S1/S2 & 52W Pullback) ✅
+### 17. Phase 16: Live Technical Signals Engine (RSI 14, SMA 50/200, Pivot Support S1/S2 & 52W Pullback) & Strict Signal Classification ✅
 - **Institutional Technical Signals Engine (`lib/market-data/technical-signals.ts`)**:
-  - คำนวณ Wilder's RSI(14) จากแท่งเทียนราคาปิดจริงย้อนหลัง
+  - คำนวณ Wilder's RSI(14) จากแท่งเทียนราคาปิดจริงย้อนหลัง 6 เดือน
   - คำนวณเส้นค่าเฉลี่ยเคลื่อนที่ SMA 50 วัน และ SMA 200 วัน
   - คำนวณระดับแนวรับ/แนวต้าน Pivot Points: Support 1 (S1), Support 2 (S2), Resistance 1 (R1)
   - คำนวณ % Drawdown ย่อตัวจากจุดสูงสุดรอบ 52 สัปดาห์ (52-Week High Pullback)
+  - ปรับเกณฑ์ความแม่นยำทางสถิติ (Strict Rule Calibration):
+    - **ชนแนวรับจริง (At Support)**: ต้องมี Pullback ย่อตัวลงมาจริงอย่างน้อย $\le -3.5\%$ และราคาปัจจุบันอยู่ชิดกรอบ $\pm 1\%$ ของ S1/SMA50/SMA200
+    - **Oversold จริง**: ต้องเป็น RSI $\le 35$ เท่านั้น (หาก RSI 54.7 จะแสดงสถานะ "ปกติ" ชัดเจน ไม่ปะปนกับ Oversold)
+    - **เกาะใกล้จุดสูงสุด (Near Peak)**: หากย่อตัวเพียง $\ge -2.5\%$ เช่น VOO (-1.2%) จะระบุว่าเป็นโซนเกาะจุดสูงสุด แนะนำทยอย DCA สม่ำเสมอ ไม่เร่งไล่ราคา
   - ระบบ In-memory Cache 5 นาทีเพื่อความเร็วระดับ Milliseconds และป้องกัน Rate-limit
 - **REST API Endpoint (`GET /api/market-data/technical-signals`)**:
   - ดึงข้อมูลสัญญาณเทคนิคัลแบบคู่ขนานสำหรับหุ้นในพอร์ต
 - **Sub-Allocation Drill-Down Integration (`components/plans/SubAllocationDrillDown.tsx`)**:
-  - ผสานสัดส่วนที่ขาดในพอร์ต (Rebalance Deficit) เข้ากับ **"สัญญาณกราฟเทคนิคัลจริงจากตลาด"**:
-    - `🔥 ชนแนวรับจริง / RSI Oversold (น่าช้อน)`: เมื่อสัดส่วนขาด + ราคาชนแนวรับ S1 หรือ RSI < 35
-    - `🟢 สัดส่วนขาดเป้า / ทยอยสะสม (Accumulate)`: สัดส่วนขาดเป้า พร้อมแสดงค่า RSI จริง
-    - `⚠️ RSI Overbought / งดซื้อชั่วคราว`: เมื่อ RSI > 68 หรือราคาใกล้แนวต้าน
-  - แสดงป้ายกำกับ Metric กราฟจริงในตาราง: `📈 RSI 32.5 | แนวรับ S1: $93.80 | ย่อตัว -8.4%`
+  - ปรับ Badge และคำแนะนำ Smart Tactical DCA ให้ตรงกับข้อเท็จจริงทางเทคนิคอล 100%:
+    - `🔥 RSI Oversold (X) + ชนแนวรับ S1`: เมื่อ RSI $\le 35$ และราคาชนแนวรับจริง
+    - `🔥 RSI Oversold (X) / น่าช้อนพิเศษ`: เมื่อ RSI $\le 35$ แท้จริง
+    - `🟢 ทดสอบแนวรับสำคัญ (S1/SMA50)`: เมื่อราคาย่อตัวลงมาถึงแนวรับ
+    - `🟢 ขาดเป้า / ทยอย DCA (เกาะจุดสูงสุด)`: เมื่อสัดส่วนขาดแต่ราคาเกาะใกล้จุดสูงสุด (ย่อ < 2.5%) แนะนำทยอยเติมตามงวดปกติ
+    - `🟢 สัดส่วนขาดเป้า / ทยอยสะสม (Accumulate)`: สัดส่วนขาดเป้าตามรอบปกติ
+    - `⚠️ RSI Overbought (X) / งดซื้อชั่วคราว`: เมื่อ RSI $\ge 68$ เสี่ยงพักฐาน
+    - `⏸️ สัดส่วนโตเกินเป้า (+X.X%) / งดซื้อชั่วคราว`: เมื่อสัดส่วนโตเกินเป้าหมาย
+  - แสดงป้ายกำกับ Metric กราฟจริงในตาราง: `📈 RSI 54.7 (ปกติ) | แนวรับ S1: $692.30 | ย่อตัว -1.2%`
   - นำค่าทางเทคนิคอลจริงไปใส่ในเหตุผลของกล่องคำแนะนำแบ่งเงิน DCA ฿5,000 ชัดเจน 100% ไม่มีการสุ่มข้อความ
 - **Build Status**: `npm run build` ผ่าน 100% (60 routes) ไร้ Type Warning หรือ Error
 

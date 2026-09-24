@@ -172,31 +172,47 @@ export function SubAllocationDrillDown({
       // Institutional Signal Detection using Real Technical Indicators + Portfolio Drift
       let signal: SubAssetItem['signal']
 
-      const isTechnicallyAtSupport =
-        liveSig?.isNearSupport || (liveSig?.pullbackFromHigh !== undefined && liveSig.pullbackFromHigh <= -6)
-      const isTechnicallyOversold = liveSig?.isOversold
-      const isTechnicallyOverbought = liveSig?.isOverbought
+      const isTechnicallyAtSupport = Boolean(liveSig?.isNearSupport)
+      const isTechnicallyOversold = Boolean(liveSig?.isOversold)
+      const isTechnicallyOverbought = Boolean(liveSig?.isOverbought)
+      const isNearPeak = typeof liveSig?.pullbackFromHigh === 'number' && liveSig.pullbackFromHigh >= -2.5
 
       if (drift <= -3) {
-        // Underweight in portfolio
-        if (isTechnicallyOversold || isTechnicallyAtSupport) {
-          const detail = [
-            liveSig?.supportS1 ? `แนวรับ S1: $${liveSig.supportS1}` : null,
-            liveSig?.rsi14 ? `RSI ${liveSig.rsi14} (Oversold)` : null,
-            liveSig?.pullbackFromHigh ? `ย่อตัว ${liveSig.pullbackFromHigh}%` : null,
-          ]
-            .filter(Boolean)
-            .join(' • ')
-
+        // Underweight in portfolio: candidate to buy/accumulate
+        if (isTechnicallyOversold && isTechnicallyAtSupport) {
+          // Double confirmation: Oversold + at support
           signal = {
             type: 'DIP_BUY',
-            badgeText: '🔥 ชนแนวรับจริง / RSI Oversold (น่าช้อน)',
+            badgeText: `🔥 RSI Oversold (${liveSig?.rsi14}) + ชนแนวรับ S1`,
             badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs shadow-emerald-950/20',
-            description: `สัดส่วนยังขาดอีก ${Math.abs(drift).toFixed(1)}% ${
-              detail ? `(${detail})` : ''
-            } เป็นจุดช้อนซื้อที่ได้เปรียบสูง`,
+            description: `สัดส่วนยังขาดอีก ${Math.abs(drift).toFixed(1)}% และกราฟลงมาชนแนวรับในเขต RSI Oversold พอดี เป็นจุดช้อนซื้อที่ได้เปรียบสูง`,
+          }
+        } else if (isTechnicallyOversold) {
+          // Pure oversold
+          signal = {
+            type: 'DIP_BUY',
+            badgeText: `🔥 RSI Oversold (${liveSig?.rsi14}) / น่าช้อนพิเศษ`,
+            badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs shadow-emerald-950/20',
+            description: `สัดส่วนยังขาดอีก ${Math.abs(drift).toFixed(1)}% และ RSI อยู่ในเขตขายมากเกินไป (${liveSig?.rsi14}) มีโอกาสรีบาวด์สูง`,
+          }
+        } else if (isTechnicallyAtSupport) {
+          // Testing real support
+          signal = {
+            type: 'DIP_BUY',
+            badgeText: `🟢 ทดสอบแนวรับ (${liveSig?.supportS1 ? `S1: $${liveSig.supportS1}` : 'SMA50'})`,
+            badgeClass: 'bg-teal-500/20 text-teal-300 border-teal-500/30 shadow-xs shadow-teal-950/20',
+            description: `สัดส่วนยังขาดอีก ${Math.abs(drift).toFixed(1)}% และราคาย่อตัวลงมาทดสอบแนวรับสำคัญ (${liveSig?.supportS1 ? `$${liveSig.supportS1}` : ''}) เป็นจุดสะสมที่ปลอดภัย`,
+          }
+        } else if (isNearPeak) {
+          // Underweight, but price is near all-time peak / 52W high
+          signal = {
+            type: 'ACCUMULATE',
+            badgeText: '🟢 ขาดเป้า / ทยอย DCA (เกาะจุดสูงสุด)',
+            badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+            description: `สัดส่วนยังขาดอีก ${Math.abs(drift).toFixed(1)}% แต่ราคาเกาะใกล้จุดสูงสุด 52W (ย่อเพียง ${liveSig?.pullbackFromHigh?.toFixed(1)}%) แนะนำทยอยสะสมตามงวดปกติ ไม่เร่งไล่ราคา`,
           }
         } else {
+          // Standard underweight accumulation
           signal = {
             type: 'ACCUMULATE',
             badgeText: '🟢 สัดส่วนขาดเป้า / ทยอยสะสม (Accumulate)',
@@ -211,18 +227,20 @@ export function SubAllocationDrillDown({
         signal = {
           type: 'PAUSE',
           badgeText: isTechnicallyOverbought
-            ? '⚠️ RSI Overbought / งดซื้อชั่วคราว'
-            : '⏸️ สัดส่วนโตเกินเป้า / งดซื้อชั่วคราว (Pause)',
+            ? `⚠️ RSI Overbought (${liveSig?.rsi14}) / งดซื้อชั่วคราว`
+            : `⏸️ สัดส่วนโตเกินเป้า (+${drift.toFixed(1)}%) / งดซื้อชั่วคราว`,
           badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-          description: `สัดส่วนเกินเป้า +${drift.toFixed(1)}% ${
-            liveSig?.rsi14 ? `(RSI ${liveSig.rsi14} ตึงตัว)` : ''
-          } ควรงดซื้อเพื่อไม่ให้พอร์ตกระจุกตัว`,
+          description: isTechnicallyOverbought
+            ? `RSI อยู่ที่ ${liveSig?.rsi14} (เขตซื้อมากเกินไป) เสี่ยงต่อการพักฐานระยะสั้น ควรงดไล่ราคา`
+            : `สัดส่วนเกินเป้า +${drift.toFixed(1)}% ควรงดซื้อเพื่อไม่ให้พอร์ตกระจุกตัว`,
         }
       } else {
         // Balanced
         signal = {
           type: 'BALANCED',
-          badgeText: '✨ สมดุลดี / สะสมตามแผนปกติ (Balanced)',
+          badgeText: isNearPeak
+            ? `✨ สมดุลดี / เกาะจุดสูงสุด (${liveSig?.pullbackFromHigh?.toFixed(1)}%)`
+            : '✨ สมดุลดี / สะสมตามแผนปกติ (Balanced)',
           badgeClass: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/20',
           description: `สัดส่วนใกล้เคียงเป้าหมาย (${targetWeight}%) ${
             liveSig?.rsi14 ? `(RSI ${liveSig.rsi14})` : ''
@@ -308,15 +326,27 @@ export function SubAllocationDrillDown({
         ? `[สัญญาณเทคนิคอลจริง: ${item.technical.metricSummary}]`
         : ''
 
-      const reason =
-        item.signal.type === 'DIP_BUY'
-          ? `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% ${techDetails} เข้าเงื่อนไขจุดช้อนซื้อที่ได้เปรียบสูง`
-          : `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% ${techDetails} ทยอยเติมเพื่อดึงพอร์ตเข้าสู่เป้าหมาย ${item.targetWeightInGroup}%`
+      const isDipBuy = item.signal.type === 'DIP_BUY'
+      const isNearPeak = typeof item.technical?.pullbackFromHigh === 'number' && item.technical.pullbackFromHigh >= -2.5
+
+      let actionLabel = '🟢 ทยอยสะสม'
+      let reason = ''
+
+      if (isDipBuy) {
+        actionLabel = '🔥 ช้อนซื้อพิเศษ'
+        reason = `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% ${techDetails} เข้าเงื่อนไขจุดช้อนซื้อที่แนวรับหรือ Oversold จริง`
+      } else if (isNearPeak) {
+        actionLabel = '🟢 ทยอยสะสม (ไม่ไล่ราคา)'
+        reason = `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% ${techDetails} ราคาเกาะใกล้จุดสูงสุด แนะนำทยอยสะสมตามงวดปกติ ไม่เร่งไล่ราคา`
+      } else {
+        actionLabel = '🟢 ทยอยสะสม'
+        reason = `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% ${techDetails} ทยอยเติมเพื่อดึงพอร์ตเข้าสู่เป้าหมาย ${item.targetWeightInGroup}%`
+      }
 
       allocations.set(item.ticker, {
         amount: roundedAmt,
         estShares: Number(estShares.toFixed(3)),
-        action: item.signal.type === 'DIP_BUY' ? '🔥 ช้อนซื้อพิเศษ' : '🟢 ทยอยสะสม',
+        action: actionLabel,
         reason,
       })
     })
