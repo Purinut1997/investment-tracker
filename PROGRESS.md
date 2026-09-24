@@ -226,6 +226,23 @@ Last updated: 2026-09-17
   - นำค่าทางเทคนิคอลจริงไปใส่ในเหตุผลของกล่องคำแนะนำแบ่งเงิน DCA ฿5,000 ชัดเจน 100% ไม่มีการสุ่มข้อความ
 - **Build Status**: `npm run build` ผ่าน 100% (60 routes) ไร้ Type Warning หรือ Error
 
+### 18. Phase 17: Gemini AI Strategic Wealth Roadmap Executive Redesign ✅
+- **Executive Card Engine (`components/forecast/StrategicRoadmapDisplay.tsx`)**:
+  - พลิกโฉมจากกล่องข้อความยาวพรืด (Text Wall Prose) สู่ **Executive Cards ระดับสถาบันการเงิน**:
+    - **KPI Ribbon บาร์สรุปตัวเลขหลัก**: โอกาสสำเร็จ (%), คาดการณ์มัธยฐาน P50, อำนาจซื้อแท้จริงหลังหักเงินเฟ้อ, เงินเดือนเกษียณ 4% Rule
+    - **Card 1: 💡 บทสรุปภาพรวมผู้บริหาร (Executive Overview)**: ไฮไลต์สถานะพอร์ต โอกาสสำเร็จ และความท้าทายหลัก
+    - **Card 2: 📈 การตีความผลลัพธ์และอำนาจซื้อแท้จริง (Executive Interpretation & Inflation Reality)**: วิเคราะห์ P50, P10 Bear market, อำนาจซื้อที่ลดลงจากเงินเฟ้อ
+    - **Card 3: 🎯 ไทม์ไลน์และจุดเร่งทบต้น (Milestone Velocity & Compounding Effect)**: วิเคราะห์ปีที่จะแตะ 1M, 3M, 5M, 10M และจุดที่เกิดพลังดอกเบี้ยทบต้น
+    - **Card 4: 🚀 พิมพ์เขียวกลยุทธ์เร่งการเติบโต (Actionable Growth Blueprint)**: แนวทางปฏิบัติแบบ 3 ขั้นตอน (Numbered Step Cards) พร้อมไฮไลต์
+    - **Card 5: 🧭 คำแนะนำสรุปฟันธง (Strategic Conclusion)**: ฟันธง Action สำคัญที่สุดที่ต้องทำในเดือนนี้
+  - ระบบ Format ตัวเลขทางการเงินแบบ Glow Badge: `฿1,219,801`, `72%` คมชัด อ่านง่าย สบายตา
+  - ปุ่ม "คัดลอกบทวิเคราะห์ (Copy Roadmap)" สำหรับแชร์หรือส่งต่อ
+- **Prompt Refinement (`app/api/ai-advisor/explain-forecast/route.ts`)**:
+  - ปรับ Prompt บังคับโครงสร้าง Executive 5 หัวข้อหลัก ปราศจากคำทักทายเยิ่นเย้อ ชูประเด็นตัวเลขและกลยุทธ์ชัดเจน
+- **Forecast Page Integration (`app/forecast/page.tsx`)**:
+  - เชื่อมโยงผลลัพธ์เดิมในฐานข้อมูลและผลลัพธ์ใหม่เข้ากับ `StrategicRoadmapDisplay` สวยงามทันทีโดยไม่ต้อง Generate ใหม่
+- **Build Status**: `npm run build` ผ่าน 100% (60 routes)
+
 ---
 
 ## วิธีการรันและทดสอบระบบ

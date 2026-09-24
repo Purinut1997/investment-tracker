@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
+import { StrategicRoadmapDisplay } from '@/components/forecast/StrategicRoadmapDisplay'
 import {
   runMonteCarloSimulation,
   solveRequiredMonthlyDCA,
@@ -1077,13 +1078,16 @@ export default function ForecastPage() {
           </div>
 
           {currentExplanation ? (
-            <div className="mt-5 space-y-4 relative z-10">
-              <div className="prose prose-invert max-w-none text-xs sm:text-sm text-slate-300 whitespace-pre-line leading-relaxed bg-black/30 rounded-2xl p-4 sm:p-6 border border-white/[0.06]">
-                {currentExplanation}
-              </div>
-              <p className="text-[11px] text-slate-500">
-                *แบบจำลองพยากรณ์และการวิเคราะห์ของ AI ใช้เพื่อเป็นแนวทางวางแผนความมั่งคั่งส่วนบุคคลเท่านั้น ไม่ถือเป็นคำรับรองผลตอบแทนในอนาคต
-              </p>
+            <div className="mt-5 relative z-10">
+              <StrategicRoadmapDisplay
+                explanation={currentExplanation}
+                modelUsed={currentModel}
+                updatedAt={currentUpdatedAt}
+                probabilityOfSuccess={result?.probabilityOfReachingTarget}
+                p50Value={result?.finalP50}
+                realP50Value={result?.finalRealP50}
+                monthlyRetirementIncome={result?.retirementMonthlyIncome}
+              />
             </div>
           ) : (
             <div className="mt-6 py-6 text-center space-y-3 relative z-10">
