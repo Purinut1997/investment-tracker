@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
+import useSWR from 'swr'
 import {
   ChevronDown,
   ChevronUp,
@@ -21,9 +22,11 @@ import {
   Info,
   Layers,
   ArrowRight,
+  Activity,
 } from 'lucide-react'
 import { StockLogo } from '@/components/StockLogo'
 import type { HoldingItem } from '@/lib/analytics/holdings'
+import type { TechnicalSignal } from '@/lib/market-data/technical-signals'
 
 interface SubAllocationDrillDownProps {
   categoryKey: string
@@ -53,6 +56,16 @@ export interface SubAssetItem {
   targetWeightInGroup: number
   driftInGroup: number // actual - target
   unrealizedPnLPercent: number
+  technical?: {
+    rsi14: number | null
+    supportS1: number | null
+    sma50: number | null
+    pullbackFromHigh: number | null
+    metricSummary: string
+    isNearSupport: boolean
+    isOversold: boolean
+    isOverbought: boolean
+  }
   signal: {
     type: 'DIP_BUY' | 'ACCUMULATE' | 'PAUSE' | 'BALANCED'
     badgeText: string
@@ -132,6 +145,17 @@ export function SubAllocationDrillDown({
     return {}
   }, [categoryKey, categoryHoldings, savedSubTargets, customTargets])
 
+  // Fetch Real Market Technical Signals via SWR (5-min cache)
+  const tickersParam = useMemo(() => {
+    return categoryHoldings.map((h) => h.ticker.toUpperCase()).join(',')
+  }, [categoryHoldings])
+
+  const { data: techData, isLoading: isTechLoading } = useSWR(
+    tickersParam ? `/api/market-data/technical-signals?tickers=${tickersParam}&market=${categoryKey}` : null,
+    { revalidateOnFocus: false, dedupingInterval: 120000 }
+  )
+  const liveSignals: Record<string, TechnicalSignal> = techData?.signals || {}
+
   // Build sub-asset items with technical and rebalancing signals
   const subItems: SubAssetItem[] = useMemo(() => {
     const safeGroupTotal = Math.max(1, categoryTotalValue)
@@ -143,42 +167,66 @@ export function SubAllocationDrillDown({
       const actualWeightInGroup = (h.currentValueBase / safeGroupTotal) * 100
       const actualWeightInPortfolio = (h.currentValueBase / safePortTotal) * 100
       const drift = actualWeightInGroup - targetWeight
+      const liveSig = liveSignals[tKey]
 
-      // Signal detection logic (Technical & Rebalance Timing)
+      // Institutional Signal Detection using Real Technical Indicators + Portfolio Drift
       let signal: SubAssetItem['signal']
 
-      if (drift <= -4) {
-        // Significantly underweight
-        if (h.unrealizedPnLPercent < -3 || h.unrealizedPnLPercent < 5) {
+      const isTechnicallyAtSupport =
+        liveSig?.isNearSupport || (liveSig?.pullbackFromHigh !== undefined && liveSig.pullbackFromHigh <= -6)
+      const isTechnicallyOversold = liveSig?.isOversold
+      const isTechnicallyOverbought = liveSig?.isOverbought
+
+      if (drift <= -3) {
+        // Underweight in portfolio
+        if (isTechnicallyOversold || isTechnicallyAtSupport) {
+          const detail = [
+            liveSig?.supportS1 ? `แนวรับ S1: $${liveSig.supportS1}` : null,
+            liveSig?.rsi14 ? `RSI ${liveSig.rsi14} (Oversold)` : null,
+            liveSig?.pullbackFromHigh ? `ย่อตัว ${liveSig.pullbackFromHigh}%` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ')
+
           signal = {
             type: 'DIP_BUY',
-            badgeText: '🔥 ชนแนวรับ / น่าช้อนพิเศษ (Top Buy)',
-            badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-            description: `สัดส่วนยังขาดอีก ${Math.abs(drift).toFixed(1)}% ราคาอยู่ในโซนได้เปรียบ แนะนำเร่งสะสม`,
+            badgeText: '🔥 ชนแนวรับจริง / RSI Oversold (น่าช้อน)',
+            badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs shadow-emerald-950/20',
+            description: `สัดส่วนยังขาดอีก ${Math.abs(drift).toFixed(1)}% ${
+              detail ? `(${detail})` : ''
+            } เป็นจุดช้อนซื้อที่ได้เปรียบสูง`,
           }
         } else {
           signal = {
             type: 'ACCUMULATE',
-            badgeText: '🟢 ขาดเป้าหมาย / ทยอยสะสม (Accumulate)',
+            badgeText: '🟢 สัดส่วนขาดเป้า / ทยอยสะสม (Accumulate)',
             badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-            description: `สัดส่วนต่ำกว่าเป้า ${Math.abs(drift).toFixed(1)}% ควรแบ่งเงินเติมในงวดนี้`,
+            description: `สัดส่วนต่ำกว่าเป้า ${Math.abs(drift).toFixed(1)}% ${
+              liveSig?.rsi14 ? `(RSI ${liveSig.rsi14})` : ''
+            } ควรแบ่งเงินเติมในงวดนี้`,
           }
         }
-      } else if (drift >= 5) {
-        // Significantly overweight
+      } else if (drift >= 4 || isTechnicallyOverbought) {
+        // Overweight in portfolio OR technically overbought
         signal = {
           type: 'PAUSE',
-          badgeText: '⏸️ โตเกินเป้า / งดซื้อชั่วคราว (Pause & Hold)',
+          badgeText: isTechnicallyOverbought
+            ? '⚠️ RSI Overbought / งดซื้อชั่วคราว'
+            : '⏸️ สัดส่วนโตเกินเป้า / งดซื้อชั่วคราว (Pause)',
           badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-          description: `สัดส่วนเกินเป้าไป +${drift.toFixed(1)}% ควรงดซื้อเพื่อไม่ให้พอร์ตกระจุกตัว`,
+          description: `สัดส่วนเกินเป้า +${drift.toFixed(1)}% ${
+            liveSig?.rsi14 ? `(RSI ${liveSig.rsi14} ตึงตัว)` : ''
+          } ควรงดซื้อเพื่อไม่ให้พอร์ตกระจุกตัว`,
         }
       } else {
-        // Well balanced within ±4%
+        // Balanced
         signal = {
           type: 'BALANCED',
           badgeText: '✨ สมดุลดี / สะสมตามแผนปกติ (Balanced)',
           badgeClass: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/20',
-          description: `สัดส่วนใกล้เคียงเป้าหมาย (${targetWeight}%) สะสมตามน้ำหนักปกติได้`,
+          description: `สัดส่วนใกล้เคียงเป้าหมาย (${targetWeight}%) ${
+            liveSig?.rsi14 ? `(RSI ${liveSig.rsi14})` : ''
+          } สะสมตามน้ำหนักปกติได้`,
         }
       }
 
@@ -187,17 +235,29 @@ export function SubAllocationDrillDown({
         name: h.assetName || h.ticker,
         market: h.market || categoryKey,
         shares: h.quantity,
-        currentPrice: h.currentPrice,
+        currentPrice: liveSig?.currentPrice || h.currentPrice,
         currentValueBase: h.currentValueBase,
         actualWeightInGroup,
         actualWeightInPortfolio,
         targetWeightInGroup: targetWeight,
         driftInGroup: drift,
         unrealizedPnLPercent: h.unrealizedPnLPercent,
+        technical: liveSig
+          ? {
+              rsi14: liveSig.rsi14,
+              supportS1: liveSig.supportS1,
+              sma50: liveSig.sma50,
+              pullbackFromHigh: liveSig.pullbackFromHigh,
+              metricSummary: liveSig.metricSummary,
+              isNearSupport: liveSig.isNearSupport,
+              isOversold: liveSig.isOversold,
+              isOverbought: liveSig.isOverbought,
+            }
+          : undefined,
         signal,
       }
     })
-  }, [categoryHoldings, categoryTotalValue, portfolioTotalValue, effectiveSubTargets, categoryKey])
+  }, [categoryHoldings, categoryTotalValue, portfolioTotalValue, effectiveSubTargets, categoryKey, liveSignals])
 
   // Smart Tactical Monthly DCA Recommendation Engine
   const tacticalPlan = useMemo(() => {
@@ -244,10 +304,14 @@ export function SubAllocationDrillDown({
       distributed += roundedAmt
 
       const estShares = item.currentPrice > 0 ? (roundedAmt / item.currentPrice) : 0
+      const techDetails = item.technical?.metricSummary
+        ? `[สัญญาณเทคนิคอลจริง: ${item.technical.metricSummary}]`
+        : ''
+
       const reason =
         item.signal.type === 'DIP_BUY'
-          ? `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% + ชนแนวรับสำคัญ/ราคาลงมาลึก จัดเป็นจุดช้อนซื้อที่ได้เปรียบสูงสุด`
-          : `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% แบ่งเงินเติมเพื่อดึงพอร์ตเข้าสู่เป้าหมาย ${item.targetWeightInGroup}%`
+          ? `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% ${techDetails} เข้าเงื่อนไขจุดช้อนซื้อที่ได้เปรียบสูง`
+          : `สัดส่วนยังขาดอีก ${Math.abs(item.driftInGroup).toFixed(1)}% ${techDetails} ทยอยเติมเพื่อดึงพอร์ตเข้าสู่เป้าหมาย ${item.targetWeightInGroup}%`
 
       allocations.set(item.ticker, {
         amount: roundedAmt,
@@ -483,11 +547,23 @@ export function SubAllocationDrillDown({
                   </td>
 
                   <td className="py-3 px-3 text-center">
-                    <span
-                      className={`inline-flex items-center text-[10px] font-semibold px-2.5 py-1 rounded-full border ${item.signal.badgeClass}`}
-                    >
-                      {item.signal.badgeText}
-                    </span>
+                    <div className="flex flex-col items-center gap-1">
+                      <span
+                        className={`inline-flex items-center text-[10px] font-semibold px-2.5 py-1 rounded-full border ${item.signal.badgeClass}`}
+                      >
+                        {item.signal.badgeText}
+                      </span>
+                      {item.technical?.metricSummary ? (
+                        <span className="text-[10px] font-mono text-slate-400 bg-white/[0.04] px-2 py-0.5 rounded-md border border-white/[0.06] flex items-center gap-1">
+                          <Activity className="w-2.5 h-2.5 text-indigo-400 shrink-0" />
+                          <span>{item.technical.metricSummary}</span>
+                        </span>
+                      ) : isTechLoading ? (
+                        <span className="text-[9px] text-slate-500 font-mono animate-pulse">
+                          กำลังวิเคราะห์กราฟจริง...
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               )
