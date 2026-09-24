@@ -243,6 +243,23 @@ Last updated: 2026-09-17
   - เชื่อมโยงผลลัพธ์เดิมในฐานข้อมูลและผลลัพธ์ใหม่เข้ากับ `StrategicRoadmapDisplay` สวยงามทันทีโดยไม่ต้อง Generate ใหม่
 - **Build Status**: `npm run build` ผ่าน 100% (60 routes)
 
+### 19. Phase 18: Executive Allocation Drift Matrix (Institutional Table Redesign) ✅
+- **Executive Rebalance Matrix (`app/plans/page.tsx`)**:
+  - พลิกโฉมการแสดงผลจากกล่องเดี่ยวหนาเทอะทะ (Bulky Double Bars) สู่ **ตารางเมทริกซ์สไตล์สถาบันการเงิน (Institutional Table)**:
+    - **Asset Class & Status**: ไอคอนกลุ่มสินทรัพย์ + ชื่อกลุ่ม + ป้ายสถานะ (`หลุดกรอบเป้าหมาย` / `เริ่มเบี่ยงเบน` / `สมดุลดี`)
+    - **Actual vs Target (%) with Glowing Target Pin**:
+      - แถบหลอดเดี่ยวทรงโมเดิร์นฉีดสีตามสัดส่วนปัจจุบันจริง
+      - ปักหมุดเป้าหมายสีขาวเรืองแสง (Target Pin Marker) ที่ระดับเปอร์เซ็นต์เป้าหมาย ทำให้เห็นทันทีว่าหลอดสีอยู่ก่อนหรือเกินเป้าหมาย โดยไม่ต้องเทียบสองแถบบนล่าง
+    - **Current Portfolio Value**: มูลค่าเงินบาทจริงในพอร์ต (`฿X,XXX`) พร้อมจำนวนสินทรัพย์ย่อย
+    - **Variance (Drift %)**: ป้ายส่วนต่างตัวเลขคมชัดตามโทนสีความเสี่ยง
+    - **Action Recommendation Pill**: กล่องแนะนำสั้นกระชับเข้าใจทันที:
+      - `⏸️ เกินเป้า ~฿11,597 (ชะลอเติม)` (Amber)
+      - `🟢 ขาดเป้า ~฿3,500 (เน้นเติม)` (Emerald)
+      - `✨ สัดส่วนสมดุลดี (DCA ตามปกติ)` (Cyan)
+    - **Sub-Allocation Drill-Down Row**:
+      - ปุ่มกดเจาะลึก `ดูย่อย (X รายการ) ▾` ที่เมื่อกดแล้วจะกางแถว Sub-Row ออกมาแสดงผลกล่อง `SubAllocationDrillDown` ด้านล่างของแถวนั้นอย่างแนบเนียนและสวยงาม
+- **Build Status**: `npm run build` ผ่าน 100% (60 routes) ไร้ข้อผิดพลาด
+
 ---
 
 ## วิธีการรันและทดสอบระบบ

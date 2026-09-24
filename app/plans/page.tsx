@@ -37,6 +37,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  PauseCircle,
 } from 'lucide-react'
 import CountUp from 'react-countup'
 import { SubAllocationDrillDown } from '@/components/plans/SubAllocationDrillDown'
@@ -938,211 +939,270 @@ export default function PlansPage() {
             </div>
 
             {/* ══════════════════════════════════════════════════════════════
-                DUAL-PROGRESS ALLOCATION DRIFT BARS (VISUAL COMPARISON)
+                EXECUTIVE REBALANCE MATRIX (INSTITUTIONAL TABLE)
             ══════════════════════════════════════════════════════════════ */}
             <div className="space-y-4 pt-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-bold text-white tracking-wide">
-                    การเปรียบเทียบสัดส่วนเป้าหมายกับพอร์ตปัจจุบัน (Allocation Drift)
+                  <h3 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
+                    การเปรียบเทียบสัดส่วนเป้าหมายกับพอร์ตปัจจุบัน (Allocation Drift Matrix)
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-normal">
+                      Institutional View
+                    </span>
                   </h3>
                   <p className="text-xs text-slate-400">
-                    แสดงแถบเปรียบเทียบสัดส่วนจริงกับเป้าหมาย พร้อมสัญลักษณ์แจ้งเตือนตามกรอบความเสี่ยง
+                    ตารางเมทริกซ์วิเคราะห์สัดส่วนจริงเทียบเป้าหมาย พร้อมคำแนะนำปรับสมดุลและระบบเจาะลึกสินทรัพย์รายตัว
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                {Object.entries(activePreset.targetAllocation)
-                  .filter(([key]) => !key.startsWith('_'))
-                  .map(([key, targetPct]) => {
-                  const upperKey = key.toUpperCase()
-                  const cfg =
-                    CATEGORY_CONFIG[upperKey] ?? {
-                      label: key,
-                      emoji: '📊',
-                      color: 'text-indigo-400',
-                      barColor: 'bg-indigo-500',
-                      bg: 'bg-indigo-500/10 border-indigo-500/20',
-                    }
+              {/* Matrix Table Container */}
+              <div className="rounded-2xl bg-[#141822] border border-white/[0.08] shadow-2xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/[0.08] bg-white/[0.02] text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
+                        <th className="py-3.5 px-4">กลุ่มสินทรัพย์</th>
+                        <th className="py-3.5 px-4 min-w-[220px]">จริง vs เป้าหมาย (%)</th>
+                        <th className="py-3.5 px-4 text-right">มูลค่าปัจจุบัน</th>
+                        <th className="py-3.5 px-4 text-center">ส่วนต่าง (Drift)</th>
+                        <th className="py-3.5 px-4">สถานะ & คำแนะนำ</th>
+                        <th className="py-3.5 px-4 text-center">เจาะลึกสินทรัพย์</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.05]">
+                      {Object.entries(activePreset.targetAllocation)
+                        .filter(([key]) => !key.startsWith('_'))
+                        .map(([key, targetPct]) => {
+                          const upperKey = key.toUpperCase()
+                          const cfg =
+                            CATEGORY_CONFIG[upperKey] ?? {
+                              label: key,
+                              emoji: '📊',
+                              color: 'text-indigo-400',
+                              barColor: 'bg-indigo-500',
+                              bg: 'bg-indigo-500/10 border-indigo-500/20',
+                            }
 
-                  // Find actual percent either from ticker or category
-                  let actualPct = actualAllocation[upperKey] ?? 0
-                  if (data?.actualByTicker && data.actualByTicker[upperKey] !== undefined) {
-                    actualPct = data.actualByTicker[upperKey]
-                  }
+                          // Find actual percent either from ticker or category
+                          let actualPct = actualAllocation[upperKey] ?? 0
+                          if (data?.actualByTicker && data.actualByTicker[upperKey] !== undefined) {
+                            actualPct = data.actualByTicker[upperKey]
+                          }
 
-                  const diff = actualPct - targetPct
-                  const isOver = diff > 0
-                  const isUnder = diff < 0
-                  const absDiff = Math.abs(diff)
-                  const diffAmount = (absDiff / 100) * totalValue
-                  const isOnTarget = absDiff <= toleranceBand
+                          const diff = actualPct - targetPct
+                          const isOver = diff > 0
+                          const isUnder = diff < 0
+                          const absDiff = Math.abs(diff)
+                          const diffAmount = (absDiff / 100) * totalValue
+                          const isOnTarget = absDiff <= toleranceBand
 
-                  // Holdings matching this category
-                  const matchingHoldings = holdings.filter((h: any) => {
-                    const hMarket = (h.market || '').toUpperCase()
-                    const hType = (h.assetType || '').toUpperCase()
-                    if (upperKey === 'US') return hMarket === 'US' || (!hMarket && hType !== 'CRYPTO' && hType !== 'GOLD')
-                    if (upperKey === 'TH') return hMarket === 'TH' || h.ticker.endsWith('.BK')
-                    if (upperKey === 'CRYPTO') return hType === 'CRYPTO'
-                    if (upperKey === 'GOLD') return hType === 'GOLD'
-                    if (upperKey === 'CASH') return false
-                    return hMarket === upperKey || hType === upperKey
-                  })
+                          // Holdings matching this category
+                          const matchingHoldings = holdings.filter((h: any) => {
+                            const hMarket = (h.market || '').toUpperCase()
+                            const hType = (h.assetType || '').toUpperCase()
+                            if (upperKey === 'US') return hMarket === 'US' || (!hMarket && hType !== 'CRYPTO' && hType !== 'GOLD')
+                            if (upperKey === 'TH') return hMarket === 'TH' || h.ticker.endsWith('.BK')
+                            if (upperKey === 'CRYPTO') return hType === 'CRYPTO'
+                            if (upperKey === 'GOLD') return hType === 'GOLD'
+                            if (upperKey === 'CASH') return false
+                            return hMarket === upperKey || hType === upperKey
+                          })
 
-                  const categoryValue =
-                    upperKey === 'CASH'
-                      ? totalCash
-                      : matchingHoldings.reduce((sum: number, h: any) => sum + (h.currentValueBase || 0), 0)
+                          const categoryValue =
+                            upperKey === 'CASH'
+                              ? totalCash
+                              : matchingHoldings.reduce((sum: number, h: any) => sum + (h.currentValueBase || 0), 0)
 
-                  const isExpanded = !!expandedCategories[key] || !!expandedCategories[upperKey]
+                          const isExpanded = !!expandedCategories[key] || !!expandedCategories[upperKey]
 
-                  return (
-                    <div
-                      key={key}
-                      className="p-4 sm:p-5 rounded-2xl bg-[#181C25] border border-white/[0.06] hover:border-white/[0.12] transition-all space-y-3.5"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-lg">{cfg.emoji}</span>
-                          <span className="font-bold text-white text-sm">{key}</span>
-                          <span className="text-xs text-slate-400 font-sans">({cfg.label})</span>
-                          {absDiff > toleranceBand * 1.7 ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                              หลุดกรอบเป้าหมาย
-                            </span>
-                          ) : !isOnTarget ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20">
-                              เริ่มเบี่ยงเบน
-                            </span>
-                          ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">
-                              สมดุลดี
-                            </span>
-                          )}
-                        </div>
+                          return (
+                            <React.Fragment key={key}>
+                              <tr
+                                className={`transition-all hover:bg-white/[0.02] ${
+                                  isExpanded ? 'bg-indigo-950/20' : ''
+                                }`}
+                              >
+                                {/* Asset Class */}
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-2.5">
+                                    <span className="text-xl shrink-0">{cfg.emoji}</span>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-white text-sm">{key}</span>
+                                        <span className="text-xs text-slate-400 font-sans">
+                                          {cfg.label}
+                                        </span>
+                                      </div>
+                                      <div className="mt-0.5">
+                                        {absDiff > toleranceBand * 1.7 ? (
+                                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                            หลุดกรอบเป้าหมาย
+                                          </span>
+                                        ) : !isOnTarget ? (
+                                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                                            เริ่มเบี่ยงเบน
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">
+                                            สมดุลดี
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
 
-                        <div className="flex items-center gap-4 text-xs font-mono">
-                          <div className="flex flex-col items-end">
-                            <span className="text-[10px] text-slate-500">เป้าหมาย</span>
-                            <span className="text-white font-semibold">{targetPct}%</span>
-                          </div>
-                          <div className="flex flex-col items-end">
-                            <span className="text-[10px] text-slate-500">ปัจจุบัน</span>
-                            <span className={`font-semibold ${cfg.color}`}>{actualPct.toFixed(1)}%</span>
-                          </div>
-                          <div className="flex flex-col items-end pl-3 border-l border-white/[0.1]">
-                            <span className="text-[10px] text-slate-500">ส่วนต่าง</span>
-                            <span
-                              className={`font-bold ${
-                                isOnTarget
-                                  ? 'text-slate-400'
-                                  : isOver
-                                  ? 'text-amber-400'
-                                  : 'text-blue-400'
-                              }`}
-                            >
-                              {diff > 0 ? '+' : ''}
-                              {diff.toFixed(1)}%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                                {/* Actual vs Target with Visual Target Marker Pin */}
+                                <td className="py-4 px-4 min-w-[220px]">
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs font-mono">
+                                      <div>
+                                        <span className="text-slate-400 text-[10px] mr-1">จริง:</span>
+                                        <span className={`font-bold ${cfg.color}`}>
+                                          {actualPct.toFixed(1)}%
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-400 text-[10px] mr-1">เป้า:</span>
+                                        <span className="text-slate-200 font-semibold">
+                                          {targetPct}%
+                                        </span>
+                                      </div>
+                                    </div>
 
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-medium text-slate-500 w-12 shrink-0">
-                            เป้าหมาย
-                          </span>
-                          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-slate-500 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, targetPct)}%` }}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-medium text-slate-500 w-12 shrink-0">
-                            ปัจจุบัน
-                          </span>
-                          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full ${cfg.barColor} rounded-full transition-all duration-500 shadow-sm`}
-                              style={{ width: `${Math.min(100, actualPct)}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
+                                    {/* Unified Progress Bar with Glowing Target Pin */}
+                                    <div className="relative h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                      {/* Actual Fill */}
+                                      <div
+                                        className={`h-full ${cfg.barColor} rounded-full transition-all duration-500`}
+                                        style={{ width: `${Math.min(100, actualPct)}%` }}
+                                      />
+                                      {/* Target Pin Marker */}
+                                      {targetPct > 0 && targetPct < 100 && (
+                                        <div
+                                          className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)] z-10 pointer-events-none"
+                                          style={{ left: `calc(${targetPct}% - 2px)` }}
+                                          title={`เป้าหมาย: ${targetPct}%`}
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
 
-                      {absDiff > toleranceBand && totalValue > 0 && (
-                        <div className="pt-2.5 border-t border-white/[0.04]">
-                          <p className="text-xs font-mono text-slate-300 flex items-center gap-2">
-                            <span className="text-indigo-400">💡</span>
-                            {isOver ? (
-                              <span>
-                                สัดส่วนเกินเป้าหมาย แนะนำชะลอการเติมเงินในกลุ่มนี้ (ส่วนเกินประมาณ{' '}
-                                <strong className="text-amber-400">
-                                  ฿{diffAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                </strong>
-                                )
-                              </span>
-                            ) : (
-                              <span>
-                                สัดส่วนต่ำกว่าเป้าหมาย แนะนำเน้นเติมเงินงวดใหม่เข้ากลุ่มนี้ (ขาดอีกประมาณ{' '}
-                                <strong className="text-emerald-400">
-                                  ฿{diffAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                </strong>
-                                )
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      )}
+                                {/* Portfolio Value */}
+                                <td className="py-4 px-4 text-right font-mono">
+                                  <div className="font-bold text-white text-sm">
+                                    ฿{Math.round(categoryValue).toLocaleString()}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 font-sans">
+                                    {matchingHoldings.length} รายการ
+                                  </div>
+                                </td>
 
-                      {/* Drill-down Toggle Button */}
-                      <div className="pt-2 border-t border-white/[0.04]">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpandCategory(key)}
-                          className="w-full py-1.5 flex items-center justify-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-semibold transition-colors cursor-pointer group"
-                        >
-                          {isExpanded ? (
-                            <>
-                              <ChevronUp className="w-4 h-4 transition-transform group-hover:-translate-y-0.5" />
-                              <span>ซ่อนรายละเอียดสัดส่วนย่อยในกลุ่ม {key}</span>
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
-                              <span>
-                                ดูสัดส่วนหุ้นย่อยในกลุ่มนี้ ({matchingHoldings.length} รายการ) & แผนเติมเงินเดือนหน้า
-                              </span>
-                            </>
-                          )}
-                        </button>
-                      </div>
+                                {/* Variance (Drift) */}
+                                <td className="py-4 px-4 text-center">
+                                  <span
+                                    className={`inline-block px-2.5 py-1 rounded-lg text-xs font-mono font-bold ${
+                                      isOnTarget
+                                        ? 'text-slate-300 bg-white/[0.04] border border-white/[0.08]'
+                                        : isOver
+                                        ? 'text-amber-300 bg-amber-500/15 border border-amber-500/30'
+                                        : 'text-blue-300 bg-blue-500/15 border border-blue-500/30'
+                                    }`}
+                                  >
+                                    {diff > 0 ? '+' : ''}
+                                    {diff.toFixed(1)}%
+                                  </span>
+                                </td>
 
-                      {/* Sub-Allocation Drill-Down Content */}
-                      {isExpanded && (
-                        <SubAllocationDrillDown
-                          categoryKey={key}
-                          categoryLabel={cfg.label}
-                          categoryEmoji={cfg.emoji}
-                          holdings={holdings}
-                          categoryTotalValue={categoryValue}
-                          portfolioTotalValue={totalValue}
-                          baseCurrency={baseCurrency}
-                          targetCategoryPct={targetPct}
-                          actualCategoryPct={actualPct}
-                          defaultDcaBudget={Number(activePreset.monthlyContribution) || 5000}
-                          savedSubTargets={activePreset.subTargets?.[upperKey] || {}}
-                          onSaveSubTargets={(newSub) => handleSaveSubTargets(key, newSub)}
-                        />
-                      )}
-                    </div>
-                  )
-                })}
+                                {/* Action Recommendation */}
+                                <td className="py-4 px-4">
+                                  {absDiff > toleranceBand && totalValue > 0 ? (
+                                    isOver ? (
+                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[11px]">
+                                        <PauseCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                        <span>
+                                          เกินเป้า ~฿{Math.round(diffAmount).toLocaleString()} (ชะลอเติม)
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[11px]">
+                                        <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                        <span>
+                                          ขาดเป้า ~฿{Math.round(diffAmount).toLocaleString()} (เน้นเติม)
+                                        </span>
+                                      </div>
+                                    )
+                                  ) : (
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[11px]">
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                      <span>สัดส่วนสมดุลดี (DCA ตามปกติ)</span>
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Drill-Down Action Button */}
+                                <td className="py-4 px-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpandCategory(key)}
+                                    className={`px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 mx-auto ${
+                                      isExpanded
+                                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
+                                        : 'bg-white/[0.04] hover:bg-indigo-600/20 text-indigo-300 hover:text-white border border-indigo-500/25'
+                                    }`}
+                                  >
+                                    <span>
+                                      {isExpanded ? 'ปิด' : `ดูย่อย (${matchingHoldings.length})`}
+                                    </span>
+                                    {isExpanded ? (
+                                      <ChevronUp className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </td>
+                              </tr>
+
+                              {/* Expandable Sub-Allocation Drill-Down Row */}
+                              {isExpanded && (
+                                <tr className="bg-[#0e111a] border-b border-indigo-500/30">
+                                  <td
+                                    colSpan={6}
+                                    className="p-3 sm:p-5 bg-gradient-to-b from-[#131726]/90 via-[#0e121e] to-[#0a0d16]"
+                                  >
+                                    <div className="rounded-2xl border border-indigo-500/25 p-2 sm:p-4 bg-black/40 shadow-inner">
+                                      <SubAllocationDrillDown
+                                        categoryKey={key}
+                                        categoryLabel={cfg.label}
+                                        categoryEmoji={cfg.emoji}
+                                        holdings={holdings}
+                                        categoryTotalValue={categoryValue}
+                                        portfolioTotalValue={totalValue}
+                                        baseCurrency={baseCurrency}
+                                        targetCategoryPct={targetPct}
+                                        actualCategoryPct={actualPct}
+                                        defaultDcaBudget={
+                                          Number(activePreset.monthlyContribution) || 5000
+                                        }
+                                        savedSubTargets={
+                                          activePreset.subTargets?.[upperKey] || {}
+                                        }
+                                        onSaveSubTargets={(newSub) =>
+                                          handleSaveSubTargets(key, newSub)
+                                        }
+                                      />
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          )
+                        })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
