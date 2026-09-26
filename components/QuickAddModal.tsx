@@ -126,6 +126,76 @@ function calculateTxnTotal(
   return Number(Math.max(0, q * p + f).toFixed(2))
 }
 
+function compressImage(
+  file: File,
+  maxDimension = 1600,
+  quality = 0.85
+): Promise<{ base64: string; mimeType: string; size: number }> {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) {
+      resolve({ base64: '', mimeType: 'image/jpeg', size: 0 })
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        let width = img.width
+        let height = img.height
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width)
+            width = maxDimension
+          } else {
+            width = Math.round((width * maxDimension) / height)
+            height = maxDimension
+          }
+        }
+
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height)
+          const compressedBase64 = canvas.toDataURL('image/jpeg', quality)
+          const approxSize = Math.round((compressedBase64.length * 3) / 4)
+          resolve({
+            base64: compressedBase64,
+            mimeType: 'image/jpeg',
+            size: approxSize,
+          })
+          return
+        }
+
+        resolve({
+          base64: e.target?.result as string,
+          mimeType: file.type || 'image/jpeg',
+          size: file.size,
+        })
+      }
+
+      img.onerror = () => {
+        resolve({
+          base64: e.target?.result as string,
+          mimeType: file.type || 'image/jpeg',
+          size: file.size,
+        })
+      }
+
+      img.src = e.target?.result as string
+    }
+
+    reader.onerror = () => {
+      resolve({ base64: '', mimeType: 'image/jpeg', size: 0 })
+    }
+
+    reader.readAsDataURL(file)
+  })
+}
+
 export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: QuickAddModalProps) {
   const [tab, setTab] = useState<'photos' | 'ai' | 'manual'>(initialTab)
   const [nlText, setNlText] = useState('')
@@ -246,23 +316,39 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
     return () => window.removeEventListener('paste', handlePaste)
   }, [tab])
 
-  function processImageFile(file: File) {
+  async function processImageFile(file: File) {
     if (!file.type.startsWith('image/')) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
+
+    try {
+      const compressed = await compressImage(file)
+      if (!compressed.base64) return
       setUploadedFiles((prev) => [
         ...prev,
         {
-          name: file.name || `screenshot-${Date.now()}.png`,
-          size: file.size,
-          base64: result,
-          mimeType: file.type || 'image/jpeg',
+          name: file.name || `slip-${Date.now()}.jpg`,
+          size: compressed.size,
+          base64: compressed.base64,
+          mimeType: compressed.mimeType,
         },
       ])
       setError('')
+    } catch {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result as string
+        setUploadedFiles((prev) => [
+          ...prev,
+          {
+            name: file.name || `screenshot-${Date.now()}.png`,
+            size: file.size,
+            base64: result,
+            mimeType: file.type || 'image/jpeg',
+          },
+        ])
+        setError('')
+      }
+      reader.readAsDataURL(file)
     }
-    reader.readAsDataURL(file)
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -290,26 +376,46 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       return
     }
 
+    const abortController = new AbortController()
     setParsing(true)
     setError('')
     setSuccessMsg('')
+
+    // 45s safety timeout
+    const timeoutId = setTimeout(() => {
+      abortController.abort()
+    }, 45000)
+
+    const handleCancelScan = () => {
+      clearTimeout(timeoutId)
+      abortController.abort()
+      setParsing(false)
+      setStatusModal(null)
+    }
+
     setStatusModal({
       isOpen: true,
       type: 'loading',
       title: 'กำลังสแกนและวิเคราะห์สลิป...',
       description: `ระบบกำลังถอดรหัสภาพสลิปจำนวน ${uploadedFiles.length} รูป และสกัดรายการลงทุน`,
       progressStep: 'AI Vision & Multimodal Extraction...',
+      secondaryAction: {
+        label: 'ยกเลิก',
+        onClick: handleCancelScan,
+      },
     })
 
     try {
       const res = await fetch('/api/ai/extract-slips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortController.signal,
         body: JSON.stringify({
           images: uploadedFiles.map((f) => ({ data: f.base64, mimeType: f.mimeType })),
         }),
       })
 
+      clearTimeout(timeoutId)
       const json = await parseResponseJson(res, 'การวิเคราะห์ภาพถ่ายล้มเหลว')
 
       const txns: ExtractedTxn[] = (json.data?.transactions || []).map((t: any, i: number) => ({
@@ -350,19 +456,48 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       setAiSummaryText(json.data?.summary || `พบ ${txns.length} รายการธุรกรรม และ ${cash.length} บัญชีเงินสด`)
       setHasExtracted(true)
 
+      // CRITICAL FIX: Dismiss the loading modal so user can view and edit extracted items
+      setStatusModal(null)
+
       if (txns.length === 0 && cash.length === 0) {
         setError('ไม่พบข้อมูลธุรกรรมหรือเงินสดในภาพที่ส่งมา กรุณาตรวจสอบความคมชัดของภาพ')
+        setStatusModal({
+          isOpen: true,
+          type: 'warning',
+          title: 'ไม่พบรายการในภาพ',
+          description: 'ระบบไม่สามารถตรวจพบรายการซื้อขายหรือยอดเงินสดในสลิปที่แนบมา กรุณาลองอัปโหลดภาพที่มีความคมชัดอีกครั้ง',
+          primaryAction: {
+            label: 'ตกลง',
+            onClick: () => setStatusModal(null),
+          },
+        })
+      } else {
+        setSuccessMsg(`วิเคราะห์สลิปสำเร็จ! พบ ${txns.length} รายการธุรกรรม ตรวจสอบและแก้ไขข้อมูลก่อนกดบันทึกได้เลย`)
       }
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'การวิเคราะห์ภาพถ่ายล้มเหลว'))
-      setStatusModal({
-        isOpen: true,
-        type: 'error',
-        title: 'การวิเคราะห์ภาพถ่ายล้มเหลว',
-        description: getErrorMessage(err, 'ไม่สามารถสกัดข้อมูลจากภาพได้ กรุณาลองใหม่อีกครั้ง'),
-        primaryAction: { label: 'ลองใหม่', onClick: () => setStatusModal(null) },
-      })
+      clearTimeout(timeoutId)
+      const isAbort = (err as any)?.name === 'AbortError'
+      if (isAbort) {
+        setError('ยกเลิกการสแกนสลิป หรือการเชื่อมต่อหมดเวลา (Timeout)')
+        setStatusModal({
+          isOpen: true,
+          type: 'warning',
+          title: 'การวิเคราะห์หมดเวลาหรือถูกยกเลิก',
+          description: 'การสกัดข้อมูลภาพใช้เวลานานเกินกำหนด หรือคุณได้กดยกเลิก กรุณาลองใหม่อีกครั้ง',
+          primaryAction: { label: 'ตกลง', onClick: () => setStatusModal(null) },
+        })
+      } else {
+        setError(getErrorMessage(err, 'การวิเคราะห์ภาพถ่ายล้มเหลว'))
+        setStatusModal({
+          isOpen: true,
+          type: 'error',
+          title: 'การวิเคราะห์ภาพถ่ายล้มเหลว',
+          description: getErrorMessage(err, 'ไม่สามารถสกัดข้อมูลจากภาพได้ กรุณาลองใหม่อีกครั้ง'),
+          primaryAction: { label: 'ลองใหม่', onClick: () => setStatusModal(null) },
+        })
+      }
     } finally {
+      clearTimeout(timeoutId)
       setParsing(false)
     }
   }

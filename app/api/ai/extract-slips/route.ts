@@ -134,6 +134,7 @@ ${accountsListStr}
       images: imageParts,
       logType: 'quick_add_multimodal',
       systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
     })
 
     // Clean JSON response
@@ -144,7 +145,13 @@ ${accountsListStr}
 
     let parsedResult: any
     try {
-      parsedResult = JSON.parse(cleanText)
+      let jsonStr = cleanText
+      const firstBrace = cleanText.indexOf('{')
+      const lastBrace = cleanText.lastIndexOf('}')
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        jsonStr = cleanText.substring(firstBrace, lastBrace + 1)
+      }
+      parsedResult = JSON.parse(jsonStr)
     } catch (parseErr) {
       console.error('[extract-slips] JSON Parse error. Raw output:', cleanText)
       throw new Error('AI ส่งผลลัพธ์ที่ไม่ใช่ JSON ที่ถูกต้อง กรุณาลองใหม่อีกครั้ง')

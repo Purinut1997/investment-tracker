@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect } from 'react'
-import { Check, AlertTriangle, XCircle, Sparkles, ArrowRight, Loader2 } from 'lucide-react'
+import { Check, AlertTriangle, XCircle, Sparkles, ArrowRight, Loader2, X } from 'lucide-react'
 
 export interface StatusDetailItem {
   label: string
@@ -49,10 +49,28 @@ export function StatusModal({
     return () => clearTimeout(timer)
   }, [isOpen, autoCloseMs, type, onClose])
 
+  useEffect(() => {
+    if (!isOpen || !onClose) return
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        onClose?.()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onClose && type !== 'loading') {
+          onClose()
+        }
+      }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+    >
       <div
         className={`relative w-full max-w-md rounded-3xl p-6 sm:p-8 bg-[#12151C] border border-white/10 shadow-2xl text-center overflow-hidden animate-success-pop ${
           type === 'success'
@@ -64,6 +82,18 @@ export function StatusModal({
             : 'border-amber-500/40'
         }`}
       >
+        {/* Close Button */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer z-20"
+            title="ปิดหน้าต่าง"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Background ambient lighting aura */}
         <div
           className={`absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl pointer-events-none opacity-25 ${
