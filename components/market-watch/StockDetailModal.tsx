@@ -252,127 +252,202 @@ function AiStructuredDashboardView({
 
       {/* 2. Business Overview (บริษัททำอะไร / รายได้มาจากไหน) */}
       {aiData.businessOverview && (
-        <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.07] shadow-sm">
-          <div className="flex items-center gap-2 mb-2">
-            <Building2 className="w-4 h-4 text-indigo-400" />
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#121620] border border-white/[0.08] shadow-sm space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+              <Building2 className="w-3.5 h-3.5" />
+            </div>
             <h5 className="text-xs font-bold text-white uppercase tracking-wider">
               🏢 ภาพรวมธุรกิจ & ที่มาของรายได้ (Business & Revenue Engine)
             </h5>
           </div>
-          <p className="text-xs sm:text-[13px] text-slate-300 leading-relaxed font-normal">
+          <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal pl-8">
             {aiData.businessOverview}
           </p>
         </div>
       )}
 
       {/* 3. Financial Performance (ผลประกอบการ: Revenue, EPS, Growth, FCF) */}
-      <div>
-        <div className="flex items-center gap-2 mb-2.5">
-          <BarChart3 className="w-4 h-4 text-emerald-400" />
-          <h5 className="text-xs font-bold text-white uppercase tracking-wider">
-            📊 ผลประกอบการสำคัญ (Financial Performance)
-          </h5>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <BarChart3 className="w-3.5 h-3.5" />
+            </div>
+            <h5 className="text-xs font-bold text-white uppercase tracking-wider">
+              📊 ผลประกอบการสำคัญ (Financial Performance)
+            </h5>
+          </div>
+          <span className="text-[11px] text-slate-400 font-normal hidden sm:inline">
+            ตัวเลขงบการเงินล่าสุด & ทิศทางการเติบโต
+          </span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+
+        {/* 2-Column Responsive Grid with plenty of reading space */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {/* Revenue */}
-          <div className="p-3.5 rounded-xl bg-[#121620] border border-white/[0.06] hover:border-indigo-500/30 transition-all">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
-              รายได้รวม (Revenue)
-            </span>
-            <span className="text-sm sm:text-base font-bold text-white font-mono mt-1 block">
-              {aiData.financialPerformance?.revenue || (stock?.revenue ? `${currencySymbol}${(stock.revenue / 1e9).toFixed(1)}B` : '—')}
-            </span>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">ยอดขายรอบ 12 เดือน</span>
+          <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.08] hover:border-indigo-500/30 transition-all space-y-2">
+            <div className="flex items-center justify-between gap-2 border-b border-white/[0.04] pb-2">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-indigo-400" />
+                รายได้รวม (Revenue)
+              </span>
+              {stock?.revenue && (
+                <span className="text-xs font-mono font-bold text-white px-2.5 py-0.5 rounded-lg bg-white/[0.06] border border-white/10">
+                  {currencySymbol}{(stock.revenue / 1e9).toFixed(1)}B
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
+              {aiData.financialPerformance?.revenue || '—'}
+            </p>
           </div>
 
           {/* EPS */}
-          <div className="p-3.5 rounded-xl bg-[#121620] border border-white/[0.06] hover:border-indigo-500/30 transition-all">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
-              กำไรต่อหุ้น (EPS)
-            </span>
-            <span className="text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1 block">
-              {aiData.financialPerformance?.eps || (stock?.eps ? `${currencySymbol}${stock.eps}` : '—')}
-            </span>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">คุณภาพกำไรสุทธิ</span>
+          <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.08] hover:border-emerald-500/30 transition-all space-y-2">
+            <div className="flex items-center justify-between gap-2 border-b border-white/[0.04] pb-2">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-emerald-400" />
+                กำไรต่อหุ้น (EPS)
+              </span>
+              {stock?.eps && (
+                <span className="text-xs font-mono font-bold text-emerald-400 px-2.5 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  {currencySymbol}{stock.eps}
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
+              {aiData.financialPerformance?.eps || '—'}
+            </p>
           </div>
 
-          {/* Growth */}
-          <div className="p-3.5 rounded-xl bg-[#121620] border border-white/[0.06] hover:border-indigo-500/30 transition-all">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
-              การเติบโต (Growth YoY)
-            </span>
-            <span className="text-sm sm:text-base font-bold text-white font-mono mt-1 block">
-              {aiData.financialPerformance?.growth || (stock?.revenueGrowth ? `+${stock.revenueGrowth}%` : '—')}
-            </span>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">ทิศทางการขยายตัว</span>
+          {/* Growth YoY */}
+          <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.08] hover:border-cyan-500/30 transition-all space-y-2">
+            <div className="flex items-center justify-between gap-2 border-b border-white/[0.04] pb-2">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+                การเติบโตของรายได้ (Growth YoY)
+              </span>
+              {stock?.revenueGrowth && (
+                <span className="text-xs font-mono font-bold text-cyan-300 px-2.5 py-0.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                  +{stock.revenueGrowth}%
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
+              {aiData.financialPerformance?.growth || '—'}
+            </p>
           </div>
 
-          {/* FCF */}
-          <div className="p-3.5 rounded-xl bg-[#121620] border border-white/[0.06] hover:border-indigo-500/30 transition-all">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
-              กระแสเงินสด (FCF)
-            </span>
-            <span className="text-sm sm:text-base font-bold text-cyan-400 font-mono mt-1 block">
-              {aiData.financialPerformance?.fcf || (stock?.freeCashflow ? `${currencySymbol}${(stock.freeCashflow / 1e9).toFixed(1)}B` : '—')}
-            </span>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Free Cash Flow</span>
+          {/* Free Cash Flow */}
+          <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.08] hover:border-teal-500/30 transition-all space-y-2">
+            <div className="flex items-center justify-between gap-2 border-b border-white/[0.04] pb-2">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-teal-400" />
+                กระแสเงินสดอิสระ (Free Cash Flow)
+              </span>
+              {stock?.freeCashflow && (
+                <span className="text-xs font-mono font-bold text-teal-300 px-2.5 py-0.5 rounded-lg bg-teal-500/10 border border-teal-500/20">
+                  {currencySymbol}{(stock.freeCashflow / 1e9).toFixed(1)}B
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
+              {aiData.financialPerformance?.fcf || '—'}
+            </p>
           </div>
         </div>
       </div>
 
       {/* 4. Valuation & Dividend (P/E, P/B, EV/EBITDA, Dividend Yield, Payout Ratio) */}
-      <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.07] space-y-3">
-        <div className="flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-amber-400" />
-          <h5 className="text-xs font-bold text-white uppercase tracking-wider">
-            💰 การประเมินมูลค่า & เงินปันผล (Valuation & Dividend Metrics)
-          </h5>
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#121620] border border-white/[0.08] space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <DollarSign className="w-3.5 h-3.5" />
+            </div>
+            <h5 className="text-xs font-bold text-white uppercase tracking-wider">
+              💰 การประเมินมูลค่า & เงินปันผล (Valuation & Dividend Metrics)
+            </h5>
+          </div>
+          <span className="text-[11px] text-slate-400 font-normal hidden sm:inline">
+            เปรียบเทียบความถูกแพงและผลตอบแทน
+          </span>
         </div>
+
+        {/* Top 5 Metric Badges */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-          <div className="p-3 rounded-xl bg-slate-900/70 border border-white/[0.04]">
+          <div className="p-3 rounded-xl bg-slate-900/80 border border-white/[0.06] text-center">
             <span className="text-[10px] text-slate-400 block font-medium">P/E Ratio</span>
-            <span className="text-sm font-bold text-white font-mono mt-0.5 block">
+            <span className="text-sm sm:text-base font-bold text-white font-mono mt-0.5 block">
               {stock?.pe ? `${stock.pe}x` : 'N/A'}
             </span>
-            <span className="text-[10px] text-slate-400 truncate block mt-0.5">
-              {aiData.valuationAndDividend?.pe || 'ระดับความถูกแพง'}
-            </span>
           </div>
-          <div className="p-3 rounded-xl bg-slate-900/70 border border-white/[0.04]">
+          <div className="p-3 rounded-xl bg-slate-900/80 border border-white/[0.06] text-center">
             <span className="text-[10px] text-slate-400 block font-medium">P/B Ratio</span>
-            <span className="text-sm font-bold text-white font-mono mt-0.5 block">
+            <span className="text-sm sm:text-base font-bold text-white font-mono mt-0.5 block">
               {stock?.pb ? `${stock.pb}x` : 'N/A'}
             </span>
-            <span className="text-[10px] text-slate-400 truncate block mt-0.5">
-              {aiData.valuationAndDividend?.pb || 'เทียบมูลค่าทางบัญชี'}
-            </span>
           </div>
-          <div className="p-3 rounded-xl bg-slate-900/70 border border-white/[0.04]">
+          <div className="p-3 rounded-xl bg-slate-900/80 border border-white/[0.06] text-center">
             <span className="text-[10px] text-slate-400 block font-medium">EV/EBITDA</span>
-            <span className="text-sm font-bold text-white font-mono mt-0.5 block">
+            <span className="text-sm sm:text-base font-bold text-white font-mono mt-0.5 block">
               {stock?.evEbitda ? `${stock.evEbitda}x` : 'N/A'}
             </span>
-            <span className="text-[10px] text-slate-400 truncate block mt-0.5">
-              {aiData.valuationAndDividend?.evEbitda || 'มูลค่ากิจการต่อกำไร'}
-            </span>
           </div>
-          <div className="p-3 rounded-xl bg-slate-900/70 border border-white/[0.04]">
+          <div className="p-3 rounded-xl bg-slate-900/80 border border-white/[0.06] text-center">
             <span className="text-[10px] text-slate-400 block font-medium">Dividend Yield</span>
-            <span className="text-sm font-bold text-emerald-400 font-mono mt-0.5 block">
+            <span className="text-sm sm:text-base font-bold text-emerald-400 font-mono mt-0.5 block">
               {stock?.dividendYield !== null && stock?.dividendYield !== undefined ? `${stock.dividendYield}%` : '0.00%'}
             </span>
-            <span className="text-[10px] text-slate-400 truncate block mt-0.5">
-              {aiData.valuationAndDividend?.dividendYield || 'อัตราผลตอบแทน'}
-            </span>
           </div>
-          <div className="p-3 rounded-xl bg-slate-900/70 border border-white/[0.04]">
+          <div className="p-3 rounded-xl bg-slate-900/80 border border-white/[0.06] text-center col-span-2 sm:col-span-1">
             <span className="text-[10px] text-slate-400 block font-medium">Payout Ratio</span>
-            <span className="text-sm font-bold text-indigo-300 font-mono mt-0.5 block">
+            <span className="text-sm sm:text-base font-bold text-indigo-300 font-mono mt-0.5 block">
               {stock?.payoutRatio ? `${stock.payoutRatio}%` : 'N/A'}
             </span>
-            <span className="text-[10px] text-slate-400 truncate block mt-0.5">
-              {aiData.valuationAndDividend?.payoutRatio || 'ความปลอดภัยปันผล'}
+          </div>
+        </div>
+
+        {/* Qualitative AI Valuation & Dividend Breakdown - No Truncation */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          {/* Card 1: Valuation analysis */}
+          <div className="p-3.5 rounded-xl bg-[#161B26] border border-white/[0.06] space-y-2">
+            <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+              🎯 ความถูกแพงของราคาหุ้น (Valuation Assessment)
             </span>
+            <div className="space-y-1.5 text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
+              {aiData.valuationAndDividend?.pe && (
+                <p>• <strong className="text-white">P/E Context:</strong> {aiData.valuationAndDividend.pe}</p>
+              )}
+              {aiData.valuationAndDividend?.pb && (
+                <p>• <strong className="text-white">P/B Context:</strong> {aiData.valuationAndDividend.pb}</p>
+              )}
+              {aiData.valuationAndDividend?.evEbitda && (
+                <p>• <strong className="text-white">EV/EBITDA:</strong> {aiData.valuationAndDividend.evEbitda}</p>
+              )}
+              {!aiData.valuationAndDividend?.pe && !aiData.valuationAndDividend?.pb && !aiData.valuationAndDividend?.evEbitda && (
+                <p className="text-slate-400">ระดับมูลค่าอยู่ในเกณฑ์ปกติเมื่อเทียบกับหุ้นกลุ่มเดียวกัน</p>
+              )}
+            </div>
+          </div>
+
+          {/* Card 2: Dividend analysis */}
+          <div className="p-3.5 rounded-xl bg-[#161B26] border border-white/[0.06] space-y-2">
+            <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+              💵 คุณภาพ & ความปลอดภัยเงินปันผล (Dividend Safety)
+            </span>
+            <div className="space-y-1.5 text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
+              {aiData.valuationAndDividend?.dividendYield && (
+                <p>• <strong className="text-white">Yield:</strong> {aiData.valuationAndDividend.dividendYield}</p>
+              )}
+              {aiData.valuationAndDividend?.payoutRatio && (
+                <p>• <strong className="text-white">Payout:</strong> {aiData.valuationAndDividend.payoutRatio}</p>
+              )}
+              {!aiData.valuationAndDividend?.dividendYield && !aiData.valuationAndDividend?.payoutRatio && (
+                <p className="text-slate-400">ไม่มีนโยบายการจ่ายเงินปันผล หรือเน้นการนำกำไรไปลงทุนต่อเพื่อการเติบโต (Growth Reinvestment)</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -380,7 +455,7 @@ function AiStructuredDashboardView({
       {/* 5. จุดแข็ง vs ความเสี่ยง (Side-by-side 2 Columns) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Left: Strengths */}
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/25 to-[#121620] border border-emerald-500/30 space-y-3">
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-950/20 to-[#121620] border border-emerald-500/30 space-y-3">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
               🚀
@@ -389,10 +464,10 @@ function AiStructuredDashboardView({
               จุดแข็ง & ปัจจัยขับเคลื่อนการเติบโต (Moats)
             </h5>
           </div>
-          <ul className="space-y-2.5">
+          <ul className="space-y-2 pl-1">
             {(aiData.strengths || []).map((s, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-xs text-slate-300 leading-relaxed">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
+              <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-2" />
                 <span>{s}</span>
               </li>
             ))}
@@ -400,7 +475,7 @@ function AiStructuredDashboardView({
         </div>
 
         {/* Right: Risks */}
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-950/25 to-[#121620] border border-rose-500/30 space-y-3">
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-rose-950/20 to-[#121620] border border-rose-500/30 space-y-3">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-xs">
               ⚠️
@@ -409,10 +484,10 @@ function AiStructuredDashboardView({
               ความเสี่ยง & ปัจจัยที่ต้องจับตา (Key Risks)
             </h5>
           </div>
-          <ul className="space-y-2.5">
+          <ul className="space-y-2 pl-1">
             {(aiData.risks || []).map((r, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-xs text-slate-300 leading-relaxed">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0 mt-1.5" />
+              <li key={idx} className="flex items-start gap-2.5 text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0 mt-2" />
                 <span>{r}</span>
               </li>
             ))}
@@ -422,7 +497,7 @@ function AiStructuredDashboardView({
 
       {/* 6. Scenario Analysis (Bull / Base / Bear) */}
       {aiData.scenarioAnalysis && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#121620] border border-white/[0.07] space-y-3">
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#121620] border border-white/[0.08] space-y-3">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm">🔮</span>
             <h5 className="text-xs font-bold text-white uppercase tracking-wider">
@@ -431,40 +506,40 @@ function AiStructuredDashboardView({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Bull Case */}
-            <div className="p-3.5 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/25 space-y-1.5">
+            <div className="p-4 rounded-xl bg-emerald-500/[0.07] border border-emerald-500/25 space-y-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs">🐂</span>
+                <span className="text-sm">🐂</span>
                 <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">
                   Bull Case (กรณีดีสุด)
                 </span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
                 {aiData.scenarioAnalysis.bull || 'ปัจจัยเร่งผลักดันราคาทำจุดสูงสุดใหม่'}
               </p>
             </div>
 
             {/* Base Case */}
-            <div className="p-3.5 rounded-xl bg-indigo-500/[0.07] border border-indigo-500/25 space-y-1.5">
+            <div className="p-4 rounded-xl bg-indigo-500/[0.07] border border-indigo-500/25 space-y-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs">⚖️</span>
+                <span className="text-sm">⚖️</span>
                 <span className="text-xs font-bold text-indigo-300 uppercase tracking-wide">
                   Base Case (กรณีพื้นฐาน)
                 </span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
                 {aiData.scenarioAnalysis.base || 'เติบโตตามเป้าหมายของบริษัทและค่าเฉลี่ยอุตสาหกรรม'}
               </p>
             </div>
 
             {/* Bear Case */}
-            <div className="p-3.5 rounded-xl bg-rose-500/[0.07] border border-rose-500/25 space-y-1.5">
+            <div className="p-4 rounded-xl bg-rose-500/[0.07] border border-rose-500/25 space-y-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs">🐻</span>
+                <span className="text-sm">🐻</span>
                 <span className="text-xs font-bold text-rose-400 uppercase tracking-wide">
                   Bear Case (กรณีแย่สุด)
                 </span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
+              <p className="text-xs sm:text-[13px] text-slate-200 leading-relaxed font-normal">
                 {aiData.scenarioAnalysis.bear || 'ปัจจัยกดดันด้านการแข่งขันหรือเศรษฐกิจชะลอตัว'}
               </p>
             </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
@@ -22,7 +22,131 @@ import {
   Plus,
   Trash2,
   Sparkles,
+  Search,
+  LayoutGrid,
+  FolderKanban,
+  X,
 } from 'lucide-react'
+
+export type WatchlistCategory = 'ALL' | 'US_STOCK' | 'ETF' | 'TH_STOCK' | 'CRYPTO_COMMODITY'
+
+export function getWatchlistItemCategory(item: WatchlistWithQuote): WatchlistCategory {
+  const sym = (item.symbol || '').toUpperCase()
+  const name = (item.displayName || item.quote?.name || '').toUpperCase()
+  const itemType = (item.itemType || '').toLowerCase()
+  const market = (item.market || '').toUpperCase()
+
+  // 1. Thai Stocks
+  if (
+    market === 'TH' ||
+    sym.endsWith('.BK') ||
+    sym === 'SCB' ||
+    sym === 'PTT' ||
+    sym === 'DELTA' ||
+    sym === 'KBANK' ||
+    sym === 'CPALL' ||
+    sym === 'AOT' ||
+    sym === 'ADVANC' ||
+    sym === 'BDMS' ||
+    sym === 'GULF'
+  ) {
+    return 'TH_STOCK'
+  }
+
+  // 2. Crypto & Commodities
+  if (
+    itemType === 'crypto' ||
+    itemType === 'gold' ||
+    sym === 'BTC' ||
+    sym === 'ETH' ||
+    sym === 'GOLD' ||
+    market === 'GLOBAL'
+  ) {
+    return 'CRYPTO_COMMODITY'
+  }
+
+  // 3. ETFs
+  const knownEtfs = new Set([
+    'VOO',
+    'QQQ',
+    'QQQM',
+    'SCHD',
+    'SMH',
+    'SPY',
+    'IVV',
+    'VTI',
+    'VEA',
+    'VWO',
+    'ARKK',
+    'SOXX',
+    'DIA',
+    'IWM',
+    'XLE',
+    'XLF',
+    'XLK',
+    'VIG',
+    'JEPI',
+    'JEPQ',
+    'TLT',
+    'BND',
+    'GLD',
+    'SLV',
+    'VNQ',
+    'VNQI',
+    'VT',
+  ])
+  if (
+    itemType === 'etf' ||
+    knownEtfs.has(sym) ||
+    name.includes('ETF') ||
+    name.includes('INDEX') ||
+    name.includes('ISHARES') ||
+    name.includes('VANGUARD') ||
+    name.includes('INVESCO') ||
+    name.includes('SCHWAB')
+  ) {
+    return 'ETF'
+  }
+
+  // 4. Default: US / Global Stocks
+  return 'US_STOCK'
+}
+
+const CATEGORY_CONFIG: Record<
+  WatchlistCategory,
+  { label: string; icon: string; title: string; subtitle: string }
+> = {
+  ALL: {
+    label: 'ทั้งหมด',
+    icon: '🌟',
+    title: 'สินทรัพย์ทั้งหมดใน Watchlist',
+    subtitle: 'ภาพรวมทุกสินทรัพย์ที่คุณกำลังจับตา',
+  },
+  ETF: {
+    label: 'กองทุน ETF',
+    icon: '📦',
+    title: 'กองทุนดัชนี & ETF (Exchange-Traded Funds)',
+    subtitle: 'กองทุน ETF กระจายความเสี่ยงทั่วโลกและกลุ่มอุตสาหกรรม',
+  },
+  US_STOCK: {
+    label: 'หุ้นสหรัฐฯ',
+    icon: '🇺🇸',
+    title: 'หุ้นต่างประเทศ & สหรัฐฯ (US Equities)',
+    subtitle: 'หุ้นเติบโต บลูชิพ และเทคโนโลยีสหรัฐฯ',
+  },
+  TH_STOCK: {
+    label: 'หุ้นไทย',
+    icon: '🇹🇭',
+    title: 'หุ้นไทย (Thai Equities / SET)',
+    subtitle: 'หุ้นขนาดใหญ่และสินทรัพย์ในตลาดหลักทรัพย์แห่งประเทศไทย',
+  },
+  CRYPTO_COMMODITY: {
+    label: 'คริปโต & โภคภัณฑ์',
+    icon: '🪙',
+    title: 'คริปโตเคอร์เรนซี & สินค้าโภคภัณฑ์ (Crypto & Commodities)',
+    subtitle: 'สินทรัพย์ดิจิทัลและทองคำ',
+  },
+}
 
 interface WatchlistWithQuote {
   id: string
@@ -70,6 +194,52 @@ export default function MarketWatchPage() {
   } | null>(null)
 
   const watchlistItems: WatchlistWithQuote[] = watchlistData?.items ?? []
+
+  const [watchlistCategory, setWatchlistCategory] = useState<WatchlistCategory>('ALL')
+  const [watchlistSearch, setWatchlistSearch] = useState('')
+  const [isGroupedView, setIsGroupedView] = useState(true)
+
+  const categorizedItems = useMemo(() => {
+    return watchlistItems.map((item) => ({
+      item,
+      category: getWatchlistItemCategory(item),
+    }))
+  }, [watchlistItems])
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<WatchlistCategory, number> = {
+      ALL: watchlistItems.length,
+      ETF: 0,
+      US_STOCK: 0,
+      TH_STOCK: 0,
+      CRYPTO_COMMODITY: 0,
+    }
+    categorizedItems.forEach(({ category }) => {
+      counts[category]++
+    })
+    return counts
+  }, [categorizedItems, watchlistItems.length])
+
+  const filteredWatchlistItems = useMemo(() => {
+    let result = categorizedItems
+
+    if (watchlistCategory !== 'ALL') {
+      result = result.filter((entry) => entry.category === watchlistCategory)
+    }
+
+    if (watchlistSearch.trim()) {
+      const q = watchlistSearch.trim().toUpperCase()
+      result = result.filter(
+        ({ item }) =>
+          item.symbol.toUpperCase().includes(q) ||
+          (item.displayName && item.displayName.toUpperCase().includes(q)) ||
+          (item.quote?.name && item.quote.name.toUpperCase().includes(q))
+      )
+    }
+
+    return result
+  }, [categorizedItems, watchlistCategory, watchlistSearch])
+
   const existingSymbols = watchlistItems.map((item) => item.symbol)
 
   const fxList: MarketQuote[] = Array.isArray(data?.fxAndCommodities) ? data.fxAndCommodities : []
@@ -295,6 +465,102 @@ export default function MarketWatchPage() {
             </button>
           </div>
 
+          {/* Watchlist Categorization Toolbar */}
+          {watchlistItems.length > 0 && (
+            <div className="pt-2 border-t border-white/[0.06] flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+                {(
+                  [
+                    'ALL',
+                    'ETF',
+                    'US_STOCK',
+                    'TH_STOCK',
+                    'CRYPTO_COMMODITY',
+                  ] as WatchlistCategory[]
+                ).map((catKey) => {
+                  const count = categoryCounts[catKey]
+                  if (count === 0 && catKey !== 'ALL') return null
+                  const isActive = watchlistCategory === catKey
+                  const cfg = CATEGORY_CONFIG[catKey]
+
+                  return (
+                    <button
+                      key={catKey}
+                      type="button"
+                      onClick={() => setWatchlistCategory(catKey)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 border ${
+                        isActive
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm shadow-amber-500/10'
+                          : 'bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.06] border-white/[0.06]'
+                      }`}
+                    >
+                      <span className="text-xs">{cfg.icon}</span>
+                      <span>{cfg.label}</span>
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                          isActive
+                            ? 'bg-amber-400/20 text-amber-200'
+                            : 'bg-white/[0.06] text-slate-400'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Search Box & View Mode Toggle */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={watchlistSearch}
+                    onChange={(e) => setWatchlistSearch(e.target.value)}
+                    placeholder="ค้นหาชื่อย่อ / Ticker..."
+                    className="w-full bg-[#181C25] border border-white/[0.08] rounded-xl pl-8 pr-8 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500/50 transition-colors"
+                  />
+                  {watchlistSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setWatchlistSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {watchlistCategory === 'ALL' && !watchlistSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setIsGroupedView(!isGroupedView)}
+                    title={isGroupedView ? 'สลับเป็นมุมมองตารางรวม' : 'สลับเป็นมุมมองแยกตามหมวดหมู่'}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                      isGroupedView
+                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                        : 'bg-white/[0.04] text-slate-400 hover:text-white border-white/[0.08]'
+                    }`}
+                  >
+                    {isGroupedView ? (
+                      <>
+                        <FolderKanban className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">แยกหมวด</span>
+                      </>
+                    ) : (
+                      <>
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">ตารางรวม</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Watchlist Content */}
           {isWatchlistLoading ? (
             <div className="py-12 flex items-center justify-center gap-2.5 text-slate-500 text-xs">
@@ -344,10 +610,80 @@ export default function MarketWatchPage() {
                 </div>
               </div>
             </div>
+          ) : filteredWatchlistItems.length === 0 ? (
+            /* No Search / Filter Result */
+            <div className="py-12 px-6 rounded-2xl bg-[#181C25]/40 border border-white/[0.06] text-center space-y-3">
+              <Search className="w-8 h-8 text-slate-500 mx-auto" />
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-white">ไม่พบสินทรัพย์ที่ค้นหา</h4>
+                <p className="text-xs text-slate-400">
+                  ไม่พบรายการที่ตรงกับ "{watchlistSearch}" ในหมวดหมู่นี้
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setWatchlistSearch('')
+                  setWatchlistCategory('ALL')
+                }}
+                className="px-4 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs font-semibold hover:bg-amber-500/25 transition-all cursor-pointer"
+              >
+                ดูทั้งหมด ({watchlistItems.length} รายการ)
+              </button>
+            </div>
+          ) : watchlistCategory === 'ALL' && isGroupedView && !watchlistSearch ? (
+            /* Grouped Sections by Category */
+            <div className="space-y-6 pt-1">
+              {(
+                ['ETF', 'US_STOCK', 'TH_STOCK', 'CRYPTO_COMMODITY'] as WatchlistCategory[]
+              ).map((catKey) => {
+                const sectionEntries = categorizedItems.filter(
+                  (entry) => entry.category === catKey
+                )
+                if (sectionEntries.length === 0) return null
+                const cfg = CATEGORY_CONFIG[catKey]
+
+                return (
+                  <div key={catKey} className="space-y-3">
+                    <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{cfg.icon}</span>
+                        <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide">
+                          {cfg.title}
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-amber-300 font-mono text-[10px] font-bold">
+                          {sectionEntries.length} รายการ
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 hidden sm:inline font-normal">
+                        {cfg.subtitle}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {sectionEntries.map(({ item }) => (
+                        <WatchlistCard
+                          key={item.id}
+                          item={item}
+                          onDelete={() => handleDeleteWatchlistItem(item.id)}
+                          onSelect={() =>
+                            setSelectedStock({
+                              symbol: item.symbol,
+                              name: item.displayName || item.quote?.name,
+                              market: item.market,
+                            })
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           ) : (
-            /* Populated Watchlist Grid */
+            /* Filtered Flat Grid */
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {watchlistItems.map((item) => (
+              {filteredWatchlistItems.map(({ item }) => (
                 <WatchlistCard
                   key={item.id}
                   item={item}
