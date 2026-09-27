@@ -51,6 +51,8 @@ const PIE_COLORS = [
   '#8b5cf6', // Violet
   '#3b82f6', // Blue
   '#14b8a6', // Teal
+  '#f97316', // Orange
+  '#e11d48', // Rose
 ]
 
 const CustomAreaTooltip = ({ active, payload, label }: any) => {
@@ -111,6 +113,7 @@ export default function DashboardPage() {
     name?: string
     market?: string
   } | null>(null)
+  const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
   const { data: summary, error: summaryError, isLoading: sumLoading } = useSWR('/api/portfolio/summary', { refreshInterval: 60000 })
   const { data: holdingsData, error: holdingsError, isLoading: holdLoading } = useSWR('/api/portfolio/holdings', { refreshInterval: 60000 })
   const { data: accountsData, error: accountsError, isLoading: accLoading } = useSWR('/api/accounts')
@@ -188,13 +191,48 @@ export default function DashboardPage() {
     )
   }
 
-  // Multi-colored asset allocation
-  const allocationData = holdings.map((h, i) => ({
-    name: h.ticker,
-    value: Math.round(h.currentValueBase),
-    percent: h.allocationPercent.toFixed(1),
-    color: PIE_COLORS[i % PIE_COLORS.length],
-  }))
+  // Extract target allocation per ticker from active preset if available
+  const activePreset = plansData?.presets?.find((p: any) => p.isDefault) || plansData?.presets?.[0]
+  const subTargets = activePreset?.targetAllocation?._subTargets || activePreset?.subTargets || {}
+
+  const targetMap: Record<string, number> = {}
+  if (activePreset?.targetAllocation) {
+    for (const [key, val] of Object.entries(activePreset.targetAllocation)) {
+      if (key !== '_subTargets' && typeof val === 'number') {
+        targetMap[key.toUpperCase()] = val
+      }
+    }
+    for (const catKey of Object.keys(subTargets)) {
+      const subs = subTargets[catKey]
+      if (subs && typeof subs === 'object') {
+        for (const [tKey, val] of Object.entries(subs)) {
+          if (typeof val === 'number') {
+            targetMap[tKey.toUpperCase()] = val
+          }
+        }
+      }
+    }
+  }
+
+  // Multi-colored asset allocation with target & deviation
+  const allocationData = holdings.map((h, i) => {
+    const tickerUpper = h.ticker.toUpperCase()
+    const targetPercent = targetMap[tickerUpper] ?? null
+    const actualPercent = Number(h.allocationPercent.toFixed(1))
+    const deviation = targetPercent !== null ? Number((actualPercent - targetPercent).toFixed(1)) : null
+
+    return {
+      name: h.ticker,
+      fullName: h.assetName || h.ticker,
+      assetType: h.assetType || 'STOCK',
+      market: h.market || 'US',
+      value: Math.round(h.currentValueBase),
+      percent: actualPercent,
+      targetPercent,
+      deviation,
+      color: PIE_COLORS[i % PIE_COLORS.length],
+    }
+  })
 
   // Real performance milestones calculated from transactions vs S&P 500 benchmark
   const allPerformanceData: { month: string; value: number; benchmark: number }[] = Array.isArray(summary?.performanceData)
@@ -580,68 +618,220 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Asset Allocation Donut */}
-            <div className="glass-panel rounded-3xl p-6 flex-1 flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-2">
+            {/* Asset Allocation Donut - Hybrid FinTech Glow & Rebalance Sentinel */}
+            <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between relative overflow-hidden">
+              {/* Header with Title, Badge, and Rebalance Link */}
+              <div className="flex items-start justify-between gap-2 mb-2">
                 <div>
-                  <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">สัดส่วนสินทรัพย์</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">สัดส่วนสินทรัพย์</span>
+                    {activePreset && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                        Target vs Actual
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-400 mt-0.5">Asset Allocation</p>
                 </div>
-                <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-lg bg-slate-800 text-indigo-300">
-                  {holdings.length} รายการ
-                </span>
+                
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Link
+                    href="/plans"
+                    className="text-[11px] font-medium text-indigo-300 hover:text-white transition-all flex items-center gap-1 bg-indigo-600/15 hover:bg-indigo-600/25 px-2.5 py-1 rounded-xl border border-indigo-500/30 shadow-sm"
+                    title="ไปที่หน้าแผนการลงทุนเพื่อปรับสัดส่วนเป้าหมาย หรือจำลองการ Rebalance"
+                  >
+                    <span>ปรับแผน</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                  <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200">
+                    {holdings.length} ตัว
+                  </span>
+                </div>
               </div>
-              
-              <div className="h-40 w-full flex items-center justify-center relative my-2">
+
+              {/* Glowing Dynamic Donut Chart */}
+              <div className="h-44 w-full flex items-center justify-center relative my-2">
                 {allocationData.length > 0 ? (
                   <>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={allocationData}
-                          innerRadius={46}
-                          outerRadius={68}
+                          innerRadius={50}
+                          outerRadius={70}
                           paddingAngle={3}
+                          cornerRadius={4}
                           dataKey="value"
                           stroke="none"
+                          onMouseEnter={(_, index) => setActivePieIndex(index)}
+                          onMouseLeave={() => setActivePieIndex(null)}
                         >
-                          {allocationData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
+                          {allocationData.map((entry, index) => {
+                            const isSelected = activePieIndex === index
+                            return (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={entry.color}
+                                stroke={isSelected ? '#ffffff' : 'rgba(15, 23, 42, 0.8)'}
+                                strokeWidth={isSelected ? 2.5 : 1}
+                                style={{
+                                  outline: 'none',
+                                  cursor: 'pointer',
+                                  transition: 'all 200ms ease',
+                                  opacity: activePieIndex === null || isSelected ? 1 : 0.35,
+                                  filter: isSelected ? `drop-shadow(0 0 8px ${entry.color})` : 'none',
+                                }}
+                              />
+                            )
+                          })}
                         </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '12px',
-                            fontSize: '12px',
-                            color: '#fff',
-                            boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
-                          }}
-                          itemStyle={{ color: '#fff' }}
-                        />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div className="absolute flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-xs text-slate-400">สินทรัพย์</span>
-                      <span className="text-lg font-bold text-white tabular-nums font-mono">{holdings.length}</span>
+
+                    {/* Dynamic Center Display */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4 transition-all duration-300">
+                      {activePieIndex !== null && allocationData[activePieIndex] ? (
+                        <div className="animate-fade-in flex flex-col items-center">
+                          <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400 max-w-[130px] truncate">
+                            {allocationData[activePieIndex].name}
+                          </span>
+                          <span className="text-2xl font-bold font-mono text-white tracking-tight leading-none mt-0.5">
+                            {allocationData[activePieIndex].percent}%
+                          </span>
+                          <span className="text-[11px] font-mono font-semibold text-indigo-300 mt-1">
+                            ฿{allocationData[activePieIndex].value.toLocaleString()}
+                          </span>
+                          {allocationData[activePieIndex].deviation !== null && (
+                            <span className={`text-[10px] font-semibold font-mono mt-0.5 px-1.5 py-0.2 rounded-md ${
+                              allocationData[activePieIndex].deviation! > 1.5
+                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                : allocationData[activePieIndex].deviation! < -1.5
+                                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                            }`}>
+                              {allocationData[activePieIndex].deviation! > 0
+                                ? `+${allocationData[activePieIndex].deviation}%`
+                                : `${allocationData[activePieIndex].deviation}%`} เป้า
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
+                            มูลค่าสินทรัพย์
+                          </span>
+                          <span className="text-xl font-bold text-white tabular-nums font-mono leading-tight mt-0.5">
+                            ฿{Math.round(totalValue).toLocaleString()}
+                          </span>
+                          <span className="text-[11px] text-indigo-300 font-medium font-mono mt-0.5">
+                            {holdings.length} รายการ
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </>
                 ) : (
                   <div className="text-xs text-slate-500 font-medium">ไม่มีข้อมูลสินทรัพย์</div>
                 )}
               </div>
-              
-              <div className="space-y-2 mt-2 pt-3 border-t border-slate-800/80">
-                {allocationData.slice(0, 4).map((item) => (
-                  <div key={item.name} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: item.color }} />
-                      <span className="font-semibold text-slate-200">{item.name}</span>
-                    </div>
-                    <span className="font-mono text-slate-400 font-medium">{item.percent}%</span>
-                  </div>
-                ))}
+
+              {/* Asset List & Rebalance Indicators (Shows ALL assets, scrollable if > 5) */}
+              <div className="mt-2 pt-3 border-t border-slate-800/80">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2 px-1">
+                  <span>สินทรัพย์ / ประเภท</span>
+                  <span>สัดส่วน & มูลค่า</span>
+                </div>
+
+                <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+                  {allocationData.map((item, i) => {
+                    const isActive = activePieIndex === i
+                    return (
+                      <div
+                        key={item.name}
+                        onMouseEnter={() => setActivePieIndex(i)}
+                        onMouseLeave={() => setActivePieIndex(null)}
+                        onClick={() => setSelectedStock({ symbol: item.name, name: item.fullName, market: item.market })}
+                        className={`p-2 rounded-xl transition-all cursor-pointer border ${
+                          isActive
+                            ? 'bg-slate-800/90 border-slate-700 shadow-lg scale-[1.01]'
+                            : 'bg-slate-900/40 hover:bg-slate-800/50 border-white/[0.04] hover:border-slate-700/60'
+                        }`}
+                        title="คลิกเพื่อดูรายละเอียดและกราฟเทคนิค"
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0 transition-all"
+                              style={{
+                                backgroundColor: item.color,
+                                boxShadow: isActive ? `0 0 10px ${item.color}` : 'none',
+                              }}
+                            />
+                            <span className="font-bold text-slate-100 truncate">{item.name}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700/50">
+                              {item.assetType}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono text-xs font-semibold text-slate-300">
+                              ฿{item.value.toLocaleString()}
+                            </span>
+                            <span
+                              className="font-mono text-xs font-bold px-1.5 py-0.5 rounded"
+                              style={{
+                                backgroundColor: `${item.color}22`,
+                                color: item.color,
+                              }}
+                            >
+                              {item.percent}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar with Target Indicator */}
+                        <div className="relative w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(item.percent, 100)}%`,
+                              backgroundColor: item.color,
+                            }}
+                          />
+                          {item.targetPercent !== null && (
+                            <div
+                              className="absolute top-0 bottom-0 w-1 bg-white rounded-full shadow-sm z-10"
+                              style={{ left: `calc(${Math.min(item.targetPercent, 100)}% - 2px)` }}
+                              title={`เป้าหมาย: ${item.targetPercent}%`}
+                            />
+                          )}
+                        </div>
+
+                        {/* Target vs Actual Deviation Footer */}
+                        {item.targetPercent !== null && (
+                          <div className="flex items-center justify-between text-[10px] mt-1 font-mono">
+                            <span className="text-slate-400">เป้า {item.targetPercent}%</span>
+                            <span
+                              className={`font-semibold ${
+                                item.deviation! > 1.5
+                                  ? 'text-amber-400'
+                                  : item.deviation! < -1.5
+                                  ? 'text-rose-400'
+                                  : 'text-emerald-400'
+                              }`}
+                            >
+                              {item.deviation! > 1.5
+                                ? `+${item.deviation}% เกินเป้า`
+                                : item.deviation! < -1.5
+                                ? `${item.deviation}% ต่ำกว่าเป้า`
+                                : 'สมดุลตามแผน'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 
