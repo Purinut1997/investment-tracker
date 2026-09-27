@@ -56,8 +56,10 @@ function formatPrice(price: number, currency: string) {
 
 export function TickerTape() {
   const { data } = useSWR<{ items: TickerItem[] }>('/api/market-data/ticker', {
-    refreshInterval: 45000, // Refresh real prices every 45s
-    revalidateOnFocus: true,
+    fallbackData: { items: DEFAULT_FALLBACK_TICKERS },
+    revalidateOnMount: false, // Render fallback immediately (0ms) without blocking page load
+    refreshInterval: 60000,
+    revalidateOnFocus: false,
   })
 
   const items = (data?.items && data.items.length > 0) ? data.items : DEFAULT_FALLBACK_TICKERS

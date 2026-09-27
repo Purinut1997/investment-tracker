@@ -32,6 +32,82 @@ export function invalidatePriceCache(assetId?: string) {
   }
 }
 
+export async function getBatchCachedOrFetchPrices(
+  assetIds: string[],
+  forceRefresh = false
+): Promise<Map<string, { price: number; sourceProvider: string; isStale: boolean }>> {
+  const now = Date.now()
+  const resultMap = new Map<string, { price: number; sourceProvider: string; isStale: boolean }>()
+  const missingAssetIds: string[] = []
+
+  // ── Tier 1: In-Memory Fast Cache (<0.1ms) ──────────────────────
+  if (!forceRefresh) {
+    for (const id of assetIds) {
+      const memoryCached = priceMemoryCache.get(id)
+      if (memoryCached && now - memoryCached.timestamp < PRICE_CACHE_TTL_MS) {
+        resultMap.set(id, {
+          price: memoryCached.price,
+          sourceProvider: memoryCached.sourceProvider,
+          isStale: memoryCached.isStale,
+        })
+      } else {
+        missingAssetIds.push(id)
+      }
+    }
+  } else {
+    missingAssetIds.push(...assetIds)
+  }
+
+  if (missingAssetIds.length === 0) {
+    return resultMap
+  }
+
+  // ── Tier 2: Single Batch Database Query to PriceHistory ────────
+  if (!forceRefresh) {
+    try {
+      const historicalPrices = await prisma.priceHistory.findMany({
+        where: {
+          assetId: { in: missingAssetIds },
+          closePrice: { gt: 0 },
+        },
+        orderBy: { priceDate: 'desc' },
+      })
+
+      // Take the most recent price for each asset
+      for (const row of historicalPrices) {
+        if (!resultMap.has(row.assetId)) {
+          const entry = {
+            price: Number(row.closePrice),
+            sourceProvider: `${row.sourceProvider} (cached)`,
+            isStale: true,
+          }
+          resultMap.set(row.assetId, entry)
+          priceMemoryCache.set(row.assetId, { ...entry, timestamp: now })
+        }
+      }
+    } catch (err) {
+      console.warn('[getBatchCachedOrFetchPrices DB error]', err)
+    }
+  }
+
+  // ── Tier 3: Fetch individually only for assets with NO price in DB ──
+  const stillMissing = missingAssetIds.filter((id) => !resultMap.has(id))
+  if (stillMissing.length > 0) {
+    await Promise.all(
+      stillMissing.map(async (assetId) => {
+        try {
+          const fetched = await getCachedOrFetchPrice(assetId, undefined, forceRefresh)
+          if (fetched) {
+            resultMap.set(assetId, fetched)
+          }
+        } catch {}
+      })
+    )
+  }
+
+  return resultMap
+}
+
 export async function getCachedOrFetchPrice(
   assetId: string,
   targetDate = new Date(),

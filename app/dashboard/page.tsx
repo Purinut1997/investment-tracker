@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
@@ -114,18 +114,52 @@ export default function DashboardPage() {
     market?: string
   } | null>(null)
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
-  const { data: summary, error: summaryError, isLoading: sumLoading } = useSWR('/api/portfolio/summary', { refreshInterval: 60000 })
-  const { data: holdingsData, error: holdingsError, isLoading: holdLoading } = useSWR('/api/portfolio/holdings', { refreshInterval: 60000 })
-  const { data: accountsData, error: accountsError, isLoading: accLoading } = useSWR('/api/accounts')
-  const { data: plansData, error: plansError, isLoading: planLoading } = useSWR('/api/plans')
-  const { data: cashData } = useSWR('/api/cash-wallet')
-  const { data: radarData } = useSWR('/api/radar', { revalidateOnFocus: false })
+  // Stale-While-Revalidate Instant Paint (0ms LCP on repeat visits)
+  const [cachedSummary, setCachedSummary] = useState<any>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const item = sessionStorage.getItem('port_summary_cache_v1')
+        return item ? JSON.parse(item) : null
+      } catch {
+        return null
+      }
+    }
+    return null
+  })
 
-  const holdings: HoldingItem[] = Array.isArray(holdingsData?.holdings) ? holdingsData.holdings : []
+  // Single Unified Fast SWR call for all core Dashboard data
+  const { data: summaryRaw, error: summaryError, isLoading: sumLoading } = useSWR<any>(
+    '/api/portfolio/summary',
+    {
+      refreshInterval: 60000,
+      revalidateOnFocus: false,
+      dedupingInterval: 15000,
+      fallbackData: cachedSummary || undefined,
+    }
+  )
 
-  const totalCash = cashData?.totalCashBase ?? 0
+  const summary = summaryRaw || cachedSummary
+
+  useEffect(() => {
+    if (summaryRaw && typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('port_summary_cache_v1', JSON.stringify(summaryRaw))
+      } catch {}
+    }
+  }, [summaryRaw])
+
+  // Non-blocking secondary widget: only fetch AI Radar AFTER summary has loaded
+  const { data: radarData } = useSWR(
+    summary ? '/api/radar' : null,
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  )
+
+  const holdings: HoldingItem[] = Array.isArray(summary?.holdings) ? summary.holdings : []
+
+  const accounts = parseAccountsPayload(summary?.accounts)
+  const totalCash = summary?.totalCash ?? 0
   const totalValue = summary?.totalValue ?? 0
-  const netWorth = totalValue + totalCash
+  const netWorth = summary?.netWorth ?? (totalValue + totalCash)
   const totalCost = summary?.totalCost ?? 0
   const unrealizedPnL = summary?.unrealizedPnL ?? 0
   const unrealizedPnLPercent = summary?.unrealizedPnLPercent ?? 0
@@ -139,12 +173,11 @@ export default function DashboardPage() {
       : null
   const isProfit = unrealizedPnL >= 0
 
-  const accounts = parseAccountsPayload(accountsData)
-  const hasAccounts = accounts.length > 0
+  const hasAccounts = accounts.length > 0 || (summary?.accounts?.length ?? 0) > 0
   const hasHoldings = holdings.length > 0 || totalCost > 0
-  const hasPlans = (plansData?.presets?.length ?? 0) > 0
-  const isInitialLoading = !summary && !holdingsData && (sumLoading || holdLoading)
-  const hasFatalError = Boolean((summaryError && !summary) && (holdingsError && !holdingsData))
+  const hasPlans = (summary?.presets?.length ?? 0) > 0
+  const isInitialLoading = !summary && sumLoading
+  const hasFatalError = Boolean(summaryError && !summary)
 
   const [refreshingPrices, setRefreshingPrices] = useState(false)
   const [refreshToast, setRefreshToast] = useState<{ title: string; desc: string } | null>(null)
@@ -156,10 +189,7 @@ export default function DashboardPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to refresh prices')
 
-      await Promise.all([
-        mutate('/api/portfolio/holdings'),
-        mutate('/api/portfolio/summary'),
-      ])
+      await mutate('/api/portfolio/summary')
 
       setRefreshToast({
         title: 'อัปเดตราคาล่าสุดเรียบร้อย!',
@@ -192,7 +222,7 @@ export default function DashboardPage() {
   }
 
   // Extract target allocation per ticker from active preset if available
-  const activePreset = plansData?.presets?.find((p: any) => p.isDefault) || plansData?.presets?.[0]
+  const activePreset = summary?.activePreset || summary?.presets?.find((p: any) => p.isDefault) || summary?.presets?.[0]
   const subTargets = activePreset?.targetAllocation?._subTargets || activePreset?.subTargets || {}
 
   const targetMap: Record<string, number> = {}

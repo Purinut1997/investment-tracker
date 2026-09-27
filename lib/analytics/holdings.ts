@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getCachedOrFetchPrice } from '@/lib/market-data/cache-layer'
+import { getCachedOrFetchPrice, getBatchCachedOrFetchPrices } from '@/lib/market-data/cache-layer'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
 
 export interface HoldingItem {
@@ -34,6 +34,7 @@ export interface PortfolioHoldingsResult {
   unrealizedPnLBase: number
   unrealizedPnLPercent: number
   baseCurrency: string
+  txns?: any[]
 }
 
 // In-memory cache for computed user holdings (60-second TTL)
@@ -100,13 +101,14 @@ export const invalidateUserHoldingsCache = invalidateUserPortfolioCache
 export async function calculateUserHoldings(
   userId: string,
   baseCurrency = 'THB',
-  forceRefresh = false
+  forceRefresh = false,
+  preloadedTxns?: any[]
 ): Promise<PortfolioHoldingsResult> {
   const cacheKey = `${userId}_${baseCurrency}`
   const now = Date.now()
 
   // Return cached result if available and fresh (<60s)
-  if (!forceRefresh) {
+  if (!forceRefresh && !preloadedTxns) {
     const cached = userHoldingsCache.get(cacheKey)
     if (cached && now - cached.timestamp < HOLDINGS_CACHE_TTL_MS) {
       return cached.result
@@ -114,21 +116,21 @@ export async function calculateUserHoldings(
   }
 
   // Deduplicate concurrent in-flight requests for the same user
-  if (inFlightHoldings.has(cacheKey)) {
+  if (!preloadedTxns && inFlightHoldings.has(cacheKey)) {
     return inFlightHoldings.get(cacheKey)!
   }
 
   const computePromise = (async () => {
     try {
-      // 1. Fetch all user transactions ordered chronologically
-      const txns = await prisma.transaction.findMany({
+      // 1. Fetch all user transactions ordered chronologically (or reuse preloaded)
+      const txns = preloadedTxns ?? (await prisma.transaction.findMany({
         where: { userId },
         orderBy: { txnDate: 'asc' },
         include: {
           asset: true,
           account: true,
         },
-      })
+      }))
 
   // 2. Aggregate quantity and cost per asset using FIFO (First-In, First-Out) matching
   // Matches Dime and US brokerage cost-basis standard (without fee mixing)
@@ -187,21 +189,20 @@ export async function calculateUserHoldings(
     return remainingQty > 0.00001
   })
 
-  // Parallelize price fetching for all active assets concurrently
-  const priceResults = await Promise.all(
-    activeEntries.map(([assetId]) => getCachedOrFetchPrice(assetId, undefined, forceRefresh))
-  )
+  // Batch price lookup: 1 DB query instead of N individual queries (<5ms)
+  const activeAssetIds = activeEntries.map(([assetId]) => assetId)
+  const priceMap = await getBatchCachedOrFetchPrices(activeAssetIds, forceRefresh)
 
   const activeHoldings: HoldingItem[] = []
   let totalValueBase = 0
   let totalCostBase = 0
 
-  activeEntries.forEach(([assetId, data], idx) => {
+  activeEntries.forEach(([assetId, data]) => {
     const remainingQty = data.lots.reduce((acc, lot) => acc + lot.quantity, 0)
     const totalCost = data.lots.reduce((acc, lot) => acc + lot.quantity * lot.pricePerUnit, 0)
     const avgCost = remainingQty > 0 ? totalCost / remainingQty : 0
 
-    const priceData = priceResults[idx]
+    const priceData = priceMap.get(assetId)
     const currentPrice = priceData?.price ?? avgCost
     const currentValue = remainingQty * currentPrice
     const unrealizedPnL = currentValue - totalCost
@@ -258,6 +259,7 @@ export async function calculateUserHoldings(
     unrealizedPnLBase,
     unrealizedPnLPercent,
     baseCurrency,
+    txns,
   }
 
     // Cache computed result

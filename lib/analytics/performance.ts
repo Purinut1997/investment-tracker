@@ -14,13 +14,14 @@ export interface PerformancePoint {
 export async function calculatePortfolioPerformance(
   userId: string,
   currentPortfolioValue: number,
-  baseCurrency = 'THB'
+  baseCurrency = 'THB',
+  preloadedTxns?: any[]
 ): Promise<PerformancePoint[]> {
-  const txns = await prisma.transaction.findMany({
+  const txns = preloadedTxns ?? (await prisma.transaction.findMany({
     where: { userId },
     orderBy: { txnDate: 'asc' },
     include: { asset: true },
-  })
+  }))
 
   if (txns.length === 0) {
     return []

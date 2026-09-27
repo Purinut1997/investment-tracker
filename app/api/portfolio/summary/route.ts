@@ -43,28 +43,24 @@ export async function GET(req: NextRequest) {
     }
 
     const computePromise = (async () => {
-      // 3. Parallel fetch FX rate, holdings, sell transactions, dividend transactions, digest, and alert
+      // 3. Parallel fetch FX rate, holdings, accounts, presets, digest, and alert in one shot
       const [
         usdThbRateRaw,
         holdingsResult,
-        sellTxns,
-        divTxns,
+        accounts,
+        presets,
         latestDigest,
         unackAlert,
       ] = await Promise.all([
         getExchangeRate('USD', baseCurrency).catch(() => 35.5),
         calculateUserHoldings(userId, baseCurrency, forceRefresh),
-        prisma.transaction.findMany({
-          where: { userId, txnType: 'SELL' },
-          include: {
-            asset: { select: { currency: true, market: true } },
-          },
+        prisma.investmentAccount.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'asc' },
         }),
-        prisma.transaction.findMany({
-          where: { userId, txnType: 'DIVIDEND' },
-          include: {
-            asset: { select: { currency: true, market: true } },
-          },
+        prisma.investmentPreset.findMany({
+          where: { userId },
+          orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
         }),
         prisma.weeklyDigest.findFirst({
           where: { userId },
@@ -77,46 +73,64 @@ export async function GET(req: NextRequest) {
       ])
 
       const usdThbRate = usdThbRateRaw ?? 35.5
+      const txns = holdingsResult.txns || []
 
       // 4. Calculate health score
       const healthScore = calculatePortfolioHealthScore(holdingsResult.holdings)
 
-      // 5. Calculate total REALIZED GAIN from SELL transactions
-      const totalRealizedProceedsBase = sellTxns.reduce((sum, t) => {
-        const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
+      // 5. In-Memory: Calculate total REALIZED GAIN from preloaded SELL transactions (0 DB queries)
+      const sellTxns = txns.filter((t: any) => t.txnType === 'SELL')
+      const totalRealizedProceedsBase = sellTxns.reduce((sum: number, t: any) => {
+        const isUSD = t.asset?.currency === 'USD' || t.asset?.market === 'US'
         const fx = isUSD ? usdThbRate : 1.0
         return sum + Number(t.totalAmount || 0) * fx
       }, 0)
 
-      const totalRealizedProceedsUSD = sellTxns.reduce((sum, t) => {
-        const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
+      const totalRealizedProceedsUSD = sellTxns.reduce((sum: number, t: any) => {
+        const isUSD = t.asset?.currency === 'USD' || t.asset?.market === 'US'
         return sum + (isUSD ? Number(t.totalAmount || 0) : 0)
       }, 0)
 
-      // 6. Total dividends received
-      const totalDividendsBase = divTxns.reduce((sum, t) => {
-        const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
+      // 6. In-Memory: Total dividends received from preloaded DIVIDEND transactions (0 DB queries)
+      const divTxns = txns.filter((t: any) => t.txnType === 'DIVIDEND')
+      const totalDividendsBase = divTxns.reduce((sum: number, t: any) => {
+        const isUSD = t.asset?.currency === 'USD' || t.asset?.market === 'US'
         const fx = isUSD ? usdThbRate : 1.0
         return sum + Number(t.totalAmount || 0) * fx
       }, 0)
 
-      const totalDividendsUSD = divTxns.reduce((sum, t) => {
-        const isUSD = t.asset.currency === 'USD' || t.asset.market === 'US'
+      const totalDividendsUSD = divTxns.reduce((sum: number, t: any) => {
+        const isUSD = t.asset?.currency === 'USD' || t.asset?.market === 'US'
         return sum + (isUSD ? Number(t.totalAmount || 0) : 0)
       }, 0)
 
-      // 7. Calculate historical portfolio growth milestones vs SPX benchmark
+      // 7. Calculate historical portfolio growth milestones reusing preloaded txns (0 DB queries)
       const performanceData = await calculatePortfolioPerformance(
         userId,
         holdingsResult.totalValueBase,
-        baseCurrency
+        baseCurrency,
+        txns
       )
+
+      // 8. Calculate total cash & net worth across user accounts
+      let totalCash = 0
+      for (const acc of accounts) {
+        const bal = Number(acc.cashBalance) || 0
+        const isUSD = acc.currency === 'USD'
+        const fx = isUSD ? usdThbRate : 1.0
+        totalCash += bal * fx
+      }
+      const netWorth = holdingsResult.totalValueBase + totalCash
+
+      const defaultPreset = presets.find((p: any) => p.isDefault) || presets[0] || null
 
       const summaryPayload = {
         baseCurrency,
         usdThbRate,
         totalValue: holdingsResult.totalValueBase,
         totalCost: holdingsResult.totalCostBase,
+        netWorth,
+        totalCash,
         unrealizedPnL: holdingsResult.unrealizedPnLBase,
         unrealizedPnLPercent: holdingsResult.unrealizedPnLPercent,
         totalRealizedGain: totalRealizedProceedsBase,
@@ -126,6 +140,10 @@ export async function GET(req: NextRequest) {
         assetCount: holdingsResult.holdings.length,
         healthScore,
         performanceData,
+        holdings: holdingsResult.holdings,
+        accounts,
+        presets,
+        activePreset: defaultPreset,
         latestDigest,
         unackAlert,
         timestamp: Date.now(),

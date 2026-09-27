@@ -289,19 +289,33 @@ export async function GET() {
       cachedTicker = { items, timestamp: now }
     }
 
-    return NextResponse.json({
-      items: items.length > 0 ? items : (cachedTicker?.items ?? []),
-      timestamp: now,
-      cached: false,
-    })
+    return NextResponse.json(
+      {
+        items: items.length > 0 ? items : (cachedTicker?.items ?? []),
+        timestamp: now,
+        cached: false,
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=180',
+        },
+      }
+    )
   } catch (err: any) {
     console.error('[Ticker API error]', err)
     if (cachedTicker) {
-      return NextResponse.json({
-        items: cachedTicker.items,
-        timestamp: cachedTicker.timestamp,
-        cached: true,
-      })
+      return NextResponse.json(
+        {
+          items: cachedTicker.items,
+          timestamp: cachedTicker.timestamp,
+          cached: true,
+        },
+        {
+          headers: {
+            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=180',
+          },
+        }
+      )
     }
     return NextResponse.json({ error: 'Failed to fetch ticker data' }, { status: 500 })
   }
