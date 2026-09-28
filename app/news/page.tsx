@@ -162,11 +162,11 @@ export default function NewsPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {item.symbol ? (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 uppercase">
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-black font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 uppercase tracking-wide">
                             {item.symbol}
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-slate-800 text-slate-400 uppercase border border-slate-700">
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-slate-800 text-slate-300 uppercase border border-slate-700">
                             ตลาดรวม
                           </span>
                         )}

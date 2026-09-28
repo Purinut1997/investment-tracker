@@ -550,7 +550,7 @@ export function scanPortfolioOpportunities(
         opportunityType: 'WATCHLIST_DIP',
         opportunityScore: 78,
         title: `สินทรัพย์ใน Watchlist น่าจับตา: ${w.symbol}`,
-        description: `คุณกำลังติดตาม ${w.displayName} อยู่ หากมีกระสุนเงินสดสำรองเพียงพอ เป็นจังหวะดีในการศึกษาแนวรับเพื่อเริ่มไม้แรก (Initial Position)`,
+        description: `คุณกำลังติดตาม ${w.symbol} อยู่ หากมีกระสุนเงินสดสำรองเพียงพอ เป็นจังหวะดีในการศึกษาแนวรับเพื่อเริ่มไม้แรก (Initial Position)`,
         metricLabel: 'สถานะ',
         metricValue: 'ใน Watchlist',
         suggestedAction: `วางแผนจุดเข้าซื้อไม้แรกใน ${w.symbol}`,
