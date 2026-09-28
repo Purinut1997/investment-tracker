@@ -1,18 +1,17 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import useSWR, { mutate } from 'swr'
-import Link from 'next/link'
+import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockLogo } from '@/components/StockLogo'
+import { AiBriefViewer } from '@/components/daily-plan/AiBriefViewer'
 import {
   CalendarCheck,
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
   TrendingUp,
   TrendingDown,
   Compass,
@@ -39,9 +38,8 @@ import {
   Layers,
   ArrowUpRight,
   ArrowDownRight,
-  ExternalLink,
+  Sparkles,
 } from 'lucide-react'
-import CountUp from 'react-countup'
 
 interface ChecklistItem {
   id: string
@@ -170,20 +168,20 @@ export default function DailyPlanPage() {
   const [selectedDate, setSelectedDate] = useState<string>(todayStr)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
 
-  // Local state for interactive editing before save
+  // Local state for interactive editing
   const [marketBias, setMarketBias] = useState<'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'VOLATILE'>('NEUTRAL')
   const [notes, setNotes] = useState('')
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [targetActions, setTargetActions] = useState<TargetAction[]>([])
   const [newChecklistText, setNewChecklistText] = useState('')
 
-  // New action modal / inline input state
+  // New action form state
   const [newTicker, setNewTicker] = useState('')
   const [newActionType, setNewActionType] = useState<'BUY' | 'SELL' | 'HOLD' | 'WATCH'>('BUY')
   const [newTargetPrice, setNewTargetPrice] = useState<string>('')
   const [newActionNote, setNewActionNote] = useState('')
 
-  // Trigger filters
+  // Trigger filter
   const [triggerTab, setTriggerTab] = useState<'ALL' | 'ALERTS_ONLY'>('ALERTS_ONLY')
 
   // Save & AI Status
@@ -197,7 +195,7 @@ export default function DailyPlanPage() {
     revalidateOnFocus: false,
   })
 
-  // Sync server data to local edit state whenever date or data changes
+  // Sync server data to local state
   useEffect(() => {
     if (data?.plan) {
       setMarketBias(data.plan.marketBias || data.marketOverview?.regime?.type || 'NEUTRAL')
@@ -245,7 +243,6 @@ export default function DailyPlanPage() {
       item.id === id ? { ...item, done: !item.done } : item
     )
     setChecklist(updated)
-    // Optimistic background save
     handleSavePlan(undefined, updated)
   }
 
@@ -265,6 +262,21 @@ export default function DailyPlanPage() {
     handleSavePlan(undefined, updated)
   }
 
+  // Add checklist item directly from AI Recommendation
+  const handleAddToChecklistFromAi = (actionText: string) => {
+    const cleanText = actionText.replace(/^[\d+.\-•*]\s*/, '').trim()
+    if (!cleanText) return
+    const newItem: ChecklistItem = {
+      id: Date.now().toString(),
+      text: cleanText,
+      done: false,
+      category: 'action',
+    }
+    const updated = [...checklist, newItem]
+    setChecklist(updated)
+    handleSavePlan(undefined, updated)
+  }
+
   // Delete checklist item
   const handleDeleteChecklist = (id: string) => {
     const updated = checklist.filter((item) => item.id !== id)
@@ -272,13 +284,10 @@ export default function DailyPlanPage() {
     handleSavePlan(undefined, updated)
   }
 
-  // Add Target Action (from Trigger list or manual)
+  // Add Target Action
   const handleAddAction = (ticker: string, targetPrice?: number, defaultNote?: string) => {
     const exists = targetActions.find((a) => a.ticker.toUpperCase() === ticker.toUpperCase() && a.status === 'PENDING')
-    if (exists) {
-      // Already in list, scroll to it or alert
-      return
-    }
+    if (exists) return
     const newAction: TargetAction = {
       id: Date.now().toString(),
       ticker: ticker.toUpperCase(),
@@ -347,7 +356,6 @@ export default function DailyPlanPage() {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || 'Failed to generate AI brief')
 
-      // Refresh SWR data to get the updated AI briefing
       await revalidatePlan()
     } catch (err: any) {
       console.error('AI generation error:', err)
@@ -384,8 +392,8 @@ export default function DailyPlanPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 pb-20">
-        {/* Page Header with Date Navigator */}
+      <div className="space-y-8 pb-24">
+        {/* Top Header & Date Bar */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <PageHeader
             title="แผนการลงทุนประจำวัน (Daily Action Hub)"
@@ -393,133 +401,137 @@ export default function DailyPlanPage() {
           />
 
           {/* Date Selector Pill */}
-          <div className="flex items-center gap-2 bg-slate-900/90 border border-white/[0.08] p-1.5 rounded-2xl shadow-xl backdrop-blur-xl self-start md:self-auto">
+          <div className="flex items-center gap-2 bg-slate-900/90 border-2 border-white/[0.1] p-2 rounded-2xl shadow-2xl backdrop-blur-xl self-start md:self-auto">
             <button
               onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
-              className="p-2 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-xl transition-colors"
+              className="p-2 text-slate-300 hover:text-white hover:bg-white/[0.08] rounded-xl transition-colors"
               title="วันก่อนหน้า"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-5 h-5" />
             </button>
 
             <button
               onClick={() => setSelectedDate(todayStr)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
                 selectedDate === todayStr
-                  ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40 shadow-xs'
-                  : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
               วันนี้
             </button>
 
-            <div className="flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-white">
-              <Calendar className="w-4 h-4 text-blue-400" />
+            <div className="flex items-center gap-2 px-3 py-1.5 text-base font-bold text-white">
+              <Calendar className="w-5 h-5 text-blue-400" />
               <span>{formatThaiDate(selectedDate)}</span>
             </div>
 
             <button
               onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
-              className="p-2 text-slate-400 hover:text-white hover:bg-white/[0.06] rounded-xl transition-colors"
+              className="p-2 text-slate-300 hover:text-white hover:bg-white/[0.08] rounded-xl transition-colors"
               title="วันถัดไป"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-5 h-5" />
             </button>
 
             <button
               onClick={() => revalidatePlan()}
               disabled={isLoading}
-              className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors disabled:opacity-50"
+              className="p-2 text-slate-300 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors disabled:opacity-50"
               title="รีเฟรชข้อมูล"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-400' : ''}`} />
+              <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin text-blue-400' : ''}`} />
             </button>
           </div>
         </div>
 
         {/* SECTION 1: MARKET REGIME & SENTIMENT COMPASS */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Regime Badge Card */}
-          <div className="lg:col-span-5 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/90 border border-white/[0.08] rounded-2xl p-5 shadow-xl relative overflow-hidden backdrop-blur-xl flex flex-col justify-between">
-            <div className="absolute top-0 right-0 -mt-8 -mr-8 w-44 h-44 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="lg:col-span-5 bg-gradient-to-br from-slate-900/95 via-slate-900/80 to-slate-950/95 border-2 border-white/[0.1] rounded-3xl p-6 shadow-2xl relative overflow-hidden backdrop-blur-2xl flex flex-col justify-between">
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-52 h-52 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
 
             <div>
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                    <Compass className="w-4 h-4" />
+              <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                    <Compass className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="text-[11px] font-semibold text-slate-400 tracking-wider uppercase">
+                    <span className="text-xs font-bold text-blue-400 tracking-wider uppercase block">
                       Market Regime Compass
                     </span>
-                    <h3 className="text-base font-bold text-white">สภาวะตลาดวันนี้</h3>
+                    <h3 className="text-xl font-black text-white">สภาวะตลาดวันนี้</h3>
                   </div>
                 </div>
 
                 <div
-                  className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide uppercase ${
-                    data?.marketOverview?.regime?.bg || 'bg-cyan-500/10 border-cyan-500/30'
-                  } ${data?.marketOverview?.regime?.color || 'text-cyan-400'}`}
+                  className={`px-4 py-1.5 rounded-full text-sm font-extrabold border tracking-wide uppercase shadow-sm ${
+                    data?.marketOverview?.regime?.bg || 'bg-cyan-500/15 border-cyan-500/40'
+                  } ${data?.marketOverview?.regime?.color || 'text-cyan-300'}`}
                 >
                   {data?.marketOverview?.regime?.title || 'กำลังวิเคราะห์...'}
                 </div>
               </div>
 
-              <p className="text-xs text-slate-300 leading-relaxed mt-2 bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl">
+              <div className="text-sm md:text-base text-slate-200 leading-relaxed mt-3 bg-white/[0.03] border border-white/[0.06] p-4 rounded-2xl">
                 {data?.marketOverview?.regime?.description ||
                   'กำลังประมวลผลดัชนีตลาดหลักเพื่อวิเคราะห์โมเมนตัมและความเสี่ยง...'}
-              </p>
+              </div>
             </div>
 
             {/* Dry Powder & Currency Info */}
-            <div className="pt-4 mt-4 border-t border-white/[0.06] grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/[0.04]">
-                <span className="text-slate-400 block text-[11px]">เงินสดสำรอง (Dry Powder)</span>
-                <span className="text-sm font-bold text-emerald-400">
+            <div className="pt-5 mt-5 border-t border-white/[0.08] grid grid-cols-2 gap-4">
+              <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-white/[0.06]">
+                <span className="text-xs font-semibold text-slate-400 block mb-1">
+                  เงินสดสำรอง (Dry Powder)
+                </span>
+                <span className="text-lg md:text-xl font-black text-emerald-400 font-mono">
                   ฿{(data?.totalCash ?? 0).toLocaleString()}
                 </span>
-                <span className="text-[10px] text-slate-500 ml-1">
+                <span className="text-xs font-bold text-slate-400 ml-1.5">
                   ({data?.totalPortfolioValue ? ((data.totalCash / data.totalPortfolioValue) * 100).toFixed(1) : 0}%)
                 </span>
               </div>
-              <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/[0.04]">
-                <span className="text-slate-400 block text-[11px]">อัตราแลกเปลี่ยน USD/THB</span>
-                <span className="text-sm font-bold text-cyan-300">
+              <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-white/[0.06]">
+                <span className="text-xs font-semibold text-slate-400 block mb-1">
+                  อัตราแลกเปลี่ยน USD/THB
+                </span>
+                <span className="text-lg md:text-xl font-black text-cyan-300 font-mono">
                   ฿{data?.marketOverview?.usdThbRate ? data.marketOverview.usdThbRate.toFixed(2) : '33.30'}
                 </span>
-                <span className="text-[10px] text-slate-500 ml-1">บาท/ดอลลาร์</span>
+                <span className="text-xs text-slate-400 ml-1.5">บาท/ดอลลาร์</span>
               </div>
             </div>
           </div>
 
           {/* Benchmark Ticker Tiles */}
-          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-4">
             {(data?.marketOverview?.benchmarks || []).map((bm) => {
               const isUp = bm.changePercent >= 0
               return (
                 <div
                   key={bm.symbol}
-                  className="bg-slate-900/60 border border-white/[0.06] hover:border-white/[0.12] rounded-2xl p-3.5 backdrop-blur-xl transition-all flex flex-col justify-between"
+                  className="bg-slate-900/80 border-2 border-white/[0.08] hover:border-white/[0.18] rounded-3xl p-4 md:p-5 backdrop-blur-xl transition-all flex flex-col justify-between shadow-lg"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-bold text-white tracking-tight">{bm.symbol}</span>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-black text-white tracking-tight">{bm.symbol}</span>
                     <span
-                      className={`flex items-center text-[11px] font-bold px-1.5 py-0.5 rounded-md ${
+                      className={`flex items-center text-xs font-black px-2 py-0.5 rounded-lg border ${
                         isUp
-                          ? 'bg-emerald-500/15 text-emerald-400'
-                          : 'bg-rose-500/15 text-rose-400'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                       }`}
                     >
-                      {isUp ? <ArrowUpRight className="w-3 h-3 mr-0.5" /> : <ArrowDownRight className="w-3 h-3 mr-0.5" />}
+                      {isUp ? <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" /> : <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" />}
                       {isUp ? '+' : ''}
                       {bm.changePercent.toFixed(2)}%
                     </span>
                   </div>
 
-                  <span className="text-[11px] text-slate-400 truncate mb-2">{bm.name}</span>
+                  <span className="text-xs font-semibold text-slate-300 truncate mb-2">{bm.name}</span>
 
-                  <div className="text-base font-extrabold text-white font-mono">
+                  <div className="text-lg md:text-xl font-black text-white font-mono">
                     {bm.currency === 'USD' ? '$' : bm.currency === 'THB' ? '฿' : ''}
                     {bm.price.toLocaleString(undefined, {
                       minimumFractionDigits: bm.price < 10 ? 3 : 2,
@@ -533,118 +545,50 @@ export default function DailyPlanPage() {
           </div>
         </div>
 
-        {/* SECTION 2: AI DAILY INTELLIGENCE BRIEF */}
-        <div className="bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-slate-900/80 border border-indigo-500/30 rounded-2xl p-5 md:p-6 shadow-2xl backdrop-blur-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 -mt-12 -mr-12 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300 shadow-md shadow-indigo-950/50">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-white tracking-tight">
-                    AI Market Strategist (สรุปตลาดเฉพาะพอร์ตคุณ)
-                  </h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    AI INTELLIGENCE
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400">
-                  {data?.aiBriefing?.updatedAt
-                    ? `อัปเดตล่าสุด: ${new Date(data.aiBriefing.updatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น. (โมเดล: ${data.aiBriefing.modelUsed})`
-                    : 'วิเคราะห์ทิศทางตลาดมหภาคผสานสัญญาณแนวรับ/แนวต้านของหุ้นในพอร์ตคุณ'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {data?.aiBriefing?.text && (
-                <button
-                  onClick={handleCopyAiToNotes}
-                  className="px-3 py-1.5 rounded-xl text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-slate-200 border border-white/[0.1] transition-all flex items-center gap-1.5"
-                  title="คัดลอกบทวิเคราะห์ลงในสมุดบันทึกประจำวัน"
-                >
-                  <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>คัดลอกลงบันทึก</span>
-                </button>
-              )}
-
-              <button
-                onClick={handleGenerateAiBrief}
-                disabled={generatingAi || isLoading}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 disabled:opacity-50"
-              >
-                {generatingAi ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>กำลังวิเคราะห์...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    <span>{data?.aiBriefing ? 'ขอคำแนะนำ AI ใหม่' : 'เริ่มให้ AI วางแผน'}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {aiError && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-center gap-2 mb-3">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>{aiError}</span>
-            </div>
-          )}
-
-          {data?.aiBriefing?.text ? (
-            <div className="bg-slate-950/60 border border-white/[0.06] rounded-xl p-4 md:p-5 text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-line space-y-2">
-              {data.aiBriefing.text}
-            </div>
-          ) : (
-            <div className="bg-slate-950/40 border border-dashed border-white/[0.08] rounded-xl p-6 text-center text-xs text-slate-400 space-y-2">
-              <Sparkles className="w-8 h-8 text-indigo-400/60 mx-auto" />
-              <p className="font-medium text-slate-300">ยังไม่มีบทวิเคราะห์สำหรับวันนี้</p>
-              <p className="text-slate-500 text-[11px] max-w-md mx-auto">
-                กดปุ่ม &quot;เริ่มให้ AI วางแผน&quot; ด้านบน เพื่อให้ Gemini AI รวบรวมสภาวะตลาด และสแกนหุ้นในพอร์ตคุณเพื่อสร้าง Daily Action Plan
-              </p>
-            </div>
-          )}
-        </div>
+        {/* SECTION 2: AI MARKET STRATEGIST BENTO VIEWER */}
+        <AiBriefViewer
+          text={data?.aiBriefing?.text || ''}
+          modelUsed={data?.aiBriefing?.modelUsed}
+          updatedAt={data?.aiBriefing?.updatedAt}
+          isGenerating={generatingAi}
+          error={aiError}
+          onRegenerate={handleGenerateAiBrief}
+          onCopyNotes={handleCopyAiToNotes}
+          onAddToChecklist={handleAddToChecklistFromAi}
+        />
 
         {/* SECTION 3: PORTFOLIO ACTIONABLE TRIGGERS & S/R WATCH */}
-        <div className="bg-slate-900/60 border border-white/[0.08] rounded-2xl p-5 md:p-6 shadow-xl backdrop-blur-xl">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <div className="bg-slate-900/80 border-2 border-white/[0.08] rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <div className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-teal-400" />
-                <h3 className="text-base font-bold text-white tracking-tight">
+              <div className="flex items-center gap-2.5">
+                <Target className="w-6 h-6 text-teal-400" />
+                <h3 className="text-xl font-black text-white tracking-tight">
                   Portfolio Daily Action Watch (สแกนจุดซื้อ/ขายในพอร์ตวันนี้)
                 </h3>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                คัดกรองหุ้นในพอร์ตที่ลงมาแตะแนวรับสำคัญ (S1/SMA), RSI Oversold, หรือส่งสัญญาณเตือน
+              <p className="text-sm text-slate-300 mt-1">
+                คัดกรองหุ้นในพอร์ตที่แตะแนวรับสำคัญ (S1/SMA), RSI Oversold, หรือส่งสัญญาณเตือน
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center bg-slate-950/60 p-1 rounded-xl border border-white/[0.06] text-xs">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-slate-950/80 p-1.5 rounded-2xl border border-white/[0.08] text-sm">
                 <button
                   onClick={() => setTriggerTab('ALERTS_ONLY')}
-                  className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                  className={`px-4 py-2 rounded-xl font-bold transition-all ${
                     triggerTab === 'ALERTS_ONLY'
-                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                      ? 'bg-teal-500/25 text-teal-300 border border-teal-500/40 shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  เฉพาะที่มีสัญญาณเตือน ({data?.portfolioTriggers?.filter((t) => t.actionPriority !== 'NORMAL').length || 0})
+                  เฉพาะมีสัญญาณเตือน ({data?.portfolioTriggers?.filter((t) => t.actionPriority !== 'NORMAL').length || 0})
                 </button>
                 <button
                   onClick={() => setTriggerTab('ALL')}
-                  className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                  className={`px-4 py-2 rounded-xl font-bold transition-all ${
                     triggerTab === 'ALL'
-                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                      ? 'bg-teal-500/25 text-teal-300 border border-teal-500/40 shadow-sm'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -654,9 +598,9 @@ export default function DailyPlanPage() {
 
               <button
                 onClick={() => setQuickAddOpen(true)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-all flex items-center gap-1.5 shadow-md shadow-blue-600/20"
+                className="px-4 py-2.5 rounded-2xl text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white transition-all flex items-center gap-2 shadow-lg shadow-blue-600/30"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
                 <span>บันทึกธุรกรรม</span>
               </button>
             </div>
@@ -664,34 +608,34 @@ export default function DailyPlanPage() {
 
           {/* Triggers Table */}
           {displayedTriggers.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400 border border-dashed border-white/[0.06] rounded-xl">
-              <ShieldCheck className="w-10 h-10 text-emerald-400/60 mx-auto mb-2" />
-              <p className="font-semibold text-slate-300">
+            <div className="py-14 text-center text-sm text-slate-300 border-2 border-dashed border-white/[0.08] rounded-2xl space-y-2">
+              <ShieldCheck className="w-12 h-12 text-emerald-400/80 mx-auto" />
+              <p className="text-base font-bold text-white">
                 {triggerTab === 'ALERTS_ONLY'
-                  ? 'ไม่พบสินทรัพย์ที่มีสัญญาณเตือนระดับสูงในวันนี้'
+                  ? 'ไม่พบสินทรัพย์ที่มีสัญญาณเตือนรุนแรงในวันนี้'
                   : 'ยังไม่มีสินทรัพย์ในพอร์ต'}
               </p>
-              <p className="text-slate-500 text-[11px] mt-1">
+              <p className="text-slate-400 text-sm max-w-md mx-auto">
                 {triggerTab === 'ALERTS_ONLY'
-                  ? 'สินทรัพย์ส่วนใหญ่เคลื่อนไหวในกรอบปกติ ไม่มีตัวใดแตะแนวรับรุนแรงหรือ Oversold'
+                  ? 'สินทรัพย์ส่วนใหญ่เคลื่อนไหวในกรอบปกติ ไม่มีตัวใดหลุดแนวรับรุนแรงหรือเข้าเขต Oversold'
                   : 'เพิ่มธุรกรรมการซื้อเพื่อเริ่มระบบสแกนรายวัน'}
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="border-b border-white/[0.08] text-slate-400 text-[11px] tracking-wider uppercase font-semibold">
-                    <th className="pb-3 pr-4">สินทรัพย์</th>
-                    <th className="pb-3 px-4 text-right">ราคาปัจจุบัน</th>
-                    <th className="pb-3 px-4 text-center">RSI(14)</th>
-                    <th className="pb-3 px-4 text-right">แนวรับ S1</th>
-                    <th className="pb-3 px-4 text-right">ระยะห่างถึงแนวรับ</th>
-                    <th className="pb-3 px-4">สัญญาณทางเทคนิค</th>
-                    <th className="pb-3 pl-4 text-right">การกระทำที่แนะนำ</th>
+                  <tr className="border-b-2 border-white/[0.08] text-slate-300 text-xs tracking-wider uppercase font-bold">
+                    <th className="pb-4 pr-4">สินทรัพย์</th>
+                    <th className="pb-4 px-4 text-right">ราคาปัจจุบัน</th>
+                    <th className="pb-4 px-4 text-center">RSI(14)</th>
+                    <th className="pb-4 px-4 text-right">แนวรับ S1</th>
+                    <th className="pb-4 px-4 text-right">ระยะห่างถึงแนวรับ</th>
+                    <th className="pb-4 px-4">สัญญาณทางเทคนิค</th>
+                    <th className="pb-4 pl-4 text-right">การกระทำ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/[0.04]">
+                <tbody className="divide-y divide-white/[0.06]">
                   {displayedTriggers.map((item) => {
                     const rsi = item.rsi14
                     const isOversold = rsi !== null && rsi <= 35
@@ -701,26 +645,26 @@ export default function DailyPlanPage() {
                     return (
                       <tr
                         key={item.ticker}
-                        className="hover:bg-white/[0.02] transition-colors group"
+                        className="hover:bg-white/[0.03] transition-colors group"
                       >
                         {/* Ticker & Name */}
-                        <td className="py-3.5 pr-4">
-                          <div className="flex items-center gap-2.5">
+                        <td className="py-4 pr-4">
+                          <div className="flex items-center gap-3">
                             <StockLogo
                               ticker={item.ticker}
                               name={item.assetName}
-                              className="w-8 h-8 rounded-xl shrink-0"
+                              className="w-10 h-10 rounded-2xl shrink-0"
                             />
                             <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-white tracking-wide">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base font-black text-white tracking-wide">
                                   {item.ticker}
                                 </span>
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/[0.06] text-slate-400">
+                                <span className="text-xs px-2 py-0.5 rounded-md bg-white/[0.08] text-slate-300 font-semibold">
                                   {item.market === 'US' ? '🇺🇸' : item.market === 'TH' ? '🇹🇭' : '🪙'} {item.market}
                                 </span>
                               </div>
-                              <span className="text-[11px] text-slate-400 truncate block max-w-[140px]">
+                              <span className="text-xs font-semibold text-slate-400 truncate block max-w-[160px]">
                                 {item.assetName}
                               </span>
                             </div>
@@ -728,8 +672,8 @@ export default function DailyPlanPage() {
                         </td>
 
                         {/* Current Price */}
-                        <td className="py-3.5 px-4 text-right font-mono">
-                          <span className="font-bold text-white">
+                        <td className="py-4 px-4 text-right font-mono">
+                          <span className="text-base font-black text-white">
                             {item.currency === 'USD' ? '$' : item.currency === 'THB' ? '฿' : ''}
                             {item.currentPrice.toLocaleString(undefined, {
                               minimumFractionDigits: 2,
@@ -737,31 +681,31 @@ export default function DailyPlanPage() {
                             })}
                           </span>
                           <span
-                            className={`block text-[10px] font-semibold ${
+                            className={`block text-xs font-bold ${
                               item.unrealizedPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                             }`}
                           >
-                            กำไรพอร์ต {item.unrealizedPnLPercent >= 0 ? '+' : ''}
-                            {item.unrealizedPnLPercent.toFixed(1)}%
+                            {item.unrealizedPnLPercent >= 0 ? '+' : ''}
+                            {item.unrealizedPnLPercent.toFixed(1)}% ในพอร์ต
                           </span>
                         </td>
 
                         {/* RSI 14 Gauge */}
-                        <td className="py-3.5 px-4 text-center">
+                        <td className="py-4 px-4 text-center">
                           {rsi !== null ? (
                             <div className="inline-flex flex-col items-center">
                               <span
-                                className={`font-mono font-bold text-xs px-2 py-0.5 rounded-md ${
+                                className={`font-mono font-black text-sm px-3 py-1 rounded-xl border ${
                                   isOversold
-                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                    ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/40 shadow-xs'
                                     : isOverbought
-                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                                    : 'bg-slate-800 text-slate-300'
+                                    ? 'bg-amber-500/25 text-amber-300 border-amber-500/40'
+                                    : 'bg-slate-800/90 text-slate-200 border-white/[0.08]'
                                 }`}
                               >
                                 {rsi.toFixed(1)}
                               </span>
-                              <span className="text-[9px] text-slate-500 mt-0.5">
+                              <span className="text-[11px] font-semibold text-slate-400 mt-1">
                                 {isOversold ? 'Oversold 🔥' : isOverbought ? 'Overbought ⚠️' : 'โซนปกติ'}
                               </span>
                             </div>
@@ -771,9 +715,9 @@ export default function DailyPlanPage() {
                         </td>
 
                         {/* Support S1 */}
-                        <td className="py-3.5 px-4 text-right font-mono">
+                        <td className="py-4 px-4 text-right font-mono">
                           {item.supportS1 ? (
-                            <span className="text-slate-300 font-semibold">
+                            <span className="text-base font-black text-slate-100">
                               ${item.supportS1.toFixed(2)}
                             </span>
                           ) : (
@@ -782,15 +726,15 @@ export default function DailyPlanPage() {
                         </td>
 
                         {/* Distance to S1 */}
-                        <td className="py-3.5 px-4 text-right font-mono">
+                        <td className="py-4 px-4 text-right font-mono">
                           {item.distanceToS1Percent !== null ? (
                             <span
-                              className={`font-semibold ${
+                              className={`text-sm font-black ${
                                 isNearS1
-                                  ? 'text-teal-400 font-bold'
+                                  ? 'text-teal-300 bg-teal-500/20 px-2 py-0.5 rounded-lg border border-teal-500/30'
                                   : item.distanceToS1Percent <= 5
                                   ? 'text-cyan-300'
-                                  : 'text-slate-400'
+                                  : 'text-slate-300'
                               }`}
                             >
                               {item.distanceToS1Percent > 0 ? '+' : ''}
@@ -802,34 +746,34 @@ export default function DailyPlanPage() {
                         </td>
 
                         {/* Technical Signal Tag */}
-                        <td className="py-3.5 px-4">
+                        <td className="py-4 px-4">
                           <span
-                            className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${item.actionTagColor}`}
+                            className={`inline-block px-3 py-1 rounded-xl text-xs font-bold border ${item.actionTagColor}`}
                           >
                             {item.actionTag}
                           </span>
-                          <span className="block text-[10px] text-slate-400 mt-1 max-w-[200px] truncate" title={item.technicalReason}>
+                          <span className="block text-xs font-medium text-slate-300 mt-1 max-w-[220px] truncate" title={item.technicalReason}>
                             {item.technicalReason}
                           </span>
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3.5 pl-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="py-4 pl-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleAddAction(item.ticker, item.supportS1 ?? item.currentPrice, item.actionTag)}
-                              className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 transition-all flex items-center gap-1"
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all flex items-center gap-1.5 shadow-xs"
                               title="เพิ่มสินทรัพย์นี้ลงในแผนปฏิบัติการวันนี้"
                             >
-                              <Plus className="w-3 h-3" />
+                              <Plus className="w-3.5 h-3.5" />
                               <span>ใส่ในแผน</span>
                             </button>
                             <button
                               onClick={() => setQuickAddOpen(true)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+                              className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
                               title="เปิดหน้าต่างบันทึกธุรกรรม"
                             >
-                              <Zap className="w-3.5 h-3.5 text-blue-400" />
+                              <Zap className="w-4 h-4 text-blue-400" />
                             </button>
                           </div>
                         </td>
@@ -843,54 +787,61 @@ export default function DailyPlanPage() {
         </div>
 
         {/* SECTION 4: TODAY'S EXECUTION PLAN & INTERACTIVE CHECKLIST */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Left Column: Interactive Daily Checklist */}
-          <div className="lg:col-span-5 bg-slate-900/60 border border-white/[0.08] rounded-2xl p-5 md:p-6 shadow-xl backdrop-blur-xl flex flex-col justify-between">
+          <div className="lg:col-span-5 bg-slate-900/80 border-2 border-white/[0.08] rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <CalendarCheck className="w-5 h-5 text-emerald-400" />
-                  <h3 className="text-base font-bold text-white tracking-tight">
-                    เช็กลิสต์ประจำวัน (Daily Checklist)
-                  </h3>
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                    <CalendarCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
+                      Daily Routine
+                    </span>
+                    <h3 className="text-xl font-black text-white tracking-tight">
+                      เช็กลิสต์ประจำวัน
+                    </h3>
+                  </div>
                 </div>
-                <span className="text-xs font-mono font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                <span className="text-sm font-mono font-bold text-emerald-300 bg-emerald-500/20 px-3.5 py-1.5 rounded-xl border border-emerald-500/30">
                   {completedCount}/{checklist.length} สำเร็จ ({progressPercent}%)
                 </span>
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full bg-slate-800 rounded-full h-1.5 mb-5 overflow-hidden">
+              <div className="w-full bg-slate-800 rounded-full h-2 mb-6 overflow-hidden">
                 <div
-                  className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500 shadow-md shadow-emerald-500/50"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
 
               {/* Checklist Items */}
-              <div className="space-y-2 mb-4">
+              <div className="space-y-3 mb-5">
                 {checklist.map((item) => (
                   <div
                     key={item.id}
                     onClick={() => handleToggleChecklist(item.id)}
-                    className={`flex items-start justify-between gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                    className={`flex items-start justify-between gap-3.5 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
                       item.done
-                        ? 'bg-emerald-500/5 border-emerald-500/20 text-slate-400'
-                        : 'bg-slate-950/40 hover:bg-white/[0.02] border-white/[0.04] text-slate-200'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-slate-400'
+                        : 'bg-slate-950/60 hover:bg-slate-950/90 border-white/[0.08] text-slate-100 hover:border-emerald-500/40'
                     }`}
                   >
-                    <div className="flex items-start gap-2.5 flex-1">
+                    <div className="flex items-start gap-3.5 flex-1">
                       <button
                         type="button"
                         className="mt-0.5 text-emerald-400 hover:text-emerald-300 shrink-0"
                       >
                         {item.done ? (
-                          <CheckCircle2 className="w-4 h-4 fill-emerald-500/20" />
+                          <CheckCircle2 className="w-5 h-5 fill-emerald-500/30" />
                         ) : (
-                          <Circle className="w-4 h-4 text-slate-500" />
+                          <Circle className="w-5 h-5 text-slate-400 hover:text-emerald-400" />
                         )}
                       </button>
-                      <span className={`text-xs leading-relaxed ${item.done ? 'line-through text-slate-500' : ''}`}>
+                      <span className={`text-sm md:text-base leading-relaxed font-medium ${item.done ? 'line-through text-slate-500' : 'text-slate-100'}`}>
                         {item.text}
                       </span>
                     </div>
@@ -901,57 +852,65 @@ export default function DailyPlanPage() {
                         e.stopPropagation()
                         handleDeleteChecklist(item.id)
                       }}
-                      className="text-slate-600 hover:text-rose-400 p-1 transition-colors"
+                      className="text-slate-500 hover:text-rose-400 p-1.5 transition-colors"
                       title="ลบข้อนี้"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ))}
               </div>
 
               {/* Add Custom Task Form */}
-              <form onSubmit={handleAddChecklist} className="flex gap-2 mt-3">
+              <form onSubmit={handleAddChecklist} className="flex gap-2.5 mt-4">
                 <input
                   type="text"
                   placeholder="+ เพิ่มสิ่งที่ต้องทำวันนี้..."
                   value={newChecklistText}
                   onChange={(e) => setNewChecklistText(e.target.value)}
-                  className="flex-1 bg-slate-950/60 border border-white/[0.08] focus:border-emerald-500/50 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none transition-all"
+                  className="flex-1 bg-slate-950/80 border-2 border-white/[0.1] focus:border-emerald-500/60 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-400 outline-none transition-all shadow-inner"
                 />
                 <button
                   type="submit"
                   disabled={!newChecklistText.trim()}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-semibold transition-all"
+                  className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-bold transition-all shadow-lg shadow-emerald-600/30"
                 >
                   เพิ่ม
                 </button>
               </form>
             </div>
 
-            <div className="text-[11px] text-slate-500 mt-6 pt-3 border-t border-white/[0.04] flex items-center justify-between">
-              <span>* การติ๊กเลือกจะบันทึกอัตโนมัติลงฐานข้อมูล</span>
-              {saveSuccess && <span className="text-emerald-400 font-semibold flex items-center gap-1"><Check className="w-3 h-3" /> บันทึกแล้ว</span>}
+            <div className="text-xs font-medium text-slate-400 mt-6 pt-4 border-t border-white/[0.08] flex items-center justify-between">
+              <span>* การติ๊กเลือกจะบันทึกอัตโนมัติลงฐานข้อมูลทันที</span>
+              {saveSuccess && (
+                <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <Check className="w-4 h-4" /> บันทึกแล้ว
+                </span>
+              )}
             </div>
           </div>
 
           {/* Right Column: Strategy Notes & Target Orders Plan */}
-          <div className="lg:col-span-7 bg-slate-900/60 border border-white/[0.08] rounded-2xl p-5 md:p-6 shadow-xl backdrop-blur-xl flex flex-col justify-between">
-            <div>
+          <div className="lg:col-span-7 bg-slate-900/80 border-2 border-white/[0.08] rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
+            <div className="space-y-6">
               {/* Header & Market Bias selector */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-                <div>
-                  <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-blue-400" />
-                    บันทึกกลยุทธ์ & แผนตั้งรับประจำวัน
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    กำหนดจุดยืนและคำสั่งซื้อขายที่ตั้งเป้าหมายไว้สำหรับวันนี้
-                  </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-blue-400 uppercase tracking-wider block">
+                      Execution Strategy
+                    </span>
+                    <h3 className="text-xl font-black text-white tracking-tight">
+                      บันทึกกลยุทธ์ & แผนตั้งรับ
+                    </h3>
+                  </div>
                 </div>
 
                 {/* Bias Selector */}
-                <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-white/[0.06] text-[11px]">
+                <div className="flex items-center gap-1.5 bg-slate-950/80 p-1.5 rounded-2xl border border-white/[0.08] text-xs">
                   {(['BULLISH', 'NEUTRAL', 'BEARISH', 'VOLATILE'] as const).map((b) => {
                     const isSelected = marketBias === b
                     const label =
@@ -969,9 +928,9 @@ export default function DailyPlanPage() {
                           setMarketBias(b)
                           handleSavePlan(b)
                         }}
-                        className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+                        className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
                           isSelected
-                            ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40 shadow-xs'
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                             : 'text-slate-400 hover:text-white'
                         }`}
                       >
@@ -983,53 +942,53 @@ export default function DailyPlanPage() {
               </div>
 
               {/* Planned Target Orders Table */}
-              <div className="mb-5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-slate-300">
+              <div className="bg-slate-950/60 border border-white/[0.08] rounded-2xl p-4 md:p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-slate-200">
                     🎯 สินทรัพย์เป้าหมายของวันนี้ (Target Orders)
                   </span>
-                  <span className="text-[11px] text-slate-500 font-mono">
+                  <span className="text-xs font-bold text-slate-400 font-mono">
                     {targetActions.length} รายการ
                   </span>
                 </div>
 
                 {targetActions.length === 0 ? (
-                  <div className="p-4 bg-slate-950/40 border border-dashed border-white/[0.06] rounded-xl text-center text-xs text-slate-500">
+                  <div className="p-5 bg-slate-900/60 border-2 border-dashed border-white/[0.06] rounded-xl text-center text-sm text-slate-400">
                     ยังไม่มีรายการสั่งซื้อขายที่วางแผนไว้สำหรับวันนี้ (กด &quot;ใส่ในแผน&quot; จากตารางด้านบน หรือเพิ่มด้านล่าง)
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
                     {targetActions.map((action) => (
                       <div
                         key={action.id}
-                        className="bg-slate-950/60 border border-white/[0.04] p-3 rounded-xl flex items-center justify-between gap-3 text-xs"
+                        className="bg-slate-900/90 border border-white/[0.08] p-3.5 rounded-xl flex items-center justify-between gap-3 text-sm"
                       >
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-3">
                           <span
-                            className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                            className={`px-2.5 py-1 rounded-lg font-black text-xs ${
                               action.action === 'BUY'
                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                 : action.action === 'SELL'
                                 ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                                : 'bg-slate-800 text-slate-300'
+                                : 'bg-slate-800 text-slate-200'
                             }`}
                           >
                             {action.action}
                           </span>
-                          <span className="font-bold text-white font-mono">{action.ticker}</span>
+                          <span className="font-black text-white font-mono text-base">{action.ticker}</span>
                           {action.targetPrice && (
-                            <span className="text-slate-300 font-mono">
+                            <span className="text-slate-200 font-mono font-bold text-sm">
                               @ ${action.targetPrice.toFixed(2)}
                             </span>
                           )}
                           {action.note && (
-                            <span className="text-slate-500 text-[11px] hidden sm:inline truncate max-w-[150px]">
+                            <span className="text-slate-400 text-xs hidden sm:inline truncate max-w-[180px]">
                               ({action.note})
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
                           <select
                             value={action.status}
                             onChange={(e) =>
@@ -1038,12 +997,12 @@ export default function DailyPlanPage() {
                                 e.target.value as 'PENDING' | 'EXECUTED' | 'CANCELLED'
                               )
                             }
-                            className={`text-[10px] font-semibold px-2 py-1 rounded-lg border bg-slate-900 outline-none ${
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl border bg-slate-900 outline-none ${
                               action.status === 'EXECUTED'
-                                ? 'text-emerald-400 border-emerald-500/30'
+                                ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/20'
                                 : action.status === 'CANCELLED'
-                                ? 'text-rose-400 border-rose-500/30'
-                                : 'text-amber-400 border-amber-500/30'
+                                ? 'text-rose-400 border-rose-500/40 bg-rose-950/20'
+                                : 'text-amber-400 border-amber-500/40 bg-amber-950/20'
                             }`}
                           >
                             <option value="PENDING">รอดำเนินการ</option>
@@ -1054,9 +1013,9 @@ export default function DailyPlanPage() {
                           <button
                             type="button"
                             onClick={() => handleDeleteAction(action.id)}
-                            className="text-slate-600 hover:text-rose-400 p-1"
+                            className="text-slate-500 hover:text-rose-400 p-1.5"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -1065,18 +1024,18 @@ export default function DailyPlanPage() {
                 )}
 
                 {/* Inline add action form */}
-                <form onSubmit={handleAddCustomAction} className="grid grid-cols-1 sm:grid-cols-4 gap-2 mt-2.5">
+                <form onSubmit={handleAddCustomAction} className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-2">
                   <input
                     type="text"
                     placeholder="Ticker (เช่น NVDA)"
                     value={newTicker}
                     onChange={(e) => setNewTicker(e.target.value)}
-                    className="bg-slate-950/60 border border-white/[0.08] rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 uppercase outline-none"
+                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3.5 py-2 text-sm text-white placeholder-slate-400 uppercase outline-none font-bold"
                   />
                   <select
                     value={newActionType}
                     onChange={(e) => setNewActionType(e.target.value as any)}
-                    className="bg-slate-950/60 border border-white/[0.08] rounded-xl px-2 py-1.5 text-xs text-white outline-none"
+                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white outline-none font-semibold"
                   >
                     <option value="BUY">BUY (ซื้อ)</option>
                     <option value="SELL">SELL (ขาย)</option>
@@ -1089,14 +1048,14 @@ export default function DailyPlanPage() {
                     placeholder="ราคาเป้าหมาย ($)"
                     value={newTargetPrice}
                     onChange={(e) => setNewTargetPrice(e.target.value)}
-                    className="bg-slate-950/60 border border-white/[0.08] rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none"
+                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3.5 py-2 text-sm text-white placeholder-slate-400 outline-none font-mono"
                   />
                   <button
                     type="submit"
                     disabled={!newTicker.trim()}
-                    className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-semibold transition-all flex items-center justify-center gap-1"
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/30"
                   >
-                    <Plus className="w-3 h-3" />
+                    <Plus className="w-4 h-4" />
                     <span>เพิ่มออร์เดอร์</span>
                   </button>
                 </form>
@@ -1104,43 +1063,43 @@ export default function DailyPlanPage() {
 
               {/* Free-form Strategy Notes */}
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                <label className="text-sm font-bold text-slate-200 block mb-2">
                   📝 บันทึกกลยุทธ์ & Trading Journal ส่วนตัว
                 </label>
                 <textarea
-                  rows={4}
+                  rows={5}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="เขียนแผนการตัดสินใจวันนี้ เช่น 'วันนี้ตั้งรับ NVDA ที่ $118 แบ่งซื้อ 1 ไม้ ไม่ไล่ราคาถ้ารีบาวด์แรง...'"
-                  className="w-full bg-slate-950/60 border border-white/[0.08] focus:border-blue-500/50 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 outline-none transition-all resize-none leading-relaxed"
+                  className="w-full bg-slate-950/80 border-2 border-white/[0.1] focus:border-blue-500/60 rounded-2xl p-4 text-sm md:text-base text-slate-100 placeholder-slate-400 outline-none transition-all resize-none leading-relaxed shadow-inner"
                 />
               </div>
             </div>
 
             {/* Save Button Bar */}
-            <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/[0.04]">
-              <span className="text-[11px] text-slate-500">
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/[0.08]">
+              <span className="text-xs text-slate-400 font-medium">
                 {data?.plan?.updatedAt ? `บันทึกล่าสุด: ${new Date(data.plan.updatedAt).toLocaleTimeString('th-TH')}` : ''}
               </span>
 
               <button
                 onClick={() => handleSavePlan()}
                 disabled={savingPlan}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                className="px-6 py-3 rounded-2xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-600/30 transition-all flex items-center gap-2 disabled:opacity-50"
               >
                 {savingPlan ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     <span>กำลังบันทึก...</span>
                   </>
                 ) : saveSuccess ? (
                   <>
-                    <Check className="w-3.5 h-3.5" />
+                    <Check className="w-4 h-4" />
                     <span>บันทึกสำเร็จ!</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-3.5 h-3.5" />
+                    <Save className="w-4 h-4" />
                     <span>บันทึกแผนงานวันนี้</span>
                   </>
                 )}
