@@ -38,6 +38,7 @@ model User {
   watchlistItems       WatchlistItem[]
   weeklyDigests        WeeklyDigest[]
   allocationAlerts     AllocationAlert[]
+  dailyPlans           DailyPlan[]
   passwordResetTokens  PasswordResetToken[]
   emailVerifTokens     EmailVerificationToken[]
 
@@ -485,4 +486,24 @@ model AllocationAlert {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, acknowledged])
+}
+
+// ============================================================
+// 21. DailyPlan
+// ============================================================
+model DailyPlan {
+  id            String    @id @default(cuid())
+  userId        String
+  planDate      String    // Format "YYYY-MM-DD" e.g. "2026-09-28"
+  marketBias    String?   // "BULLISH" | "BEARISH" | "NEUTRAL" | "VOLATILE"
+  notes         String?   @db.Text
+  checklist     Json?     // [{ id: string, text: string, done: boolean }]
+  targetActions Json?     // [{ id: string, ticker: string, action: string, targetPrice?: number, note?: string, done?: boolean }]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, planDate])
+  @@index([userId, planDate])
 }
