@@ -498,46 +498,49 @@ export function SubAllocationDrillDown({
       )}
 
       {/* ── Sub-Holdings Table ── */}
-      <div className="overflow-x-auto rounded-xl border border-white/[0.06] bg-black/25">
-        <table className="w-full text-left text-xs">
+      <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-black/35 shadow-xl">
+        <table className="w-full text-left text-sm border-collapse">
           <thead>
-            <tr className="border-b border-white/[0.08] bg-white/[0.02] text-slate-400 font-mono text-[11px]">
-              <th className="py-2.5 px-3">สินทรัพย์</th>
-              <th className="py-2.5 px-3 text-right">มูลค่าปัจจุบัน</th>
-              <th className="py-2.5 px-3 text-center">สัดส่วนในกลุ่ม (จริง vs เป้า)</th>
-              <th className="py-2.5 px-3 text-right">ส่วนต่าง</th>
-              <th className="py-2.5 px-3 text-center">สัญญาณ & จังหวะราคา</th>
+            <tr className="border-b-2 border-white/[0.08] bg-white/[0.03] text-slate-200 font-bold text-xs uppercase tracking-wider">
+              <th className="py-3 px-4 min-w-[160px]">สินทรัพย์</th>
+              <th className="py-3 px-4 text-right min-w-[120px]">มูลค่าปัจจุบัน</th>
+              <th className="py-3 px-4 text-center min-w-[160px]">สัดส่วนในกลุ่ม (จริง vs เป้า)</th>
+              <th className="py-3 px-4 text-right min-w-[100px]">ส่วนต่าง</th>
+              <th className="py-3 px-4 text-center min-w-[260px]">สัญญาณ & จังหวะราคา</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/[0.04]">
+          <tbody className="divide-y divide-white/[0.06]">
             {subItems.map((item) => {
               const isOver = item.driftInGroup > 0
               const isUnder = item.driftInGroup < 0
 
               return (
-                <tr key={item.ticker} className="hover:bg-white/[0.02] transition-colors">
-                  <td className="py-3 px-3">
-                    <div className="flex items-center gap-2.5">
+                <tr key={item.ticker} className="hover:bg-white/[0.03] transition-colors">
+                  <td className="py-3.5 px-4">
+                    <div className="flex items-center gap-3">
                       <StockLogo
                         ticker={item.ticker}
                         name={item.name}
-                        size={28}
+                        size={32}
+                        className="rounded-xl shrink-0"
                       />
                       <div>
-                        <span className="font-bold text-white block">{item.ticker}</span>
-                        <span className="text-[10px] text-slate-400 truncate max-w-[120px] block">
-                          {item.name}
-                        </span>
+                        <span className="font-black text-white text-base tracking-wide block">{item.ticker}</span>
+                        {item.name && item.name.trim().toUpperCase() !== item.ticker.trim().toUpperCase() && (
+                          <span className="text-xs text-slate-300 font-medium truncate max-w-[160px] block mt-0.5">
+                            {item.name}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </td>
 
-                  <td className="py-3 px-3 text-right font-mono">
-                    <span className="text-white font-semibold block">
+                  <td className="py-3.5 px-4 text-right font-mono">
+                    <span className="text-white font-black text-base block">
                       ฿{item.currentValueBase.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </span>
                     <span
-                      className={`text-[10px] ${
+                      className={`text-xs font-bold ${
                         item.unrealizedPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                       }`}
                     >
@@ -546,13 +549,13 @@ export function SubAllocationDrillDown({
                     </span>
                   </td>
 
-                  <td className="py-3 px-3">
-                    <div className="space-y-1 max-w-[140px] mx-auto">
-                      <div className="flex items-center justify-between text-[10px] font-mono">
-                        <span className="text-slate-400">{item.actualWeightInGroup.toFixed(1)}%</span>
-                        <span className="text-indigo-300 font-semibold">{item.targetWeightInGroup}%</span>
+                  <td className="py-3.5 px-4">
+                    <div className="space-y-1.5 max-w-[160px] mx-auto">
+                      <div className="flex items-center justify-between text-xs font-mono font-bold">
+                        <span className="text-slate-300 font-bold">{item.actualWeightInGroup.toFixed(1)}%</span>
+                        <span className="text-indigo-300 font-bold">เป้า {item.targetWeightInGroup}%</span>
                       </div>
-                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden flex">
+                      <div className="h-2 bg-slate-800 rounded-full overflow-hidden flex shadow-inner">
                         <div
                           className="h-full bg-indigo-500 rounded-full transition-all duration-300"
                           style={{ width: `${Math.min(100, item.actualWeightInGroup)}%` }}
@@ -561,14 +564,14 @@ export function SubAllocationDrillDown({
                     </div>
                   </td>
 
-                  <td className="py-3 px-3 text-right font-mono">
+                  <td className="py-3.5 px-4 text-right font-mono">
                     <span
-                      className={`font-bold text-xs ${
+                      className={`font-black text-sm px-2 py-0.5 rounded-lg ${
                         Math.abs(item.driftInGroup) <= 3
-                          ? 'text-slate-400'
+                          ? 'text-slate-300 bg-white/[0.04]'
                           : isOver
-                          ? 'text-amber-400'
-                          : 'text-emerald-400'
+                          ? 'text-amber-300 bg-amber-500/15 border border-amber-500/30'
+                          : 'text-emerald-300 bg-emerald-500/15 border border-emerald-500/30'
                       }`}
                     >
                       {isOver ? '+' : ''}
@@ -576,20 +579,20 @@ export function SubAllocationDrillDown({
                     </span>
                   </td>
 
-                  <td className="py-3 px-3 text-center">
-                    <div className="flex flex-col items-center gap-1">
+                  <td className="py-3.5 px-4 text-center">
+                    <div className="flex flex-col items-center gap-1.5">
                       <span
-                        className={`inline-flex items-center text-[10px] font-semibold px-2.5 py-1 rounded-full border ${item.signal.badgeClass}`}
+                        className={`inline-flex items-center text-xs font-bold px-3 py-1 rounded-full border shadow-xs ${item.signal.badgeClass}`}
                       >
                         {item.signal.badgeText}
                       </span>
                       {item.technical?.metricSummary ? (
-                        <span className="text-[10px] font-mono text-slate-400 bg-white/[0.04] px-2 py-0.5 rounded-md border border-white/[0.06] flex items-center gap-1">
-                          <Activity className="w-2.5 h-2.5 text-indigo-400 shrink-0" />
+                        <span className="text-xs font-mono font-semibold text-slate-200 bg-white/[0.06] px-2.5 py-1 rounded-lg border border-white/[0.1] flex items-center gap-1.5">
+                          <Activity className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                           <span>{item.technical.metricSummary}</span>
                         </span>
                       ) : isTechLoading ? (
-                        <span className="text-[9px] text-slate-500 font-mono animate-pulse">
+                        <span className="text-xs text-slate-400 font-mono animate-pulse">
                           กำลังวิเคราะห์กราฟจริง...
                         </span>
                       ) : null}
@@ -603,27 +606,27 @@ export function SubAllocationDrillDown({
       </div>
 
       {/* ── Smart Monthly Tactical DCA Allocation Recommendation Box ── */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-indigo-950/30 via-[#121622] to-cyan-950/20 border border-indigo-500/25 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.08] pb-3.5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center">
-              <Zap className="w-4 h-4" />
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-indigo-950/40 via-[#121622] to-cyan-950/30 border-2 border-indigo-500/30 shadow-2xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 flex items-center justify-center shadow-lg shadow-indigo-950/50">
+              <Zap className="w-5 h-5 text-indigo-300" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <h4 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                 คำแนะนำจัดสรรเงินเดือนหน้า (Smart Tactical DCA)
               </h4>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs sm:text-sm text-slate-300 mt-0.5">
                 วิเคราะห์ร่วมระหว่างสัดส่วนที่ยังขาดในพอร์ต + สัญญาณแนวรับ เพื่อกระจายเงินให้คุ้มค่าที่สุด
               </p>
             </div>
           </div>
 
           {/* Monthly Budget Controller */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 font-sans">งบเติมเงิน:</span>
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm text-slate-200 font-bold font-sans">งบเติมเงิน:</span>
             <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-indigo-400 font-bold">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-indigo-400 font-black">
                 ฿
               </span>
               <input
@@ -632,19 +635,19 @@ export function SubAllocationDrillDown({
                 min="0"
                 value={dcaBudget}
                 onChange={(e) => setDcaBudget(Math.max(0, Number(e.target.value) || 0))}
-                className="w-28 pl-6 pr-2 py-1 bg-black/50 border border-white/[0.12] rounded-lg text-xs font-mono font-bold text-white focus:border-indigo-400 focus:outline-hidden"
+                className="w-32 pl-7 pr-2.5 py-1.5 bg-black/60 border border-white/[0.18] rounded-xl text-sm font-mono font-black text-white focus:border-indigo-400 focus:outline-hidden shadow-inner"
               />
             </div>
-            <div className="hidden sm:flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1.5">
               {[3000, 5000, 10000].map((quick) => (
                 <button
                   key={quick}
                   type="button"
                   onClick={() => setDcaBudget(quick)}
-                  className={`text-[10px] px-2 py-1 rounded-md border font-mono transition-all cursor-pointer ${
+                  className={`text-xs px-3 py-1.5 rounded-lg border font-mono font-bold transition-all cursor-pointer ${
                     dcaBudget === quick
-                      ? 'bg-indigo-600 text-white border-indigo-500'
-                      : 'bg-white/[0.04] text-slate-400 border-white/[0.08] hover:text-white'
+                      ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30'
+                      : 'bg-white/[0.05] text-slate-300 border-white/[0.1] hover:text-white hover:bg-white/[0.1]'
                   }`}
                 >
                   {quick.toLocaleString()}
@@ -655,45 +658,45 @@ export function SubAllocationDrillDown({
         </div>
 
         {/* Action Recommendations Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {tacticalPlan.map((plan) => {
             const isZero = plan.amount === 0
             return (
               <div
                 key={plan.ticker}
-                className={`p-3.5 rounded-xl border transition-all ${
+                className={`p-4 sm:p-5 rounded-2xl border transition-all ${
                   isZero
-                    ? 'bg-white/[0.01] border-white/[0.05] opacity-75'
-                    : 'bg-indigo-500/[0.07] border-indigo-500/25 shadow-md shadow-indigo-950/20'
+                    ? 'bg-white/[0.02] border-white/[0.06] opacity-85'
+                    : 'bg-indigo-500/[0.08] border-indigo-500/30 shadow-lg shadow-indigo-950/30'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white font-mono">{plan.ticker}</span>
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-base sm:text-lg font-black text-white font-mono tracking-wide">{plan.ticker}</span>
                     <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                      className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
                         isZero
-                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/20'
-                          : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                       }`}
                     >
                       {plan.action}
                     </span>
                   </div>
 
-                  <span className={`text-sm font-mono font-bold ${plan.statusClass}`}>
+                  <span className={`text-base sm:text-lg font-mono font-black ${plan.statusClass}`}>
                     {isZero ? '฿0' : `฿${plan.amount.toLocaleString()}`}
                   </span>
                 </div>
 
-                <p className="text-[11px] text-slate-300 leading-relaxed font-sans mb-1.5">
+                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans mb-2">
                   {plan.reason}
                 </p>
 
                 {!isZero && plan.estShares > 0 && (
-                  <div className="text-[10px] font-mono text-indigo-300 flex items-center gap-1.5 pt-1 border-t border-white/[0.06]">
-                    <span>🎯 ซื้อได้ประมาณ:</span>
-                    <strong className="text-white">{plan.estShares} หุ้น</strong>
+                  <div className="text-xs sm:text-sm font-mono text-indigo-300 flex items-center gap-2 pt-2 border-t border-white/[0.08]">
+                    <span className="font-medium text-slate-400">🎯 ซื้อได้ประมาณ:</span>
+                    <strong className="text-white font-bold">{plan.estShares} หุ้น</strong>
                   </div>
                 )}
               </div>
@@ -702,25 +705,25 @@ export function SubAllocationDrillDown({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-2 border-t border-white/[0.06]">
-          <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
-            <Info className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+        <div className="flex items-center justify-between pt-3 border-t border-white/[0.08] flex-wrap gap-2">
+          <p className="text-xs text-slate-400 flex items-center gap-1.5 font-medium">
+            <Info className="w-4 h-4 text-slate-400 shrink-0" />
             คำนวณจากสัดส่วนเป้าหมายและจุดช้อนราคา ช่วยให้กระจายเงินได้ประสิทธิภาพสูงสุด
           </p>
 
           <button
             type="button"
             onClick={handleCopyPlan}
-            className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-slate-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+            className="text-xs sm:text-sm px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-slate-200 hover:text-white transition-all flex items-center gap-2 font-bold cursor-pointer shrink-0 shadow-xs"
           >
             {copiedPlan ? (
               <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400 font-semibold">คัดลอกแผนแล้ว</span>
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span className="text-emerald-400 font-bold">คัดลอกแผนแล้ว</span>
               </>
             ) : (
               <>
-                <Copy className="w-3.5 h-3.5 text-slate-400" />
+                <Copy className="w-4 h-4 text-slate-300" />
                 <span>คัดลอกแผนซื้อ</span>
               </>
             )}

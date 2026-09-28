@@ -38,11 +38,19 @@ export async function GET(req: NextRequest) {
       where: {
         userId: session.user.id,
         logType: 'advisor',
-        OR: [
-          { prompt: { contains: `(${cleanSymbol})` } },
-          { prompt: { contains: `สัญลักษณ์ (Ticker): ${cleanSymbol}` } },
-          { prompt: { contains: `สัญลักษณ์: ${cleanSymbol}` } },
-          { prompt: { contains: cleanSymbol } },
+        AND: [
+          {
+            OR: [
+              { prompt: { contains: `[AI Stock Deep Dive Analysis: ${cleanSymbol}]` } },
+              { prompt: { contains: `สัญลักษณ์ (Ticker): ${cleanSymbol}` } },
+              { prompt: { contains: `(Ticker): ${cleanSymbol}` } },
+              { prompt: { contains: `สัญลักษณ์: ${cleanSymbol}` } },
+            ],
+          },
+          { prompt: { not: { contains: 'AI Daily Investment Strategist' } } },
+          { prompt: { not: { contains: 'Chief Investment Strategist' } } },
+          { prompt: { not: { contains: 'Rebalance & Portfolio Advisor' } } },
+          { prompt: { not: { contains: 'วางแผนปฏิบัติการประจำวัน' } } },
         ],
       },
       orderBy: { createdAt: 'desc' },
@@ -113,6 +121,7 @@ export async function POST(req: NextRequest) {
     const cleanSymbol = symbol.toUpperCase()
 
     const prompt = `
+[AI Stock Deep Dive Analysis: ${cleanSymbol}]
 คุณเป็น Senior Equity Research Analyst & Multi-Asset Portfolio Manager ระดับสถาบันการเงินชั้นนำ
 กรุณาวิเคราะห์สินทรัพย์/หุ้นนี้แบบเจาะลึกรอบด้าน (Deep-Dive Institutional Grade Analysis) สำหรับนักลงทุนไทย:
 - สัญลักษณ์ (Ticker): ${cleanSymbol} (${cleanSymbol})

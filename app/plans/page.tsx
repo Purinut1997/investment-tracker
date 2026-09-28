@@ -803,22 +803,22 @@ export default function PlansPage() {
                     </button>
                   </div>
 
-                  <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#0C0F14]">
-                    <table className="w-full text-left text-xs">
+                  <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#0C0F14] shadow-xl">
+                    <table className="w-full text-left text-sm border-collapse">
                       <thead>
-                        <tr className="border-b border-white/[0.08] text-slate-400 font-semibold uppercase text-[10px] tracking-wider bg-white/[0.02]">
-                          <th className="py-3 px-4">สินทรัพย์ (Ticker / กลุ่ม)</th>
-                          <th className="py-3 px-3 text-right">สัดส่วนปัจจุบัน</th>
-                          <th className="py-3 px-3 text-right">เป้าหมาย</th>
-                          <th className="py-3 px-3 text-center">สถานะ</th>
-                          <th className="py-3 px-3 text-center">คำแนะนำ</th>
-                          <th className="py-3 px-3 text-right">จำนวนเงิน (฿)</th>
-                          <th className="py-3 px-3 text-right">ประมาณการหุ้น</th>
-                          <th className="py-3 px-3 text-right">สัดส่วนใหม่</th>
-                          <th className="py-3 px-4 text-center">ดำเนินการ</th>
+                        <tr className="border-b-2 border-white/[0.08] text-slate-200 font-bold uppercase text-xs tracking-wider bg-white/[0.03]">
+                          <th className="py-3.5 px-4 min-w-[170px]">สินทรัพย์ (Ticker / กลุ่ม)</th>
+                          <th className="py-3.5 px-3.5 text-right min-w-[120px]">สัดส่วนปัจจุบัน</th>
+                          <th className="py-3.5 px-3.5 text-right min-w-[100px]">เป้าหมาย</th>
+                          <th className="py-3.5 px-3.5 text-center min-w-[120px]">สถานะ</th>
+                          <th className="py-3.5 px-3.5 text-center min-w-[140px]">คำแนะนำ</th>
+                          <th className="py-3.5 px-3.5 text-right min-w-[130px]">จำนวนเงิน (฿)</th>
+                          <th className="py-3.5 px-3.5 text-right min-w-[120px]">ประมาณการหุ้น</th>
+                          <th className="py-3.5 px-3.5 text-right min-w-[110px]">สัดส่วนใหม่</th>
+                          <th className="py-3.5 px-4 text-center min-w-[110px]">ดำเนินการ</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/[0.04] font-mono">
+                      <tbody className="divide-y divide-white/[0.05] font-mono">
                         {rebalancePlan.items.map((item) => {
                           const isBuy = item.action === 'BUY'
                           const isTrim = item.action === 'TRIM'
@@ -827,67 +827,67 @@ export default function PlansPage() {
                               key={item.id}
                               className={`transition-colors ${
                                 isBuy
-                                  ? 'bg-emerald-500/[0.02] hover:bg-emerald-500/[0.05]'
+                                  ? 'bg-emerald-500/[0.03] hover:bg-emerald-500/[0.06]'
                                   : isTrim
-                                  ? 'bg-amber-500/[0.02] hover:bg-amber-500/[0.05]'
-                                  : 'hover:bg-white/[0.02]'
+                                  ? 'bg-amber-500/[0.03] hover:bg-amber-500/[0.06]'
+                                  : 'hover:bg-white/[0.03]'
                               }`}
                             >
-                              <td className="py-3 px-4 font-sans">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-white font-mono px-2 py-0.5 rounded bg-white/[0.06] border border-white/[0.1]">
+                              <td className="py-3.5 px-4 font-sans">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="font-black text-white font-mono text-sm px-2.5 py-1 rounded-lg bg-white/[0.08] border border-white/[0.12]">
                                     {item.key}
                                   </span>
-                                  <span className="text-slate-300 text-xs truncate max-w-[140px] font-sans">
+                                  <span className="text-slate-200 text-sm font-semibold truncate max-w-[150px] font-sans">
                                     {item.label}
                                   </span>
                                 </div>
                               </td>
 
-                              <td className="py-3 px-3 text-right text-slate-300">
+                              <td className="py-3.5 px-3.5 text-right text-slate-200 font-bold text-sm">
                                 {item.currentWeight.toFixed(1)}%
                               </td>
 
-                              <td className="py-3 px-3 text-right font-bold text-white">
+                              <td className="py-3.5 px-3.5 text-right font-black text-white text-sm">
                                 {item.targetWeight}%
                               </td>
 
-                              <td className="py-3 px-3 text-center">
+                              <td className="py-3.5 px-3.5 text-center font-sans">
                                 {item.status === 'TRIGGERED' ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                                    <AlertTriangle className="w-2.5 h-2.5" /> หลุดกรอบ
+                                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                    <AlertTriangle className="w-3 h-3" /> หลุดกรอบ
                                   </span>
                                 ) : item.status === 'DRIFT' ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-amber-500/15 text-amber-300 border border-amber-500/25">
                                     เริ่มเบี่ยงเบน
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">
-                                    <CheckCircle2 className="w-2.5 h-2.5" /> สมดุล
+                                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+                                    <CheckCircle2 className="w-3 h-3" /> สมดุล
                                   </span>
                                 )}
                               </td>
 
-                              <td className="py-3 px-3 text-center">
+                              <td className="py-3.5 px-3.5 text-center font-sans">
                                 {isBuy ? (
-                                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30 text-[11px] inline-flex items-center gap-1">
-                                    <ArrowUpRight className="w-3 h-3" /> ซื้อเพิ่ม
+                                  <span className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 text-xs inline-flex items-center gap-1.5 shadow-xs">
+                                    <ArrowUpRight className="w-3.5 h-3.5" /> ซื้อเพิ่ม
                                   </span>
                                 ) : isTrim ? (
-                                  <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30 text-[11px] inline-flex items-center gap-1">
-                                    <ArrowDownRight className="w-3 h-3" /> ลดน้ำหนัก
+                                  <span className="px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-xs inline-flex items-center gap-1.5 shadow-xs">
+                                    <ArrowDownRight className="w-3.5 h-3.5" /> ลดน้ำหนัก
                                   </span>
                                 ) : (
-                                  <span className="px-2 py-1 rounded-lg bg-white/[0.04] text-slate-400 font-medium text-[11px]">
+                                  <span className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-slate-300 font-semibold text-xs">
                                     คงสัดส่วน (Hold)
                                   </span>
                                 )}
                               </td>
 
-                              <td className="py-3 px-3 text-right">
+                              <td className="py-3.5 px-3.5 text-right">
                                 {item.recommendedAmountBase > 0 ? (
                                   <span
-                                    className={`font-bold ${
+                                    className={`font-black text-sm sm:text-base ${
                                       isBuy ? 'text-emerald-400' : 'text-amber-400'
                                     }`}
                                   >
@@ -898,27 +898,27 @@ export default function PlansPage() {
                                 )}
                               </td>
 
-                              <td className="py-3 px-3 text-right text-slate-300">
+                              <td className="py-3.5 px-3.5 text-right text-slate-200 font-bold text-sm">
                                 {item.estimatedShares ? `~${item.estimatedShares} หุ้น` : '—'}
                               </td>
 
-                              <td className="py-3 px-3 text-right">
-                                <span className="text-indigo-300 font-bold">
+                              <td className="py-3.5 px-3.5 text-right">
+                                <span className="text-indigo-300 font-black text-sm">
                                   {item.postRebalanceWeight.toFixed(1)}%
                                 </span>
                               </td>
 
-                              <td className="py-3 px-4 text-center font-sans">
+                              <td className="py-3.5 px-4 text-center font-sans">
                                 {isBuy && item.type === 'TICKER' ? (
                                   <button
                                     type="button"
                                     onClick={() => handleQuickBuy(item)}
-                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition-all cursor-pointer shadow-sm active:scale-95"
+                                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all cursor-pointer shadow-md active:scale-95"
                                   >
                                     + บันทึกซื้อ
                                   </button>
                                 ) : (
-                                  <span className="text-[10px] text-slate-500">—</span>
+                                  <span className="text-xs text-slate-500">—</span>
                                 )}
                               </td>
                             </tr>
@@ -959,18 +959,18 @@ export default function PlansPage() {
               {/* Matrix Table Container */}
               <div className="rounded-2xl bg-[#141822] border border-white/[0.08] shadow-2xl overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
+                  <table className="w-full text-left text-sm border-collapse">
                     <thead>
-                      <tr className="border-b border-white/[0.08] bg-white/[0.02] text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
-                        <th className="py-3.5 px-4">กลุ่มสินทรัพย์</th>
-                        <th className="py-3.5 px-4 min-w-[220px]">จริง vs เป้าหมาย (%)</th>
-                        <th className="py-3.5 px-4 text-right">มูลค่าปัจจุบัน</th>
-                        <th className="py-3.5 px-4 text-center">ส่วนต่าง (Drift)</th>
-                        <th className="py-3.5 px-4">สถานะ & คำแนะนำ</th>
-                        <th className="py-3.5 px-4 text-center">เจาะลึกสินทรัพย์</th>
+                      <tr className="border-b-2 border-white/[0.08] bg-white/[0.03] text-slate-200 font-bold text-xs uppercase tracking-wider">
+                        <th className="py-4 px-4 min-w-[200px]">กลุ่มสินทรัพย์</th>
+                        <th className="py-4 px-4 min-w-[240px]">จริง vs เป้าหมาย (%)</th>
+                        <th className="py-4 px-4 text-right min-w-[130px]">มูลค่าปัจจุบัน</th>
+                        <th className="py-4 px-4 text-center min-w-[120px]">ส่วนต่าง (Drift)</th>
+                        <th className="py-4 px-4 min-w-[240px]">สถานะ & คำแนะนำ</th>
+                        <th className="py-4 px-4 text-center min-w-[120px]">เจาะลึกสินทรัพย์</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.05]">
+                    <tbody className="divide-y divide-white/[0.06]">
                       {Object.entries(activePreset.targetAllocation)
                         .filter(([key]) => !key.startsWith('_'))
                         .map(([key, targetPct]) => {
@@ -1019,32 +1019,32 @@ export default function PlansPage() {
                           return (
                             <React.Fragment key={key}>
                               <tr
-                                className={`transition-all hover:bg-white/[0.02] ${
-                                  isExpanded ? 'bg-indigo-950/20' : ''
+                                className={`transition-all hover:bg-white/[0.03] ${
+                                  isExpanded ? 'bg-indigo-950/30' : ''
                                 }`}
                               >
                                 {/* Asset Class */}
                                 <td className="py-4 px-4">
-                                  <div className="flex items-center gap-2.5">
-                                    <span className="text-xl shrink-0">{cfg.emoji}</span>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-2xl shrink-0">{cfg.emoji}</span>
                                     <div>
                                       <div className="flex items-center gap-2">
-                                        <span className="font-bold text-white text-sm">{key}</span>
-                                        <span className="text-xs text-slate-400 font-sans">
+                                        <span className="font-black text-white text-base tracking-wide">{key}</span>
+                                        <span className="text-xs sm:text-sm text-slate-300 font-semibold font-sans">
                                           {cfg.label}
                                         </span>
                                       </div>
-                                      <div className="mt-0.5">
+                                      <div className="mt-1">
                                         {absDiff > toleranceBand * 1.7 ? (
-                                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                          <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
                                             หลุดกรอบเป้าหมาย
                                           </span>
                                         ) : !isOnTarget ? (
-                                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                                          <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-300 border border-amber-500/25">
                                             เริ่มเบี่ยงเบน
                                           </span>
                                         ) : (
-                                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">
+                                          <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
                                             สมดุลดี
                                           </span>
                                         )}
@@ -1054,25 +1054,25 @@ export default function PlansPage() {
                                 </td>
 
                                 {/* Actual vs Target with Visual Target Marker Pin */}
-                                <td className="py-4 px-4 min-w-[220px]">
-                                  <div className="space-y-1.5">
-                                    <div className="flex items-center justify-between text-xs font-mono">
+                                <td className="py-4 px-4 min-w-[240px]">
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-xs sm:text-sm font-mono">
                                       <div>
-                                        <span className="text-slate-400 text-[10px] mr-1">จริง:</span>
-                                        <span className={`font-bold ${cfg.color}`}>
+                                        <span className="text-slate-300 text-xs font-semibold mr-1.5">จริง:</span>
+                                        <span className={`font-black text-sm sm:text-base ${cfg.color}`}>
                                           {actualPct.toFixed(1)}%
                                         </span>
                                       </div>
                                       <div>
-                                        <span className="text-slate-400 text-[10px] mr-1">เป้า:</span>
-                                        <span className="text-slate-200 font-semibold">
+                                        <span className="text-slate-300 text-xs font-semibold mr-1.5">เป้า:</span>
+                                        <span className="text-white font-bold text-sm sm:text-base">
                                           {targetPct}%
                                         </span>
                                       </div>
                                     </div>
 
                                     {/* Unified Progress Bar with Glowing Target Pin */}
-                                    <div className="relative h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                    <div className="relative h-3 w-full bg-slate-800 rounded-full overflow-hidden shadow-inner">
                                       {/* Actual Fill */}
                                       <div
                                         className={`h-full ${cfg.barColor} rounded-full transition-all duration-500`}
@@ -1081,8 +1081,8 @@ export default function PlansPage() {
                                       {/* Target Pin Marker */}
                                       {targetPct > 0 && targetPct < 100 && (
                                         <div
-                                          className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)] z-10 pointer-events-none"
-                                          style={{ left: `calc(${targetPct}% - 2px)` }}
+                                          className="absolute top-0 bottom-0 w-1.5 bg-white shadow-[0_0_10px_rgba(255,255,255,1)] z-10 pointer-events-none"
+                                          style={{ left: `calc(${targetPct}% - 3px)` }}
                                           title={`เป้าหมาย: ${targetPct}%`}
                                         />
                                       )}
@@ -1092,10 +1092,10 @@ export default function PlansPage() {
 
                                 {/* Portfolio Value */}
                                 <td className="py-4 px-4 text-right font-mono">
-                                  <div className="font-bold text-white text-sm">
+                                  <div className="font-black text-white text-base">
                                     ฿{Math.round(categoryValue).toLocaleString()}
                                   </div>
-                                  <div className="text-[11px] text-slate-400 font-sans">
+                                  <div className="text-xs text-slate-300 font-medium font-sans mt-0.5">
                                     {matchingHoldings.length} รายการ
                                   </div>
                                 </td>
@@ -1103,12 +1103,12 @@ export default function PlansPage() {
                                 {/* Variance (Drift) */}
                                 <td className="py-4 px-4 text-center">
                                   <span
-                                    className={`inline-block px-2.5 py-1 rounded-lg text-xs font-mono font-bold ${
+                                    className={`inline-block px-3 py-1 rounded-xl text-sm font-mono font-black ${
                                       isOnTarget
-                                        ? 'text-slate-300 bg-white/[0.04] border border-white/[0.08]'
+                                        ? 'text-slate-200 bg-white/[0.05] border border-white/[0.1]'
                                         : isOver
-                                        ? 'text-amber-300 bg-amber-500/15 border border-amber-500/30'
-                                        : 'text-blue-300 bg-blue-500/15 border border-blue-500/30'
+                                        ? 'text-amber-300 bg-amber-500/20 border border-amber-500/35'
+                                        : 'text-blue-300 bg-blue-500/20 border border-blue-500/35'
                                     }`}
                                   >
                                     {diff > 0 ? '+' : ''}
@@ -1120,23 +1120,23 @@ export default function PlansPage() {
                                 <td className="py-4 px-4">
                                   {absDiff > toleranceBand && totalValue > 0 ? (
                                     isOver ? (
-                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[11px]">
-                                        <PauseCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs sm:text-sm font-semibold">
+                                        <PauseCircle className="w-4 h-4 text-amber-400 shrink-0" />
                                         <span>
                                           เกินเป้า ~฿{Math.round(diffAmount).toLocaleString()} (ชะลอเติม)
                                         </span>
                                       </div>
                                     ) : (
-                                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[11px]">
-                                        <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-xs sm:text-sm font-semibold">
+                                        <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
                                         <span>
                                           ขาดเป้า ~฿{Math.round(diffAmount).toLocaleString()} (เน้นเติม)
                                         </span>
                                       </div>
                                     )
                                   ) : (
-                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[11px]">
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-xs sm:text-sm font-semibold">
+                                      <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
                                       <span>สัดส่วนสมดุลดี (DCA ตามปกติ)</span>
                                     </div>
                                   )}
@@ -1147,19 +1147,19 @@ export default function PlansPage() {
                                   <button
                                     type="button"
                                     onClick={() => toggleExpandCategory(key)}
-                                    className={`px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 mx-auto ${
+                                    className={`px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 mx-auto ${
                                       isExpanded
                                         ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
-                                        : 'bg-white/[0.04] hover:bg-indigo-600/20 text-indigo-300 hover:text-white border border-indigo-500/25'
+                                        : 'bg-white/[0.06] hover:bg-indigo-600/25 text-indigo-300 hover:text-white border border-indigo-500/30'
                                     }`}
                                   >
                                     <span>
                                       {isExpanded ? 'ปิด' : `ดูย่อย (${matchingHoldings.length})`}
                                     </span>
                                     {isExpanded ? (
-                                      <ChevronUp className="w-3.5 h-3.5" />
+                                      <ChevronUp className="w-4 h-4" />
                                     ) : (
-                                      <ChevronDown className="w-3.5 h-3.5" />
+                                      <ChevronDown className="w-4 h-4" />
                                     )}
                                   </button>
                                 </td>
@@ -1221,7 +1221,7 @@ export default function PlansPage() {
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   Gemini AI Rebalance & Portfolio Advisor
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs sm:text-sm text-slate-300">
                   สังเคราะห์และวิเคราะห์เชิงยุทธศาสตร์เพื่อปรับพอร์ตให้สอดคล้องกับสภาวะเศรษฐกิจ
                 </p>
               </div>
@@ -1229,8 +1229,8 @@ export default function PlansPage() {
 
             <div className="flex items-center gap-3 self-start sm:self-auto">
               {aiAdvisorData?.updatedAt && (
-                <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-white/[0.03] px-3 py-1.5 rounded-xl border border-white/[0.06]">
-                  <Clock className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-xs sm:text-sm text-slate-300 font-medium flex items-center gap-1.5 bg-white/[0.04] px-3.5 py-1.5 rounded-xl border border-white/[0.08]">
+                  <Clock className="w-4 h-4 text-slate-400" />
                   วิเคราะห์ล่าสุด:{' '}
                   {new Date(aiAdvisorData.updatedAt).toLocaleTimeString('th-TH', {
                     hour: '2-digit',
@@ -1243,9 +1243,9 @@ export default function PlansPage() {
                 type="button"
                 onClick={handleRunAiAdvisor}
                 disabled={isAiAnalyzing}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-all flex items-center gap-2 shadow-md shadow-indigo-600/25 active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition-all flex items-center gap-2 shadow-md shadow-indigo-600/25 active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                <Sparkles className={`w-3.5 h-3.5 ${isAiAnalyzing ? 'animate-spin' : ''}`} />
+                <Sparkles className={`w-4 h-4 ${isAiAnalyzing ? 'animate-spin' : ''}`} />
                 <span>
                   {isAiAnalyzing
                     ? 'กำลังประมวลผล AI...'
@@ -1258,8 +1258,8 @@ export default function PlansPage() {
           </div>
 
           {aiError && (
-            <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <div className="mt-4 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-200 text-sm flex items-center gap-2.5">
+              <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
               <span>{aiError}</span>
             </div>
           )}
@@ -1276,10 +1276,10 @@ export default function PlansPage() {
               />
             </div>
           ) : (
-            <div className="mt-6 py-6 text-center space-y-3 relative z-10">
-              <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+            <div className="mt-6 py-8 text-center space-y-3 relative z-10">
+              <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed font-medium">
                 ยังไม่มีประวัติการวิเคราะห์สัดส่วนพอร์ต — คลิกปุ่ม{' '}
-                <strong>&quot;วิเคราะห์ปรับพอร์ตด้วย AI&quot;</strong> ด้านบน
+                <strong className="text-indigo-300 font-bold">&quot;วิเคราะห์ปรับพอร์ตด้วย AI&quot;</strong> ด้านบน
                 เพื่อรับคำแนะนำจัดสรรสินทรัพย์และลดความเสี่ยงแบบ Real-time
               </p>
             </div>
@@ -1289,7 +1289,7 @@ export default function PlansPage() {
         {/* ─── SAVED PRESETS LIST ─────────────────────────────────────────── */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white tracking-wide">
+            <h3 className="text-base font-bold text-white tracking-wide">
               แผนการลงทุนที่บันทึกไว้ ({presets.length})
             </h3>
           </div>
@@ -1297,15 +1297,15 @@ export default function PlansPage() {
           {isLoading ? (
             <div className="py-16 text-center flex flex-col items-center justify-center gap-3 text-slate-500">
               <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
-              <span className="text-xs">กำลังโหลดแผนการลงทุน...</span>
+              <span className="text-sm">กำลังโหลดแผนการลงทุน...</span>
             </div>
           ) : error ? (
             <div className="p-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center flex flex-col items-center justify-center">
               <AlertCircle className="w-8 h-8 text-rose-400 mb-3" />
-              <p className="text-xs text-rose-300 mb-4">โหลดข้อมูลแผนไม่สำเร็จ</p>
+              <p className="text-sm text-rose-300 mb-4">โหลดข้อมูลแผนไม่สำเร็จ</p>
               <button
                 onClick={() => revalidate()}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-white"
+                className="px-4 py-2 rounded-xl bg-slate-800 text-sm font-bold text-white"
               >
                 ลองอีกครั้ง
               </button>
@@ -1315,13 +1315,13 @@ export default function PlansPage() {
               <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4">
                 <Scale className="w-7 h-7" />
               </div>
-              <h4 className="font-bold text-white text-base mb-1.5">ยังไม่มีแผนการลงทุน</h4>
-              <p className="text-xs text-slate-400 max-w-sm mb-5 leading-relaxed">
+              <h4 className="font-bold text-white text-lg mb-1.5">ยังไม่มีแผนการลงทุน</h4>
+              <p className="text-sm text-slate-300 max-w-sm mb-5 leading-relaxed">
                 สร้างแผนสัดส่วนเป้าหมายเพื่อช่วยกำกับและติดตามการจัดสรรพอร์ตอย่างเป็นระบบ
               </p>
               <button
                 onClick={openCreateModal}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-5 rounded-xl transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold py-2.5 px-6 rounded-xl transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
               >
                 สร้างแผนแรก
               </button>
@@ -1340,20 +1340,20 @@ export default function PlansPage() {
                 return (
                   <div
                     key={preset.id}
-                    className={`p-5 rounded-2xl bg-[#12151C] border transition-all duration-200 group flex flex-col justify-between min-h-[200px] shadow-xl shadow-black/30 ${
+                    className={`p-5 sm:p-6 rounded-3xl bg-[#12151C] border transition-all duration-200 group flex flex-col justify-between min-h-[200px] shadow-xl shadow-black/30 ${
                       isActive
-                        ? 'border-indigo-500/50 ring-1 ring-indigo-500/20'
-                        : 'border-white/[0.08] hover:border-white/[0.16]'
+                        ? 'border-indigo-500/60 ring-2 ring-indigo-500/20'
+                        : 'border-white/[0.08] hover:border-white/[0.18]'
                     }`}
                   >
                     <div>
                       <div className="flex items-start justify-between">
                         <div>
-                          <h4 className="font-bold text-white text-base tracking-tight">
+                          <h4 className="font-black text-white text-lg tracking-tight">
                             {preset.presetName}
                           </h4>
                           <span
-                            className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-md border mt-1.5 ${riskCfg.bg} ${riskCfg.color}`}
+                            className={`inline-block text-xs font-bold px-3 py-1 rounded-lg border mt-1.5 ${riskCfg.bg} ${riskCfg.color}`}
                           >
                             {riskCfg.label}
                           </span>
@@ -1361,47 +1361,47 @@ export default function PlansPage() {
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={() => openEditModal(preset)}
-                            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                             title="แก้ไข"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(preset.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                            className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                             title="ลบ"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-1.5">
+                      <div className="mt-4 flex flex-wrap gap-2">
                         {Object.entries(preset.targetAllocation).map(([cat, pct]) => {
                           return (
                             <span
                               key={cat}
-                              className="px-2 py-0.5 rounded-md bg-[#181C25] border border-white/[0.06] text-slate-400 text-[10px] font-mono"
+                              className="px-2.5 py-1 rounded-lg bg-[#181C25] border border-white/[0.1] text-slate-200 text-xs font-mono font-semibold"
                             >
-                              {cat} <span className="text-white font-semibold ml-1">{pct}%</span>
+                              {cat} <span className="text-white font-bold ml-1">{pct}%</span>
                             </span>
                           )
                         })}
                       </div>
                     </div>
 
-                    <div className="mt-5 pt-3.5 border-t border-white/[0.06] flex items-center justify-between">
-                      <span className="text-xs font-mono text-slate-400">
+                    <div className="mt-5 pt-4 border-t border-white/[0.08] flex items-center justify-between">
+                      <span className="text-sm font-mono font-bold text-slate-200">
                         +฿{Number(preset.monthlyContribution).toLocaleString()}/เดือน
                       </span>
                       {preset.isDefault ? (
-                        <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
-                          <CheckCircle className="w-3 h-3" /> ค่าเริ่มต้น
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                          <CheckCircle className="w-4 h-4" /> ค่าเริ่มต้น
                         </span>
                       ) : (
                         <button
                           onClick={() => setSelectedPresetId(preset.id)}
-                          className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                          className="text-xs sm:text-sm font-bold text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
                         >
                           เลือกดูแผนนี้
                         </button>

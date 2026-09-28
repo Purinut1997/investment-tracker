@@ -258,12 +258,12 @@ export function AiAdvisorDisplay({
       {/* Action Bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs sm:text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             บทสรุปยุทธศาสตร์ระดับสถาบัน
           </span>
           {modelUsed && (
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.08] text-slate-400">
+            <span className="text-xs font-mono px-2.5 py-0.5 rounded-md bg-white/[0.06] border border-white/[0.1] text-slate-300">
               {modelUsed}
             </span>
           )}
@@ -272,16 +272,16 @@ export function AiAdvisorDisplay({
         <button
           type="button"
           onClick={handleCopy}
-          className="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] transition-all flex items-center gap-1.5 cursor-pointer"
+          className="text-xs sm:text-sm text-slate-300 hover:text-white px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] transition-all flex items-center gap-1.5 cursor-pointer font-semibold shadow-xs"
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400 font-medium">คัดลอกแล้ว</span>
+              <Check className="w-4 h-4 text-emerald-400" />
+              <span className="text-emerald-400 font-bold">คัดลอกแล้ว</span>
             </>
           ) : (
             <>
-              <Copy className="w-3.5 h-3.5 text-slate-400" />
+              <Copy className="w-4 h-4 text-slate-300" />
               <span>คัดลอกบทสรุป</span>
             </>
           )}
@@ -289,24 +289,24 @@ export function AiAdvisorDisplay({
       </div>
 
       {/* Structured Executive Cards Grid */}
-      <div className="grid grid-cols-1 gap-3.5">
+      <div className="grid grid-cols-1 gap-4">
         {parsedSections.map((sec) => (
           <div
             key={sec.id}
-            className={`p-4 sm:p-5 rounded-2xl ${sec.color.bg} border ${sec.color.border} shadow-lg transition-all duration-300 hover:border-white/[0.15] space-y-3 relative overflow-hidden`}
+            className={`p-5 sm:p-6 rounded-2xl ${sec.color.bg} border-2 ${sec.color.border} shadow-xl transition-all duration-300 hover:border-white/[0.2] space-y-3.5 relative overflow-hidden`}
           >
             {/* Header Badge */}
-            <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className={`p-1.5 rounded-lg ${sec.color.badgeBg}`}>
+            <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`p-2 rounded-xl ${sec.color.badgeBg}`}>
                   {sec.icon}
                 </div>
-                <h4 className="text-sm font-bold text-white tracking-wide">
+                <h4 className="text-base sm:text-lg font-bold text-white tracking-wide">
                   {sec.title}
                 </h4>
               </div>
               <span
-                className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full ${sec.color.badgeBg} ${sec.color.badgeText} border border-white/[0.06]`}
+                className={`text-xs font-bold px-3 py-1 rounded-full ${sec.color.badgeBg} ${sec.color.badgeText} border border-white/[0.1]`}
               >
                 {sec.type === 'takeaway' && 'ยุทธศาสตร์หลัก'}
                 {sec.type === 'buy' && 'เร่งสะสม / จุดช้อน'}
@@ -318,17 +318,17 @@ export function AiAdvisorDisplay({
             </div>
 
             {/* Bullet List Content */}
-            <div className="space-y-2 text-xs sm:text-sm text-slate-300 leading-relaxed font-sans">
+            <div className="space-y-2.5 text-sm sm:text-base text-slate-200 leading-relaxed font-sans">
               {sec.content.map((line, lIdx) => {
                 // If the line looks like a sub-heading or divider
                 if (line.startsWith('---') || line.startsWith('___')) {
-                  return <hr key={lIdx} className="border-white/[0.06] my-2" />
+                  return <hr key={lIdx} className="border-white/[0.08] my-2.5" />
                 }
 
                 return (
                   <div key={lIdx} className="flex items-start gap-2.5">
-                    <span className="text-indigo-400 mt-1 shrink-0">
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="text-indigo-400 mt-1.5 shrink-0">
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
                     </span>
                     <div className="flex-1">
                       {formatLineContent(line)}
@@ -342,8 +342,8 @@ export function AiAdvisorDisplay({
       </div>
 
       {disclaimer && (
-        <p className="text-[11px] text-slate-500 flex items-center gap-1.5 pt-1">
-          <Info className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+        <p className="text-xs text-slate-400 flex items-center gap-2 pt-1 font-medium">
+          <Info className="w-4 h-4 text-slate-400 shrink-0" />
           <span>{disclaimer}</span>
         </p>
       )}
