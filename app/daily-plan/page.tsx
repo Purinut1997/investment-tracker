@@ -622,17 +622,17 @@ export default function DailyPlanPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
+            <div className="overflow-x-auto pb-3 -mx-2 px-2 scrollbar-thin">
+              <table className="w-full min-w-[1200px] text-left text-sm border-collapse">
                 <thead>
                   <tr className="border-b-2 border-white/[0.08] text-slate-300 text-xs tracking-wider uppercase font-bold">
-                    <th className="pb-4 pr-4">สินทรัพย์</th>
-                    <th className="pb-4 px-4 text-right">ราคาปัจจุบัน</th>
-                    <th className="pb-4 px-4 text-center">RSI(14)</th>
-                    <th className="pb-4 px-4 text-right">แนวรับ S1</th>
-                    <th className="pb-4 px-4 text-right">ระยะห่างถึงแนวรับ</th>
-                    <th className="pb-4 px-4">สัญญาณทางเทคนิค</th>
-                    <th className="pb-4 pl-4 text-right">การกระทำ</th>
+                    <th className="pb-3.5 pr-4 min-w-[200px] whitespace-nowrap">สินทรัพย์</th>
+                    <th className="pb-3.5 px-4 text-right min-w-[140px] whitespace-nowrap">ราคาปัจจุบัน</th>
+                    <th className="pb-3.5 px-4 text-center min-w-[110px] whitespace-nowrap">RSI(14)</th>
+                    <th className="pb-3.5 px-4 text-right min-w-[110px] whitespace-nowrap">แนวรับ S1</th>
+                    <th className="pb-3.5 px-4 text-right min-w-[140px] whitespace-nowrap">ระยะห่างถึงแนวรับ</th>
+                    <th className="pb-3.5 px-4 min-w-[360px] whitespace-nowrap">สัญญาณทางเทคนิค & เหตุผล</th>
+                    <th className="pb-3.5 pl-4 text-right min-w-[140px] whitespace-nowrap">การกระทำ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.06]">
@@ -664,9 +664,11 @@ export default function DailyPlanPage() {
                                   {item.market === 'US' ? '🇺🇸' : item.market === 'TH' ? '🇹🇭' : '🪙'} {item.market}
                                 </span>
                               </div>
-                              <span className="text-xs font-semibold text-slate-400 truncate block max-w-[160px]">
-                                {item.assetName}
-                              </span>
+                              {item.assetName && item.assetName.trim().toUpperCase() !== item.ticker.trim().toUpperCase() && (
+                                <span className="text-xs font-semibold text-slate-400 block break-words mt-0.5 max-w-[180px]">
+                                  {item.assetName}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -745,24 +747,26 @@ export default function DailyPlanPage() {
                           )}
                         </td>
 
-                        {/* Technical Signal Tag */}
+                        {/* Technical Signal Tag & Reason (Full Text, Wrapped, No Ellipsis) */}
                         <td className="py-4 px-4">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-xl text-xs font-bold border ${item.actionTagColor}`}
-                          >
-                            {item.actionTag}
-                          </span>
-                          <span className="block text-xs font-medium text-slate-300 mt-1 max-w-[220px] truncate" title={item.technicalReason}>
-                            {item.technicalReason}
-                          </span>
+                          <div className="space-y-1.5 max-w-[400px]">
+                            <span
+                              className={`inline-block px-3 py-1 rounded-xl text-xs font-bold border ${item.actionTagColor}`}
+                            >
+                              {item.actionTag}
+                            </span>
+                            <p className="text-xs sm:text-sm font-medium text-slate-200 leading-relaxed break-words whitespace-normal">
+                              {item.technicalReason}
+                            </p>
+                          </div>
                         </td>
 
                         {/* Actions */}
-                        <td className="py-4 pl-4 text-right">
+                        <td className="py-4 pl-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleAddAction(item.ticker, item.supportS1 ?? item.currentPrice, item.actionTag)}
-                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all flex items-center gap-1.5 shadow-xs"
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all flex items-center gap-1.5 shadow-xs whitespace-nowrap"
                               title="เพิ่มสินทรัพย์นี้ลงในแผนปฏิบัติการวันนี้"
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -982,7 +986,7 @@ export default function DailyPlanPage() {
                             </span>
                           )}
                           {action.note && (
-                            <span className="text-slate-400 text-xs hidden sm:inline truncate max-w-[180px]">
+                            <span className="text-slate-300 text-xs hidden sm:inline break-words">
                               ({action.note})
                             </span>
                           )}
