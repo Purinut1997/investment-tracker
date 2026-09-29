@@ -11,3 +11,4 @@ dist/
 .vscode/
 *.csv
 dime_transactions.csv
+*-DESKTOP-*

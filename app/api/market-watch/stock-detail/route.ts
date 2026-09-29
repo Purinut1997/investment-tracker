@@ -53,31 +53,37 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(cached.data)
   }
 
-  // Map timeframe to Yahoo parameters
+  // Map timeframe to Yahoo parameters with warm-up buffer for full-span moving averages
   let yfRange = '1mo'
   let yfInterval = '1d'
+  let fetchRange = '3mo'
 
   switch (range) {
     case '1d':
       yfRange = '1d'
+      fetchRange = '5d'
       yfInterval = '5m'
       break
     case '1w':
     case '5d':
       yfRange = '5d'
+      fetchRange = '1mo'
       yfInterval = '15m'
       break
     case '1m':
     case '1mo':
       yfRange = '1mo'
+      fetchRange = '3mo'
       yfInterval = '1d'
       break
     case '1y':
       yfRange = '1y'
+      fetchRange = '2y'
       yfInterval = '1wk'
       break
     default:
       yfRange = '1mo'
+      fetchRange = '3mo'
       yfInterval = '1d'
   }
 
@@ -96,10 +102,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 1. Fetch Yahoo Chart Data
+    // 1. Fetch Yahoo Chart Data (with warm-up buffer for full-span SMA lines)
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       yfTicker
-    )}?range=${yfRange}&interval=${yfInterval}`
+    )}?range=${fetchRange}&interval=${yfInterval}`
 
     const yahooPromise = fetch(chartUrl, {
       headers: {
@@ -211,12 +217,12 @@ export async function GET(req: NextRequest) {
     const closes: (number | null)[] = quote.close || []
     const volumes: (number | null)[] = quote.volume || []
 
-    // Build clean chart points with OHLC
-    const chartPoints: ChartPoint[] = []
+    // Build clean chart points from all buffered bars
+    const allPoints: ChartPoint[] = []
 
     for (let i = 0; i < timestamps.length; i++) {
       const c = closes[i]
-      if (c !== null && c !== undefined && !isNaN(c)) {
+      if (c !== null && c !== undefined && !isNaN(c) && c > 0) {
         const o = opens[i] ?? c
         const h = highs[i] ?? Math.max(o, c)
         const l = lows[i] ?? Math.min(o, c)
@@ -240,7 +246,7 @@ export async function GET(req: NextRequest) {
           ).slice(-2)}`
         }
 
-        chartPoints.push({
+        allPoints.push({
           time: timeLabel,
           price: Number(c.toFixed(2)),
           open: Number(o.toFixed(2)),
@@ -253,28 +259,62 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Calculate Moving Averages (SMA 20, SMA 50)
-    for (let i = 0; i < chartPoints.length; i++) {
+    // Calculate Moving Averages (SMA 20, SMA 50) on the FULL buffered dataset
+    for (let i = 0; i < allPoints.length; i++) {
       if (i >= 19) {
-        const slice20 = chartPoints.slice(i - 19, i + 1)
+        const slice20 = allPoints.slice(i - 19, i + 1)
         const sum20 = slice20.reduce((acc, p) => acc + p.close, 0)
-        chartPoints[i].sma20 = Number((sum20 / 20).toFixed(2))
+        allPoints[i].sma20 = Number((sum20 / 20).toFixed(2))
       } else {
-        chartPoints[i].sma20 = null
+        const slice = allPoints.slice(0, i + 1)
+        const sum = slice.reduce((acc, p) => acc + p.close, 0)
+        allPoints[i].sma20 = Number((sum / slice.length).toFixed(2))
       }
 
       if (i >= 49) {
-        const slice50 = chartPoints.slice(i - 49, i + 1)
+        const slice50 = allPoints.slice(i - 49, i + 1)
         const sum50 = slice50.reduce((acc, p) => acc + p.close, 0)
-        chartPoints[i].sma50 = Number((sum50 / 50).toFixed(2))
+        allPoints[i].sma50 = Number((sum50 / 50).toFixed(2))
       } else {
-        chartPoints[i].sma50 = null
+        const slice = allPoints.slice(0, i + 1)
+        const sum = slice.reduce((acc, p) => acc + p.close, 0)
+        allPoints[i].sma50 = Number((sum / slice.length).toFixed(2))
+      }
+    }
+
+    // Slice down to the exact requested timeframe for display
+    let chartPoints: ChartPoint[] = allPoints
+    if (allPoints.length > 0) {
+      const latestTs = allPoints[allPoints.length - 1].timestamp
+      const latestDate = new Date(latestTs * 1000)
+
+      if (range === '1d') {
+        const latestDayStr = latestDate.toDateString()
+        const dayPoints = allPoints.filter(
+          (p) => new Date(p.timestamp * 1000).toDateString() === latestDayStr
+        )
+        chartPoints = dayPoints.length >= 5 ? dayPoints : allPoints.slice(-78)
+      } else if (range === '1w') {
+        const oneWeekAgo = latestTs - 7 * 86400
+        const weekPoints = allPoints.filter((p) => p.timestamp >= oneWeekAgo)
+        chartPoints = weekPoints.length >= 5 ? weekPoints : allPoints.slice(-35)
+      } else if (range === '1m') {
+        const oneMonthAgo = latestTs - 32 * 86400
+        const monthPoints = allPoints.filter((p) => p.timestamp >= oneMonthAgo)
+        chartPoints = monthPoints.length >= 10 ? monthPoints : allPoints.slice(-25)
+      } else if (range === '1y') {
+        const oneYearAgo = latestTs - 366 * 86400
+        const yearPoints = allPoints.filter((p) => p.timestamp >= oneYearAgo)
+        chartPoints = yearPoints.length >= 20 ? yearPoints : allPoints.slice(-52)
       }
     }
 
     // Price change calculation
     const currentPrice = Number(meta.regularMarketPrice ?? chartPoints[chartPoints.length - 1]?.price ?? 0)
-    const prevClose = Number(meta.chartPreviousClose ?? chartPoints[0]?.price ?? currentPrice)
+    let prevClose = Number(meta.chartPreviousClose ?? chartPoints[0]?.price ?? currentPrice)
+    if (range !== '1d' && chartPoints.length > 0) {
+      prevClose = chartPoints[0].price
+    }
     const change = currentPrice - prevClose
     const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0
 
@@ -426,7 +466,9 @@ export async function GET(req: NextRequest) {
     const historicalStats = parseHistoricalStats(
       yahooHistoryData?.chart?.result?.[0] || yahooData?.chart?.result?.[0],
       currentPrice,
-      userTxns
+      userTxns,
+      userPosition,
+      ySummary?.payoutRatio !== null && ySummary?.payoutRatio !== undefined ? Number(ySummary.payoutRatio.toFixed(2)) : null
     )
 
     const payload = {

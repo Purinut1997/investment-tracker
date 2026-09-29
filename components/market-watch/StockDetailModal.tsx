@@ -680,7 +680,7 @@ export function StockDetailModal({
     return first > 0 ? ((last - first) / first) * 100 : 0
   }, [chartPoints, data?.changePercent])
 
-  // Min and Max prices for chart domain
+  // Min and Max prices for chart domain (auto-fits S/R and SMA levels so lines don't get clipped)
   const { minPrice, maxPrice } = useMemo(() => {
     if (chartPoints.length === 0) return { minPrice: 0, maxPrice: 100 }
     let min = chartPoints[0].price
@@ -688,13 +688,29 @@ export function StockDetailModal({
     for (const p of chartPoints) {
       if (p.price < min) min = p.price
       if (p.price > max) max = p.price
+      if (showSMA) {
+        if (p.sma20 && p.sma20 < min) min = p.sma20
+        if (p.sma20 && p.sma20 > max) max = p.sma20
+        if (p.sma50 && p.sma50 < min) min = p.sma50
+        if (p.sma50 && p.sma50 > max) max = p.sma50
+      }
     }
+
+    // Auto-fit Support and Resistance levels when enabled so R1, R2, S1, S2 are NEVER clipped off!
+    if (showSR && data?.technicalLevels) {
+      const { r1, r2, s1, s2 } = data.technicalLevels
+      if (r1 && r1 < max * 1.3) max = Math.max(max, r1)
+      if (r2 && r2 < max * 1.4) max = Math.max(max, r2)
+      if (s1 && s1 > min * 0.7) min = Math.min(min, s1)
+      if (s2 && s2 > min * 0.6) min = Math.min(min, s2)
+    }
+
     const padding = (max - min) * 0.08 || min * 0.02
     return {
       minPrice: Math.max(0, Number((min - padding).toFixed(2))),
       maxPrice: Number((max + padding).toFixed(2)),
     }
-  }, [chartPoints])
+  }, [chartPoints, showSR, showSMA, data?.technicalLevels])
 
   // 52-Week Range Percentage calculation
   const fiftyTwoWeekPct = useMemo(() => {
@@ -905,6 +921,8 @@ export function StockDetailModal({
               currencySymbol={currencySymbol}
               currentPrice={data?.currentPrice ?? 0}
               stats={data?.historicalStats}
+              userPosition={data?.userPosition}
+              payoutRatio={data?.payoutRatio}
             />
           ) : (
             <>
@@ -1002,8 +1020,13 @@ export function StockDetailModal({
                           : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:text-slate-300'
                       }`}
                     >
-                      <span className={`w-1.5 h-1.5 rounded-full ${showSMA ? 'bg-amber-400' : 'bg-slate-600'}`} />
-                      <span>เส้นเฉลี่ย SMA 20/50</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${showSMA ? 'bg-amber-400' : 'bg-slate-600'}`} />
+                        <span>SMA 20</span>
+                        <span className="text-slate-500 font-light">/</span>
+                        <span className={`w-1.5 h-1.5 rounded-full ${showSMA ? 'bg-cyan-400' : 'bg-slate-600'}`} />
+                        <span>50</span>
+                      </div>
                     </button>
                   </div>
 
@@ -1107,11 +1130,29 @@ export function StockDetailModal({
                                 <ReferenceLine y={data.technicalLevels.s2} stroke="#10B981" strokeDasharray="4 4" label={{ value: `S2: ${data.technicalLevels.s2}`, fill: '#10B981', fontSize: 9, position: 'insideBottomRight' }} />
                               </>
                             )}
-                            {/* Moving Average SMA Lines */}
+                            {/* Moving Average SMA Lines (Full span, smooth) */}
                             {showSMA && (
                               <>
-                                <Line type="monotone" dataKey="sma20" stroke="#F59E0B" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                                <Line type="monotone" dataKey="sma50" stroke="#06B6D4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                                <Line
+                                  type="monotone"
+                                  dataKey="sma20"
+                                  name="SMA 20"
+                                  stroke="#F59E0B"
+                                  strokeWidth={1.75}
+                                  dot={false}
+                                  connectNulls={true}
+                                  isAnimationActive={false}
+                                />
+                                <Line
+                                  type="monotone"
+                                  dataKey="sma50"
+                                  name="SMA 50"
+                                  stroke="#06B6D4"
+                                  strokeWidth={1.75}
+                                  dot={false}
+                                  connectNulls={true}
+                                  isAnimationActive={false}
+                                />
                               </>
                             )}
                             <Area

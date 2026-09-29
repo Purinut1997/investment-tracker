@@ -11,6 +11,49 @@ export interface AnnualDividendSummary {
   totalAmount: number
   count: number
   growthPercent: number | null
+  isCurrentYear?: boolean
+  statusLabel?: string
+}
+
+export interface EstimatedNextPayout {
+  estimatedDate: string
+  estimatedMonthYear: string
+  estimatedAmount: number
+  daysRemaining: number
+  countdownText: string
+  isNear: boolean
+  isPastEstimatedDate: boolean
+}
+
+export interface DividendSafety {
+  payoutRatio: number | null
+  payoutRatioStatus: 'healthy' | 'moderate' | 'high_risk' | 'not_applicable'
+  payoutRatioLabel: string
+  payoutRatioDescription: string
+  growthStreakYears: number
+  streakBadge: string
+  streakDescription: string
+  cagr3Y: number | null
+  cagr5Y: number | null
+  safetyScore: 'high' | 'medium' | 'caution'
+}
+
+export interface UserPositionStats {
+  shares: number
+  avgCost: number
+  totalCost: number
+  currentValue: number
+  unrealizedGain: number
+  unrealizedGainPercent: number
+  yieldOnCost: number
+  yocDifference: number
+  annualEstimatedIncome: number
+  monthlyEstimatedIncome: number
+  perPeriodEstimatedIncome: number
+  totalReceived: number
+  receivedCount: number
+  lastReceivedDate: string | null
+  paybackPercent: number
 }
 
 export interface DividendIntelligence {
@@ -52,11 +95,14 @@ export interface HistoricalStockStats {
   dividends: DividendIntelligence
   performance: HistoricalPerformance
   splits: StockSplitItem[]
+  safety?: DividendSafety
+  estimatedNextPayout?: EstimatedNextPayout | null
   userDividends?: {
     totalReceived: number
     count: number
     lastDate: string | null
   } | null
+  userPositionStats?: UserPositionStats | null
 }
 
 const THAI_MONTH_NAMES = [
@@ -74,21 +120,6 @@ const THAI_MONTH_NAMES = [
   'ธ.ค.',
 ]
 
-const THAI_FULL_MONTHS = [
-  'มกราคม',
-  'กุมภาพันธ์',
-  'มีนาคม',
-  'เมษายน',
-  'พฤษภาคม',
-  'มิถุนายน',
-  'กรกฎาคม',
-  'สิงหาคม',
-  'กันยายน',
-  'ตุลาคม',
-  'พฤศจิกายน',
-  'ธันวาคม',
-]
-
 export function formatThaiDate(timestampMs: number): string {
   const d = new Date(timestampMs)
   if (isNaN(d.getTime())) return ''
@@ -96,12 +127,22 @@ export function formatThaiDate(timestampMs: number): string {
 }
 
 /**
- * Parses Yahoo Chart 5Y response with events=div|split into rich statistics
+ * Parses Yahoo Chart response with events=div|split into rich statistics,
+ * calculating Dividend Intelligence, Safety, Next Estimated XD, YoC and Performance Matrix.
  */
 export function parseHistoricalStats(
   chartResult: any,
   currentPrice: number,
-  userTxns?: any[]
+  userTxns?: any[],
+  userPosition?: {
+    shares: number
+    avgCost: number
+    totalCost?: number
+    currentValue?: number
+    unrealizedGain?: number
+    unrealizedGainPercent?: number
+  } | null,
+  payoutRatio?: number | null
 ): HistoricalStockStats {
   const meta = chartResult?.meta || {}
   const events = chartResult?.events || {}
@@ -155,12 +196,14 @@ export function parseHistoricalStats(
 
   const sortedYears = Array.from(yearMap.keys()).sort((a, b) => b - a)
   const annualBreakdown: AnnualDividendSummary[] = []
+  const currentYear = new Date().getFullYear()
 
   for (let i = 0; i < sortedYears.length; i++) {
     const yr = sortedYears[i]
     const cur = yearMap.get(yr)!
     const prevYrData = yearMap.get(yr - 1)
     let growthPercent: number | null = null
+    const isCurrentYear = yr === currentYear
 
     if (prevYrData && prevYrData.total > 0) {
       growthPercent = Number(
@@ -173,59 +216,89 @@ export function parseHistoricalStats(
       totalAmount: Number(cur.total.toFixed(4)),
       count: cur.count,
       growthPercent,
+      isCurrentYear,
+      statusLabel: isCurrentYear ? `YTD (${cur.count} งวด)` : undefined,
     })
   }
 
-  // Detect Frequency & Common Months
+  // 2. Frequency & Payout Months Detection (Robust logic)
   let frequency: DividendIntelligence['frequency'] = 'None'
   let frequencyLabel = 'ไม่มีข้อมูลการจ่ายปันผล'
   let frequencyTitle = 'ไม่มีเงินปันผล'
   let frequencyBadge = ''
   let payoutMonths: string[] = []
 
+  let avgDaysBetween: number | null = null
+
   if (hasDividends) {
-    // Check months and sort chronologically in calendar order
+    // Unique months where dividends occurred
     const monthIndexes = new Set<number>()
-    for (const item of history.slice(0, 12)) {
+    for (const item of history.slice(0, 16)) {
       const d = new Date(item.timestamp * 1000)
       monthIndexes.add(d.getMonth())
     }
     const sortedMonthIndexes = Array.from(monthIndexes).sort((a, b) => a - b)
     payoutMonths = sortedMonthIndexes.map((m) => THAI_MONTH_NAMES[m])
 
+    // Average interval between consecutive recent payouts
+    if (history.length >= 2) {
+      const diffs: number[] = []
+      for (let i = 0; i < Math.min(history.length - 1, 6); i++) {
+        const diffDays = (history[i].timestamp - history[i + 1].timestamp) / 86400
+        if (diffDays > 10 && diffDays < 400) diffs.push(diffDays)
+      }
+      if (diffs.length > 0) {
+        avgDaysBetween = diffs.reduce((a, b) => a + b, 0) / diffs.length
+      }
+    }
+
     // Determine average frequency per calendar year
-    // Look at last 2 full years if available
-    const currentYear = new Date().getFullYear()
     const fullYears = annualBreakdown.filter((a) => a.year < currentYear)
     const avgCount =
       fullYears.length > 0
         ? fullYears.reduce((acc, y) => acc + y.count, 0) / fullYears.length
         : history.length / Math.max(1, sortedYears.length)
 
-    if (avgCount >= 10) {
+    // Accurate Frequency Classification
+    if (
+      monthIndexes.size >= 10 ||
+      (avgDaysBetween !== null && avgDaysBetween <= 45) ||
+      avgCount >= 10
+    ) {
       frequency = 'Monthly'
       frequencyTitle = 'จ่ายรายเดือน'
       frequencyBadge = '12 ครั้ง/ปี'
       frequencyLabel = 'จ่ายรายเดือน (12 ครั้ง/ปี)'
-    } else if (avgCount >= 3.5) {
+    } else if (
+      monthIndexes.size >= 4 ||
+      (avgDaysBetween !== null && avgDaysBetween >= 65 && avgDaysBetween <= 125) ||
+      avgCount >= 3.2
+    ) {
       frequency = 'Quarterly'
       frequencyTitle = 'จ่ายรายไตรมาส'
       frequencyBadge = '4 ครั้ง/ปี'
       frequencyLabel = 'จ่ายรายไตรมาส (4 ครั้ง/ปี)'
-    } else if (avgCount >= 1.7) {
+    } else if (
+      monthIndexes.size >= 2 ||
+      (avgDaysBetween !== null && avgDaysBetween >= 130 && avgDaysBetween <= 240) ||
+      avgCount >= 1.6
+    ) {
       frequency = 'Semi-Annual'
       frequencyTitle = 'จ่ายปีละ 2 ครั้ง'
       frequencyBadge = '2 ครั้ง/ปี'
       frequencyLabel = 'จ่ายปีละ 2 ครั้ง (กึ่งประจำปี)'
-    } else if (avgCount >= 0.8) {
+    } else if (
+      (avgDaysBetween !== null && avgDaysBetween >= 250) ||
+      avgCount >= 0.8
+    ) {
       frequency = 'Annual'
       frequencyTitle = 'จ่ายปีละ 1 ครั้ง'
       frequencyBadge = '1 ครั้ง/ปี'
       frequencyLabel = 'จ่ายปีละ 1 ครั้ง'
     } else {
       frequency = 'Irregular'
-      frequencyTitle = 'จ่ายไม่แน่นอน'
-      frequencyBadge = 'ตามโอกาส'
+      frequencyTitle = 'จ่ายตามโอกาส'
+      frequencyBadge = 'ไม่แน่นอน'
       frequencyLabel = 'จ่ายตามโอกาส / ไม่แน่นอน'
     }
   }
@@ -241,11 +314,156 @@ export function parseHistoricalStats(
     ttmYield,
     latestPayout,
     previousPayout,
-    history: history.slice(0, 20), // Top 20 recent dividend payouts
+    history: history.slice(0, 20),
     annualBreakdown,
   }
 
-  // 2. Process Performance & Trailing Returns
+  // 3. Next Estimated XD Countdown
+  let estimatedNextPayout: EstimatedNextPayout | null = null
+  if (hasDividends && latestPayout) {
+    let stepDays = 91.25 // default quarterly
+    if (frequency === 'Monthly') stepDays = 30.5
+    else if (frequency === 'Quarterly') stepDays = 91.25
+    else if (frequency === 'Semi-Annual') stepDays = 182.5
+    else if (frequency === 'Annual') stepDays = 365
+    else if (avgDaysBetween && avgDaysBetween > 15) stepDays = avgDaysBetween
+
+    const nowMs = Date.now()
+    let candidateMs = latestPayout.timestamp * 1000 + stepDays * 86400 * 1000
+
+    // If candidate timestamp already passed by more than 10 days, project forward
+    while (candidateMs < nowMs - 10 * 86400 * 1000) {
+      candidateMs += stepDays * 86400 * 1000
+    }
+
+    const nextDateObj = new Date(candidateMs)
+    const daysRemaining = Math.ceil((candidateMs - nowMs) / (86400 * 1000))
+    const nextMonthIdx = nextDateObj.getMonth()
+    const nextYear = nextDateObj.getFullYear()
+    const thaiMonth = THAI_MONTH_NAMES[nextMonthIdx]
+    const estDateFormatted = `${nextDateObj.getDate()} ${thaiMonth} ${nextYear}`
+    const partOfMonth =
+      nextDateObj.getDate() > 20 ? 'ปลาย' : nextDateObj.getDate() < 10 ? 'ต้น' : 'กลาง'
+    const estMonthYear = `~${partOfMonth}เดือน ${thaiMonth} ${nextYear}`
+
+    let countdownText = ''
+    if (daysRemaining > 45) {
+      const months = Math.round(daysRemaining / 30)
+      countdownText = `เหลือเวลาสะสมอีก ~${months} เดือน (${daysRemaining} วัน)`
+    } else if (daysRemaining > 0) {
+      countdownText = `เหลือเวลาสะสมอีก ~${daysRemaining} วัน`
+    } else {
+      countdownText = 'กำลังเข้าสู่ช่วงประกาศวัน XD รอบใหม่'
+    }
+
+    estimatedNextPayout = {
+      estimatedDate: estDateFormatted,
+      estimatedMonthYear: estMonthYear,
+      estimatedAmount: latestPayout.amount,
+      daysRemaining,
+      countdownText,
+      isNear: daysRemaining <= 30 && daysRemaining >= 0,
+      isPastEstimatedDate: daysRemaining < 0,
+    }
+  }
+
+  // 4. Dividend Safety & Sustainability Scorecard
+  const fullYears = annualBreakdown.filter((a) => a.year < currentYear)
+  let growthStreakYears = 0
+  if (fullYears.length >= 2) {
+    for (let i = 0; i < fullYears.length - 1; i++) {
+      const curYr = fullYears[i]
+      const prevYr = fullYears[i + 1]
+      if (curYr.totalAmount >= prevYr.totalAmount * 0.985) {
+        growthStreakYears++
+      } else {
+        break
+      }
+    }
+  }
+
+  let streakBadge = 'จ่ายสม่ำเสมอ'
+  let streakDescription = 'มีประวัติจ่ายเงินปันผลสม่ำเสมอในอดีต'
+  if (growthStreakYears >= 25) {
+    streakBadge = '👑 Dividend King'
+    streakDescription = `เพิ่มปันผลต่อเนื่อง ${growthStreakYears} ปีขึ้นไป ระดับราชาปันผล`
+  } else if (growthStreakYears >= 10) {
+    streakBadge = '🏆 Dividend Contender'
+    streakDescription = `เพิ่มปันผลต่อเนื่อง ${growthStreakYears} ปีขึ้นไป ระดับบลูชิพชั้นนำ`
+  } else if (growthStreakYears >= 5) {
+    streakBadge = '⭐ Dividend Challenger'
+    streakDescription = `เพิ่มปันผลต่อเนื่อง ${growthStreakYears} ปีติดต่อกัน`
+  } else if (growthStreakYears >= 2) {
+    streakBadge = '🌱 เติบโตต่อเนื่อง'
+    streakDescription = `เพิ่มปันผลต่อเนื่อง ${growthStreakYears} ปีล่าสุด`
+  }
+
+  // CAGR calculation
+  let cagr3Y: number | null = null
+  let cagr5Y: number | null = null
+  if (fullYears.length >= 4) {
+    const endVal = fullYears[0].totalAmount
+    const start3Val = fullYears[3].totalAmount
+    if (start3Val > 0 && endVal > 0) {
+      cagr3Y = Number(((Math.pow(endVal / start3Val, 1 / 3) - 1) * 100).toFixed(1))
+    }
+  }
+  if (fullYears.length >= 6) {
+    const endVal = fullYears[0].totalAmount
+    const start5Val = fullYears[5].totalAmount
+    if (start5Val > 0 && endVal > 0) {
+      cagr5Y = Number(((Math.pow(endVal / start5Val, 1 / 5) - 1) * 100).toFixed(1))
+    }
+  }
+
+  // Payout Ratio analysis
+  let payoutRatioStatus: DividendSafety['payoutRatioStatus'] = 'not_applicable'
+  let payoutRatioLabel = 'ดัชนี ETF / หุ้นกลุ่มทุน'
+  let payoutRatioDescription = 'กองทุน ETF กระจายความเสี่ยงจากเงินปันผลของหุ้นในตะกร้า'
+
+  if (payoutRatio !== null && payoutRatio !== undefined && payoutRatio > 0) {
+    if (payoutRatio <= 65) {
+      payoutRatioStatus = 'healthy'
+      payoutRatioLabel = 'ปลอดภัยมาก (Very Safe)'
+      payoutRatioDescription = `ใช้กำไรเพียง ${payoutRatio.toFixed(1)}% ในการจ่ายปันผล เหลือเงินสดหมุนเวียนสูง`
+    } else if (payoutRatio <= 80) {
+      payoutRatioStatus = 'healthy'
+      payoutRatioLabel = 'มั่นคงสมดุล (Safe Payout)'
+      payoutRatioDescription = `อัตราจ่ายปันผล ${payoutRatio.toFixed(1)}% อยู่ในเกณฑ์มาตรฐานที่ปลอดภัย`
+    } else if (payoutRatio <= 95) {
+      payoutRatioStatus = 'moderate'
+      payoutRatioLabel = 'เริ่มตึงตัว (Moderate)'
+      payoutRatioDescription = `ใช้กำไรส่วนใหญ่ ${payoutRatio.toFixed(1)}% มีสภาพคล่องสำรองจำกัด`
+    } else {
+      payoutRatioStatus = 'high_risk'
+      payoutRatioLabel = 'ระวัง เสี่ยงลดปันผล (High Risk)'
+      payoutRatioDescription = `จ่ายปันผลสูงถึง ${payoutRatio.toFixed(1)}% ของกำไร อาจไม่ยั่งยืนหากกำไรชะลอตัว`
+    }
+  }
+
+  let safetyScore: DividendSafety['safetyScore'] = 'high'
+  if (payoutRatioStatus === 'high_risk') {
+    safetyScore = 'caution'
+  } else if (payoutRatioStatus === 'moderate') {
+    safetyScore = 'medium'
+  } else if (growthStreakYears >= 5 || (cagr3Y !== null && cagr3Y > 0)) {
+    safetyScore = 'high'
+  }
+
+  const safety: DividendSafety = {
+    payoutRatio: payoutRatio ?? null,
+    payoutRatioStatus,
+    payoutRatioLabel,
+    payoutRatioDescription,
+    growthStreakYears,
+    streakBadge,
+    streakDescription,
+    cagr3Y,
+    cagr5Y,
+    safetyScore,
+  }
+
+  // 5. Process Performance & Trailing Returns
   const validPoints: Array<{ time: number; close: number }> = []
   for (let i = 0; i < timestamps.length; i++) {
     const c = closes[i]
@@ -289,7 +507,7 @@ export function parseHistoricalStats(
     fiftyTwoWeekLow,
   }
 
-  // 3. Process Splits
+  // 6. Process Splits
   const rawSplitsList = Object.values(rawSplits) as Array<{
     date: number
     numerator: number
@@ -310,7 +528,7 @@ export function parseHistoricalStats(
     }
   })
 
-  // 4. Process User Dividends (if user holds transactions)
+  // 7. Process User Dividends (from transactions)
   let userDividends: HistoricalStockStats['userDividends'] = null
   if (userTxns && userTxns.length > 0) {
     const divTxns = userTxns.filter((t) => t.txnType === 'DIVIDEND')
@@ -334,10 +552,71 @@ export function parseHistoricalStats(
     }
   }
 
+  // 8. Process User Position & Yield on Cost (YoC)
+  let userPositionStats: UserPositionStats | null = null
+  if (userPosition && userPosition.shares > 0.0001) {
+    const shares = userPosition.shares
+    const avgCost = userPosition.avgCost
+    const totalCost = userPosition.totalCost || shares * avgCost
+    const currentValue = userPosition.currentValue || shares * currentPrice
+    const unrealizedGain = userPosition.unrealizedGain || currentValue - totalCost
+    const unrealizedGainPercent =
+      userPosition.unrealizedGainPercent ||
+      (totalCost > 0 ? (unrealizedGain / totalCost) * 100 : 0)
+
+    const yieldOnCost =
+      avgCost > 0 && ttmDividends > 0
+        ? Number(((ttmDividends / avgCost) * 100).toFixed(2))
+        : 0
+
+    const marketYieldVal = ttmYield ?? 0
+    const yocDifference = Number((yieldOnCost - marketYieldVal).toFixed(2))
+
+    const annualEstimatedIncome = Number((shares * ttmDividends).toFixed(2))
+    const monthlyEstimatedIncome = Number((annualEstimatedIncome / 12).toFixed(2))
+
+    const periodDiv =
+      frequency === 'Monthly'
+        ? 12
+        : frequency === 'Quarterly'
+        ? 4
+        : frequency === 'Semi-Annual'
+        ? 2
+        : 1
+    const perPeriodEstimatedIncome = Number((annualEstimatedIncome / periodDiv).toFixed(2))
+
+    const totalReceived = userDividends?.totalReceived || 0
+    const receivedCount = userDividends?.count || 0
+    const lastReceivedDate = userDividends?.lastDate || null
+    const paybackPercent =
+      totalCost > 0 ? Number(((totalReceived / totalCost) * 100).toFixed(2)) : 0
+
+    userPositionStats = {
+      shares,
+      avgCost,
+      totalCost: Number(totalCost.toFixed(2)),
+      currentValue: Number(currentValue.toFixed(2)),
+      unrealizedGain: Number(unrealizedGain.toFixed(2)),
+      unrealizedGainPercent: Number(unrealizedGainPercent.toFixed(2)),
+      yieldOnCost,
+      yocDifference,
+      annualEstimatedIncome,
+      monthlyEstimatedIncome,
+      perPeriodEstimatedIncome,
+      totalReceived,
+      receivedCount,
+      lastReceivedDate,
+      paybackPercent,
+    }
+  }
+
   return {
     dividends: dividendIntelligence,
     performance,
     splits,
+    safety,
+    estimatedNextPayout,
     userDividends,
+    userPositionStats,
   }
 }
