@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2, RotateCcw } from 'lucide-react'
 
 export interface CandlePoint {
   time: string
@@ -35,6 +35,7 @@ interface CandlestickChartProps {
   showVolume?: boolean
   technicalLevels?: TechnicalLevels | null
   height?: number
+  onToggleFullscreen?: () => void
 }
 
 const MIN_SPAN = 5 // minimum visible candles when zoomed in
@@ -65,6 +66,7 @@ function CandlestickChartViewport({
   showVolume = false,
   technicalLevels,
   height = 280,
+  onToggleFullscreen,
 }: CandlestickChartProps) {
   const [hoveredPoint, setHoveredPoint] = useState<CandlePoint | null>(null)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
@@ -572,7 +574,7 @@ function CandlestickChartViewport({
           )}
         </svg>
 
-        {/* Zoom Controls */}
+        {/* Zoom & Viewport Controls */}
         <div className="absolute bottom-2 right-[70px] flex items-center gap-1.5">
           <button
             type="button"
@@ -599,11 +601,22 @@ function CandlestickChartViewport({
             onClick={resetView}
             disabled={isFullView}
             className={zoomBtnClass}
-            title="รีเซ็ตมุมมอง (ดับเบิลคลิกที่กราฟ)"
-            aria-label="รีเซ็ตมุมมอง"
+            title="รีเซ็ตการซูม (ดับเบิลคลิกที่กราฟ)"
+            aria-label="รีเซ็ตการซูม"
           >
-            <Maximize2 size={13} />
+            <RotateCcw size={13} />
           </button>
+          {onToggleFullscreen && (
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              className={`${zoomBtnClass} hover:text-indigo-300 hover:border-indigo-500/40`}
+              title="เปิดกราฟขนาดใหญ่เต็มจอ (Pro Fullscreen)"
+              aria-label="เปิดกราฟเต็มจอ"
+            >
+              <Maximize2 size={13} />
+            </button>
+          )}
         </div>
 
         {/* Zoom hint */}

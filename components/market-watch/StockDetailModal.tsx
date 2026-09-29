@@ -1002,11 +1002,11 @@ export function StockDetailModal({
                     <button
                       type="button"
                       onClick={() => setIsFullscreenChartOpen(true)}
-                      className="px-2 py-1 sm:px-2.5 rounded-xl bg-[#0F1218] hover:bg-indigo-600/20 text-slate-400 hover:text-indigo-300 border border-white/[0.06] hover:border-indigo-500/30 transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shadow-sm group"
+                      className="px-2.5 py-1 rounded-xl bg-indigo-500/15 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/30 hover:border-indigo-400/60 transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-sm group active:scale-95 shrink-0"
                       title="เปิดกราฟขนาดใหญ่เต็มจอ (Fullscreen Pro Modal)"
                     >
-                      <Maximize2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-400 transition-colors" />
-                      <span className="hidden sm:inline font-sans">เต็มจอ</span>
+                      <Maximize2 className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                      <span className="font-sans">เต็มจอ</span>
                     </button>
                   </div>
                 </div>
@@ -1077,9 +1077,18 @@ export function StockDetailModal({
                         showVolume={showVolume}
                         technicalLevels={data?.technicalLevels}
                         height={260}
+                        onToggleFullscreen={() => setIsFullscreenChartOpen(true)}
                       />
                     ) : (
-                      <div className="w-full h-56 sm:h-64">
+                      <div className="w-full h-56 sm:h-64 relative group/areachart">
+                        <button
+                          type="button"
+                          onClick={() => setIsFullscreenChartOpen(true)}
+                          className="absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-black/60 hover:bg-indigo-600 text-slate-400 hover:text-white border border-white/10 transition-all opacity-70 group-hover/areachart:opacity-100 cursor-pointer shadow-md"
+                          title="ขยายกราฟเส้นเต็มจอ (Pro Fullscreen)"
+                        >
+                          <Maximize2 className="w-3.5 h-3.5" />
+                        </button>
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={chartPoints}>
                             <defs>

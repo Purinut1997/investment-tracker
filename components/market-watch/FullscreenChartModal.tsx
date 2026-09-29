@@ -122,7 +122,7 @@ export function FullscreenChartModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="fullscreen-chart-title"
-      className="fixed inset-0 z-[120] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/90 backdrop-blur-2xl animate-fade-in select-none"
+      className="fixed inset-0 z-[100000] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/90 backdrop-blur-2xl animate-fade-in select-none"
     >
       <div
         ref={containerRef}
