@@ -30,6 +30,7 @@ import {
   Newspaper,
   AlertTriangle,
   CheckCircle2,
+  Calendar,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -43,6 +44,7 @@ import {
 } from 'recharts'
 import { StockLogo } from '@/components/StockLogo'
 import { CandlestickChart } from '@/components/market-watch/CandlestickChart'
+import { StockHistoricalStatsTab } from '@/components/market-watch/StockHistoricalStatsTab'
 
 export interface StructuredAiData {
   summary?: string
@@ -585,6 +587,7 @@ export function StockDetailModal({
   market = 'US',
 }: StockDetailModalProps) {
   const [range, setRange] = useState<TimeRange>('1m')
+  const [activeTab, setActiveTab] = useState<'chart' | 'stats'>('chart')
   const [chartType, setChartType] = useState<'area' | 'candle'>('area')
   const [showSR, setShowSR] = useState(true)
   const [showSMA, setShowSMA] = useState(true)
@@ -615,6 +618,7 @@ export function StockDetailModal({
   useEffect(() => {
     if (isOpen) {
       setRange('1m')
+      setActiveTab('chart')
       setAiInsight(null)
       setStructuredAi(null)
       setAiModelUsed(null)
@@ -835,6 +839,52 @@ export function StockDetailModal({
           </div>
         </div>
 
+        {/* Tab Navigation: Chart & Technicals vs Historical Stats & Dividends */}
+        <div className="px-5 sm:px-6 pt-2.5 pb-0 border-b border-white/[0.08] bg-[#12151C]/90 flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab('chart')}
+            className={`pb-2.5 px-3 text-xs font-bold transition-all relative flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'chart'
+                ? 'text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+            <span>ภาพรวม & กราฟเทคนิคอล</span>
+            {activeTab === 'chart' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('stats')}
+            className={`pb-2.5 px-3 text-xs font-bold transition-all relative flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'stats'
+                ? 'text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+            <span>สถิติ & ปันผลย้อนหลัง</span>
+            {data?.historicalStats?.dividends?.hasDividends && (
+              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                {data.historicalStats.dividends.frequency === 'Quarterly'
+                  ? '4x/ปี'
+                  : data.historicalStats.dividends.frequency === 'Semi-Annual'
+                  ? '2x/ปี'
+                  : data.historicalStats.dividends.frequency === 'Monthly'
+                  ? '12x/ปี'
+                  : 'ปันผล'}
+              </span>
+            )}
+            {activeTab === 'stats' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
+            )}
+          </button>
+        </div>
+
         {/* ============================================================ */}
         {/* MODAL BODY (SCROLLABLE) */}
         {/* ============================================================ */}
@@ -848,6 +898,14 @@ export function StockDetailModal({
             <div className="py-12 p-6 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center text-rose-300 text-xs">
               ไม่สามารถดึงข้อมูลรายละเอียดของ {symbol} ได้ในขณะนี้
             </div>
+          ) : activeTab === 'stats' ? (
+            <StockHistoricalStatsTab
+              symbol={symbol}
+              name={data?.name || initialName || symbol}
+              currencySymbol={currencySymbol}
+              currentPrice={data?.currentPrice ?? 0}
+              stats={data?.historicalStats}
+            />
           ) : (
             <>
               {/* 1. CHART & TIMEFRAME & TECHNICAL CONTROLS */}

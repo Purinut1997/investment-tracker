@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { getYahooQuoteSummary } from '@/lib/market-data/yahoo-crumb'
+import { parseHistoricalStats, HistoricalStockStats } from '@/lib/market-data/historical-stats'
 
 export interface ChartPoint {
   time: string
@@ -112,6 +113,23 @@ export async function GET(req: NextRequest) {
       .then((res) => (res.ok ? res.json() : null))
       .catch(() => null)
 
+    // 1.1 Fetch 5Y monthly data for dividend history and performance matrix
+    const historyUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+      yfTicker
+    )}?range=5y&interval=1mo&events=div|split`
+
+    const yahooHistoryPromise = fetch(historyUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(3500),
+      next: { revalidate: 300 },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+
     // 2. Fetch Finnhub data if available
     const finnhubKey = process.env.FINNHUB_API_KEY
     const shouldFetchFinnhub =
@@ -173,9 +191,10 @@ export async function GET(req: NextRequest) {
       orderBy: { txnDate: 'asc' },
     })
 
-    const [yahooData, finnhubMetric, finnhubTarget, finnhubRecom, userTxns] =
+    const [yahooData, yahooHistoryData, finnhubMetric, finnhubTarget, finnhubRecom, userTxns] =
       await Promise.all([
         yahooPromise,
+        yahooHistoryPromise,
         finnhubMetricPromise,
         finnhubTargetPromise,
         finnhubRecomPromise,
@@ -403,6 +422,13 @@ export async function GET(req: NextRequest) {
       if (dividendYield === null && ySummary.dividendYield !== null) dividendYield = ySummary.dividendYield
     }
 
+    // Historical Dividends, Splits & Return Performance Matrix
+    const historicalStats = parseHistoricalStats(
+      yahooHistoryData?.chart?.result?.[0] || yahooData?.chart?.result?.[0],
+      currentPrice,
+      userTxns
+    )
+
     const payload = {
       symbol: rawSymbol,
       name: meta.longName || meta.shortName || rawSymbol,
@@ -420,7 +446,7 @@ export async function GET(req: NextRequest) {
       forwardPe: ySummary?.forwardPe ? Number(ySummary.forwardPe.toFixed(2)) : null,
       pb: ySummary?.pb ? Number(ySummary.pb.toFixed(2)) : null,
       evEbitda: ySummary?.evEbitda ? Number(ySummary.evEbitda.toFixed(2)) : null,
-      dividendYield: dividendYield !== null ? Number(dividendYield.toFixed(2)) : null,
+      dividendYield: dividendYield !== null ? Number(dividendYield.toFixed(2)) : (historicalStats.dividends.ttmYield ?? null),
       payoutRatio: ySummary?.payoutRatio !== null && ySummary?.payoutRatio !== undefined ? Number(ySummary.payoutRatio.toFixed(2)) : null,
       revenue: ySummary?.revenue ?? null,
       revenueGrowth: ySummary?.revenueGrowth !== null && ySummary?.revenueGrowth !== undefined ? Number(ySummary.revenueGrowth.toFixed(2)) : null,
@@ -432,6 +458,7 @@ export async function GET(req: NextRequest) {
       chartPoints,
       technicalLevels,
       range,
+      historicalStats,
     }
 
     stockDetailMemoryCache.set(cacheKey, { data: payload, timestamp: now })
