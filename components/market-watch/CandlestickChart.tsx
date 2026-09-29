@@ -5,6 +5,7 @@ import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 
 export interface CandlePoint {
   time: string
+  price?: number
   open: number
   high: number
   low: number
@@ -31,6 +32,7 @@ interface CandlestickChartProps {
   currencySymbol?: string
   showSR?: boolean
   showSMA?: boolean
+  showVolume?: boolean
   technicalLevels?: TechnicalLevels | null
   height?: number
 }
@@ -60,6 +62,7 @@ function CandlestickChartViewport({
   currencySymbol = '$',
   showSR = true,
   showSMA = true,
+  showVolume = false,
   technicalLevels,
   height = 280,
 }: CandlestickChartProps) {
@@ -333,6 +336,20 @@ function CandlestickChartViewport({
     return levels.filter((l) => l.val > minPrice && l.val < maxPrice)
   }, [showSR, technicalLevels, minPrice, maxPrice])
 
+  // Volume scale
+  const maxVisibleVolume = useMemo(() => {
+    if (!showVolume) return 1
+    let maxV = 1
+    for (let i = firstVisible; i <= lastVisible; i++) {
+      const v = data[i]?.volume || 0
+      if (v > maxV) maxV = v
+    }
+    return maxV
+  }, [data, firstVisible, lastVisible, showVolume])
+
+  const volumeMaxHeight = Math.min(plotHeight * 0.22, 70)
+  const volumeBaseline = paddingTop + plotHeight
+
   const activePoint = hoveredPoint || data[data.length - 1]
   const isUp = activePoint ? activePoint.close >= activePoint.open : true
   const changeVal = activePoint ? activePoint.close - activePoint.open : 0
@@ -464,6 +481,18 @@ function CandlestickChartViewport({
 
             return (
               <g key={d.timestamp || i}>
+                {/* Volume Bar Underneath */}
+                {showVolume && d.volume > 0 && (
+                  <rect
+                    x={x - candleWidth / 2}
+                    y={volumeBaseline - (d.volume / maxVisibleVolume) * volumeMaxHeight}
+                    width={candleWidth}
+                    height={Math.max(1, (d.volume / maxVisibleVolume) * volumeMaxHeight)}
+                    fill={candleUp ? '#10B981' : '#F43F5E'}
+                    opacity={0.32}
+                    rx={0.5}
+                  />
+                )}
                 {/* Wick */}
                 <line
                   x1={x}

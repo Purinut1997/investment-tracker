@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Calendar,
+  Maximize2,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -44,6 +45,7 @@ import {
 } from 'recharts'
 import { StockLogo } from '@/components/StockLogo'
 import { CandlestickChart } from '@/components/market-watch/CandlestickChart'
+import { FullscreenChartModal } from '@/components/market-watch/FullscreenChartModal'
 import { StockHistoricalStatsTab } from '@/components/market-watch/StockHistoricalStatsTab'
 
 export interface StructuredAiData {
@@ -591,6 +593,8 @@ export function StockDetailModal({
   const [chartType, setChartType] = useState<'area' | 'candle'>('area')
   const [showSR, setShowSR] = useState(true)
   const [showSMA, setShowSMA] = useState(true)
+  const [showVolume, setShowVolume] = useState(false)
+  const [isFullscreenChartOpen, setIsFullscreenChartOpen] = useState(false)
   const [isAiLoading, setIsAiLoading] = useState(false)
   const [aiInsight, setAiInsight] = useState<string | null>(null)
   const [structuredAi, setStructuredAi] = useState<StructuredAiData | null>(null)
@@ -641,11 +645,11 @@ export function StockDetailModal({
   // ESC key to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose()
+      if (e.key === 'Escape' && isOpen && !isFullscreenChartOpen) onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
+  }, [isOpen, isFullscreenChartOpen, onClose])
 
   // Fetch Stock Detail Data with SWR
   const { data, isLoading, error } = useSWR(
@@ -993,12 +997,23 @@ export function StockDetailModal({
                         </button>
                       ))}
                     </div>
+
+                    {/* Fullscreen Expand Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsFullscreenChartOpen(true)}
+                      className="px-2 py-1 sm:px-2.5 rounded-xl bg-[#0F1218] hover:bg-indigo-600/20 text-slate-400 hover:text-indigo-300 border border-white/[0.06] hover:border-indigo-500/30 transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer shadow-sm group"
+                      title="เปิดกราฟขนาดใหญ่เต็มจอ (Fullscreen Pro Modal)"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-400 transition-colors" />
+                      <span className="hidden sm:inline font-sans">เต็มจอ</span>
+                    </button>
                   </div>
                 </div>
 
                 {/* Technical Indicator Filter Toggles */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/[0.04] text-xs">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => setShowSR(!showSR)}
@@ -1028,6 +1043,18 @@ export function StockDetailModal({
                         <span>50</span>
                       </div>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowVolume(!showVolume)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all flex items-center gap-1.5 ${
+                        showVolume
+                          ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                          : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:text-slate-300'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${showVolume ? 'bg-indigo-400' : 'bg-slate-600'}`} />
+                      <span>Volume</span>
+                    </button>
                   </div>
 
                   {data?.technicalLevels && (
@@ -1047,6 +1074,7 @@ export function StockDetailModal({
                         currencySymbol={currencySymbol}
                         showSR={showSR}
                         showSMA={showSMA}
+                        showVolume={showVolume}
                         technicalLevels={data?.technicalLevels}
                         height={260}
                       />
@@ -1584,5 +1612,35 @@ export function StockDetailModal({
     </div>
   )
 
-  return createPortal(modalContent, document.body)
+  return (
+    <>
+      {createPortal(modalContent, document.body)}
+      <FullscreenChartModal
+        isOpen={isFullscreenChartOpen}
+        onClose={() => setIsFullscreenChartOpen(false)}
+        symbol={symbol}
+        name={data?.name || initialName || symbol}
+        market={market}
+        currencySymbol={currencySymbol}
+        currentPrice={data?.currentPrice ?? 0}
+        range={range}
+        setRange={setRange}
+        chartType={chartType}
+        setChartType={setChartType}
+        showSR={showSR}
+        setShowSR={setShowSR}
+        showSMA={showSMA}
+        setShowSMA={setShowSMA}
+        showVolume={showVolume}
+        setShowVolume={setShowVolume}
+        chartPoints={chartPoints}
+        technicalLevels={data?.technicalLevels}
+        isRangePositive={isRangePositive}
+        rangeChangePercent={rangeChangePercent}
+        minPrice={minPrice}
+        maxPrice={maxPrice}
+        hasChartData={hasChartData}
+      />
+    </>
+  )
 }
