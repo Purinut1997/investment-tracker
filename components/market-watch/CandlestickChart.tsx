@@ -338,7 +338,22 @@ function CandlestickChartViewport({
     return levels.filter((l) => l.val > minPrice && l.val < maxPrice)
   }, [showSR, technicalLevels, minPrice, maxPrice])
 
-  // Volume scale
+  // Volume scale & 20-period Moving Average
+  const volumeMAs = useMemo(() => {
+    if (!showVolume) return []
+    const mas: number[] = []
+    const period = Math.min(20, Math.max(3, Math.floor(data.length / 2)))
+    for (let i = 0; i < data.length; i++) {
+      const start = Math.max(0, i - period + 1)
+      let sum = 0
+      for (let j = start; j <= i; j++) {
+        sum += data[j].volume || 0
+      }
+      mas.push(Math.round(sum / (i - start + 1)))
+    }
+    return mas
+  }, [data, showVolume])
+
   const maxVisibleVolume = useMemo(() => {
     if (!showVolume) return 1
     let maxV = 1
@@ -383,7 +398,38 @@ function CandlestickChartViewport({
           <span className={`font-bold ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
             {isUp ? '+' : ''}{changeVal.toFixed(2)} ({isUp ? '+' : ''}{changePct.toFixed(2)}%)
           </span>
-          {activePoint?.volume ? (
+          {showVolume && activePoint?.volume ? (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-white/[0.08] text-[11px]">
+              <span className="text-slate-400">Vol:</span>
+              <strong className={isUp ? 'text-emerald-400' : 'text-rose-400'}>
+                {activePoint.volume >= 1e6
+                  ? `${(activePoint.volume / 1e6).toFixed(2)}M`
+                  : activePoint.volume >= 1e3
+                  ? `${(activePoint.volume / 1e3).toFixed(1)}K`
+                  : activePoint.volume.toLocaleString()}
+              </strong>
+              {(() => {
+                const idx = hoveredPoint
+                  ? data.findIndex((d) => d.timestamp === hoveredPoint.timestamp)
+                  : data.length - 1
+                const ma = idx >= 0 ? volumeMAs[idx] || 0 : 0
+                if (ma <= 0) return null
+                const diffPct = ((activePoint.volume - ma) / ma) * 100
+                const isSpike = activePoint.volume >= ma * 1.4
+                return (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                      isSpike
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {isSpike ? `🔥 Spike +${Math.round(diffPct)}%` : `${diffPct >= 0 ? '+' : ''}${Math.round(diffPct)}% MA`}
+                  </span>
+                )
+              })()}
+            </div>
+          ) : activePoint?.volume ? (
             <span className="text-slate-500 hidden sm:inline">
               Vol: {Number(activePoint.volume).toLocaleString()}
             </span>
@@ -516,6 +562,56 @@ function CandlestickChartViewport({
               </g>
             )
           })}
+
+          {/* Volume MA 20 Line Overlay across visible candles */}
+          {showVolume && volumeMAs.length > 0 && (
+            <polyline
+              points={data
+                .slice(firstVisible, lastVisible + 1)
+                .map((_, idx) => {
+                  const i = firstVisible + idx
+                  const x = scaleX(i)
+                  const ma = volumeMAs[i] || 0
+                  const y = volumeBaseline - (ma / maxVisibleVolume) * volumeMaxHeight
+                  return `${x},${Math.max(paddingTop, y)}`
+                })
+                .join(' ')}
+              fill="none"
+              stroke="#F59E0B"
+              strokeWidth={1.3}
+              strokeDasharray="3 2"
+              opacity={0.8}
+            />
+          )}
+
+          {/* Volume Reference Line & Scale Label on Axis */}
+          {showVolume && maxVisibleVolume > 1 && (
+            <g>
+              <line
+                x1={paddingLeft}
+                y1={volumeBaseline - volumeMaxHeight}
+                x2={paddingLeft + plotWidth}
+                y2={volumeBaseline - volumeMaxHeight}
+                stroke="#64748B"
+                strokeDasharray="2 3"
+                strokeWidth={0.6}
+                opacity={0.35}
+              />
+              <text
+                x={paddingLeft + plotWidth + 6}
+                y={volumeBaseline - volumeMaxHeight + 3}
+                fill="#F59E0B"
+                fontSize={8}
+                fontFamily="monospace"
+                opacity={0.85}
+              >
+                {maxVisibleVolume >= 1e6
+                  ? `${(maxVisibleVolume / 1e6).toFixed(1)}M`
+                  : `${(maxVisibleVolume / 1e3).toFixed(0)}K`}{' '}
+                Vol
+              </text>
+            </g>
+          )}
 
           {/* Crosshair Cursor on Mouse Move */}
           {mousePos && (

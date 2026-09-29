@@ -29,6 +29,7 @@ import {
 } from 'recharts'
 import { StockLogo } from '@/components/StockLogo'
 import { CandlestickChart, type TechnicalLevels, type CandlePoint } from '@/components/market-watch/CandlestickChart'
+import { VolumeChartPanel } from '@/components/market-watch/VolumeChartPanel'
 
 export type TimeRange = '1d' | '1w' | '1m' | '1y'
 
@@ -310,16 +311,23 @@ export function FullscreenChartModal({
               <p className="text-sm font-semibold">ไม่มีข้อมูลราคาสำหรับช่วงเวลานี้</p>
             </div>
           ) : chartType === 'candle' ? (
-            <div className="w-full h-full flex flex-col justify-center">
-              <CandlestickChart
-                data={chartPoints}
-                currencySymbol={currencySymbol}
-                showSR={showSR}
-                showSMA={showSMA}
-                showVolume={showVolume}
-                technicalLevels={technicalLevels}
-                height={550}
-              />
+            <div className="w-full h-full flex flex-col justify-between overflow-hidden">
+              <div className="w-full flex-1 min-h-[360px] flex flex-col justify-center">
+                <CandlestickChart
+                  data={chartPoints}
+                  currencySymbol={currencySymbol}
+                  showSR={showSR}
+                  showSMA={showSMA}
+                  showVolume={showVolume}
+                  technicalLevels={technicalLevels}
+                  height={showVolume ? 420 : 540}
+                />
+              </div>
+              {showVolume && (
+                <div className="w-full pt-3 shrink-0">
+                  <VolumeChartPanel data={chartPoints} height={115} showSummaryBar={true} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="w-full h-full flex flex-col">
@@ -464,22 +472,10 @@ export function FullscreenChartModal({
                 </ResponsiveContainer>
               </div>
 
-              {/* Volume Bars Sub-Panel for Area Mode */}
+              {/* Volume Intelligence Panel */}
               {showVolume && (
-                <div className="w-full h-24 pt-2 border-t border-white/[0.06]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartPoints} margin={{ top: 5, right: 35, left: 10, bottom: 0 }}>
-                      <XAxis dataKey="time" hide />
-                      <YAxis stroke="#64748B" fontSize={9} tickLine={false} axisLine={false} orientation="right" tickFormatter={(v) => (v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}K` : String(v))} />
-                      <Bar
-                        dataKey="volume"
-                        fill="#818CF8"
-                        opacity={0.45}
-                        radius={[2, 2, 0, 0]}
-                        isAnimationActive={false}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="w-full pt-3 shrink-0">
+                  <VolumeChartPanel data={chartPoints} height={125} showSummaryBar={true} />
                 </div>
               )}
             </div>

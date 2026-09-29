@@ -46,6 +46,7 @@ import {
 import { StockLogo } from '@/components/StockLogo'
 import { CandlestickChart } from '@/components/market-watch/CandlestickChart'
 import { FullscreenChartModal } from '@/components/market-watch/FullscreenChartModal'
+import { VolumeChartPanel } from '@/components/market-watch/VolumeChartPanel'
 import { StockHistoricalStatsTab } from '@/components/market-watch/StockHistoricalStatsTab'
 
 export interface StructuredAiData {
@@ -1080,7 +1081,8 @@ export function StockDetailModal({
                         onToggleFullscreen={() => setIsFullscreenChartOpen(true)}
                       />
                     ) : (
-                      <div className="w-full h-56 sm:h-64 relative group/areachart">
+                      <>
+                        <div className="w-full h-56 sm:h-64 relative group/areachart">
                         <button
                           type="button"
                           onClick={() => setIsFullscreenChartOpen(true)}
@@ -1203,7 +1205,18 @@ export function StockDetailModal({
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
-                    )
+                      {showVolume && (
+                        <div className="w-full pt-2.5">
+                          <VolumeChartPanel
+                            data={chartPoints}
+                            height={90}
+                            showSummaryBar={true}
+                            isCompact={true}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )
                   ) : (
                     <div className="h-48 flex items-center justify-center text-slate-500 text-xs">
                       กำลังรวบรวมข้อมูลราคาสำหรับกราฟช่วงเวลานี้...
