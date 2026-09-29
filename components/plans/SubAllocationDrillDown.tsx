@@ -25,6 +25,7 @@ import {
   Activity,
 } from 'lucide-react'
 import { StockLogo } from '@/components/StockLogo'
+import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import type { HoldingItem } from '@/lib/analytics/holdings'
 import type { TechnicalSignal } from '@/lib/market-data/technical-signals'
 
@@ -95,6 +96,11 @@ export function SubAllocationDrillDown({
   const [customTargets, setCustomTargets] = useState<Record<string, number>>(savedSubTargets)
   const [isSaving, setIsSaving] = useState(false)
   const [copiedPlan, setCopiedPlan] = useState(false)
+  const [selectedStock, setSelectedStock] = useState<{
+    symbol: string
+    name?: string
+    market?: 'US' | 'TH'
+  } | null>(null)
 
   // Filter holdings for this specific category
   const categoryHoldings = useMemo(() => {
@@ -517,22 +523,35 @@ export function SubAllocationDrillDown({
               return (
                 <tr key={item.ticker} className="hover:bg-white/[0.03] transition-colors">
                   <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedStock({
+                          symbol: item.ticker,
+                          name: item.name,
+                          market: (item.market as 'US' | 'TH') || 'US',
+                        })
+                      }
+                      className="flex items-center gap-3 text-left group/sub cursor-pointer"
+                      title="คลิกเพื่อดูรายละเอียดและกราฟราคา"
+                    >
                       <StockLogo
                         ticker={item.ticker}
                         name={item.name}
                         size={32}
-                        className="rounded-xl shrink-0"
+                        className="rounded-xl shrink-0 group-hover/sub:scale-105 transition-transform"
                       />
                       <div>
-                        <span className="font-black text-white text-base tracking-wide block">{item.ticker}</span>
+                        <span className="font-black text-white text-base tracking-wide block group-hover/sub:text-indigo-400 group-hover/sub:underline transition-colors">
+                          {item.ticker}
+                        </span>
                         {item.name && item.name.trim().toUpperCase() !== item.ticker.trim().toUpperCase() && (
                           <span className="text-xs text-slate-300 font-medium truncate max-w-[160px] block mt-0.5">
                             {item.name}
                           </span>
                         )}
                       </div>
-                    </div>
+                    </button>
                   </td>
 
                   <td className="py-3.5 px-4 text-right font-mono">
@@ -730,6 +749,15 @@ export function SubAllocationDrillDown({
           </button>
         </div>
       </div>
+
+      {/* Interactive Stock Detail & Technical Insights Modal */}
+      <StockDetailModal
+        isOpen={Boolean(selectedStock)}
+        onClose={() => setSelectedStock(null)}
+        symbol={selectedStock?.symbol ?? null}
+        initialName={selectedStock?.name}
+        market={selectedStock?.market}
+      />
     </div>
   )
 }

@@ -245,20 +245,25 @@ Last updated: 2026-09-17
 
 ### 19. Phase 18: Executive Allocation Drift Matrix (Institutional Table Redesign) ✅
 - **Executive Rebalance Matrix (`app/plans/page.tsx`)**:
-  - พลิกโฉมการแสดงผลจากกล่องเดี่ยวหนาเทอะทะ (Bulky Double Bars) สู่ **ตารางเมทริกซ์สไตล์สถาบันการเงิน (Institutional Table)**:
-    - **Asset Class & Status**: ไอคอนกลุ่มสินทรัพย์ + ชื่อกลุ่ม + ป้ายสถานะ (`หลุดกรอบเป้าหมาย` / `เริ่มเบี่ยงเบน` / `สมดุลดี`)
-    - **Actual vs Target (%) with Glowing Target Pin**:
-      - แถบหลอดเดี่ยวทรงโมเดิร์นฉีดสีตามสัดส่วนปัจจุบันจริง
-      - ปักหมุดเป้าหมายสีขาวเรืองแสง (Target Pin Marker) ที่ระดับเปอร์เซ็นต์เป้าหมาย ทำให้เห็นทันทีว่าหลอดสีอยู่ก่อนหรือเกินเป้าหมาย โดยไม่ต้องเทียบสองแถบบนล่าง
-    - **Current Portfolio Value**: มูลค่าเงินบาทจริงในพอร์ต (`฿X,XXX`) พร้อมจำนวนสินทรัพย์ย่อย
-    - **Variance (Drift %)**: ป้ายส่วนต่างตัวเลขคมชัดตามโทนสีความเสี่ยง
-    - **Action Recommendation Pill**: กล่องแนะนำสั้นกระชับเข้าใจทันที:
-      - `⏸️ เกินเป้า ~฿11,597 (ชะลอเติม)` (Amber)
-      - `🟢 ขาดเป้า ~฿3,500 (เน้นเติม)` (Emerald)
-      - `✨ สัดส่วนสมดุลดี (DCA ตามปกติ)` (Cyan)
-    - **Sub-Allocation Drill-Down Row**:
-      - ปุ่มกดเจาะลึก `ดูย่อย (X รายการ) ▾` ที่เมื่อกดแล้วจะกางแถว Sub-Row ออกมาแสดงผลกล่อง `SubAllocationDrillDown` ด้านล่างของแถวนั้นอย่างแนบเนียนและสวยงาม
+  - พลิกโฉมการแสดงผลจากกล่องเดี่ยวหนาเทอะทะ (Bulky Double Bars) สู่ **ตารางเมทริกซ์สไตล์สถาบันการเงิน (Institutional Table)**
 - **Build Status**: `npm run build` ผ่าน 100% (60 routes) ไร้ข้อผิดพลาด
+
+### 20. Phase 19: Usability Polish, Redundancy Elimination & Cross-App Stock Intelligence ✅
+- **QuickAddModal Overhaul (`components/QuickAddModal.tsx`)**:
+  - ขจัด Hardcoded Fallbacks (`Dime! USD`, `Dime! Save`, `interestDays: 104`) โดยดึงข้อมูลบัญชีจริงของผู้ใช้จาก `/api/accounts`
+  - รองรับ `initialData` (ticker, action, price, market, assetName) เพื่อ pre-fill ฟอร์มบันทึกธุรกรรมโดยอัตโนมัติจากทุกหน้า
+- **Cross-App Stock Detail Modal Integration (`StockDetailModal`)**:
+  - เชื่อมโยงกราฟเทคนิคและข้อมูลปันผลเชิงลึก ให้คลิกชื่อ Ticker ได้โดยตรงจากทุกหน้า:
+    - `/daily-plan`: คลิก Benchmark Tiles, Action Watch Items, Target Orders
+    - `/transactions`: คลิก Ticker ในตารางประวัติธุรกรรม
+    - `/radar`: คลิก Ticker ใน Concentration Risks, Drawdown Risks, และ Opportunity Radar
+    - `/plans`: คลิก Ticker ใน Sub-Allocation Drill Down
+- **Daily Action Hub Mobile Responsiveness (`app/daily-plan/page.tsx`)**:
+  - เพิ่ม **Mobile Card View (`lg:hidden`)** สำหรับ Action Watch Items ขจัดปัญหาหน้าจอล้นจากตารางความกว้าง 1200px
+  - เพิ่มปุ่มสั่งบันทึกธุรกรรมด่วน (Zap / Buy Button) ที่เชื่อมต่อไปยัง `QuickAddModal` แบบระบุสินทรัพย์และราคาพร้อมกรอกทันที
+- **Navigation Clarity (`components/AppShell.tsx`)**:
+  - แยกความชัดเจนระหว่าง `/daily-plan` ("บันทึกแผนประจำวัน") และ `/plans` ("เป้าหมาย & ปรับสมดุลพอร์ต") เพื่อไม่ให้ผู้ใช้งานสับสน
+- **TypeScript & Build Status**: ผ่าน 100% (`npx tsc --noEmit` 0 errors)
 
 ---
 

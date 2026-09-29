@@ -8,6 +8,7 @@ import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockLogo } from '@/components/StockLogo'
 import { AiBriefViewer } from '@/components/daily-plan/AiBriefViewer'
 import { ChecklistDetailModal } from '@/components/daily-plan/ChecklistDetailModal'
+import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
   CalendarCheck,
   Calendar,
@@ -168,6 +169,39 @@ export default function DailyPlanPage() {
   const todayStr = useMemo(() => getTodayDateString(), [])
   const [selectedDate, setSelectedDate] = useState<string>(todayStr)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [selectedStock, setSelectedStock] = useState<{
+    symbol: string
+    name?: string
+    market?: 'US' | 'TH'
+  } | null>(null)
+  const [quickAddInitialData, setQuickAddInitialData] = useState<{
+    ticker?: string
+    action?: 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'FEE'
+    price?: number
+    market?: 'US' | 'TH' | 'CRYPTO'
+    assetName?: string
+  } | undefined>(undefined)
+
+  const handleOpenQuickAddForTrigger = (item: PortfolioTriggerItem) => {
+    const isSell = item.signalType === 'OVERBOUGHT_RESISTANCE'
+    setQuickAddInitialData({
+      ticker: item.ticker,
+      assetName: item.assetName,
+      market: (item.market as 'US' | 'TH' | 'CRYPTO') || 'US',
+      action: isSell ? 'SELL' : 'BUY',
+      price: item.currentPrice,
+    })
+    setQuickAddOpen(true)
+  }
+
+  const handleOpenQuickAddForAction = (action: TargetAction) => {
+    setQuickAddInitialData({
+      ticker: action.ticker,
+      action: action.action as any,
+      price: action.targetPrice,
+    })
+    setQuickAddOpen(true)
+  }
 
   // Local state for interactive editing
   const [marketBias, setMarketBias] = useState<'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'VOLATILE'>('NEUTRAL')
@@ -523,10 +557,18 @@ export default function DailyPlanPage() {
               return (
                 <div
                   key={bm.symbol}
-                  className="bg-slate-900/80 border-2 border-white/[0.08] hover:border-white/[0.18] rounded-3xl p-4 md:p-5 backdrop-blur-xl transition-all flex flex-col justify-between shadow-lg"
+                  onClick={() => {
+                    const cleanSymbol = bm.symbol.replace('^', '').replace('=X', '')
+                    setSelectedStock({
+                      symbol: cleanSymbol,
+                      name: bm.name,
+                      market: bm.currency === 'THB' ? 'TH' : 'US',
+                    })
+                  }}
+                  className="bg-slate-900/80 border-2 border-white/[0.08] hover:border-blue-500/40 rounded-3xl p-4 md:p-5 backdrop-blur-xl transition-all flex flex-col justify-between shadow-lg cursor-pointer group hover:scale-[1.02]"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-black text-white tracking-tight">{bm.symbol}</span>
+                    <span className="text-sm font-black text-white tracking-tight group-hover:text-blue-400 transition-colors">{bm.symbol}</span>
                     <span
                       className={`flex items-center text-xs font-black px-2 py-0.5 rounded-lg border ${
                         isUp
@@ -608,7 +650,10 @@ export default function DailyPlanPage() {
               </div>
 
               <button
-                onClick={() => setQuickAddOpen(true)}
+                onClick={() => {
+                  setQuickAddInitialData(undefined)
+                  setQuickAddOpen(true)
+                }}
                 className="px-4 py-2.5 rounded-2xl text-sm font-bold bg-blue-600 hover:bg-blue-500 text-white transition-all flex items-center gap-2 shadow-lg shadow-blue-600/30"
               >
                 <Plus className="w-4 h-4" />
@@ -617,7 +662,7 @@ export default function DailyPlanPage() {
             </div>
           </div>
 
-          {/* Triggers Table */}
+          {/* Triggers Table & Mobile Cards */}
           {displayedTriggers.length === 0 ? (
             <div className="py-14 text-center text-sm text-slate-300 border-2 border-dashed border-white/[0.08] rounded-2xl space-y-2">
               <ShieldCheck className="w-12 h-12 text-emerald-400/80 mx-auto" />
@@ -633,60 +678,246 @@ export default function DailyPlanPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto pb-3 -mx-2 px-2 scrollbar-thin">
-              <table className="w-full min-w-[1200px] text-left text-sm border-collapse">
-                <thead>
-                  <tr className="border-b-2 border-white/[0.08] text-slate-300 text-xs tracking-wider uppercase font-bold">
-                    <th className="pb-3.5 pr-4 min-w-[200px] whitespace-nowrap">สินทรัพย์</th>
-                    <th className="pb-3.5 px-4 text-right min-w-[140px] whitespace-nowrap">ราคาปัจจุบัน</th>
-                    <th className="pb-3.5 px-4 text-center min-w-[110px] whitespace-nowrap">RSI(14)</th>
-                    <th className="pb-3.5 px-4 text-right min-w-[110px] whitespace-nowrap">แนวรับ S1</th>
-                    <th className="pb-3.5 px-4 text-right min-w-[140px] whitespace-nowrap">ระยะห่างถึงแนวรับ</th>
-                    <th className="pb-3.5 px-4 min-w-[360px] whitespace-nowrap">สัญญาณทางเทคนิค & เหตุผล</th>
-                    <th className="pb-3.5 pl-4 text-right min-w-[140px] whitespace-nowrap">การกระทำ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.06]">
-                  {displayedTriggers.map((item) => {
-                    const rsi = item.rsi14
-                    const isOversold = rsi !== null && rsi <= 35
-                    const isOverbought = rsi !== null && rsi >= 68
-                    const isNearS1 = item.distanceToS1Percent !== null && item.distanceToS1Percent <= 2.5
+            <>
+              {/* Desktop View: Wide Table with Scroll */}
+              <div className="hidden lg:block overflow-x-auto pb-3 -mx-2 px-2 scrollbar-thin">
+                <table className="w-full min-w-[1200px] text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b-2 border-white/[0.08] text-slate-300 text-xs tracking-wider uppercase font-bold">
+                      <th className="pb-3.5 pr-4 min-w-[200px] whitespace-nowrap">สินทรัพย์</th>
+                      <th className="pb-3.5 px-4 text-right min-w-[140px] whitespace-nowrap">ราคาปัจจุบัน</th>
+                      <th className="pb-3.5 px-4 text-center min-w-[110px] whitespace-nowrap">RSI(14)</th>
+                      <th className="pb-3.5 px-4 text-right min-w-[110px] whitespace-nowrap">แนวรับ S1</th>
+                      <th className="pb-3.5 px-4 text-right min-w-[140px] whitespace-nowrap">ระยะห่างถึงแนวรับ</th>
+                      <th className="pb-3.5 px-4 min-w-[360px] whitespace-nowrap">สัญญาณทางเทคนิค & เหตุผล</th>
+                      <th className="pb-3.5 pl-4 text-right min-w-[140px] whitespace-nowrap">การกระทำ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.06]">
+                    {displayedTriggers.map((item) => {
+                      const rsi = item.rsi14
+                      const isOversold = rsi !== null && rsi <= 35
+                      const isOverbought = rsi !== null && rsi >= 68
+                      const isNearS1 = item.distanceToS1Percent !== null && item.distanceToS1Percent <= 2.5
 
-                    return (
-                      <tr
-                        key={item.ticker}
-                        className="hover:bg-white/[0.03] transition-colors group"
-                      >
-                        {/* Ticker & Name */}
-                        <td className="py-4 pr-4">
-                          <div className="flex items-center gap-3">
-                            <StockLogo
-                              ticker={item.ticker}
-                              name={item.assetName}
-                              className="w-10 h-10 rounded-2xl shrink-0"
-                            />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-base font-black text-white tracking-wide">
-                                  {item.ticker}
+                      return (
+                        <tr
+                          key={item.ticker}
+                          className="hover:bg-white/[0.03] transition-colors group"
+                        >
+                          {/* Ticker & Name with Click Target */}
+                          <td className="py-4 pr-4">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedStock({
+                                  symbol: item.ticker,
+                                  name: item.assetName,
+                                  market: (item.market as 'US' | 'TH') || 'US',
+                                })
+                              }
+                              className="flex items-center gap-3 text-left group/ticker"
+                            >
+                              <StockLogo
+                                ticker={item.ticker}
+                                name={item.assetName}
+                                className="w-10 h-10 rounded-2xl shrink-0 group-hover/ticker:scale-105 transition-transform"
+                              />
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-base font-black text-white tracking-wide group-hover/ticker:text-blue-400 group-hover/ticker:underline transition-colors">
+                                    {item.ticker}
+                                  </span>
+                                  <span className="text-xs px-2 py-0.5 rounded-md bg-white/[0.08] text-slate-300 font-semibold">
+                                    {item.market === 'US' ? '🇺🇸' : item.market === 'TH' ? '🇹🇭' : '🪙'} {item.market}
+                                  </span>
+                                </div>
+                                {item.assetName && item.assetName.trim().toUpperCase() !== item.ticker.trim().toUpperCase() && (
+                                  <span className="text-xs font-semibold text-slate-400 block break-words mt-0.5 max-w-[180px]">
+                                    {item.assetName}
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          </td>
+
+                          {/* Current Price */}
+                          <td className="py-4 px-4 text-right font-mono">
+                            <span className="text-base font-black text-white">
+                              {item.currency === 'USD' ? '$' : item.currency === 'THB' ? '฿' : ''}
+                              {item.currentPrice.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </span>
+                            <span
+                              className={`block text-xs font-bold ${
+                                item.unrealizedPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                              }`}
+                            >
+                              {item.unrealizedPnLPercent >= 0 ? '+' : ''}
+                              {item.unrealizedPnLPercent.toFixed(1)}% ในพอร์ต
+                            </span>
+                          </td>
+
+                          {/* RSI 14 Gauge */}
+                          <td className="py-4 px-4 text-center">
+                            {rsi !== null ? (
+                              <div className="inline-flex flex-col items-center">
+                                <span
+                                  className={`font-mono font-black text-sm px-3 py-1 rounded-xl border ${
+                                    isOversold
+                                      ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/40 shadow-xs'
+                                      : isOverbought
+                                      ? 'bg-amber-500/25 text-amber-300 border-amber-500/40'
+                                      : 'bg-slate-800/90 text-slate-200 border-white/[0.08]'
+                                  }`}
+                                >
+                                  {rsi.toFixed(1)}
                                 </span>
-                                <span className="text-xs px-2 py-0.5 rounded-md bg-white/[0.08] text-slate-300 font-semibold">
-                                  {item.market === 'US' ? '🇺🇸' : item.market === 'TH' ? '🇹🇭' : '🪙'} {item.market}
+                                <span className="text-[11px] font-semibold text-slate-400 mt-1">
+                                  {isOversold ? 'Oversold 🔥' : isOverbought ? 'Overbought ⚠️' : 'โซนปกติ'}
                                 </span>
                               </div>
-                              {item.assetName && item.assetName.trim().toUpperCase() !== item.ticker.trim().toUpperCase() && (
-                                <span className="text-xs font-semibold text-slate-400 block break-words mt-0.5 max-w-[180px]">
-                                  {item.assetName}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
+                            ) : (
+                              <span className="text-slate-500">-</span>
+                            )}
+                          </td>
 
-                        {/* Current Price */}
-                        <td className="py-4 px-4 text-right font-mono">
-                          <span className="text-base font-black text-white">
+                          {/* Support S1 */}
+                          <td className="py-4 px-4 text-right font-mono">
+                            {item.supportS1 ? (
+                              <span className="text-base font-black text-slate-100">
+                                ${item.supportS1.toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">N/A</span>
+                            )}
+                          </td>
+
+                          {/* Distance to S1 */}
+                          <td className="py-4 px-4 text-right font-mono">
+                            {item.distanceToS1Percent !== null ? (
+                              <span
+                                className={`text-sm font-black ${
+                                  isNearS1
+                                    ? 'text-teal-300 bg-teal-500/20 px-2 py-0.5 rounded-lg border border-teal-500/30'
+                                    : item.distanceToS1Percent <= 5
+                                    ? 'text-cyan-300'
+                                    : 'text-slate-300'
+                                }`}
+                              >
+                                {item.distanceToS1Percent > 0 ? '+' : ''}
+                                {item.distanceToS1Percent.toFixed(1)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">-</span>
+                            )}
+                          </td>
+
+                          {/* Technical Signal Tag & Reason */}
+                          <td className="py-4 px-4">
+                            <div className="space-y-1.5 max-w-[400px]">
+                              <span
+                                className={`inline-block px-3 py-1 rounded-xl text-xs font-bold border ${item.actionTagColor}`}
+                              >
+                                {item.actionTag}
+                              </span>
+                              <p className="text-xs sm:text-sm font-medium text-slate-200 leading-relaxed break-words whitespace-normal">
+                                {item.technicalReason}
+                              </p>
+                            </div>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-4 pl-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleAddAction(item.ticker, item.supportS1 ?? item.currentPrice, item.actionTag)}
+                                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all flex items-center gap-1.5 shadow-xs whitespace-nowrap"
+                                title="เพิ่มสินทรัพย์นี้ลงในแผนปฏิบัติการวันนี้"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>ใส่ในแผน</span>
+                              </button>
+                              <button
+                                onClick={() => handleOpenQuickAddForTrigger(item)}
+                                className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-blue-600/25 border border-transparent hover:border-blue-500/40 transition-all"
+                                title="เปิดบันทึกธุรกรรมโดยใส่ข้อมูลสินทรัพย์นี้ทันที"
+                              >
+                                <Zap className="w-4 h-4 text-blue-400" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View (Responsive, No Overflow Scrolling Required) */}
+              <div className="lg:hidden space-y-4">
+                {displayedTriggers.map((item) => {
+                  const rsi = item.rsi14
+                  const isOversold = rsi !== null && rsi <= 35
+                  const isOverbought = rsi !== null && rsi >= 68
+                  const isNearS1 = item.distanceToS1Percent !== null && item.distanceToS1Percent <= 2.5
+
+                  return (
+                    <div
+                      key={item.ticker}
+                      className="p-5 rounded-2xl bg-slate-950/70 border border-white/[0.08] hover:border-white/[0.16] transition-all space-y-4 shadow-lg"
+                    >
+                      {/* Top Row: Logo, Ticker, Market & Tag */}
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedStock({
+                              symbol: item.ticker,
+                              name: item.assetName,
+                              market: (item.market as 'US' | 'TH') || 'US',
+                            })
+                          }
+                          className="flex items-center gap-3 text-left group"
+                        >
+                          <StockLogo
+                            ticker={item.ticker}
+                            name={item.assetName}
+                            className="w-11 h-11 rounded-2xl shrink-0"
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-base font-black text-white group-hover:text-blue-400 transition-colors">
+                                {item.ticker}
+                              </span>
+                              <span className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.08] text-slate-300 font-semibold">
+                                {item.market === 'US' ? '🇺🇸' : item.market === 'TH' ? '🇹🇭' : '🪙'} {item.market}
+                              </span>
+                            </div>
+                            {item.assetName && item.assetName.trim().toUpperCase() !== item.ticker.trim().toUpperCase() && (
+                              <span className="text-xs text-slate-400 font-medium block truncate max-w-[200px] mt-0.5">
+                                {item.assetName}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-xl text-xs font-bold border shrink-0 ${item.actionTagColor}`}
+                        >
+                          {item.actionTag}
+                        </span>
+                      </div>
+
+                      {/* Technical Metric Badges */}
+                      <div className="grid grid-cols-3 gap-2.5 p-3 rounded-xl bg-slate-900/80 border border-white/[0.05] text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                            ราคาปัจจุบัน
+                          </span>
+                          <span className="text-sm font-black text-white font-mono block mt-0.5">
                             {item.currency === 'USD' ? '$' : item.currency === 'THB' ? '฿' : ''}
                             {item.currentPrice.toLocaleString(undefined, {
                               minimumFractionDigits: 2,
@@ -694,110 +925,103 @@ export default function DailyPlanPage() {
                             })}
                           </span>
                           <span
-                            className={`block text-xs font-bold ${
+                            className={`text-[10px] font-bold ${
                               item.unrealizedPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                             }`}
                           >
                             {item.unrealizedPnLPercent >= 0 ? '+' : ''}
-                            {item.unrealizedPnLPercent.toFixed(1)}% ในพอร์ต
+                            {item.unrealizedPnLPercent.toFixed(1)}%
                           </span>
-                        </td>
+                        </div>
 
-                        {/* RSI 14 Gauge */}
-                        <td className="py-4 px-4 text-center">
+                        <div className="text-center border-x border-white/[0.06] px-1">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                            RSI (14)
+                          </span>
                           {rsi !== null ? (
-                            <div className="inline-flex flex-col items-center">
-                              <span
-                                className={`font-mono font-black text-sm px-3 py-1 rounded-xl border ${
-                                  isOversold
-                                    ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/40 shadow-xs'
-                                    : isOverbought
-                                    ? 'bg-amber-500/25 text-amber-300 border-amber-500/40'
-                                    : 'bg-slate-800/90 text-slate-200 border-white/[0.08]'
-                                }`}
-                              >
-                                {rsi.toFixed(1)}
-                              </span>
-                              <span className="text-[11px] font-semibold text-slate-400 mt-1">
-                                {isOversold ? 'Oversold 🔥' : isOverbought ? 'Overbought ⚠️' : 'โซนปกติ'}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-500">-</span>
-                          )}
-                        </td>
-
-                        {/* Support S1 */}
-                        <td className="py-4 px-4 text-right font-mono">
-                          {item.supportS1 ? (
-                            <span className="text-base font-black text-slate-100">
-                              ${item.supportS1.toFixed(2)}
+                            <span
+                              className={`inline-block font-mono font-black text-xs px-2 py-0.5 rounded-lg border mt-1 ${
+                                isOversold
+                                  ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
+                                  : isOverbought
+                                  ? 'bg-amber-500/25 text-amber-300 border-amber-500/40'
+                                  : 'bg-slate-800 text-slate-200 border-white/[0.08]'
+                              }`}
+                            >
+                              {rsi.toFixed(1)}
                             </span>
                           ) : (
-                            <span className="text-slate-500">N/A</span>
+                            <span className="text-slate-500 text-xs mt-1 block">-</span>
                           )}
-                        </td>
+                        </div>
 
-                        {/* Distance to S1 */}
-                        <td className="py-4 px-4 text-right font-mono">
-                          {item.distanceToS1Percent !== null ? (
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                            แนวรับ S1
+                          </span>
+                          <span className="text-sm font-black text-slate-100 font-mono block mt-0.5">
+                            {item.supportS1 ? `$${item.supportS1.toFixed(2)}` : 'N/A'}
+                          </span>
+                          {item.distanceToS1Percent !== null && (
                             <span
-                              className={`text-sm font-black ${
-                                isNearS1
-                                  ? 'text-teal-300 bg-teal-500/20 px-2 py-0.5 rounded-lg border border-teal-500/30'
-                                  : item.distanceToS1Percent <= 5
-                                  ? 'text-cyan-300'
-                                  : 'text-slate-300'
+                              className={`text-[10px] font-bold ${
+                                isNearS1 ? 'text-teal-300' : 'text-slate-400'
                               }`}
                             >
                               {item.distanceToS1Percent > 0 ? '+' : ''}
                               {item.distanceToS1Percent.toFixed(1)}%
                             </span>
-                          ) : (
-                            <span className="text-slate-500">-</span>
                           )}
-                        </td>
+                        </div>
+                      </div>
 
-                        {/* Technical Signal Tag & Reason (Full Text, Wrapped, No Ellipsis) */}
-                        <td className="py-4 px-4">
-                          <div className="space-y-1.5 max-w-[400px]">
-                            <span
-                              className={`inline-block px-3 py-1 rounded-xl text-xs font-bold border ${item.actionTagColor}`}
-                            >
-                              {item.actionTag}
-                            </span>
-                            <p className="text-xs sm:text-sm font-medium text-slate-200 leading-relaxed break-words whitespace-normal">
-                              {item.technicalReason}
-                            </p>
-                          </div>
-                        </td>
+                      {/* Technical Analysis Reason */}
+                      <p className="text-xs text-slate-300 leading-relaxed bg-white/[0.02] p-2.5 rounded-xl border border-white/[0.04]">
+                        {item.technicalReason}
+                      </p>
 
-                        {/* Actions */}
-                        <td className="py-4 pl-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleAddAction(item.ticker, item.supportS1 ?? item.currentPrice, item.actionTag)}
-                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all flex items-center gap-1.5 shadow-xs whitespace-nowrap"
-                              title="เพิ่มสินทรัพย์นี้ลงในแผนปฏิบัติการวันนี้"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>ใส่ในแผน</span>
-                            </button>
-                            <button
-                              onClick={() => setQuickAddOpen(true)}
-                              className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
-                              title="เปิดหน้าต่างบันทึกธุรกรรม"
-                            >
-                              <Zap className="w-4 h-4 text-blue-400" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleAddAction(item.ticker, item.supportS1 ?? item.currentPrice, item.actionTag)
+                          }
+                          className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all flex items-center justify-center gap-1.5 shadow-xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>ใส่ในแผนวันนี้</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenQuickAddForTrigger(item)}
+                          className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-all flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20"
+                        >
+                          <Zap className="w-3.5 h-3.5 text-blue-200" />
+                          <span>บันทึกธุรกรรม</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedStock({
+                              symbol: item.ticker,
+                              name: item.assetName,
+                              market: (item.market as 'US' | 'TH') || 'US',
+                            })
+                          }
+                          className="p-2 rounded-xl text-slate-300 hover:text-white bg-slate-900 border border-white/[0.08] transition-colors"
+                          title="ดูกราฟและอินไซต์เชิงลึก"
+                        >
+                          <Activity className="w-4 h-4 text-slate-400" />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
 
@@ -1002,7 +1226,19 @@ export default function DailyPlanPage() {
                           >
                             {action.action}
                           </span>
-                          <span className="font-black text-white font-mono text-base">{action.ticker}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedStock({
+                                symbol: action.ticker,
+                                market: 'US',
+                              })
+                            }
+                            className="font-black text-white font-mono text-base hover:text-blue-400 hover:underline transition-colors"
+                            title="ดูข้อมูลทางเทคนิคและกราฟ"
+                          >
+                            {action.ticker}
+                          </button>
                           {action.targetPrice && (
                             <span className="text-slate-200 font-mono font-bold text-sm">
                               @ ${action.targetPrice.toFixed(2)}
@@ -1015,7 +1251,17 @@ export default function DailyPlanPage() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQuickAddForAction(action)}
+                            className="px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-bold transition-all flex items-center gap-1"
+                            title="เปิดบันทึกธุรกรรมสำหรับเป้าหมายนี้"
+                          >
+                            <Zap className="w-3.5 h-3.5 text-blue-400" />
+                            <span className="hidden sm:inline">บันทึกธุรกรรม</span>
+                          </button>
+
                           <select
                             value={action.status}
                             onChange={(e) =>
@@ -1138,13 +1384,27 @@ export default function DailyPlanPage() {
         {/* Quick Add Modal */}
         {quickAddOpen && (
           <QuickAddModal
-            onClose={() => setQuickAddOpen(false)}
+            onClose={() => {
+              setQuickAddOpen(false)
+              setQuickAddInitialData(undefined)
+            }}
+            initialData={quickAddInitialData}
             onSuccess={() => {
               setQuickAddOpen(false)
+              setQuickAddInitialData(undefined)
               revalidatePlan()
             }}
           />
         )}
+
+        {/* Stock Detail & Technical Insights Modal */}
+        <StockDetailModal
+          isOpen={Boolean(selectedStock)}
+          onClose={() => setSelectedStock(null)}
+          symbol={selectedStock?.symbol ?? null}
+          initialName={selectedStock?.name}
+          market={selectedStock?.market}
+        />
 
         {/* Checklist Detail Modal */}
         <ChecklistDetailModal

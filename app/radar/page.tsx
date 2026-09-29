@@ -34,6 +34,7 @@ import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import { QuickAddModal } from '@/components/QuickAddModal'
+import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
   RiskSentinelReport,
   OpportunityRadarReport,
@@ -223,6 +224,17 @@ export default function RadarPage() {
   const [selectedStressDrop, setSelectedStressDrop] = useState<-10 | -20 | -30>(-20)
   const [isScanning, setIsScanning] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [selectedStock, setSelectedStock] = useState<{
+    symbol: string
+    name?: string
+    market?: 'US' | 'TH'
+  } | null>(null)
+  const [quickAddInitialData, setQuickAddInitialData] = useState<{
+    ticker?: string
+    action?: 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'FEE'
+    price?: number
+    market?: 'US' | 'TH' | 'CRYPTO'
+  } | undefined>(undefined)
   const [scanMessage, setScanMessage] = useState<string | null>(null)
 
   const handleLiveAiScan = async () => {
@@ -713,9 +725,20 @@ export default function RadarPage() {
                         >
                           <div className="flex items-center justify-between mb-2.5">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-white bg-white/10 px-2.5 py-1 rounded-lg">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedStock({
+                                    symbol: item.ticker,
+                                    name: item.assetName,
+                                    market: (item.market as 'US' | 'TH') || 'US',
+                                  })
+                                }
+                                className="text-xs font-bold text-white bg-white/10 hover:bg-white/20 hover:text-indigo-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                                title="คลิกเพื่อดูรายละเอียดและกราฟราคา"
+                              >
                                 {item.ticker}
-                              </span>
+                              </button>
                               <span className="text-xs text-slate-300 truncate max-w-[140px] sm:max-w-[200px] font-medium">
                                 {item.assetName}
                               </span>
@@ -772,14 +795,25 @@ export default function RadarPage() {
                         className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.06] flex flex-col gap-2.5"
                       >
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-white bg-rose-500/10 text-rose-300 border border-rose-500/20 px-2.5 py-1 rounded-lg">
-                              {draw.ticker}
-                            </span>
-                            <span className="text-xs text-slate-300 truncate max-w-[150px] font-medium">
-                              {draw.assetName}
-                            </span>
-                          </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedStock({
+                                    symbol: draw.ticker,
+                                    name: draw.assetName,
+                                    market: (draw.market as 'US' | 'TH') || 'US',
+                                  })
+                                }
+                                className="text-xs font-bold text-white bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                                title="คลิกเพื่อดูรายละเอียดและกราฟราคา"
+                              >
+                                {draw.ticker}
+                              </button>
+                              <span className="text-xs text-slate-300 truncate max-w-[150px] font-medium">
+                                {draw.assetName}
+                              </span>
+                            </div>
                           <span className="text-xs font-bold text-rose-400 font-mono">
                             {draw.unrealizedPnLPercent.toFixed(1)}% (ขาดทุน ฿{Math.abs(draw.unrealizedPnLBase).toLocaleString(undefined, { maximumFractionDigits: 0 })})
                           </span>
@@ -875,15 +909,25 @@ export default function RadarPage() {
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1.5">
-                            <span className={`text-sm font-bold px-3 py-1.5 rounded-lg font-mono tracking-wide shadow-sm ${
-                              opp.opportunityType === 'SECTOR_ROTATION'
-                                ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30 shadow-purple-500/10'
-                                : opp.opportunityType === 'DEFENSIVE_HEDGE'
-                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-amber-500/10'
-                                : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-emerald-500/10'
-                            }`}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedStock({
+                                  symbol: opp.ticker,
+                                  market: 'US',
+                                })
+                              }
+                              className={`text-sm font-bold px-3 py-1.5 rounded-lg font-mono tracking-wide shadow-sm hover:scale-105 transition-all cursor-pointer ${
+                                opp.opportunityType === 'SECTOR_ROTATION'
+                                  ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30 shadow-purple-500/10'
+                                  : opp.opportunityType === 'DEFENSIVE_HEDGE'
+                                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-amber-500/10'
+                                  : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-emerald-500/10'
+                              }`}
+                              title="คลิกเพื่อดูรายละเอียดและกราฟราคา"
+                            >
                               {opp.ticker}
-                            </span>
+                            </button>
                             <span className="text-[13px] font-semibold text-slate-400">
                               {opp.opportunityType === 'SECTOR_ROTATION'
                                 ? 'หมุนเวียนกลุ่มอุตสาหกรรม (Sector Rotation)'
@@ -925,7 +969,14 @@ export default function RadarPage() {
 
                         <button
                           type="button"
-                          onClick={() => setQuickAddOpen(true)}
+                          onClick={() => {
+                            setQuickAddInitialData({
+                              ticker: opp.ticker,
+                              action: 'BUY',
+                              market: 'US',
+                            })
+                            setQuickAddOpen(true)
+                          }}
                           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-md shadow-emerald-600/25 transition-all active:scale-95 cursor-pointer"
                         >
                           <span>ซื้อทันที</span>
@@ -968,14 +1019,28 @@ export default function RadarPage() {
         {/* Quick Add Modal */}
         {quickAddOpen && (
           <QuickAddModal
-            initialTab="manual"
-            onClose={() => setQuickAddOpen(false)}
+            initialTab={quickAddInitialData?.ticker ? 'manual' : 'manual'}
+            initialData={quickAddInitialData}
+            onClose={() => {
+              setQuickAddOpen(false)
+              setQuickAddInitialData(undefined)
+            }}
             onSuccess={() => {
               setQuickAddOpen(false)
+              setQuickAddInitialData(undefined)
               mutate()
             }}
           />
         )}
+
+        {/* Interactive Stock Detail & Technical Insights Modal */}
+        <StockDetailModal
+          isOpen={Boolean(selectedStock)}
+          onClose={() => setSelectedStock(null)}
+          symbol={selectedStock?.symbol ?? null}
+          initialName={selectedStock?.name}
+          market={selectedStock?.market}
+        />
       </div>
     </AppShell>
   )

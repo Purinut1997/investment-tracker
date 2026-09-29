@@ -5,6 +5,7 @@ import useSWR, { mutate } from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import { QuickAddModal } from '@/components/QuickAddModal'
+import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
   ArrowLeftRight,
   Plus,
@@ -49,6 +50,11 @@ export default function TransactionsPage() {
   const [selectedAccount, setSelectedAccount] = useState('')
   const [selectedType, setSelectedType] = useState('')
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [selectedStock, setSelectedStock] = useState<{
+    symbol: string
+    name?: string
+    market?: 'US' | 'TH'
+  } | null>(null)
   const [csvModalOpen, setCsvModalOpen] = useState(false)
   const [clearAllModalOpen, setClearAllModalOpen] = useState(false)
   const [editingTxn, setEditingTxn] = useState<any | null>(null)
@@ -535,9 +541,26 @@ export default function TransactionsPage() {
                           </td>
                           <td>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-white group-hover:text-indigo-300 transition-colors">
-                                {txn.asset?.ticker || 'N/A'}
-                              </span>
+                              {txn.asset?.ticker ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedStock({
+                                      symbol: txn.asset.ticker,
+                                      name: txn.asset.name,
+                                      market: (txn.asset.market as 'US' | 'TH') || 'US',
+                                    })
+                                  }
+                                  className="font-bold text-white hover:text-indigo-400 hover:underline transition-colors text-left"
+                                  title="คลิกเพื่อดูรายละเอียดและกราฟราคา"
+                                >
+                                  {txn.asset.ticker}
+                                </button>
+                              ) : (
+                                <span className="font-bold text-slate-400">
+                                  N/A
+                                </span>
+                              )}
                               {txn.asset?.market && (
                                 <span className={`text-[9px] px-1.5 py-0.2 rounded uppercase font-mono border ${isUsd ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'}`}>
                                   {txn.asset.market}
@@ -670,6 +693,15 @@ export default function TransactionsPage() {
           onSuccess={() => mutate(`/api/transactions?${queryParams.toString()}`)}
         />
       )}
+
+      {/* Interactive Stock Detail & Technical Insights Modal */}
+      <StockDetailModal
+        isOpen={Boolean(selectedStock)}
+        onClose={() => setSelectedStock(null)}
+        symbol={selectedStock?.symbol ?? null}
+        initialName={selectedStock?.name}
+        market={selectedStock?.market}
+      />
 
       {editingTxn && (
         <EditTransactionModal

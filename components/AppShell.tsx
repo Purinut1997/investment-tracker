@@ -64,9 +64,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     groupName: 'วางแผน',
     items: [
-      { label: 'แผนประจำวัน',     href: '/daily-plan',   icon: CalendarCheck, badge: 'ใหม่' },
+      { label: 'บันทึกแผนประจำวัน', href: '/daily-plan',   icon: CalendarCheck, badge: 'ใหม่' },
       { label: 'เรดาร์โอกาส & ความเสี่ยง', href: '/radar', icon: Radar, badge: 'AI PRO' },
-      { label: 'แผนการลงทุน',     href: '/plans',        icon: PieChart },
+      { label: 'เป้าหมาย & ปรับสมดุลพอร์ต', href: '/plans', icon: PieChart },
       { label: 'พยากรณ์พอร์ต',   href: '/forecast',     icon: Sparkles, badge: 'AI' },
     ]
   },

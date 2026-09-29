@@ -76,6 +76,13 @@ interface QuickAddModalProps {
   onClose: () => void
   onSuccess?: () => void
   initialTab?: 'photos' | 'ai' | 'manual'
+  initialData?: {
+    ticker?: string
+    action?: TransactionType
+    price?: number
+    market?: Market
+    assetName?: string
+  }
 }
 
 async function parseResponseJson(res: Response, fallbackError: string) {
@@ -196,8 +203,15 @@ function compressImage(
   })
 }
 
-export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: QuickAddModalProps) {
-  const [tab, setTab] = useState<'photos' | 'ai' | 'manual'>(initialTab)
+export function QuickAddModal({
+  onClose,
+  onSuccess,
+  initialTab = 'photos',
+  initialData,
+}: QuickAddModalProps) {
+  const [tab, setTab] = useState<'photos' | 'ai' | 'manual'>(
+    initialData?.ticker ? 'manual' : initialTab
+  )
   const [nlText, setNlText] = useState('')
   const [parsing, setParsing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -238,18 +252,33 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
   // Manual Form State
   const [formData, setFormData] = useState({
     accountId: '',
-    ticker: '',
-    market: 'US' as Market,
+    ticker: initialData?.ticker || '',
+    market: (initialData?.market || 'US') as Market,
     assetType: 'stock' as AssetType,
-    assetName: '',
+    assetName: initialData?.assetName || '',
     txnDate: new Date().toISOString().split('T')[0],
-    txnType: 'BUY' as TransactionType,
+    txnType: (initialData?.action || 'BUY') as TransactionType,
     quantity: '',
-    pricePerUnit: '',
+    pricePerUnit: initialData?.price ? String(initialData.price) : '',
     fee: '0',
     taxWithheld: '0',
     note: '',
   })
+
+  // Sync if initialData is provided/updated
+  useEffect(() => {
+    if (initialData?.ticker) {
+      setTab('manual')
+      setFormData((prev) => ({
+        ...prev,
+        ticker: initialData.ticker || prev.ticker,
+        market: (initialData.market || prev.market) as Market,
+        txnType: (initialData.action || prev.txnType) as TransactionType,
+        pricePerUnit: initialData.price ? String(initialData.price) : prev.pricePerUnit,
+        assetName: initialData.assetName || prev.assetName,
+      }))
+    }
+  }, [initialData])
 
   const accountId = formData.accountId || accounts[0]?.id || ''
 
@@ -418,38 +447,58 @@ export function QuickAddModal({ onClose, onSuccess, initialTab = 'photos' }: Qui
       clearTimeout(timeoutId)
       const json = await parseResponseJson(res, 'การวิเคราะห์ภาพถ่ายล้มเหลว')
 
-      const txns: ExtractedTxn[] = (json.data?.transactions || []).map((t: any, i: number) => ({
-        id: t.id || `txn_${i + 1}`,
-        selected: true,
-        txnType: t.txnType || 'BUY',
-        ticker: t.ticker || 'UNKNOWN',
-        assetName: t.assetName || t.ticker || 'Asset',
-        market: t.market || 'US',
-        assetType: t.assetType || 'stock',
-        quantity: Number(t.quantity || 0),
-        pricePerUnit: Number(t.pricePerUnit || 0),
-        fee: Number(t.fee || 0),
-        taxWithheld: Number(t.taxWithheld || 0),
-        totalAmount: Number(t.totalAmount || 0),
-        currency: t.currency || 'USD',
-        txnDate: t.txnDate || new Date().toISOString(),
-        matchedAccountId: t.matchedAccountId || accounts[0]?.id || '',
-        accountName: t.accountName || 'Dime! USD',
-        note: t.note || '',
-        confidence: t.confidence || 0.9,
-      }))
+      const defaultAcc = accounts[0]
+      const defaultAccName = defaultAcc?.accountName || 'บัญชีหลัก'
 
-      const cash: ExtractedCash[] = (json.data?.cashBalances || []).map((c: any) => ({
-        matchedAccountId: c.matchedAccountId || accounts[0]?.id || '',
-        accountName: c.accountName || 'Dime! Save',
-        accountType: c.accountType || 'bank',
-        currency: c.currency || 'THB',
-        cashAmount: Number(c.cashAmount || 0),
-        accruedInterest: Number(c.accruedInterest || 0),
-        interestDays: c.interestDays ?? 104,
-        balanceDate: c.balanceDate || new Date().toISOString(),
-        selected: true,
-      }))
+      const txns: ExtractedTxn[] = (json.data?.transactions || []).map((t: any, i: number) => {
+        const matched = accounts.find(
+          (a) =>
+            a.id === t.matchedAccountId ||
+            a.accountName.toLowerCase() === (t.accountName || '').toLowerCase()
+        )
+        const accountId = matched?.id || defaultAcc?.id || ''
+        const accName = matched?.accountName || t.accountName || defaultAccName
+
+        return {
+          id: t.id || `txn_${i + 1}`,
+          selected: true,
+          txnType: t.txnType || 'BUY',
+          ticker: t.ticker || 'UNKNOWN',
+          assetName: t.assetName || t.ticker || 'Asset',
+          market: t.market || 'US',
+          assetType: t.assetType || 'stock',
+          quantity: Number(t.quantity || 0),
+          pricePerUnit: Number(t.pricePerUnit || 0),
+          fee: Number(t.fee || 0),
+          taxWithheld: Number(t.taxWithheld || 0),
+          totalAmount: Number(t.totalAmount || 0),
+          currency: t.currency || matched?.currency || (t.market === 'TH' ? 'THB' : 'USD'),
+          txnDate: t.txnDate || new Date().toISOString(),
+          matchedAccountId: accountId,
+          accountName: accName,
+          note: t.note || '',
+          confidence: t.confidence || 0.9,
+        }
+      })
+
+      const cash: ExtractedCash[] = (json.data?.cashBalances || []).map((c: any) => {
+        const matched = accounts.find(
+          (a) =>
+            a.id === c.matchedAccountId ||
+            a.accountName.toLowerCase() === (c.accountName || '').toLowerCase()
+        )
+        return {
+          matchedAccountId: matched?.id || defaultAcc?.id || '',
+          accountName: matched?.accountName || c.accountName || defaultAccName,
+          accountType: c.accountType || matched?.accountType || 'bank',
+          currency: c.currency || matched?.currency || 'THB',
+          cashAmount: Number(c.cashAmount || 0),
+          accruedInterest: Number(c.accruedInterest || 0),
+          interestDays: c.interestDays !== undefined ? c.interestDays : null,
+          balanceDate: c.balanceDate || new Date().toISOString(),
+          selected: true,
+        }
+      })
 
       setExtractedTxns(txns)
       setExtractedCash(cash)
