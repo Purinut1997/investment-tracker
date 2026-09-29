@@ -39,10 +39,20 @@ export async function POST(req: NextRequest) {
 
     const topTriggers = (portfolioTriggers as any[]).slice(0, 6)
     const triggerSummary = topTriggers
-      .map(
-        (t) =>
-          `- ${t.ticker} (${t.assetName}): ราคา $${t.currentPrice} | สัดส่วน ${t.allocationPercent?.toFixed(1)}% | RSI(14): ${t.rsi14 ?? 'N/A'} | S1: $${t.supportS1 ?? 'N/A'} (ห่าง ${t.distanceToS1Percent ?? 'N/A'}%) | สัญญาณ: ${t.actionTag}`
-      )
+      .map((t) => {
+        const isThai =
+          t.currency === 'THB' ||
+          t.market === 'TH' ||
+          t.market === 'SET' ||
+          String(t.ticker).endsWith('.BK') ||
+          String(t.ticker).toUpperCase() === 'SCB'
+        const currSym = isThai ? '฿' : '$'
+        const s1Formatted =
+          t.supportS1 !== null && t.supportS1 !== undefined
+            ? `${currSym}${t.supportS1}`
+            : 'N/A'
+        return `- ${t.ticker} (${t.assetName}): ราคา ${currSym}${t.currentPrice} | สัดส่วน ${t.allocationPercent?.toFixed(1)}% | RSI(14): ${t.rsi14 ?? 'N/A'} | S1: ${s1Formatted} (ห่าง ${t.distanceToS1Percent ?? 'N/A'}%) | สัญญาณ: ${t.actionTag}`
+      })
       .join('\n')
 
     const prompt = `
@@ -61,9 +71,9 @@ export async function POST(req: NextRequest) {
 ${triggerSummary}
 
 [กฎเหล็กระดับมืออาชีพ — มาตรฐานการเงินสากล]:
-- ต้องระบุชื่อสินทรัพย์ทุกตัวด้วย "สัญลักษณ์ย่อของหุ้น (Ticker Symbol)" ภาษาอังกฤษตัวพิมพ์ใหญ่เสมอ (เช่น NVDA, AAPL, SCHD, VOO, GOOGL, PTT, DELTA, BTC, GOLD) ห้ามใช้ชื่อบริษัทภาษาไทยหรือชื่อยาวโดดเดี่ยวเด็ดขาด
-- ในส่วนที่ 2: ให้ขึ้นต้นแต่ละบรรทัดด้วยรูปแบบ: - **TICKER ($ราคา | RSI: xx | S1: $xx):** รายละเอียด
-- ในส่วนที่ 3: ให้ระบุ Ticker ให้ชัดเจนในแต่ละข้อปฏิบัติ เช่น "1. **ตั้งรับ NVDA ที่แนวรับ $118:** ..."
+- ต้องระบุชื่อสินทรัพย์ทุกตัวด้วย "สัญลักษณ์ย่อของหุ้น (Ticker Symbol)" ภาษาอังกฤษตัวพิมพ์ใหญ่เสมอ (เช่น NVDA, AAPL, SCHD, VOO, GOOGL, SCB, PTT, DELTA, BTC, GOLD) ห้ามใช้ชื่อบริษัทภาษาไทยหรือชื่อยาวโดดเดี่ยวเด็ดขาด
+- ในส่วนที่ 2: ให้ขึ้นต้นแต่ละบรรทัดด้วยรูปแบบ: - **TICKER ($ราคา หรือ ฿ราคา | RSI: xx | S1: $xx หรือ ฿xx):** รายละเอียด (ใช้ ฿ สำหรับหุ้นไทย เช่น SCB, PTT และใช้ $ สำหรับหุ้นสหรัฐฯ เช่น VOO, SCHD)
+- ในส่วนที่ 3: ให้ระบุ Ticker ให้ชัดเจนในแต่ละข้อปฏิบัติ เช่น "1. **ตั้งรับ NVDA ที่แนวรับ $118:** ..." หรือ "1. **ตั้งรับ SCB ที่แนวรับ ฿151:** ..."
 
 กรุณาเขียนบทวิเคราะห์และแผนปฏิบัติการรายวันเป็นภาษาไทยที่กระชับ คมชัด และลงมือทำได้จริง โดยแบ่งเป็น 3 ส่วนชัดเจน:
 1. 🧭 **ทิศทางตลาดและบรรยากาศมหภาควันนี้ (Market Regime & Macro Pulse)**: สรุปภาพรวมทิศทางดัชนีหลัก และปัจจัยที่ต้องจับตาในคืนนี้/วันนี้ (2-3 บรรทัด)

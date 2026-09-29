@@ -29,6 +29,7 @@ export interface TechnicalSignal {
   badgeClass: string
   metricSummary: string
   technicalReason: string
+  currencySymbol?: string
 }
 
 // 5-minute memory cache to prevent rate-limits and ensure superfast response
@@ -86,40 +87,71 @@ export async function fetchSingleTickerTechnicalSignal(
     return cached.data
   }
 
-  // Format Yahoo Ticker
-  let yfTicker = cleanSymbol
+  // Format Yahoo Ticker Candidates
+  const isThaiHint =
+    market === 'TH' ||
+    market === 'SET' ||
+    cleanSymbol.endsWith('.BK') ||
+    cleanSymbol === 'SCB' ||
+    cleanSymbol === 'PTT' ||
+    cleanSymbol === 'KBANK' ||
+    cleanSymbol === 'CPALL' ||
+    cleanSymbol === 'AOT' ||
+    cleanSymbol === 'BDMS' ||
+    cleanSymbol === 'DELTA'
+
+  let candidates: string[] = []
   if (cleanSymbol === 'GOLD' || cleanSymbol === 'XAU') {
-    yfTicker = 'GC=F'
+    candidates = ['GC=F']
   } else if (cleanSymbol === 'BTC') {
-    yfTicker = 'BTC-USD'
+    candidates = ['BTC-USD']
   } else if (cleanSymbol === 'ETH') {
-    yfTicker = 'ETH-USD'
+    candidates = ['ETH-USD']
   } else if (cleanSymbol === 'SOL') {
-    yfTicker = 'SOL-USD'
-  } else if (market === 'TH' && !cleanSymbol.endsWith('.BK')) {
-    yfTicker = `${cleanSymbol}.BK`
+    candidates = ['SOL-USD']
+  } else if (isThaiHint) {
+    const bkSymbol = `${cleanSymbol.replace(/\.BK$/, '')}.BK`
+    candidates = [bkSymbol, cleanSymbol.replace(/\.BK$/, '')]
+  } else {
+    candidates = [cleanSymbol, `${cleanSymbol}.BK`]
   }
 
+  let result: any = null
+  let activeTicker = candidates[0]
+
   try {
-    // Fetch 6 months of daily candles for robust SMA50 and RSI14
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-      yfTicker
-    )}?range=6mo&interval=1d`
+    for (const cand of candidates) {
+      try {
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+          cand
+        )}?range=6mo&interval=1d`
 
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Accept: 'application/json',
-      },
-      signal: AbortSignal.timeout(3500),
-      next: { revalidate: 300 },
-    })
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept: 'application/json',
+          },
+          signal: AbortSignal.timeout(3500),
+          next: { revalidate: 300 },
+        })
 
-    if (!res.ok) throw new Error(`Yahoo Finance responded ${res.status}`)
+        if (!res.ok) continue
 
-    const json = await res.json()
-    const result = json?.chart?.result?.[0]
+        const json = await res.json()
+        const r = json?.chart?.result?.[0]
+        if (r && (r.meta?.regularMarketPrice !== undefined || r.indicators?.quote?.[0]?.close?.length > 0)) {
+          result = r
+          activeTicker = cand
+          break
+        }
+      } catch (e) {
+        // try next candidate
+      }
+    }
+
+    if (!result) throw new Error(`No chart data found for ${cleanSymbol} (candidates: ${candidates.join(', ')})`)
+
     const meta = result?.meta || {}
     const quote = result?.indicators?.quote?.[0] || {}
 
@@ -200,6 +232,9 @@ export async function fetchSingleTickerTechnicalSignal(
     const isOverbought = rsi14 !== null && rsi14 >= 68
 
     // 6. Institutional Signal Classification (Accurate & Truthful)
+    const isThaiSymbol = activeTicker.endsWith('.BK') || isThaiHint
+    const currencySymbol = isThaiSymbol ? '฿' : '$'
+
     let signalType: TechnicalSignal['signalType'] = 'NEUTRAL'
     let badgeText = '⚪ ราคาเคลื่อนไหวปกติ'
     let badgeClass = 'bg-slate-500/15 text-slate-300 border-white/[0.08]'
@@ -209,7 +244,7 @@ export async function fetchSingleTickerTechnicalSignal(
       signalType = 'STRONG_DIP_BUY'
       badgeText = `🔥 RSI Oversold (${rsi14}) + ชนแนวรับ S1`
       badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-xs shadow-emerald-950/30'
-      technicalReason = `ราคา $${currentPrice.toFixed(2)} ย่อตัว ${pullbackFromHigh.toFixed(1)}% จากจุดสูงสุด 52W และ RSI อยู่ที่ ${rsi14} (Oversold) ชนแนวรับ S1 ($${supportS1}) เป็นจุดช้อนซื้อที่ได้เปรียบสูง`
+      technicalReason = `ราคา ${currencySymbol}${currentPrice.toFixed(2)} ย่อตัว ${pullbackFromHigh.toFixed(1)}% จากจุดสูงสุด 52W และ RSI อยู่ที่ ${rsi14} (Oversold) ชนแนวรับ S1 (${currencySymbol}${supportS1}) เป็นจุดช้อนซื้อที่ได้เปรียบสูง`
     } else if (isOversold) {
       signalType = 'STRONG_DIP_BUY'
       badgeText = `🔥 RSI Oversold (${rsi14}) / น่าช้อนพิเศษ`
@@ -217,10 +252,10 @@ export async function fetchSingleTickerTechnicalSignal(
       technicalReason = `RSI อยู่ที่ ${rsi14} (เขตขายมากเกินไป) ย่อตัว ${pullbackFromHigh.toFixed(1)}% จากจุดสูงสุด มีโอกาสฟื้นตัวกลับ`
     } else if (isNearSupport) {
       signalType = 'NEAR_SUPPORT'
-      badgeText = `🟢 ทดสอบแนวรับสำคัญ (${supportS1 ? `S1: $${supportS1}` : 'SMA50'})`
+      badgeText = `🟢 ทดสอบแนวรับสำคัญ (${supportS1 ? `S1: ${currencySymbol}${supportS1}` : 'SMA50'})`
       badgeClass = 'bg-teal-500/20 text-teal-300 border-teal-500/30'
-      technicalReason = `ราคาย่อตัว ${pullbackFromHigh.toFixed(1)}% ลงมาทดสอบโซนแนวรับ ${supportS1 ? `S1 ($${supportS1})` : ''} ${
-        sma50 ? `หรือ SMA50 ($${sma50})` : ''
+      technicalReason = `ราคาย่อตัว ${pullbackFromHigh.toFixed(1)}% ลงมาทดสอบโซนแนวรับ ${supportS1 ? `S1 (${currencySymbol}${supportS1})` : ''} ${
+        sma50 ? `หรือ SMA50 (${currencySymbol}${sma50})` : ''
       } มีแรงซื้อพยุง`
     } else if (isOverbought) {
       signalType = 'OVERBOUGHT_RESISTANCE'
@@ -231,7 +266,7 @@ export async function fetchSingleTickerTechnicalSignal(
       signalType = 'NEUTRAL'
       badgeText = `🔵 เกาะใกล้จุดสูงสุด (ย่อเพียง ${pullbackFromHigh.toFixed(1)}%)`
       badgeClass = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
-      technicalReason = `ราคา $${currentPrice.toFixed(2)} อยู่ใกล้จุดสูงสุดรอบปี ($${fiftyTwoWeekHigh.toFixed(2)}) ย่อตัวเพียง ${pullbackFromHigh.toFixed(1)}% RSI ${rsi14 ?? 'ปกติ'} แนะนำสะสมตามแผน DCA สม่ำเสมอ`
+      technicalReason = `ราคา ${currencySymbol}${currentPrice.toFixed(2)} อยู่ใกล้จุดสูงสุดรอบปี (${currencySymbol}${fiftyTwoWeekHigh.toFixed(2)}) ย่อตัวเพียง ${pullbackFromHigh.toFixed(1)}% RSI ${rsi14 ?? 'ปกติ'} แนะนำสะสมตามแผน DCA สม่ำเสมอ`
     } else if (pullbackFromHigh <= -6) {
       signalType = 'ACCUMULATE'
       badgeText = `🔵 ย่อตัวสะสม (${pullbackFromHigh.toFixed(1)}%)`
@@ -268,6 +303,7 @@ export async function fetchSingleTickerTechnicalSignal(
       badgeClass,
       metricSummary,
       technicalReason,
+      currencySymbol,
     }
 
     technicalCache.set(cacheKey, { data: signalData, timestamp: now })
@@ -296,6 +332,7 @@ export async function fetchSingleTickerTechnicalSignal(
       badgeClass: 'bg-slate-500/15 text-slate-300 border-white/[0.08]',
       metricSummary: 'วิเคราะห์ตามสัดส่วนเป้าหมาย',
       technicalReason: 'สัดส่วนจัดสรรตามแผนการลงทุนหลัก',
+      currencySymbol: isThaiHint ? '฿' : '$',
     }
     return fallback
   }

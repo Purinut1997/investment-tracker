@@ -198,7 +198,8 @@ export async function GET(req: NextRequest) {
     // 4. Scan holdings for technical signals & actionable triggers
     const triggerPromises = holdingsResult.holdings.slice(0, 15).map(async (holding) => {
       try {
-        const signal = await fetchSingleTickerTechnicalSignal(holding.ticker)
+        const marketHint = holding.market || (holding.currency === 'THB' ? 'TH' : 'US')
+        const signal = await fetchSingleTickerTechnicalSignal(holding.ticker, marketHint)
         return {
           holding,
           signal,

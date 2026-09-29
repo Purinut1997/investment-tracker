@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockLogo } from '@/components/StockLogo'
 import { AiBriefViewer } from '@/components/daily-plan/AiBriefViewer'
+import { ChecklistDetailModal } from '@/components/daily-plan/ChecklistDetailModal'
 import {
   CalendarCheck,
   Calendar,
@@ -174,6 +175,7 @@ export default function DailyPlanPage() {
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [targetActions, setTargetActions] = useState<TargetAction[]>([])
   const [newChecklistText, setNewChecklistText] = useState('')
+  const [activeChecklistModalItem, setActiveChecklistModalItem] = useState<ChecklistItem | null>(null)
 
   // New action form state
   const [newTicker, setNewTicker] = useState('')
@@ -237,10 +239,19 @@ export default function DailyPlanPage() {
     }
   }
 
-  // Toggle checklist item
-  const handleToggleChecklist = (id: string) => {
+  // Toggle checklist item or open modal
+  const handleItemClick = (item: ChecklistItem) => {
+    if (!item.done) {
+      setActiveChecklistModalItem(item)
+    } else {
+      // If already done, clicking toggles it back to undone
+      handleToggleChecklist(item.id, false)
+    }
+  }
+
+  const handleToggleChecklist = (id: string, forceDone?: boolean) => {
     const updated = checklist.map((item) =>
-      item.id === id ? { ...item, done: !item.done } : item
+      item.id === id ? { ...item, done: forceDone !== undefined ? forceDone : !item.done } : item
     )
     setChecklist(updated)
     handleSavePlan(undefined, updated)
@@ -827,27 +838,39 @@ export default function DailyPlanPage() {
                 {checklist.map((item) => (
                   <div
                     key={item.id}
-                    onClick={() => handleToggleChecklist(item.id)}
-                    className={`flex items-start justify-between gap-3.5 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                    onClick={() => handleItemClick(item)}
+                    className={`group flex items-start justify-between gap-3.5 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
                       item.done
                         ? 'bg-emerald-500/10 border-emerald-500/30 text-slate-400'
-                        : 'bg-slate-950/60 hover:bg-slate-950/90 border-white/[0.08] text-slate-100 hover:border-emerald-500/40'
+                        : 'bg-slate-950/60 hover:bg-slate-950/90 border-white/[0.08] text-slate-100 hover:border-emerald-500/40 shadow-sm hover:shadow-md'
                     }`}
                   >
                     <div className="flex items-start gap-3.5 flex-1">
                       <button
                         type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleItemClick(item)
+                        }}
                         className="mt-0.5 text-emerald-400 hover:text-emerald-300 shrink-0"
+                        title={item.done ? "คลิกเพื่อยกเลิกการติ๊ก" : "คลิกเพื่อเปิดอ่านคำแนะนำและติ๊กบันทึก"}
                       >
                         {item.done ? (
-                          <CheckCircle2 className="w-5 h-5 fill-emerald-500/30" />
+                          <CheckCircle2 className="w-5 h-5 fill-emerald-500/30 text-emerald-400" />
                         ) : (
-                          <Circle className="w-5 h-5 text-slate-400 hover:text-emerald-400" />
+                          <Circle className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition-colors" />
                         )}
                       </button>
-                      <span className={`text-sm md:text-base leading-relaxed font-medium ${item.done ? 'line-through text-slate-500' : 'text-slate-100'}`}>
-                        {item.text}
-                      </span>
+                      <div className="flex-1">
+                        <span className={`text-sm md:text-base leading-relaxed font-medium block ${item.done ? 'line-through text-slate-500' : 'text-slate-100'}`}>
+                          {item.text}
+                        </span>
+                        {!item.done && (
+                          <span className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-emerald-400 transition-colors">
+                            คลิกเพื่อเปิดอ่านคำแนะนำและบันทึกอัตโนมัติ ↗
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <button
@@ -1122,6 +1145,21 @@ export default function DailyPlanPage() {
             }}
           />
         )}
+
+        {/* Checklist Detail Modal */}
+        <ChecklistDetailModal
+          isOpen={Boolean(activeChecklistModalItem)}
+          item={activeChecklistModalItem}
+          onClose={() => setActiveChecklistModalItem(null)}
+          onConfirmComplete={(id, newDoneState) => {
+            handleToggleChecklist(id, newDoneState ?? true)
+          }}
+          marketOverview={data?.marketOverview}
+          portfolioTriggers={data?.portfolioTriggers}
+          totalCash={data?.totalCash}
+          totalPortfolioValue={data?.totalPortfolioValue}
+          baseCurrency={data?.baseCurrency}
+        />
       </div>
     </AppShell>
   )
