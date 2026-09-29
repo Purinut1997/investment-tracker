@@ -840,17 +840,17 @@ export function StockDetailModal({
         </div>
 
         {/* Tab Navigation: Chart & Technicals vs Historical Stats & Dividends */}
-        <div className="px-5 sm:px-6 pt-2.5 pb-0 border-b border-white/[0.08] bg-[#12151C]/90 flex items-center gap-2 shrink-0">
+        <div className="px-5 sm:px-6 pt-3 pb-0 border-b border-white/[0.08] bg-[#12151C]/90 flex items-center gap-3 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('chart')}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all relative flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer ${
               activeTab === 'chart'
                 ? 'text-white'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+            <BarChart3 className="w-4 h-4 text-indigo-400" />
             <span>ภาพรวม & กราฟเทคนิคอล</span>
             {activeTab === 'chart' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full" />
@@ -860,23 +860,23 @@ export function StockDetailModal({
           <button
             type="button"
             onClick={() => setActiveTab('stats')}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all relative flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer ${
               activeTab === 'stats'
                 ? 'text-white'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+            <Calendar className="w-4 h-4 text-emerald-400" />
             <span>สถิติ & ปันผลย้อนหลัง</span>
             {data?.historicalStats?.dividends?.hasDividends && (
-              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+              <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
                 {data.historicalStats.dividends.frequency === 'Quarterly'
                   ? '4x/ปี'
                   : data.historicalStats.dividends.frequency === 'Semi-Annual'
                   ? '2x/ปี'
                   : data.historicalStats.dividends.frequency === 'Monthly'
                   ? '12x/ปี'
-                  : 'ปันผล'}
+                  : 'มีปันผล'}
               </span>
             )}
             {activeTab === 'stats' && (
@@ -1258,14 +1258,16 @@ export function StockDetailModal({
               {/* 3. KEY METRICS & VALUATION */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {/* P/E */}
-                <div className="p-3.5 rounded-xl bg-[#141822] border border-white/[0.06]">
-                  <span className="text-[10px] text-slate-400 block font-medium">
-                    อัตราส่วน P/E
-                  </span>
-                  <span className="text-base sm:text-lg font-bold text-white font-mono mt-0.5 block">
-                    {data?.pe ? `${data.pe}x` : 'N/A'}
-                  </span>
-                  <span className="text-[10px] text-slate-500">
+                <div className="p-3.5 sm:p-4 rounded-xl bg-[#141822] border border-white/[0.08] flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs text-slate-300 block font-semibold">
+                      อัตราส่วน P/E
+                    </span>
+                    <span className="text-base sm:text-lg font-bold text-white font-mono mt-1 block">
+                      {data?.pe ? `${data.pe}x` : 'N/A'}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-400 mt-1 block">
                     {data?.pe
                       ? data.pe < 20
                         ? 'ราคาไม่แพง'
@@ -1275,48 +1277,54 @@ export function StockDetailModal({
                 </div>
 
                 {/* Dividend Yield */}
-                <div className="p-3.5 rounded-xl bg-[#141822] border border-white/[0.06]">
-                  <span className="text-[10px] text-slate-400 block font-medium">
-                    เงินปันผล (Dividend)
-                  </span>
-                  <span className="text-base sm:text-lg font-bold text-emerald-400 font-mono mt-0.5 block">
-                    {data?.dividendYield !== null && data?.dividendYield !== undefined
-                      ? `${data.dividendYield.toFixed(2)}%`
-                      : '0.00%'}
-                  </span>
-                  <span className="text-[10px] text-slate-500">อัตราผลตอบแทนต่อปี</span>
+                <div className="p-3.5 sm:p-4 rounded-xl bg-[#141822] border border-white/[0.08] flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs text-slate-300 block font-semibold">
+                      เงินปันผล (Dividend)
+                    </span>
+                    <span className="text-base sm:text-lg font-bold text-emerald-400 font-mono mt-1 block">
+                      {data?.dividendYield !== null && data?.dividendYield !== undefined
+                        ? `${data.dividendYield.toFixed(2)}%`
+                        : '0.00%'}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-400 mt-1 block">อัตราผลตอบแทนต่อปี</span>
                 </div>
 
                 {/* Market Cap */}
-                <div className="p-3.5 rounded-xl bg-[#141822] border border-white/[0.06]">
-                  <span className="text-[10px] text-slate-400 block font-medium">
-                    มูลค่าตลาด (Cap)
-                  </span>
-                  <span className="text-base sm:text-lg font-bold text-white font-mono mt-0.5 block truncate">
-                    {data?.marketCap
-                      ? data.marketCap >= 1e12
-                        ? `${currencySymbol}${(data.marketCap / 1e12).toFixed(2)}T`
-                        : data.marketCap >= 1e9
-                        ? `${currencySymbol}${(data.marketCap / 1e9).toFixed(2)}B`
-                        : data.marketCap >= 1e6
-                        ? `${currencySymbol}${(data.marketCap / 1e6).toFixed(1)}M`
-                        : `${currencySymbol}${Number(data.marketCap).toLocaleString()}`
-                      : 'N/A'}
-                  </span>
-                  <span className="text-[10px] text-slate-500">Market Cap</span>
+                <div className="p-3.5 sm:p-4 rounded-xl bg-[#141822] border border-white/[0.08] flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs text-slate-300 block font-semibold">
+                      มูลค่าตลาด (Cap)
+                    </span>
+                    <span className="text-base sm:text-lg font-bold text-white font-mono mt-1 block">
+                      {data?.marketCap
+                        ? data.marketCap >= 1e12
+                          ? `${currencySymbol}${(data.marketCap / 1e12).toFixed(2)}T`
+                          : data.marketCap >= 1e9
+                          ? `${currencySymbol}${(data.marketCap / 1e9).toFixed(2)}B`
+                          : data.marketCap >= 1e6
+                          ? `${currencySymbol}${(data.marketCap / 1e6).toFixed(1)}M`
+                          : `${currencySymbol}${Number(data.marketCap).toLocaleString()}`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-400 mt-1 block">Market Cap</span>
                 </div>
 
                 {/* Day Range */}
-                <div className="p-3.5 rounded-xl bg-[#141822] border border-white/[0.06]">
-                  <span className="text-[10px] text-slate-400 block font-medium">
-                    กรอบราคาวันนี้
-                  </span>
-                  <span className="text-xs sm:text-sm font-bold text-white font-mono mt-1 block truncate">
-                    {data?.dayLow && data?.dayHigh
-                      ? `${currencySymbol}${data.dayLow.toFixed(1)} - ${currencySymbol}${data.dayHigh.toFixed(1)}`
-                      : 'N/A'}
-                  </span>
-                  <span className="text-[10px] text-slate-500">Day Low - High</span>
+                <div className="p-3.5 sm:p-4 rounded-xl bg-[#141822] border border-white/[0.08] flex flex-col justify-between">
+                  <div>
+                    <span className="text-xs text-slate-300 block font-semibold">
+                      กรอบราคาวันนี้
+                    </span>
+                    <span className="text-xs sm:text-sm font-bold text-white font-mono mt-1 block">
+                      {data?.dayLow && data?.dayHigh
+                        ? `${currencySymbol}${data.dayLow.toFixed(1)} - ${currencySymbol}${data.dayHigh.toFixed(1)}`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-400 mt-1 block">Day Low - High</span>
                 </div>
               </div>
 

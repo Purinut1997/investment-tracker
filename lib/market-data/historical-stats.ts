@@ -16,6 +16,8 @@ export interface AnnualDividendSummary {
 export interface DividendIntelligence {
   hasDividends: boolean
   frequency: 'Quarterly' | 'Semi-Annual' | 'Monthly' | 'Annual' | 'Irregular' | 'None'
+  frequencyTitle?: string
+  frequencyBadge?: string
   frequencyLabel: string
   payoutMonths: string[]
   ttmDividends: number
@@ -177,14 +179,19 @@ export function parseHistoricalStats(
   // Detect Frequency & Common Months
   let frequency: DividendIntelligence['frequency'] = 'None'
   let frequencyLabel = 'ไม่มีข้อมูลการจ่ายปันผล'
-  const payoutMonthsSet = new Set<string>()
+  let frequencyTitle = 'ไม่มีเงินปันผล'
+  let frequencyBadge = ''
+  let payoutMonths: string[] = []
 
   if (hasDividends) {
-    // Check months
-    for (const item of history.slice(0, 10)) {
+    // Check months and sort chronologically in calendar order
+    const monthIndexes = new Set<number>()
+    for (const item of history.slice(0, 12)) {
       const d = new Date(item.timestamp * 1000)
-      payoutMonthsSet.add(THAI_FULL_MONTHS[d.getMonth()])
+      monthIndexes.add(d.getMonth())
     }
+    const sortedMonthIndexes = Array.from(monthIndexes).sort((a, b) => a - b)
+    payoutMonths = sortedMonthIndexes.map((m) => THAI_MONTH_NAMES[m])
 
     // Determine average frequency per calendar year
     // Look at last 2 full years if available
@@ -197,18 +204,28 @@ export function parseHistoricalStats(
 
     if (avgCount >= 10) {
       frequency = 'Monthly'
+      frequencyTitle = 'จ่ายรายเดือน'
+      frequencyBadge = '12 ครั้ง/ปี'
       frequencyLabel = 'จ่ายรายเดือน (12 ครั้ง/ปี)'
     } else if (avgCount >= 3.5) {
       frequency = 'Quarterly'
+      frequencyTitle = 'จ่ายรายไตรมาส'
+      frequencyBadge = '4 ครั้ง/ปี'
       frequencyLabel = 'จ่ายรายไตรมาส (4 ครั้ง/ปี)'
     } else if (avgCount >= 1.7) {
       frequency = 'Semi-Annual'
+      frequencyTitle = 'จ่ายปีละ 2 ครั้ง'
+      frequencyBadge = '2 ครั้ง/ปี'
       frequencyLabel = 'จ่ายปีละ 2 ครั้ง (กึ่งประจำปี)'
     } else if (avgCount >= 0.8) {
       frequency = 'Annual'
+      frequencyTitle = 'จ่ายปีละ 1 ครั้ง'
+      frequencyBadge = '1 ครั้ง/ปี'
       frequencyLabel = 'จ่ายปีละ 1 ครั้ง'
     } else {
       frequency = 'Irregular'
+      frequencyTitle = 'จ่ายไม่แน่นอน'
+      frequencyBadge = 'ตามโอกาส'
       frequencyLabel = 'จ่ายตามโอกาส / ไม่แน่นอน'
     }
   }
@@ -216,8 +233,10 @@ export function parseHistoricalStats(
   const dividendIntelligence: DividendIntelligence = {
     hasDividends,
     frequency,
+    frequencyTitle,
+    frequencyBadge,
     frequencyLabel,
-    payoutMonths: Array.from(payoutMonthsSet),
+    payoutMonths,
     ttmDividends,
     ttmYield,
     latestPayout,
