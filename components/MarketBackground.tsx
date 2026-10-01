@@ -51,6 +51,14 @@ export function MarketBackground() {
     let width = (canvas.width = window.innerWidth)
     let height = (canvas.height = window.innerHeight)
     let isVisible = true
+    let isScrolling = false
+    let scrollTimeout: any = null
+
+    // Adaptive mobile detection & FPS throttling
+    const isMobile = window.innerWidth < 768
+    const targetFPS = isMobile ? 24 : 60
+    const frameInterval = 1000 / targetFPS
+    let lastFrameTime = performance.now()
 
     // Multiplier based on intensity setting
     const intensityMultiplier =
@@ -71,26 +79,40 @@ export function MarketBackground() {
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    // Mouse tracking for interactive glow and reaction
+    // Scroll listener on mobile: pause canvas drawing during active scrolling for 60/120fps smooth scrolling
+    const handleScroll = () => {
+      if (!isMobile) return
+      isScrolling = true
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+      scrollTimeout = setTimeout(() => {
+        isScrolling = false
+      }, 120)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+
+    // Mouse tracking for interactive glow only on pointer-capable devices (desktop)
     let mouseX = -1000
     let mouseY = -1000
     const handleMouseMove = (e: MouseEvent) => {
       mouseX = e.clientX
       mouseY = e.clientY
     }
-    window.addEventListener('mousemove', handleMouseMove, { passive: true })
+    if (!isMobile) {
+      window.addEventListener('mousemove', handleMouseMove, { passive: true })
+    }
 
     // ── 1. Candlesticks Initialization ───────────────────────────────────────
     let candles: Candle[] = []
     const initCandles = () => {
       candles = []
-      // 18-35 candles depending on screen width
-      const candleCount = Math.max(16, Math.floor(width / 60))
+      // 10-14 candles on mobile, 16-35 on desktop
+      const candleCount = isMobile
+        ? Math.min(14, Math.max(10, Math.floor(width / 34)))
+        : Math.max(16, Math.floor(width / 60))
       const spacing = width / candleCount
 
       // Base line undulates in an upward trend
       for (let i = 0; i < candleCount; i++) {
-        // Financial market sine curve: trending upwards with natural waves
         const progress = i / candleCount
         const trendY = height * 0.72 - progress * (height * 0.18)
         const waveOffset =
@@ -118,7 +140,10 @@ export function MarketBackground() {
     let particles: Particle[] = []
     const initParticles = () => {
       particles = []
-      const count = Math.min(50, Math.floor(width / 28))
+      // 15 particles on mobile vs 50 on desktop saves 70% CPU/GPU draw calls
+      const count = isMobile
+        ? Math.min(15, Math.floor(width / 26))
+        : Math.min(50, Math.floor(width / 28))
       for (let i = 0; i < count; i++) {
         const isUp = Math.random() > 0.4
         particles.push({
@@ -143,15 +168,28 @@ export function MarketBackground() {
     // Animation state
     let step = 0
 
-    // ── 3. Main Render Loop ───────────────────────────────────────────────────
-    const render = () => {
-      if (!isVisible) {
-        animId = requestAnimationFrame(render)
+    // ── 3. Main Render Loop with Adaptive Throttling & Auto-Pause ────────────
+    const render = (currentTime: number) => {
+      animId = requestAnimationFrame(render)
+
+      // Auto-pause if tab is hidden, or any modal is open (document.body scroll locked), or scrolling on mobile
+      const isModalOpen = document.body.style.overflow === 'hidden'
+      if (!isVisible || isModalOpen || isScrolling) {
         return
       }
 
+      // Delta-time FPS capping (e.g. 24 FPS on mobile vs 60 FPS on desktop)
+      const elapsed = currentTime - lastFrameTime
+      if (elapsed < frameInterval) {
+        return
+      }
+      lastFrameTime = currentTime - (elapsed % frameInterval)
+
       ctx.clearRect(0, 0, width, height)
-      step += 0.008
+      step += isMobile ? 0.012 : 0.008
+
+      // Step increment for sine waves (35px on mobile saves 50% lineTo calls)
+      const waveStep = isMobile ? 36 : 20
 
       // ────────────────────────────────────────────────────────────────────────
       // STYLE 1: Dynamic Candlestick & Price Waves
@@ -159,10 +197,10 @@ export function MarketBackground() {
       if (theme === 'candlestick') {
         const mult = intensityMultiplier
 
-        // 1. Moving Average Wave 1 (Fast MA - Vibrant Cyan & Emerald)
+        // 1. Moving Average Wave 1 (Fast MA - Glowing Cyan & Emerald)
         ctx.beginPath()
         ctx.moveTo(0, height * 0.65)
-        for (let x = 0; x <= width; x += 20) {
+        for (let x = 0; x <= width; x += waveStep) {
           const progress = x / width
           const baseTrend = height * 0.72 - progress * (height * 0.18)
           const y =
@@ -171,14 +209,14 @@ export function MarketBackground() {
             Math.cos(x * 0.007 + step * 0.7) * 22
           ctx.lineTo(x, y)
         }
-        ctx.strokeStyle = `rgba(6, 182, 212, ${0.28 * mult})` // Glowing Cyan
-        ctx.lineWidth = 2.5
+        ctx.strokeStyle = `rgba(6, 182, 212, ${0.28 * mult})`
+        ctx.lineWidth = 2.2
         ctx.stroke()
 
         // 2. Moving Average Wave 2 (Slow MA - Royal Violet / Indigo)
         ctx.beginPath()
         ctx.moveTo(0, height * 0.7)
-        for (let x = 0; x <= width; x += 20) {
+        for (let x = 0; x <= width; x += waveStep) {
           const progress = x / width
           const baseTrend = height * 0.76 - progress * (height * 0.15)
           const y =
@@ -187,8 +225,8 @@ export function MarketBackground() {
             Math.sin(x * 0.0055 + step * 1.2) * 25
           ctx.lineTo(x, y)
         }
-        ctx.strokeStyle = `rgba(139, 92, 246, ${0.25 * mult})` // Glowing Violet
-        ctx.lineWidth = 2.0
+        ctx.strokeStyle = `rgba(139, 92, 246, ${0.25 * mult})`
+        ctx.lineWidth = 1.8
         ctx.stroke()
 
         // 3. Floating Horizontal Price Level Reference Line (Dashed)
@@ -200,7 +238,7 @@ export function MarketBackground() {
         ctx.strokeStyle = `rgba(16, 185, 129, ${0.16 * mult})`
         ctx.lineWidth = 1.2
         ctx.stroke()
-        ctx.setLineDash([]) // Reset line dash
+        ctx.setLineDash([])
 
         // 4. Dynamic Candlesticks
         for (let i = 0; i < candles.length; i++) {
@@ -219,12 +257,12 @@ export function MarketBackground() {
           const candleTop = liveY - c.bodyH / 2
           const candleBottom = liveY + c.bodyH / 2
 
-          // Mouse proximity reaction (Illuminates and rises slightly)
-          const dx = mouseX - c.x
-          const dy = mouseY - liveY
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          const isNearMouse = dist < 160
-          const proximityBoost = isNearMouse ? (1 - dist / 160) * 0.45 : 0
+          // Mouse proximity reaction (desktop only)
+          const isNearMouse =
+            !isMobile &&
+            mouseX > -500 &&
+            Math.hypot(mouseX - c.x, mouseY - liveY) < 160
+          const proximityBoost = isNearMouse ? 0.35 : 0
 
           const wickAlpha = (c.isGreen ? 0.45 : 0.38) * mult + proximityBoost
           const bodyFillAlpha = (c.isGreen ? 0.22 : 0.18) * mult + proximityBoost * 0.8
@@ -240,26 +278,26 @@ export function MarketBackground() {
             ? `rgba(52, 211, 153, ${strokeAlpha})`
             : `rgba(251, 113, 133, ${strokeAlpha})`
 
-          // Draw Wicks (Upper & Lower)
+          // Draw Wicks
           ctx.beginPath()
           ctx.moveTo(c.x, candleTop - c.wickTop)
           ctx.lineTo(c.x, candleBottom + c.wickBottom)
           ctx.strokeStyle = wickColor
-          ctx.lineWidth = 1.5
+          ctx.lineWidth = 1.4
           ctx.stroke()
 
-          // Draw Body with soft radial/linear glow
+          // Draw Body
           ctx.fillStyle = fillColor
           ctx.fillRect(c.x - c.w / 2, candleTop, c.w, c.bodyH)
 
           ctx.strokeStyle = strokeColor
-          ctx.lineWidth = 1.4
+          ctx.lineWidth = 1.2
           ctx.strokeRect(c.x - c.w / 2, candleTop, c.w, c.bodyH)
 
-          // Extra luminous core dot for candles near mouse or peak pulses
-          if (isNearMouse || Math.sin(c.pulse) > 0.8) {
+          // Core dot for near mouse or peak pulse
+          if (isNearMouse || Math.sin(c.pulse) > 0.85) {
             ctx.beginPath()
-            ctx.arc(c.x, liveY, 2.5, 0, Math.PI * 2)
+            ctx.arc(c.x, liveY, 2.2, 0, Math.PI * 2)
             ctx.fillStyle = c.isGreen
               ? `rgba(110, 231, 183, ${0.7 * mult})`
               : `rgba(253, 164, 175, ${0.65 * mult})`
@@ -296,18 +334,16 @@ export function MarketBackground() {
       // ────────────────────────────────────────────────────────────────────────
       else if (theme === 'aurora') {
         const mult = intensityMultiplier
-
-        // Flowing Aurora Waves
         const ribbons = [
-          { color: 'rgba(6, 182, 212,', speed: 1.0, amp: 55, yOffset: 0.55, width: 3.0 },
-          { color: 'rgba(16, 185, 129,', speed: 0.8, amp: 45, yOffset: 0.62, width: 2.5 },
-          { color: 'rgba(99, 102, 241,', speed: 1.2, amp: 65, yOffset: 0.48, width: 2.5 },
+          { color: 'rgba(6, 182, 212,', speed: 1.0, amp: 55, yOffset: 0.55, width: 2.8 },
+          { color: 'rgba(16, 185, 129,', speed: 0.8, amp: 45, yOffset: 0.62, width: 2.2 },
+          { color: 'rgba(99, 102, 241,', speed: 1.2, amp: 65, yOffset: 0.48, width: 2.2 },
         ]
 
         ribbons.forEach((r, idx) => {
           ctx.beginPath()
           ctx.moveTo(0, height * r.yOffset)
-          for (let x = 0; x <= width; x += 25) {
+          for (let x = 0; x <= width; x += waveStep) {
             const y =
               height * r.yOffset +
               Math.sin(x * 0.003 + step * r.speed + idx) * r.amp +
@@ -328,8 +364,8 @@ export function MarketBackground() {
 
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i]
-          p.x += p.vx * 1.3
-          p.y += p.vy * 1.3
+          p.x += p.vx * 1.2
+          p.y += p.vy * 1.2
           p.pulse += 0.025
 
           if (p.y < -10) p.y = height + 10
@@ -339,27 +375,27 @@ export function MarketBackground() {
 
           const dx = mouseX - p.x
           const dy = mouseY - p.y
-          const dist = Math.hypot(dx, dy)
+          const dist = !isMobile && mouseX > -500 ? Math.hypot(dx, dy) : 999
           let pAlpha = (p.alpha + Math.sin(p.pulse) * 0.1) * mult
           if (dist < 200) {
             pAlpha = Math.min(0.85, pAlpha + (1 - dist / 200) * 0.5)
           }
 
           ctx.beginPath()
-          ctx.arc(p.x, p.y, p.size + (dist < 150 ? 1 : 0), 0, Math.PI * 2)
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
           ctx.fillStyle = `rgba(139, 92, 246, ${pAlpha})`
           ctx.fill()
 
           for (let j = i + 1; j < particles.length; j++) {
             const p2 = particles[j]
             const lineDist = Math.hypot(p.x - p2.x, p.y - p2.y)
-            if (lineDist < 130) {
-              const lineAlpha = (1 - lineDist / 130) * 0.22 * mult
+            if (lineDist < 120) {
+              const lineAlpha = (1 - lineDist / 120) * 0.22 * mult
               ctx.beginPath()
               ctx.moveTo(p.x, p.y)
               ctx.lineTo(p2.x, p2.y)
               ctx.strokeStyle = `rgba(167, 139, 250, ${lineAlpha})`
-              ctx.lineWidth = 1.0
+              ctx.lineWidth = 0.9
               ctx.stroke()
             }
           }
@@ -367,14 +403,14 @@ export function MarketBackground() {
       }
 
       // ────────────────────────────────────────────────────────────────────────
-      // STYLE 4: Fluid Mesh Gradient (Canvas-assisted smooth aura)
+      // STYLE 4: Fluid Mesh Gradient
       // ────────────────────────────────────────────────────────────────────────
       else if (theme === 'gradient') {
         const mult = intensityMultiplier
         const cx = width * 0.5 + Math.sin(step * 0.4) * (width * 0.15)
         const cy = height * 0.5 + Math.cos(step * 0.5) * (height * 0.15)
 
-        const grad = ctx.createRadialGradient(cx, cy, 50, cx, cy, width * 0.55)
+        const grad = ctx.createRadialGradient(cx, cy, 40, cx, cy, width * 0.55)
         grad.addColorStop(0, `rgba(99, 102, 241, ${0.14 * mult})`)
         grad.addColorStop(0.5, `rgba(6, 182, 212, ${0.08 * mult})`)
         grad.addColorStop(1, 'rgba(0, 0, 0, 0)')
@@ -382,17 +418,19 @@ export function MarketBackground() {
         ctx.fillStyle = grad
         ctx.fillRect(0, 0, width, height)
       }
-
-      animId = requestAnimationFrame(render)
     }
 
-    render()
+    animId = requestAnimationFrame(render)
 
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', handleResize)
-      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('scroll', handleScroll)
+      if (!isMobile) {
+        window.removeEventListener('mousemove', handleMouseMove)
+      }
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (scrollTimeout) clearTimeout(scrollTimeout)
     }
   }, [theme, intensity])
 
@@ -403,32 +441,45 @@ export function MarketBackground() {
       aria-hidden="true"
       className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none"
     >
-      {/* ── 1. Atmospheric Ambient Glow Orbs (Rich FinTech Depth) ── */}
+      {/* ── 1. High-Performance GPU Ambient Glow Orbs (Pure Radial Gradients: 0% Blur GPU penalty) ── */}
       {theme !== 'minimal' && (
         <>
           <div
-            className={`absolute top-[-8%] left-[15%] w-[620px] h-[620px] rounded-full blur-[130px] pointer-events-none transition-opacity duration-700 ${
-              theme === 'candlestick'
-                ? 'bg-emerald-600/[0.12]'
-                : theme === 'aurora'
-                ? 'bg-cyan-600/[0.14]'
-                : theme === 'constellation'
-                ? 'bg-violet-600/[0.13]'
-                : 'bg-indigo-600/[0.12]'
-            }`}
+            className="absolute top-[-10%] left-[10%] w-[540px] h-[540px] rounded-full pointer-events-none transition-opacity duration-700 will-change-transform"
+            style={{
+              background:
+                theme === 'candlestick'
+                  ? 'radial-gradient(circle, rgba(16, 185, 129, 0.14) 0%, rgba(16, 185, 129, 0.04) 40%, transparent 70%)'
+                  : theme === 'aurora'
+                  ? 'radial-gradient(circle, rgba(6, 182, 212, 0.16) 0%, rgba(6, 182, 212, 0.05) 40%, transparent 70%)'
+                  : theme === 'constellation'
+                  ? 'radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.05) 40%, transparent 70%)'
+                  : 'radial-gradient(circle, rgba(99, 102, 241, 0.14) 0%, rgba(99, 102, 241, 0.04) 40%, transparent 70%)',
+              transform: 'translateZ(0)',
+            }}
           />
           <div
-            className={`absolute top-[42%] right-[-6%] w-[680px] h-[680px] rounded-full blur-[140px] pointer-events-none transition-opacity duration-700 ${
-              theme === 'candlestick'
-                ? 'bg-cyan-600/[0.09]'
-                : theme === 'aurora'
-                ? 'bg-emerald-500/[0.11]'
-                : theme === 'constellation'
-                ? 'bg-pink-600/[0.09]'
-                : 'bg-emerald-600/[0.10]'
-            }`}
+            className="absolute top-[38%] right-[-8%] w-[580px] h-[580px] rounded-full pointer-events-none transition-opacity duration-700 will-change-transform"
+            style={{
+              background:
+                theme === 'candlestick'
+                  ? 'radial-gradient(circle, rgba(6, 182, 212, 0.11) 0%, rgba(6, 182, 212, 0.03) 45%, transparent 70%)'
+                  : theme === 'aurora'
+                  ? 'radial-gradient(circle, rgba(16, 185, 129, 0.13) 0%, rgba(16, 185, 129, 0.03) 45%, transparent 70%)'
+                  : theme === 'constellation'
+                  ? 'radial-gradient(circle, rgba(236, 72, 153, 0.10) 0%, rgba(236, 72, 153, 0.02) 45%, transparent 70%)'
+                  : 'radial-gradient(circle, rgba(16, 185, 129, 0.10) 0%, rgba(16, 185, 129, 0.03) 45%, transparent 70%)',
+              transform: 'translateZ(0)',
+            }}
           />
-          <div className="absolute bottom-[-12%] left-[-6%] w-[580px] h-[580px] rounded-full bg-indigo-600/[0.08] blur-[130px] pointer-events-none" />
+          <div
+            className="absolute bottom-[-10%] left-[-6%] w-[480px] h-[480px] rounded-full pointer-events-none will-change-transform"
+            style={{
+              background:
+                'radial-gradient(circle, rgba(99, 102, 241, 0.10) 0%, rgba(99, 102, 241, 0.02) 45%, transparent 70%)',
+              transform: 'translateZ(0)',
+            }}
+          />
         </>
       )}
 
@@ -457,7 +508,7 @@ export function MarketBackground() {
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
       )}
 
-      {/* ── 4. Balanced Atmospheric Edge Vignette (Gentle edge roll-off, never crushing center) ── */}
+      {/* ── 4. Balanced Atmospheric Edge Vignette ── */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{

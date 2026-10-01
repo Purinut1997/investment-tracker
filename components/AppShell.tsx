@@ -360,8 +360,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          {/* Mobile Header */}
-          <header className="app-mobile-only items-center justify-between px-4 py-2.5 bg-[#12151C]/95 border-b border-white/10 backdrop-blur-xl">
+          {/* Mobile Header (Pseudo-Glass: 0% GPU Blur Penalty) */}
+          <header className="app-mobile-only items-center justify-between px-4 py-2.5 bg-[#10131A] border-b border-white/[0.08] shadow-[0_4px_20px_rgba(0,0,0,0.45)] relative z-20">
             <Link href="/dashboard" className="flex items-center gap-2.5 no-underline">
               <div className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/10 p-0.5 flex items-center justify-center">
                 <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
@@ -388,7 +388,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={(e) => {
               if (e.target === e.currentTarget) setMobileMenuOpen(false)
             }}
-            className="app-mobile-only fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex-col justify-end"
+            className="app-mobile-only fixed inset-0 z-50 bg-black/80 flex-col justify-end"
           >
             <div className="bg-slate-950 border-t border-slate-800 rounded-t-3xl max-h-[85vh] overflow-y-auto p-5 space-y-4 animate-slide-up shadow-2xl">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -514,8 +514,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* ── MOBILE BOTTOM NAV ───────────────────────────────── */}
-      <nav className="app-mobile-only fixed bottom-0 left-0 right-0 z-30 bg-slate-950/95 border-t border-slate-800 backdrop-blur-xl px-2 py-2 justify-around items-center">
+      {/* ── MOBILE BOTTOM NAV (Pseudo-Glass: 0% GPU Blur Penalty) ── */}
+      <nav className="app-mobile-only fixed bottom-0 left-0 right-0 z-30 bg-[#0B0E14] border-t border-white/[0.08] shadow-[0_-4px_24px_rgba(0,0,0,0.6)] px-2 py-2 justify-around items-center">
         {[
           { href: '/dashboard',    icon: LayoutDashboard, label: 'แดชบอร์ด' },
           { href: '/transactions', icon: ArrowLeftRight,   label: 'ธุรกรรม' },

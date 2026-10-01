@@ -68,7 +68,7 @@ export function TickerTape() {
   return (
     <div className="w-full h-9 relative overflow-hidden bg-[#0c0e15] border-b border-white/[0.08] text-xs select-none z-30 shadow-inner">
       {/* ── Fixed Left Badge (Live Indicator) ────────────────── */}
-      <div className="absolute left-0 inset-y-0 z-30 px-3 sm:px-3.5 bg-[#0c0e15]/95 backdrop-blur-md flex items-center gap-2 border-r border-white/[0.08] shadow-[4px_0_12px_rgba(0,0,0,0.6)]">
+      <div className="absolute left-0 inset-y-0 z-30 px-3 sm:px-3.5 bg-[#0c0e15] flex items-center gap-2 border-r border-white/[0.08] shadow-[4px_0_12px_rgba(0,0,0,0.6)]">
         <img src="/logo.png" alt="Logo" className="w-4 h-4 object-contain rounded-sm" />
         <span className="relative flex h-2 w-2">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -79,15 +79,11 @@ export function TickerTape() {
         </span>
       </div>
 
-      {/* ── Marquee Continuous Track ────────────────────────── */}
-      <div
-        className="overflow-hidden pl-16 sm:pl-36 pr-10"
-        style={{
-          maskImage: 'linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent)',
-          WebkitMaskImage: 'linear-gradient(to right, transparent, black 40px, black calc(100% - 40px), transparent)',
-        }}
-      >
-        <div className="animate-marquee h-9 items-center gap-6 sm:gap-7 py-1">
+      {/* ── Marquee Continuous Track with Zero-Cost Edge Fades ── */}
+      <div className="relative overflow-hidden pl-16 sm:pl-36 pr-10">
+        <div className="absolute left-16 sm:left-36 top-0 bottom-0 w-6 z-20 pointer-events-none bg-gradient-to-r from-[#0c0e15] to-transparent" />
+        <div className="absolute right-0 md:right-14 top-0 bottom-0 w-6 z-20 pointer-events-none bg-gradient-to-l from-[#0c0e15] to-transparent" />
+        <div className="animate-marquee h-9 items-center gap-6 sm:gap-7 py-1 will-change-transform">
           {duplicated.map((item, idx) => {
             const isPositive = item.changePercent > 0
             const isNegative = item.changePercent < 0
@@ -144,7 +140,7 @@ export function TickerTape() {
       {/* ── Fixed Right Shortcut ────────────────────────────── */}
       <Link
         href="/market-watch"
-        className="absolute right-0 inset-y-0 z-30 px-3 bg-[#0c0e15]/95 backdrop-blur-md flex items-center gap-1 border-l border-white/[0.08] text-[10px] font-medium text-zinc-400 hover:text-white transition-colors no-underline hidden md:flex"
+        className="absolute right-0 inset-y-0 z-30 px-3 bg-[#0c0e15] flex items-center gap-1 border-l border-white/[0.08] text-[10px] font-medium text-zinc-400 hover:text-white transition-colors no-underline hidden md:flex"
         title="ดูภาพรวมตลาดทั้งหมด"
       >
         <span>ตลาด</span>
