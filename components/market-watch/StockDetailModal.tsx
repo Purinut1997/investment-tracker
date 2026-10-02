@@ -661,7 +661,7 @@ export function StockDetailModal({
       : null,
     {
       revalidateOnFocus: false,
-      dedupingInterval: 30000,
+      dedupingInterval: 120000, // 2 minutes deduping to avoid excessive API requests
     }
   )
 
@@ -669,21 +669,27 @@ export function StockDetailModal({
   const chartPoints = data?.chartPoints ?? []
   const hasChartData = chartPoints.length > 1
 
-  // Determine trend of selected range (first point vs last point)
+  // Determine trend of selected range
   const isRangePositive = useMemo(() => {
-    if (chartPoints.length < 2) return (data?.changePercent ?? 0) >= 0
+    if (range === '1d') {
+      return (data?.todayChangePercent ?? data?.changePercent ?? 0) >= 0
+    }
+    if (chartPoints.length < 2) return (data?.rangeChangePercent ?? data?.changePercent ?? 0) >= 0
     const first = chartPoints[0].price
     const last = chartPoints[chartPoints.length - 1].price
     return last >= first
-  }, [chartPoints, data?.changePercent])
+  }, [range, chartPoints, data?.todayChangePercent, data?.rangeChangePercent, data?.changePercent])
 
   // Calculate range % change
   const rangeChangePercent = useMemo(() => {
-    if (chartPoints.length < 2) return data?.changePercent ?? 0
+    if (range === '1d') {
+      return data?.todayChangePercent ?? data?.changePercent ?? 0
+    }
+    if (chartPoints.length < 2) return data?.rangeChangePercent ?? data?.changePercent ?? 0
     const first = chartPoints[0].price
     const last = chartPoints[chartPoints.length - 1].price
     return first > 0 ? ((last - first) / first) * 100 : 0
-  }, [chartPoints, data?.changePercent])
+  }, [range, chartPoints, data?.todayChangePercent, data?.rangeChangePercent, data?.changePercent])
 
   // Min and Max prices for chart domain (auto-fits S/R and SMA levels so lines don't get clipped)
   const { minPrice, maxPrice } = useMemo(() => {
@@ -778,7 +784,8 @@ export function StockDetailModal({
   if (!isOpen || !symbol || !mounted) return null
 
   const currencySymbol = data?.currency === 'THB' ? '฿' : '$'
-  const isPositive = (data?.changePercent ?? 0) >= 0
+  const todayPct = data?.todayChangePercent ?? data?.changePercent ?? 0
+  const isPositive = todayPct >= 0
 
   const modalContent = (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
@@ -797,9 +804,6 @@ export function StockDetailModal({
           }`}
         />
 
-        {/* ============================================================ */}
-        {/* MODAL HEADER */}
-        {/* ============================================================ */}
         {/* ============================================================ */}
         {/* MODAL HEADER */}
         {/* ============================================================ */}
@@ -847,7 +851,7 @@ export function StockDetailModal({
                   <ArrowDownRight className="w-3.5 h-3.5" />
                 )}
                 {isPositive ? '+' : ''}
-                {Number(data?.changePercent ?? 0).toFixed(2)}% วันนี้
+                {Number(todayPct).toFixed(2)}% วันนี้
               </span>
             </div>
 

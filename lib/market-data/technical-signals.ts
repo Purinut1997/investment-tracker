@@ -176,9 +176,18 @@ export async function fetchSingleTickerTechnicalSignal(
       meta.regularMarketPrice ?? validCloses[validCloses.length - 1] ?? 0
     )
     const prevClose = Number(
-      meta.chartPreviousClose ?? validCloses[validCloses.length - 2] ?? currentPrice
+      meta.previousClose ??
+        meta.regularMarketPreviousClose ??
+        meta.chartPreviousClose ??
+        validCloses[validCloses.length - 2] ??
+        currentPrice
     )
-    const changePercent = prevClose > 0 ? ((currentPrice - prevClose) / prevClose) * 100 : 0
+    const changePercent =
+      meta.regularMarketChangePercent !== undefined && meta.regularMarketChangePercent !== null
+        ? Number(meta.regularMarketChangePercent)
+        : prevClose > 0
+        ? ((currentPrice - prevClose) / prevClose) * 100
+        : 0
 
     // 1. Calculate Real Wilder's RSI(14)
     const rsi14 = calculateWildersRSI(validCloses, 14)

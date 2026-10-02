@@ -169,7 +169,8 @@ export default function MarketWatchPage() {
     mutate: revalidate,
     isValidating,
   } = useSWR('/api/market-watch', {
-    refreshInterval: 60000,
+    refreshInterval: 120000, // 2 minutes (optimized to prevent Yahoo/CoinGecko rate limits)
+    revalidateOnFocus: false,
   })
 
   // 2. Fetch user's personal watchlist
@@ -178,7 +179,8 @@ export default function MarketWatchPage() {
     isLoading: isWatchlistLoading,
     mutate: mutateWatchlist,
   } = useSWR<{ items: WatchlistWithQuote[] }>('/api/watchlist', {
-    refreshInterval: 45000,
+    refreshInterval: 120000, // 2 minutes
+    revalidateOnFocus: false,
   })
 
   const [convAmount, setConvAmount] = useState('100')

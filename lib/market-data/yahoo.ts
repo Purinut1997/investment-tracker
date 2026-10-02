@@ -12,7 +12,7 @@ interface YahooCacheEntry {
 }
 
 const cache = new Map<string, YahooCacheEntry>()
-const CACHE_TTL_MS = 60 * 1000 // 1 minute in-memory cache
+const CACHE_TTL_MS = 3 * 60 * 1000 // 3 minutes in-memory cache to prevent Yahoo API rate limits
 
 export class YahooFinanceProvider implements MarketDataProvider {
   name = 'yahoo'
@@ -51,7 +51,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
           Accept: 'application/json',
         },
         signal: AbortSignal.timeout(3500),
-        next: { revalidate: 60 },
+        next: { revalidate: 180 },
       })
 
       if (!res.ok) {
@@ -66,9 +66,13 @@ export class YahooFinanceProvider implements MarketDataProvider {
       }
 
       const price = Number(meta.regularMarketPrice)
-      const prev = Number(meta.chartPreviousClose || meta.previousClose || price)
-      const change = price - prev
-      const changePercent = prev > 0 ? (change / prev) * 100 : 0
+      const prev = Number(meta.previousClose || meta.regularMarketPreviousClose || meta.chartPreviousClose || price)
+      const change = meta.regularMarketChange !== undefined && meta.regularMarketChange !== null
+        ? Number(meta.regularMarketChange)
+        : price - prev
+      const changePercent = meta.regularMarketChangePercent !== undefined && meta.regularMarketChangePercent !== null
+        ? Number(meta.regularMarketChangePercent)
+        : (prev > 0 ? (change / prev) * 100 : 0)
 
       let currency = 'USD'
       if (rawSymbol.includes('SET') || market === 'TH' || rawSymbol.endsWith('.BK')) {
