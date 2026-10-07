@@ -22,6 +22,9 @@ import {
   ExternalLink,
   Radar,
   BarChart3,
+  Calendar,
+  TrendingUp,
+  Layers,
 } from 'lucide-react'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
@@ -172,6 +175,13 @@ export default function DashboardPage() {
       ? summary.healthScore
       : null
   const isProfit = unrealizedPnL >= 0
+  const todayPnL = summary?.todayPnL ?? 0
+  const todayPnLPercent = summary?.todayPnLPercent ?? 0
+  const isTodayProfit = todayPnL >= 0
+  const upcomingCatalysts = Array.isArray(summary?.upcomingCatalysts) ? summary.upcomingCatalysts : []
+  const marketPulse = summary?.marketPulse ?? null
+  const assetClassAllocation = Array.isArray(summary?.assetClassAllocation) ? summary.assetClassAllocation : []
+  const [allocationView, setAllocationView] = useState<'assets' | 'classes'>('assets')
 
   const hasAccounts = accounts.length > 0 || (summary?.accounts?.length ?? 0) > 0
   const hasHoldings = holdings.length > 0 || totalCost > 0
@@ -364,9 +374,39 @@ export default function DashboardPage() {
             </div>
 
             <div className="my-5">
-              <p className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-none font-mono tabular-nums">
-                ฿<CountUp end={netWorth} duration={1.2} separator="," decimals={2} />
-              </p>
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <p className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-none font-mono tabular-nums">
+                  ฿<CountUp end={netWorth} duration={1.2} separator="," decimals={2} />
+                </p>
+
+                {/* Today's Return Badge */}
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs sm:text-sm font-bold font-mono border ${
+                    isTodayProfit
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                  }`}
+                  title="ผลตอบแทนประจำวันคำนวณจากราคาปิดล่าสุดของสินทรัพย์ในพอร์ต"
+                >
+                  {isTodayProfit ? (
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowDownRight className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    วันนี้: {isTodayProfit ? '+' : ''}฿
+                    {Math.abs(todayPnL).toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                  <span className="opacity-90">
+                    ({isTodayProfit ? '+' : ''}
+                    {todayPnLPercent.toFixed(2)}%)
+                  </span>
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 mt-3">
                 <span className="text-xs text-slate-400 font-mono tabular-nums">
                   สินทรัพย์: ฿{totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -381,7 +421,7 @@ export default function DashboardPage() {
                 <span className="text-slate-600">•</span>
                 <span className={`text-xs font-semibold flex items-center gap-0.5 ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {isProfit ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                  {unrealizedPnLPercent.toFixed(2)}% กำไรพอร์ต
+                  {unrealizedPnLPercent.toFixed(2)}% กำไรสะสม
                 </span>
               </div>
             </div>
@@ -469,6 +509,61 @@ export default function DashboardPage() {
           </div>
 
         </div>
+
+        {/* ── TODAY'S MARKET INTELLIGENCE PULSE ────────────────── */}
+        {marketPulse && (
+          <div className="p-3.5 sm:px-5 sm:py-3 rounded-2xl bg-[#12151C] border border-white/[0.08] flex items-center justify-between gap-3 text-xs shadow-md hover:border-white/[0.15] transition-all">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="font-bold text-indigo-400 shrink-0">Market Pulse:</span>
+              <span className="text-slate-300 truncate">
+                {marketPulse.symbol ? <strong className="text-white font-mono mr-1">[{marketPulse.symbol}]</strong> : null}
+                {marketPulse.headline}
+              </span>
+            </div>
+            <Link
+              href="/news"
+              className="text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 shrink-0 text-xs transition-colors hover:underline"
+            >
+              <span>อ่านข่าวพอร์ต</span>
+              <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+        )}
+
+        {/* ── UPCOMING CATALYSTS STRIP (ปฏิทินปันผล & รายงานงบ 30 วัน) ──── */}
+        {upcomingCatalysts.length > 0 && (
+          <div className="p-4 rounded-2xl bg-[#12151C] border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-3.5 shadow-lg">
+            <div className="flex items-center gap-2.5 shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-white tracking-wide">
+                  กำหนดการสำคัญที่กำลังจะมาถึง (Upcoming Catalysts)
+                </span>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  ปฏิทินขึ้นเครื่องหมาย XD เงินปันผล และรายงานผลประกอบการของหุ้นในพอร์ต
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {upcomingCatalysts.map((cat: any, idx: number) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#181C25] border border-white/[0.08] text-xs"
+                >
+                  <span className="font-bold font-mono text-indigo-300">{cat.symbol}</span>
+                  <span className="text-slate-300">{cat.title.split('—')[1]?.trim() || cat.title}</span>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    {cat.badge}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── AI RADAR & RISK SENTINEL QUICK WIDGET ─────────── */}
         {radarData?.riskReport && (
@@ -650,12 +745,12 @@ export default function DashboardPage() {
 
             {/* Asset Allocation Donut - Hybrid FinTech Glow & Rebalance Sentinel */}
             <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between relative overflow-hidden">
-              {/* Header with Title, Badge, and Rebalance Link */}
+              {/* Header with Title, Badge, and View Mode Toggle */}
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">สัดส่วนสินทรัพย์</span>
-                    {activePreset && (
+                    {activePreset && allocationView === 'assets' && (
                       <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
                         Target vs Actual
                       </span>
@@ -664,7 +759,33 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-400 mt-0.5">Asset Allocation</p>
                 </div>
                 
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                  {/* View Mode Segmented Control */}
+                  <div className="flex bg-[#181C25] p-0.5 rounded-xl border border-white/[0.08] text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => { setAllocationView('assets'); setActivePieIndex(null); }}
+                      className={`px-2 py-0.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                        allocationView === 'assets'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      สินทรัพย์
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAllocationView('classes'); setActivePieIndex(null); }}
+                      className={`px-2 py-0.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                        allocationView === 'classes'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      หมวดหมู่
+                    </button>
+                  </div>
+
                   <Link
                     href="/plans"
                     className="text-[11px] font-medium text-indigo-300 hover:text-white transition-all flex items-center gap-1 bg-indigo-600/15 hover:bg-indigo-600/25 px-2.5 py-1 rounded-xl border border-indigo-500/30 shadow-sm"
@@ -673,20 +794,17 @@ export default function DashboardPage() {
                     <span>ปรับแผน</span>
                     <ArrowRight className="w-3 h-3" />
                   </Link>
-                  <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200">
-                    {holdings.length} ตัว
-                  </span>
                 </div>
               </div>
 
               {/* Glowing Dynamic Donut Chart */}
               <div className="h-44 w-full flex items-center justify-center relative my-2">
-                {allocationData.length > 0 ? (
+                {(allocationView === 'classes' ? assetClassAllocation : allocationData).length > 0 ? (
                   <>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={allocationData}
+                          data={allocationView === 'classes' ? assetClassAllocation : allocationData}
                           innerRadius={50}
                           outerRadius={70}
                           paddingAngle={3}
@@ -696,7 +814,7 @@ export default function DashboardPage() {
                           onMouseEnter={(_, index) => setActivePieIndex(index)}
                           onMouseLeave={() => setActivePieIndex(null)}
                         >
-                          {allocationData.map((entry, index) => {
+                          {(allocationView === 'classes' ? assetClassAllocation : allocationData).map((entry: any, index: number) => {
                             const isSelected = activePieIndex === index
                             return (
                               <Cell
@@ -720,41 +838,41 @@ export default function DashboardPage() {
 
                     {/* Dynamic Center Display */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4 transition-all duration-300">
-                      {activePieIndex !== null && allocationData[activePieIndex] ? (
+                      {activePieIndex !== null && (allocationView === 'classes' ? assetClassAllocation : allocationData)[activePieIndex] ? (
                         <div className="animate-fade-in flex flex-col items-center">
                           <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400 max-w-[130px] truncate">
-                            {allocationData[activePieIndex].name}
+                            {(allocationView === 'classes' ? assetClassAllocation : allocationData)[activePieIndex].name}
                           </span>
                           <span className="text-2xl font-bold font-mono text-white tracking-tight leading-none mt-0.5">
-                            {allocationData[activePieIndex].percent}%
+                            {(allocationView === 'classes' ? assetClassAllocation : allocationData)[activePieIndex].percent}%
                           </span>
                           <span className="text-[11px] font-mono font-semibold text-indigo-300 mt-1">
-                            ฿{allocationData[activePieIndex].value.toLocaleString()}
+                            ฿{(allocationView === 'classes' ? assetClassAllocation : allocationData)[activePieIndex].value.toLocaleString()}
                           </span>
-                          {allocationData[activePieIndex].deviation !== null && (
+                          {allocationView === 'assets' && (allocationData[activePieIndex] as any)?.deviation !== null && (
                             <span className={`text-[10px] font-semibold font-mono mt-0.5 px-1.5 py-0.2 rounded-md ${
-                              allocationData[activePieIndex].deviation! > 1.5
+                              (allocationData[activePieIndex] as any).deviation > 1.5
                                 ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                                : allocationData[activePieIndex].deviation! < -1.5
+                                : (allocationData[activePieIndex] as any).deviation < -1.5
                                 ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
                                 : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                             }`}>
-                              {allocationData[activePieIndex].deviation! > 0
-                                ? `+${allocationData[activePieIndex].deviation}%`
-                                : `${allocationData[activePieIndex].deviation}%`} เป้า
+                              {(allocationData[activePieIndex] as any).deviation > 0
+                                ? `+${(allocationData[activePieIndex] as any).deviation}%`
+                                : `${(allocationData[activePieIndex] as any).deviation}%`} เป้า
                             </span>
                           )}
                         </div>
                       ) : (
                         <div className="flex flex-col items-center">
                           <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
-                            มูลค่าสินทรัพย์
+                            {allocationView === 'classes' ? 'มูลค่าพอร์ตรวม' : 'มูลค่าสินทรัพย์'}
                           </span>
                           <span className="text-xl font-bold text-white tabular-nums font-mono leading-tight mt-0.5">
-                            ฿{Math.round(totalValue).toLocaleString()}
+                            ฿{Math.round(allocationView === 'classes' ? netWorth : totalValue).toLocaleString()}
                           </span>
                           <span className="text-[11px] text-indigo-300 font-medium font-mono mt-0.5">
-                            {holdings.length} รายการ
+                            {(allocationView === 'classes' ? assetClassAllocation : allocationData).length} {allocationView === 'classes' ? 'หมวดหมู่' : 'รายการ'}
                           </span>
                         </div>
                       )}
@@ -765,103 +883,150 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Asset List & Rebalance Indicators (Shows ALL assets, scrollable if > 5) */}
+              {/* Asset List & Rebalance Indicators */}
               <div className="mt-2 pt-3 border-t border-slate-800/80">
                 <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2 px-1">
-                  <span>สินทรัพย์ / ประเภท</span>
+                  <span>{allocationView === 'classes' ? 'หมวดหมู่สินทรัพย์' : 'สินทรัพย์ / ประเภท'}</span>
                   <span>สัดส่วน & มูลค่า</span>
                 </div>
 
-                <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
-                  {allocationData.map((item, i) => {
-                    const isActive = activePieIndex === i
-                    return (
-                      <div
-                        key={item.name}
-                        onMouseEnter={() => setActivePieIndex(i)}
-                        onMouseLeave={() => setActivePieIndex(null)}
-                        onClick={() => setSelectedStock({ symbol: item.name, name: item.fullName, market: item.market })}
-                        className={`p-2 rounded-xl transition-all cursor-pointer border ${
-                          isActive
-                            ? 'bg-slate-800/90 border-slate-700 shadow-lg scale-[1.01]'
-                            : 'bg-slate-900/40 hover:bg-slate-800/50 border-white/[0.04] hover:border-slate-700/60'
-                        }`}
-                        title="คลิกเพื่อดูรายละเอียดและกราฟเทคนิค"
-                      >
-                        <div className="flex items-center justify-between text-xs mb-1.5">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0 transition-all"
-                              style={{
-                                backgroundColor: item.color,
-                                boxShadow: isActive ? `0 0 10px ${item.color}` : 'none',
-                              }}
-                            />
-                            <span className="font-bold text-slate-100 truncate">{item.name}</span>
-                            <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700/50">
-                              {item.assetType}
-                            </span>
+                {allocationView === 'classes' ? (
+                  <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+                    {assetClassAllocation.map((item: any, i: number) => {
+                      const isActive = activePieIndex === i
+                      return (
+                        <div
+                          key={item.name}
+                          onMouseEnter={() => setActivePieIndex(i)}
+                          onMouseLeave={() => setActivePieIndex(null)}
+                          className={`p-2.5 rounded-xl transition-all border ${
+                            isActive
+                              ? 'bg-slate-800/90 border-slate-700 shadow-lg scale-[1.01]'
+                              : 'bg-slate-900/40 hover:bg-slate-800/50 border-white/[0.04]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span className="font-bold text-slate-100">{item.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-semibold text-slate-300">
+                                ฿{item.value.toLocaleString()}
+                              </span>
+                              <span
+                                className="font-mono text-xs font-bold px-1.5 py-0.5 rounded"
+                                style={{ backgroundColor: `${item.color}22`, color: item.color }}
+                              >
+                                {item.percent}%
+                              </span>
+                            </div>
                           </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-mono text-xs font-semibold text-slate-300">
-                              ฿{item.value.toLocaleString()}
-                            </span>
-                            <span
-                              className="font-mono text-xs font-bold px-1.5 py-0.5 rounded"
-                              style={{
-                                backgroundColor: `${item.color}22`,
-                                color: item.color,
-                              }}
-                            >
-                              {item.percent}%
-                            </span>
+                          <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(item.percent, 100)}%`, backgroundColor: item.color }}
+                            />
                           </div>
                         </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+                    {allocationData.map((item, i) => {
+                      const isActive = activePieIndex === i
+                      return (
+                        <div
+                          key={item.name}
+                          onMouseEnter={() => setActivePieIndex(i)}
+                          onMouseLeave={() => setActivePieIndex(null)}
+                          onClick={() => setSelectedStock({ symbol: item.name, name: item.fullName, market: item.market })}
+                          className={`p-2 rounded-xl transition-all cursor-pointer border ${
+                            isActive
+                              ? 'bg-slate-800/90 border-slate-700 shadow-lg scale-[1.01]'
+                              : 'bg-slate-900/40 hover:bg-slate-800/50 border-white/[0.04] hover:border-slate-700/60'
+                          }`}
+                          title="คลิกเพื่อดูรายละเอียดและกราฟเทคนิค"
+                        >
+                          <div className="flex items-center justify-between text-xs mb-1.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0 transition-all"
+                                style={{
+                                  backgroundColor: item.color,
+                                  boxShadow: isActive ? `0 0 10px ${item.color}` : 'none',
+                                }}
+                              />
+                              <span className="font-bold text-slate-100 truncate">{item.name}</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700/50">
+                                {item.assetType}
+                              </span>
+                            </div>
 
-                        {/* Progress Bar with Target Indicator */}
-                        <div className="relative w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-300"
-                            style={{
-                              width: `${Math.min(item.percent, 100)}%`,
-                              backgroundColor: item.color,
-                            }}
-                          />
-                          {item.targetPercent !== null && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-mono text-xs font-semibold text-slate-300">
+                                ฿{item.value.toLocaleString()}
+                              </span>
+                              <span
+                                className="font-mono text-xs font-bold px-1.5 py-0.5 rounded"
+                                style={{
+                                  backgroundColor: `${item.color}22`,
+                                  color: item.color,
+                                }}
+                              >
+                                {item.percent}%
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Progress Bar with Target Indicator */}
+                          <div className="relative w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                             <div
-                              className="absolute top-0 bottom-0 w-1 bg-white rounded-full shadow-sm z-10"
-                              style={{ left: `calc(${Math.min(item.targetPercent, 100)}% - 2px)` }}
-                              title={`เป้าหมาย: ${item.targetPercent}%`}
+                              className="h-full rounded-full transition-all duration-300"
+                              style={{
+                                width: `${Math.min(item.percent, 100)}%`,
+                                backgroundColor: item.color,
+                              }}
                             />
+                            {item.targetPercent !== null && (
+                              <div
+                                className="absolute top-0 bottom-0 w-1 bg-white rounded-full shadow-sm z-10"
+                                style={{ left: `calc(${Math.min(item.targetPercent, 100)}% - 2px)` }}
+                                title={`เป้าหมาย: ${item.targetPercent}%`}
+                              />
+                            )}
+                          </div>
+
+                          {/* Target vs Actual Deviation Footer */}
+                          {item.targetPercent !== null && (
+                            <div className="flex items-center justify-between text-[10px] mt-1 font-mono">
+                              <span className="text-slate-400">เป้า {item.targetPercent}%</span>
+                              <span
+                                className={`font-semibold ${
+                                  item.deviation! > 1.5
+                                    ? 'text-amber-400'
+                                    : item.deviation! < -1.5
+                                    ? 'text-rose-400'
+                                    : 'text-emerald-400'
+                                }`}
+                              >
+                                {item.deviation! > 1.5
+                                  ? `+${item.deviation}% เกินเป้า`
+                                  : item.deviation! < -1.5
+                                  ? `${item.deviation}% ต่ำกว่าเป้า`
+                                  : 'สมดุลตามแผน'}
+                              </span>
+                            </div>
                           )}
                         </div>
-
-                        {/* Target vs Actual Deviation Footer */}
-                        {item.targetPercent !== null && (
-                          <div className="flex items-center justify-between text-[10px] mt-1 font-mono">
-                            <span className="text-slate-400">เป้า {item.targetPercent}%</span>
-                            <span
-                              className={`font-semibold ${
-                                item.deviation! > 1.5
-                                  ? 'text-amber-400'
-                                  : item.deviation! < -1.5
-                                  ? 'text-rose-400'
-                                  : 'text-emerald-400'
-                              }`}
-                            >
-                              {item.deviation! > 1.5
-                                ? `+${item.deviation}% เกินเป้า`
-                                : item.deviation! < -1.5
-                                ? `${item.deviation}% ต่ำกว่าเป้า`
-                                : 'สมดุลตามแผน'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -987,8 +1152,18 @@ export default function DashboardPage() {
                         <td className="text-right font-mono text-sm font-semibold text-slate-200 hidden lg:table-cell" title={`${sym}${Number(h.avgCost).toFixed(4)}`}>
                           {sym}{Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                         </td>
-                        <td className="text-right font-mono text-sm sm:text-base text-white font-bold">
-                          {sym}{Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td className="text-right font-mono">
+                          <div className="text-sm sm:text-base text-white font-bold">
+                            {sym}{Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          {(h as any).todayChangePercent !== undefined && (
+                            <div className={`text-[11px] font-semibold flex items-center justify-end gap-0.5 mt-0.5 ${
+                              (h as any).todayChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                            }`}>
+                              {(h as any).todayChangePercent >= 0 ? '+' : ''}
+                              {(h as any).todayChangePercent.toFixed(2)}% วันนี้
+                            </div>
+                          )}
                         </td>
                         <td className="text-right font-mono">
                           <div className="text-sm sm:text-base font-extrabold text-white">

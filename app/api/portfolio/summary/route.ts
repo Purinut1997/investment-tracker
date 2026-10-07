@@ -11,6 +11,8 @@ import {
 import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
 import { calculatePortfolioPerformance } from '@/lib/analytics/performance'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
+import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -122,6 +124,136 @@ export async function GET(req: NextRequest) {
       }
       const netWorth = holdingsResult.totalValueBase + totalCash
 
+      // 9. Calculate Today's P&L and individual daily price changes
+      let todayPnLBase = 0
+      const holdingsWithDaily = await Promise.all(
+        holdingsResult.holdings.map(async (h) => {
+          let quote = null
+          try {
+            if (h.assetType === 'crypto' || h.market === 'CRYPTO') {
+              quote = await coinGeckoProvider.getQuote(h.ticker)
+            } else {
+              quote = await yahooFinanceProvider.getQuote(h.ticker, h.market)
+            }
+          } catch {}
+
+          const changePercent = quote?.changePercent ?? 0
+          const holdingTodayPnLBase = h.currentValueBase * (changePercent / 100)
+          todayPnLBase += holdingTodayPnLBase
+
+          return {
+            ...h,
+            todayChangePercent: changePercent,
+            todayPnLBase: holdingTodayPnLBase,
+          }
+        })
+      )
+
+      const todayPnLPercent =
+        holdingsResult.totalValueBase > 0
+          ? (todayPnLBase / holdingsResult.totalValueBase) * 100
+          : 0
+
+      // 10. Group by Asset Class (Macro Allocation)
+      const classMap: Record<string, { label: string; value: number; color: string }> = {
+        stock: { label: 'หุ้นรายตัว (Stocks)', value: 0, color: '#6366f1' },
+        fund: { label: 'กองทุน & ETF', value: 0, color: '#10b981' },
+        crypto: { label: 'คริปโต (Crypto)', value: 0, color: '#f59e0b' },
+        bond: { label: 'ตราสารหนี้ (Bonds)', value: 0, color: '#06b6d4' },
+        gold: { label: 'ทองคำ & สินค้าโภคภัณฑ์', value: 0, color: '#eab308' },
+        cash: { label: 'เงินสดพร้อมลงทุน (Cash)', value: totalCash, color: '#14b8a6' },
+      }
+
+      for (const h of holdingsWithDaily) {
+        const type = (h.assetType || 'stock').toLowerCase()
+        if (classMap[type]) {
+          classMap[type].value += h.currentValueBase
+        } else {
+          classMap.stock.value += h.currentValueBase
+        }
+      }
+
+      const assetClassAllocation = Object.entries(classMap)
+        .filter(([_, item]) => item.value > 0)
+        .map(([key, item]) => ({
+          key,
+          name: item.label,
+          value: Math.round(item.value),
+          percent: netWorth > 0 ? Number(((item.value / netWorth) * 100).toFixed(1)) : 0,
+          color: item.color,
+        }))
+
+      // 11. Upcoming Catalysts (Dividends & Earnings)
+      const userTickers = holdingsResult.holdings.map((h) => h.ticker.toUpperCase())
+      const upcomingCatalysts: Array<{
+        type: 'dividend' | 'earnings'
+        symbol: string
+        title: string
+        subtitle: string
+        badge: string
+      }> = []
+
+      const knownDivTickers: Record<string, { name: string; estimateNote: string }> = {
+        SCHD: { name: 'Schwab U.S. Dividend Equity ETF', estimateNote: 'XD ไตรมาส 4 (ธ.ค.)' },
+        VOO: { name: 'Vanguard S&P 500 ETF', estimateNote: 'XD ไตรมาส 4 (ธ.ค.)' },
+        SPY: { name: 'SPDR S&P 500 ETF Trust', estimateNote: 'XD ไตรมาส 4 (ธ.ค.)' },
+        AAPL: { name: 'Apple Inc.', estimateNote: 'XD ไตรมาส 4 (พ.ย.)' },
+        MSFT: { name: 'Microsoft Corporation', estimateNote: 'XD ไตรมาส 4 (พ.ย.)' },
+        O: { name: 'Realty Income Corp', estimateNote: 'จ่ายปันผลรายเดือน (ทุกสิ้นเดือน)' },
+      }
+
+      for (const h of holdingsResult.holdings) {
+        const t = h.ticker.toUpperCase()
+        if (knownDivTickers[t] && upcomingCatalysts.length < 3) {
+          upcomingCatalysts.push({
+            type: 'dividend',
+            symbol: t,
+            title: `${t} — ${knownDivTickers[t].estimateNote}`,
+            subtitle: knownDivTickers[t].name,
+            badge: 'ปันผล',
+          })
+        }
+      }
+
+      // Check for recent catalyst news for held assets
+      if (userTickers.length > 0) {
+        const recentCatalystNews = await prisma.newsItem.findFirst({
+          where: {
+            OR: [
+              { headline: { contains: 'earnings', mode: 'insensitive' } },
+              { headline: { contains: 'guidance', mode: 'insensitive' } },
+              { headline: { contains: 'revenue', mode: 'insensitive' } },
+            ],
+            symbol: { in: userTickers },
+          },
+          orderBy: { publishedAt: 'desc' },
+        })
+
+        if (recentCatalystNews && recentCatalystNews.symbol && upcomingCatalysts.length < 3) {
+          upcomingCatalysts.push({
+            type: 'earnings',
+            symbol: recentCatalystNews.symbol,
+            title: `${recentCatalystNews.symbol} — อัปเดตผลการดำเนินงาน`,
+            subtitle: recentCatalystNews.headline,
+            badge: 'งบการเงิน',
+          })
+        }
+      }
+
+      // 12. Market Pulse summary linking to news
+      const topNews = await prisma.newsItem.findFirst({
+        where: userTickers.length > 0 ? { OR: [{ symbol: { in: userTickers } }, { symbol: null }] } : undefined,
+        orderBy: { publishedAt: 'desc' },
+      })
+
+      const marketPulse = topNews
+        ? {
+            symbol: topNews.symbol,
+            headline: topNews.headline,
+            sentiment: topNews.sentiment || 'neutral',
+          }
+        : null
+
       const defaultPreset = presets.find((p: any) => p.isDefault) || presets[0] || null
 
       const summaryPayload = {
@@ -131,6 +263,8 @@ export async function GET(req: NextRequest) {
         totalCost: holdingsResult.totalCostBase,
         netWorth,
         totalCash,
+        todayPnL: todayPnLBase,
+        todayPnLPercent,
         unrealizedPnL: holdingsResult.unrealizedPnLBase,
         unrealizedPnLPercent: holdingsResult.unrealizedPnLPercent,
         totalRealizedGain: totalRealizedProceedsBase,
@@ -140,7 +274,10 @@ export async function GET(req: NextRequest) {
         assetCount: holdingsResult.holdings.length,
         healthScore,
         performanceData,
-        holdings: holdingsResult.holdings,
+        holdings: holdingsWithDaily,
+        assetClassAllocation,
+        upcomingCatalysts,
+        marketPulse,
         accounts,
         presets,
         activePreset: defaultPreset,
