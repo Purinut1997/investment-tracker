@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { detectSentiment, isHeadlineRelevantToTicker } from '@/lib/news/news-analyzer'
 
 interface RawNewsItem {
   category?: string
@@ -95,11 +96,13 @@ export async function fetchMarketNews(): Promise<number> {
   for (const item of items.slice(0, 30)) {
     if (!item.url || !item.headline) continue
     try {
+      const sentiment = detectSentiment(item.headline, item.summary)
       await prisma.newsItem.upsert({
         where: { sourceUrl: item.url },
         update: {
           headline: item.headline,
           summary: item.summary || null,
+          sentiment,
         },
         create: {
           symbol: null, // general market news
@@ -108,6 +111,7 @@ export async function fetchMarketNews(): Promise<number> {
           sourceName: item.source || 'Market News',
           sourceUrl: item.url,
           publishedAt: new Date(item.datetime ? item.datetime * 1000 : Date.now()),
+          sentiment,
           fetchedAt: new Date(),
         },
       })
@@ -149,16 +153,27 @@ export async function fetchCompanyNews(symbol: string): Promise<number> {
   for (const item of items.slice(0, 15)) {
     if (!item.url || !item.headline) continue
     try {
+      // Check relevance: if the article doesn't actually mention the ticker/company, tag as general
+      const isRelevant = isHeadlineRelevantToTicker(item.headline, cleanSymbol)
+      const assignedSymbol = isRelevant ? cleanSymbol : null
+      const sentiment = detectSentiment(item.headline, item.summary)
+
       await prisma.newsItem.upsert({
         where: { sourceUrl: item.url },
-        update: {},
+        update: {
+          headline: item.headline,
+          summary: item.summary || null,
+          sentiment,
+          ...(isRelevant ? { symbol: cleanSymbol } : {}),
+        },
         create: {
-          symbol: cleanSymbol,
+          symbol: assignedSymbol,
           headline: item.headline,
           summary: item.summary || null,
           sourceName: item.source || cleanSymbol,
           sourceUrl: item.url,
           publishedAt: new Date(item.datetime ? item.datetime * 1000 : Date.now()),
+          sentiment,
           fetchedAt: new Date(),
         },
       })
