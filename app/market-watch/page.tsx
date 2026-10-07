@@ -8,6 +8,7 @@ import type { MarketQuote } from '@/lib/market-data/types'
 import { AddWatchlistModal } from '@/components/market-watch/AddWatchlistModal'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import { StockLogo } from '@/components/StockLogo'
+import { Sparkline } from '@/components/Sparkline'
 import {
   Coins,
   Building2,
@@ -978,9 +979,9 @@ function WatchlistCard({
         </div>
       </div>
 
-      {/* Bottom Row: Price and % Change */}
-      <div className="mt-3 pt-2.5 border-t border-white/[0.05] flex items-center justify-between gap-1">
-        <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums tracking-tight">
+      {/* Bottom Row: Price, Compact Intraday Sparkline, and % Change */}
+      <div className="mt-3 pt-2.5 border-t border-white/[0.05] flex items-center justify-between gap-1.5">
+        <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums tracking-tight shrink-0">
           {price !== undefined ? (
             <>
               {quote?.currency === 'THB' ? '฿' : '$'}
@@ -993,6 +994,24 @@ function WatchlistCard({
             <span className="text-slate-500 text-xs font-normal">กำลังดึงราคา...</span>
           )}
         </span>
+
+        {/* Compact Intraday Sparkline */}
+        <div
+          className="flex-1 max-w-[76px] h-6 flex items-center justify-center px-1"
+          title={
+            quote?.high && quote?.low
+              ? `ทิศทางราคาวันนี้ • กรอบราคา: L ${quote.currency === 'THB' ? '฿' : '$'}${Number(quote.low).toLocaleString('en-US', { minimumFractionDigits: 2 })} - H ${quote.currency === 'THB' ? '฿' : '$'}${Number(quote.high).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+              : `ทิศทางราคาในวันนี้ (${isPositive ? 'ปรับตัวขึ้น' : 'ปรับตัวลง'})`
+          }
+        >
+          <Sparkline
+            seed={item.symbol}
+            trend={isZero ? 'neutral' : isPositive ? 'up' : 'down'}
+            width={72}
+            height={22}
+            className="transition-transform group-hover:scale-105"
+          />
+        </div>
 
         <span
           className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border shrink-0 ${
@@ -1106,7 +1125,7 @@ function QuoteCard({
         </div>
       </div>
 
-      <div className="mt-2 pt-2.5 border-t border-white/[0.04] flex items-baseline justify-between">
+      <div className="mt-2 pt-2.5 border-t border-white/[0.04] flex items-center justify-between gap-2">
         <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums">
           {quote.currency === 'THB' ? '฿' : '$'}
           {Number(quote.price).toLocaleString('en-US', {
@@ -1114,6 +1133,25 @@ function QuoteCard({
             maximumFractionDigits: quote.price < 1 ? 4 : 2,
           })}
         </span>
+
+        {/* Compact Intraday Sparkline */}
+        <div
+          className="flex-1 max-w-[68px] h-5 flex items-center justify-center px-1"
+          title={
+            quote.high && quote.low
+              ? `ทิศทางราคาวันนี้ • กรอบราคา: L ${quote.currency === 'THB' ? '฿' : '$'}${Number(quote.low).toLocaleString('en-US', { minimumFractionDigits: 2 })} - H ${quote.currency === 'THB' ? '฿' : '$'}${Number(quote.high).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+              : `ทิศทางราคาระหว่างวัน`
+          }
+        >
+          <Sparkline
+            seed={quote.symbol}
+            trend={isZero ? 'neutral' : isPositive ? 'up' : 'down'}
+            width={64}
+            height={20}
+            className="transition-transform group-hover:scale-105"
+          />
+        </div>
+
         <span className="text-[10px] text-slate-500 font-mono uppercase">
           {quote.currency ?? 'USD'}
         </span>
