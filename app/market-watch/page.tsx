@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
+import Link from 'next/link'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
@@ -407,6 +408,14 @@ export default function MarketWatchPage() {
           description="ติดตามราคาตลาดสดแบบเรียลไทม์ หุ้นที่คุณสนใจ หุ้นสหรัฐฯ หุ้นไทย คริปโตเคอร์เรนซี และอัตราแลกเปลี่ยน"
           action={
             <div className="flex items-center gap-2">
+              <Link
+                href="/market-map"
+                className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/30 px-3.5 py-2 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-98"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 text-indigo-400" />
+                <span>แผนผังความร้อน (Heatmap)</span>
+              </Link>
+
               <button
                 onClick={() => setIsAddModalOpen(true)}
                 className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-indigo-600/30 active:scale-98"
