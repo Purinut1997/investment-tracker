@@ -27,6 +27,7 @@ import {
   BarChart3,
   PanelLeftClose,
   CalendarCheck,
+  Calendar,
   LayoutGrid,
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
@@ -76,6 +77,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'จับตาตลาด',       href: '/market-watch', icon: TrendingUp },
       { label: 'แผนผังตลาด (Heatmap)', href: '/market-map', icon: LayoutGrid, badge: 'ใหม่' },
+      { label: 'ปฏิทินเศรษฐกิจ',   href: '/economic-calendar', icon: Calendar },
       { label: 'สรุปข่าวเศรษฐกิจ', href: '/news',        icon: Newspaper },
     ]
   },

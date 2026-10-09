@@ -20,6 +20,7 @@ import {
   Layers,
   SlidersHorizontal,
   Info,
+  Calendar,
 } from 'lucide-react'
 
 type MainViewMode = 'market' | 'portfolio'
@@ -108,6 +109,13 @@ export default function MarketMapPage() {
           description="สำรวจทิศทางตลาดโลก ดัชนี S&P 500, หุ้นเทคโนโลยี, คริปโต หรือสลับดูแผนผังความร้อนพอร์ตลงทุนของคุณแบบเรียลไทม์"
           action={
             <div className="flex items-center gap-2">
+              <Link
+                href="/economic-calendar"
+                className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] px-3.5 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98"
+              >
+                <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ปฏิทินเศรษฐกิจ</span>
+              </Link>
               <Link
                 href="/market-watch"
                 className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] px-3.5 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98"

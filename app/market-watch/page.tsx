@@ -26,6 +26,7 @@ import {
   Sparkles,
   Search,
   LayoutGrid,
+  Calendar,
   FolderKanban,
   X,
 } from 'lucide-react'
@@ -408,6 +409,14 @@ export default function MarketWatchPage() {
           description="ติดตามราคาตลาดสดแบบเรียลไทม์ หุ้นที่คุณสนใจ หุ้นสหรัฐฯ หุ้นไทย คริปโตเคอร์เรนซี และอัตราแลกเปลี่ยน"
           action={
             <div className="flex items-center gap-2">
+              <Link
+                href="/economic-calendar"
+                className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] px-3.5 py-2 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-98"
+              >
+                <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ปฏิทินเศรษฐกิจ</span>
+              </Link>
+
               <Link
                 href="/market-map"
                 className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/30 px-3.5 py-2 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-98"

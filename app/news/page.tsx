@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import useSWR from 'swr'
+import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -11,6 +12,7 @@ import {
   RefreshCw,
   AlertCircle,
   Search,
+  Calendar,
 } from 'lucide-react'
 import { AiPortfolioBriefCard } from '@/components/news/AiPortfolioBriefCard'
 import { HoldingsSentimentBar, HoldingSummaryItem } from '@/components/news/HoldingsSentimentBar'
@@ -80,6 +82,13 @@ export default function NewsPage() {
           description="สังเคราะห์ข่าวสารและผลกระทบต่อสินทรัพย์ในพอร์ตของคุณ พร้อมบทวิเคราะห์เพื่อการตัดสินใจจริง"
           action={
             <div className="flex items-center gap-2">
+              <Link
+                href="/economic-calendar"
+                className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-98"
+              >
+                <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                <span>ปฏิทินเศรษฐกิจ</span>
+              </Link>
               <button
                 onClick={() => revalidate()}
                 className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
