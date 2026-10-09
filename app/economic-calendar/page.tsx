@@ -9,6 +9,7 @@ import {
   type CalendarImportance,
   type CalendarRegion,
 } from '@/components/economic-calendar/TradingViewCalendar'
+import { NativeEconomicCalendar } from '@/components/economic-calendar/NativeEconomicCalendar'
 import {
   Calendar,
   TrendingUp,
@@ -19,8 +20,11 @@ import {
   Clock,
   ShieldAlert,
   SlidersHorizontal,
-  Info,
   Layers,
+  Sparkles,
+  HelpCircle,
+  ExternalLink,
+  CheckCircle2,
 } from 'lucide-react'
 
 interface RegionOption {
@@ -41,6 +45,7 @@ const REGION_OPTIONS: RegionOption[] = [
 ]
 
 export default function EconomicCalendarPage() {
+  const [viewMode, setViewMode] = useState<'native' | 'tradingview'>('native')
   const [importance, setImportance] = useState<CalendarImportance>('high_medium')
   const [region, setRegion] = useState<CalendarRegion>('ALL')
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -121,9 +126,40 @@ export default function EconomicCalendarPage() {
           })}
         </div>
 
-        {/* Quick Toolbar */}
+        {/* Mode Selector & Quick Toolbar */}
         <div className="p-3 sm:p-3.5 rounded-2xl bg-[#12151C] border border-white/[0.08] flex flex-wrap items-center justify-between gap-3 shadow-lg shadow-black/20">
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-[#090B10] border border-white/[0.1] rounded-xl p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('native')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'native'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>ปฏิทินในระบบ (100% เสถียร)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('tradingview')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'tradingview'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>TradingView สตรีมสด</span>
+              </button>
+            </div>
+
+            <div className="h-6 w-px bg-white/[0.08] hidden sm:block" />
+
             <span className="text-slate-400 text-xs font-semibold flex items-center gap-1.5 pl-1">
               <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
               ระดับความสำคัญ:
@@ -141,7 +177,7 @@ export default function EconomicCalendarPage() {
                 }`}
                 title="เฉพาะตัวเลขสำคัญมาก (High Impact เช่น ดอกเบี้ย FED, เงินเฟ้อ CPI, Non-Farm)"
               >
-                <span>🔴 สำคัญมาก (High Impact)</span>
+                <span>🔴 สำคัญมาก</span>
               </button>
 
               <button
@@ -171,65 +207,78 @@ export default function EconomicCalendarPage() {
               </button>
             </div>
 
-            {/* Height Presets */}
-            <div className="hidden sm:flex items-center bg-[#181C25] border border-white/[0.08] rounded-xl p-1 text-xs">
-              <button
-                type="button"
-                onClick={() => setWidgetHeight(760)}
-                className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                  widgetHeight === 760
-                    ? 'bg-white/10 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                มาตรฐาน (760px)
-              </button>
-              <button
-                type="button"
-                onClick={() => setWidgetHeight(940)}
-                className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                  widgetHeight === 940
-                    ? 'bg-white/10 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                กว้างพิเศษ (940px)
-              </button>
-            </div>
+            {/* Height Presets (only for TradingView mode) */}
+            {viewMode === 'tradingview' && (
+              <div className="hidden sm:flex items-center bg-[#181C25] border border-white/[0.08] rounded-xl p-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setWidgetHeight(760)}
+                  className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                    widgetHeight === 760
+                      ? 'bg-white/10 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  มาตรฐาน (760px)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWidgetHeight(940)}
+                  className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                    widgetHeight === 940
+                      ? 'bg-white/10 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  กว้างพิเศษ (940px)
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Theater / Fullscreen Button */}
-          <button
-            type="button"
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="px-3.5 py-1.5 rounded-xl bg-[#181C25] hover:bg-[#202532] text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
-          >
-            {isFullscreen ? (
-              <>
-                <Minimize2 className="w-3.5 h-3.5" />
-                <span>ออกจากโหมดเต็มจอ</span>
-              </>
-            ) : (
-              <>
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span>ขยายเต็มจอ (Theater Mode)</span>
-              </>
-            )}
-          </button>
+          {viewMode === 'tradingview' && (
+            <button
+              type="button"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="px-3.5 py-1.5 rounded-xl bg-[#181C25] hover:bg-[#202532] text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span>ออกจากโหมดเต็มจอ</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>ขยายเต็มจอ (Theater Mode)</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
 
-        {/* TradingView Calendar Widget */}
-        <div className="relative">
-          <TradingViewCalendar
-            importance={importance}
-            region={region}
-            height={widgetHeight}
-            isFullscreen={false}
-            onToggleFullscreen={() => setIsFullscreen(true)}
-            onImportanceChange={(imp) => setImportance(imp)}
-            onRegionChange={(reg) => setRegion(reg)}
+        {/* Content Body based on ViewMode */}
+        {viewMode === 'native' ? (
+          <NativeEconomicCalendar
+            importanceFilter={importance}
+            regionFilter={region}
+            onSwitchToTradingView={() => setViewMode('tradingview')}
           />
-        </div>
+        ) : (
+          <div className="relative">
+            <TradingViewCalendar
+              importance={importance}
+              region={region}
+              height={widgetHeight}
+              isFullscreen={false}
+              onToggleFullscreen={() => setIsFullscreen(true)}
+              onImportanceChange={(imp) => setImportance(imp)}
+              onRegionChange={(reg) => setRegion(reg)}
+              onSwitchToNative={() => setViewMode('native')}
+            />
+          </div>
+        )}
 
         {/* Minimalist Macro Guide & Risk Tips */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-2">
@@ -270,8 +319,8 @@ export default function EconomicCalendarPage() {
           </div>
         </div>
 
-        {/* Fullscreen Theater Overlay */}
-        {isFullscreen && (
+        {/* Fullscreen Theater Overlay (for TradingView) */}
+        {isFullscreen && viewMode === 'tradingview' && (
           <div className="fixed inset-0 z-50 bg-[#090B10] flex flex-col p-3 animate-in fade-in duration-200">
             {/* Top Bar inside Fullscreen */}
             <div className="flex items-center justify-between px-3 py-2 bg-[#12151C] border border-white/[0.1] rounded-xl mb-2">
@@ -305,6 +354,10 @@ export default function EconomicCalendarPage() {
                 height="100%"
                 isFullscreen={true}
                 onToggleFullscreen={() => setIsFullscreen(false)}
+                onSwitchToNative={() => {
+                  setIsFullscreen(false)
+                  setViewMode('native')
+                }}
               />
             </div>
           </div>

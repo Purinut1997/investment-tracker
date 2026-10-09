@@ -164,6 +164,14 @@ export function TradingViewHeatmap({
 
   useEffect(() => {
     setIsLoading(true)
+
+    // Override TradingView widget host to official CDN fallback if needed
+    if (typeof window !== 'undefined') {
+      try {
+        ;(window as any).WIDGET_HOST = 'https://s.tradingview.com'
+      } catch {}
+    }
+
     const currentContainer = containerRef.current
     if (!currentContainer) return
 
