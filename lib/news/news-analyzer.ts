@@ -98,6 +98,17 @@ export interface UserHoldingContext {
   assetType?: string
   allocationPercent: number
   unrealizedPnLPercent?: number
+  currentPrice?: number
+  currency?: string
+  supportS1?: number | null
+  supportS2?: number | null
+  resistanceR1?: number | null
+  sma50?: number | null
+  sma200?: number | null
+  rsi14?: number | null
+  isNearSupport?: boolean
+  isOversold?: boolean
+  technicalSummary?: string
 }
 
 export interface MacroShockAlert {
@@ -452,17 +463,42 @@ export async function generateDailyBrief(
         .join('\n')
 
       const holdingsDigest = holdings.length > 0
-        ? holdings.map((h) => `${h.ticker} (${h.assetName}, สัดส่วน ${h.allocationPercent}%)`).join(', ')
+        ? holdings.map((h) => {
+            const isTHB = h.currency === 'THB'
+            const prefix = isTHB ? '' : '$'
+            const suffix = isTHB ? ' บาท' : ''
+            const priceStr = h.currentPrice != null && h.currentPrice > 0 ? `${prefix}${h.currentPrice}${suffix}` : 'N/A'
+            const s1Str = h.supportS1 != null ? `${prefix}${h.supportS1}${suffix}` : ''
+            const s2Str = h.supportS2 != null ? `${prefix}${h.supportS2}${suffix}` : ''
+            const smaStr = h.sma50 != null ? `SMA50: ${prefix}${h.sma50}${suffix}` : ''
+            const rsiStr = h.rsi14 != null ? `RSI: ${h.rsi14}` : ''
+            const techParts = [
+              s1Str ? `แนวรับแรก (S1): ${s1Str}` : '',
+              s2Str ? `แนวรับสอง (S2): ${s2Str}` : '',
+              smaStr,
+              rsiStr,
+            ].filter(Boolean).join(', ')
+
+            return `- [${h.ticker}] ${h.assetName} (สัดส่วน ${h.allocationPercent}%): ราคาตลาดปัจจุบัน ${priceStr}${techParts ? ` | สัญญาณเทคนิคจากระบบ: ${techParts}` : ''}`
+          }).join('\n')
         : 'หุ้นเทคโนโลยีและดัชนีหลัก'
 
       const prompt = `คุณคือหัวหน้านักกลยุทธ์การลงทุนอาวุโส (Chief Investment Strategist) ของ Investment Pro
 ทำหน้าที่สรุปบทวิเคราะห์ข่าวสารและกลยุทธ์พอร์ตประจำวัน (Executive Daily Portfolio Intelligence Brief) ให้อ่านง่าย สั้น กระชับ ได้ใจความ เหมาะสำหรับนักลงทุนอ่านจบใน 2 นาที
 
-ข้อมูลพอร์ตของผู้ใช้:
-ถือครอง: ${holdingsDigest}
+ข้อมูลพอร์ตของผู้ใช้ (อ้างอิงราคาตลาดและระดับเทคนิคจริงของระบบ):
+${holdingsDigest}
 
 ข่าวสารสำคัญล่าสุดในตลาด:
 ${newsDigest}
+
+*** กฎเหล็กที่สำคัญที่สุดเรื่องระดับราคาและแนวรับใน holdingPlaybook (STRICT PRICING ACCURACY RULE): ***
+1. ห้ามสร้าง/มโนตัวเลขราคาหรือแนวรับขึ้นมาเองเด็ดขาด! ต้องอ้างอิงจาก "ราคาตลาดปัจจุบัน" และ "สัญญาณเทคนิคจากระบบ (แนวรับ S1, S2, SMA50)" ที่ระบุไว้ในข้อมูลพอร์ตด้านบนเท่านั้น
+2. ในฟิลด์ "supportOrActionLevel" ของแต่ละหุ้นใน holdingPlaybook:
+   - ต้องระบุ "แนวรับ" (Support Level) เพื่อให้ผู้ใช้วางแผนตั้งรับการย่อตัว (ห้ามใส่เป็นแนวต้าน เว้นแต่มีเหตุผลเฉพาะ)
+   - ห้ามระบุแนวรับลึกผิดปกติเด็ดขาด! เช่น หุ้นราคา $300 แนวรับต้องอยู่ใกล้ $291-$292 ตาม S1 หรือ ~$277 ตาม S2 (ห้ามระบุ $175-180 เด็ดขาด)
+   - รูปแบบที่ถูกต้อง เช่น "แนวรับ S1: $291 - $292 (รับถัดไป S2: $277)" หรือ "แนวรับ S1: 140 บาท (SMA50: 151 บาท)" หรือ "แนวรับ S1: $32.3 - $32.5 (SMA50: $33.9)"
+   - ระบุสกุลเงินให้ตรงกับสินทรัพย์: หุ้นไทย (SCB) ใช้ "บาท", หุ้นสหรัฐฯ (QQQM, SCHD, GOOGL, VOO, WDC) ใช้ "$"
 
 กรุณาวิเคราะห์และตอบกลับในรูปแบบ JSON ภาษาไทยที่มีโครงสร้างดังนี้เท่านั้น (ห้ามใส่ Markdown หรือข้อความนอก JSON):
 {
@@ -503,7 +539,7 @@ ${newsDigest}
         "stance": "BUY_DIP | HOLD | COLLECT_DIVIDEND | WAIT | TRIM",
         "stanceLabel": "คำแนะนำการกระทำชัดเจน",
         "rationale": "เหตุผลว่าทำไมถึงต้องทำแบบนี้ต่อผลกระทบจากดอกเบี้ย/เงินเฟ้อ",
-        "supportOrActionLevel": "แนวรับหรือจุดที่ต้องจับตา"
+        "supportOrActionLevel": "แนวรับ S1 หรือจุดสังเกตจริงที่อ้างอิงจากข้อมูลเทคนิคด้านบน"
       }
     ],
     "scenarioAPlan": {
@@ -736,54 +772,80 @@ function generateHeuristicDailyBrief(
     },
   ]
 
-  // 🛡️ Portfolio Defensive Playbook: Tailored to GOOGL, VOO, SCHD, QQQM, WDC, SCB
+  // 🛡️ Portfolio Defensive Playbook: Dynamically tailored to user's actual holdings with live technical support levels
+  const holdingPlaybook: HoldingDefensiveAction[] = (holdings.length > 0 ? holdings : [
+    { ticker: 'GOOGL', assetName: 'Alphabet Inc.', allocationPercent: 20 },
+    { ticker: 'VOO', assetName: 'Vanguard S&P 500', allocationPercent: 30 },
+    { ticker: 'SCHD', assetName: 'Schwab US Dividend', allocationPercent: 20 },
+    { ticker: 'QQQM', assetName: 'Invesco Nasdaq 100', allocationPercent: 15 },
+    { ticker: 'WDC', assetName: 'Western Digital', allocationPercent: 10 },
+    { ticker: 'SCB', assetName: 'SCB X', allocationPercent: 5 },
+  ]).map((h) => {
+    const isTHB = h.currency === 'THB' || h.ticker.toUpperCase() === 'SCB'
+    const prefix = isTHB ? '' : '$'
+    const suffix = isTHB ? ' บาท' : ''
+    const sym = h.ticker.toUpperCase()
+
+    let supportText = ''
+    if (h.supportS1 != null) {
+      supportText = `แนวรับแรก S1: ${prefix}${h.supportS1}${suffix}`
+      if (h.supportS2 != null) {
+        supportText += ` (แนวรับรอง S2: ${prefix}${h.supportS2}${suffix})`
+      }
+      if (h.sma50 != null) {
+        supportText += ` / SMA50: ${prefix}${h.sma50}${suffix}`
+      }
+    } else if (h.currentPrice != null && h.currentPrice > 0) {
+      const s1 = Number((h.currentPrice * 0.975).toFixed(2))
+      const s2 = Number((h.currentPrice * 0.95).toFixed(2))
+      supportText = `แนวรับ S1: ${prefix}${s1}${suffix} (แนวรับรอง S2: ${prefix}${s2}${suffix})`
+    } else {
+      supportText = 'ตั้งรับที่แนวรับเส้นค่าเฉลี่ย SMA 50 วัน'
+    }
+
+    let stance: HoldingDefensiveAction['stance'] = 'HOLD'
+    let stanceLabel = 'ถือครองต่อเนื่อง (Hold)'
+    let rationale = `สินทรัพย์หลักในพอร์ต ยึดวินัยตามแผนการลงทุนระยะยาว`
+
+    if (sym === 'GOOGL') {
+      stance = 'BUY_DIP'
+      stanceLabel = 'รอจังหวะสะสมเมื่อย่อตัว (Buy on Dip)'
+      rationale = 'หุ้นเทคโนโลยีขนาดใหญ่มีกระแสเงินสดแข็งแกร่ง แม้ Bond Yield พุ่งกดดัน Valuation ระยะสั้น แต่เป็นโอกาสทยอยสะสมของดีที่แนวรับ'
+    } else if (sym === 'VOO') {
+      stance = 'HOLD'
+      stanceLabel = 'ถือครองต่อเนื่อง & DCA ตามแผน (Core Anchor)'
+      rationale = 'ดัชนี S&P 500 กระจายความเสี่ยงทั่วตลาด แม้จะปรับฐานตามตัวเลขเงินเฟ้อ แต่การถือยาวและ DCA ให้ผลตอบแทนฟื้นตัวได้ดีที่สุดเสมอ'
+    } else if (sym === 'SCHD') {
+      stance = 'COLLECT_DIVIDEND'
+      stanceLabel = 'กันชนความผันผวน & เก็บเกี่ยวปันผล'
+      rationale = 'หุ้นปันผลและกลุ่ม Value ทนทานต่อสภาวะดอกเบี้ยสูงได้ดี ช่วยลด Maximum Drawdown ของพอร์ตรวมและสร้างกระแสเงินสดสม่ำเสมอ'
+    } else if (sym === 'QQQM') {
+      stance = 'WAIT'
+      stanceLabel = 'ชะลอการไล่ราคา รอสร้างฐาน (Wait & See)'
+      rationale = 'Nasdaq 100 มีความอ่อนไหวต่ออัตราดอกเบี้ยและ Yield จึงควรชะลอการไล่ราคา รอให้แรงขายชะลอและดัชนีสร้างฐานที่แนวรับก่อนสะสมไม้ใหม่'
+    } else if (sym === 'WDC') {
+      stance = 'HOLD'
+      stanceLabel = 'ถือเกาะติดรอบขาขึ้นของหน่วยความจำ'
+      rationale = 'แม้มหภาคจะผันผวน แต่วัฏจักรความต้องการ Enterprise HDD และ AI Storage ยังคงเติบโตอย่างมีนัยสำคัญตามการขยายตัวของ Data Center'
+    } else if (sym === 'SCB') {
+      stance = 'COLLECT_DIVIDEND'
+      stanceLabel = 'ถือรับเงินปันผลสูง 7-8%'
+      rationale = 'ดอกเบี้ยในระดับสูงช่วยรักษา NIM ของธนาคาร และ Dividend Yield ระดับสูงทำหน้าที่เป็นเบาะกันกระแทกเงินเฟ้อ'
+    }
+
+    return {
+      symbol: sym,
+      stance,
+      stanceLabel,
+      rationale,
+      supportOrActionLevel: supportText,
+    }
+  })
+
   const defensivePlaybook: PortfolioDefensivePlaybook = {
     overallStance: '🛡️ ตั้งรับอย่างมีกลยุทธ์ (Defensive Accumulation): ไม่ Panic Sell ที่แนวรับ รักษาวินัย DCA และเตรียมสภาพคล่องดักซื้อจุดกลับตัว',
     cashBufferAdvice: 'แนะนำสำรองเงินสดหรือสภาพคล่องไว้ประมาณ 10 - 15% ของพอร์ต เพื่อเป็นกระสุนรอเข้าซื้อหุ้นคุณภาพในจังหวะตลาด Oversold จากความกังวลเรื่อง CPI/Fed',
-    holdingPlaybook: [
-      {
-        symbol: 'GOOGL',
-        stance: 'BUY_DIP',
-        stanceLabel: 'รอจังหวะสะสมเมื่อย่อตัว (Buy on Dip)',
-        rationale: 'เมื่อ Bond Yield พุ่ง หุ้น Tech มักโดนกดดันเรื่อง Valuation ชั่วคราว แต่ Alphabet มีกระแสเงินสดมหาศาล มีส่วนแบ่ง Search & Cloud แข็งแกร่ง ไม่ควรตกใจขาย แต่ให้มองเป็นโอกาสสะสมของดีราคาลด',
-        supportOrActionLevel: 'แนวรับทางเทคนิค $160 - $164 / ทยอยตั้ง Limit Order ไม้เล็กเมื่อ RSI เข้าใกล้เขต Oversold',
-      },
-      {
-        symbol: 'VOO',
-        stance: 'HOLD',
-        stanceLabel: 'ถือครองต่อเนื่อง & DCA ตามแผน (Core Anchor)',
-        rationale: 'S&P 500 กระจายความเสี่ยงใน 500 บริษัทชั้นนำ แม้จะปรับฐานระยะสั้นตามตัวเลขเงินเฟ้อ แต่สถิติย้อนหลังชี้ว่าการถือยาวและ DCA ให้ผลตอบแทนฟื้นตัวได้ดีที่สุดเสมอ',
-        supportOrActionLevel: 'ยึดวินัย DCA ประจำเดือนตามรอบปกติ ไม่จำเป็นต้องพยายามจับจุดต่ำสุด',
-      },
-      {
-        symbol: 'SCHD',
-        stance: 'COLLECT_DIVIDEND',
-        stanceLabel: 'กันชนความผันผวน & เก็บเกี่ยวปันผล (Defensive Cushion)',
-        rationale: 'หุ้นปันผลและกลุ่ม Value ทนทานต่อสภาวะดอกเบี้ยสูงได้ดีกว่ากลุ่ม Growth เม็ดเงินปันผลที่ได้ช่วยลด Maximum Drawdown ของพอร์ตรวม',
-        supportOrActionLevel: 'Reinvest เงินปันผลกลับเข้ามา หรือถือเป็นเงินสดสำรองไว้เสริมความมั่นคง',
-      },
-      {
-        symbol: 'QQQM',
-        stance: 'WAIT',
-        stanceLabel: 'ชะลอการไล่ราคา รอสัญญาณการสร้างฐาน (Wait & See)',
-        rationale: 'Nasdaq 100 มีความอ่อนไหวสูงต่ออัตราดอกเบี้ยและ Bond Yield จึงควรชะลอการซื้อไล่ราคา รอให้แรงขายจากข่าว CPI เริ่มชะลอและดัชนีสร้างฐานราคาก่อนสะสมไม้ใหม่',
-        supportOrActionLevel: 'รอสัญญาณแท่งเทียนกลับตัว หรือราคายืนเหนือเส้นค่าเฉลี่ย EMA 50 วัน',
-      },
-      {
-        symbol: 'WDC',
-        stance: 'HOLD',
-        stanceLabel: 'ถือเกาะติดรอบขาขึ้นของหน่วยความจำ (Cyclical Recovery)',
-        rationale: 'แม้มหภาคจะผันผวน แต่วัฏจักรความต้องการ Enterprise HDD และ AI Storage ยังคงเติบโตอย่างมีนัยสำคัญตามการขยายตัวของ Data Center',
-        supportOrActionLevel: 'ตั้งจุด Trailing Stop เพื่อปกป้องกำไรหากตลาดภาพรวมทรุดตัวแรง',
-      },
-      {
-        symbol: 'SCB',
-        stance: 'COLLECT_DIVIDEND',
-        stanceLabel: 'ถือรับกระแสเงินสดปันผลสูง 7-8% (High Yield Income)',
-        rationale: 'ดอกเบี้ยในระดับสูงช่วยรักษาอัตราส่วน NIM ของธนาคาร และ Dividend Yield ระดับ 7-8% เป็นเกราะป้องกันเงินเฟ้อและความผันผวนของตลาดต่างประเทศได้อย่างดี',
-        supportOrActionLevel: 'แนวรับ 102 - 105 บาท / ถือรับเงินปันผลรอบครึ่งปีตามรอบปกติ',
-      },
-    ],
+    holdingPlaybook,
     scenarioAPlan: {
       condition: 'หากเงินเฟ้อ/ดอกเบี้ยยังกดดันต่อ และตลาดปรับฐานลงอีก 3 - 5%',
       action: 'ห้าม Panic Sell ที่แนวรับ ให้ใช้เงินสดสำรอง 10-15% ทยอยแบ่งไม้ซื้อ VOO และ GOOGL ในระดับราคาที่มี Margin of Safety สูง',

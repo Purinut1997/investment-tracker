@@ -87,16 +87,16 @@ export default function NewsPage() {
             <div className="flex items-center gap-2">
               <Link
                 href="/economic-calendar"
-                className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-98"
+                className="bg-[#181C25] hover:bg-[#202532] text-slate-200 hover:text-white border border-white/[0.08] px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98"
               >
-                <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                <Calendar className="w-4 h-4 text-indigo-400" />
                 <span>ปฏิทินเศรษฐกิจ</span>
               </Link>
               <button
                 onClick={() => revalidate()}
-                className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+                className="bg-[#181C25] hover:bg-[#202532] text-slate-200 hover:text-white border border-white/[0.08] px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
+                <RefreshCw className="w-4 h-4 text-indigo-400" />
                 <span>รีเฟรชข้อมูล</span>
               </button>
             </div>
@@ -112,22 +112,22 @@ export default function NewsPage() {
         {/* Underlying News Feed Section (Collapsible & Filterable) */}
         <div className="space-y-4 pt-2">
           {/* Section Divider & Toggle Header */}
-          <div className="p-4 rounded-2xl bg-[#12151C] border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg shadow-black/20">
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-3.5 shadow-lg shadow-black/20">
             <div className="flex items-center justify-between w-full md:w-auto gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                  <Newspaper className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                  <Newspaper className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white tracking-wide">
+                  <div className="flex items-center gap-2.5">
+                    <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">
                       คลังข่าวต้นฉบับ & บทวิเคราะห์รายตัว
                     </h3>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-400 border border-white/[0.08]">
+                    <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-white/[0.06] text-slate-300 border border-white/[0.08]">
                       {filteredItems.length} ข่าว
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-xs sm:text-sm text-slate-300 mt-1">
                     สำหรับเจาะลึกข่าวต้นทางภาษาอังกฤษ พร้อมบทวิเคราะห์ AI 3 บรรทัดและแบบจำลองสถานการณ์
                   </p>
                 </div>
@@ -135,31 +135,31 @@ export default function NewsPage() {
 
               <button
                 onClick={() => setShowRawNews(!showRawNews)}
-                className="p-1.5 rounded-xl bg-[#181C25] text-slate-400 hover:text-white border border-white/[0.08] transition-colors md:hidden"
+                className="p-2 rounded-xl bg-[#181C25] text-slate-300 hover:text-white border border-white/[0.08] transition-colors md:hidden"
               >
                 {showRawNews ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
             </div>
 
-            <div className="flex items-center gap-2.5 self-end md:self-auto">
+            <div className="flex items-center gap-2.5 self-end md:self-auto w-full md:w-auto justify-end">
               {/* Search Box */}
-              <div className="relative min-w-[200px] sm:min-w-[240px]">
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <div className="relative flex-1 md:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="ค้นหาตามชื่อหุ้นหรือหัวข้อ..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-[#181C25] border border-white/[0.08] rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full bg-[#181C25] border border-white/[0.08] rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm text-white placeholder-slate-400 outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
 
               <button
                 onClick={() => setShowRawNews(!showRawNews)}
-                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] text-xs font-medium transition-colors cursor-pointer"
+                className="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
               >
                 <span>{showRawNews ? 'ซ่อนฟีดข่าว' : 'แสดงฟีดข่าว'}</span>
-                {showRawNews ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5 text-indigo-400" />}
+                {showRawNews ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4 text-indigo-400" />}
               </button>
             </div>
           </div>
@@ -181,7 +181,7 @@ export default function NewsPage() {
               )}
 
               {/* Categories Tabs */}
-              <div className="flex flex-wrap bg-[#12151C] p-1.5 rounded-2xl border border-white/[0.08] gap-1 shadow-lg shadow-black/20">
+              <div className="flex flex-wrap bg-[#12151C] p-1.5 rounded-2xl border border-white/[0.08] gap-1.5 shadow-lg shadow-black/20">
                 {CATEGORY_TABS.map((tab) => {
                   const isActive = category === tab.id
                   return (
@@ -191,10 +191,10 @@ export default function NewsPage() {
                         setCategory(tab.id)
                         setSelectedTicker('')
                       }}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center gap-2 ${
                         isActive
                           ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]'
+                          : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
                       }`}
                     >
                       <span>{tab.icon}</span>

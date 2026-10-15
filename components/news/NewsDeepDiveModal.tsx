@@ -99,79 +99,79 @@ export function NewsDeepDiveModal({ item, onClose }: NewsDeepDiveModalProps) {
             <p className="text-xs text-rose-300">{error}</p>
           </div>
         ) : data ? (
-          <div className="space-y-5 text-xs text-slate-300">
+          <div className="space-y-5 text-sm text-slate-200">
             {/* Why it matters */}
-            <div className="p-4 rounded-xl bg-[#181C25] border border-white/[0.06] space-y-1.5">
-              <div className="flex items-center gap-2 text-indigo-400 font-bold">
+            <div className="p-4 sm:p-5 rounded-xl bg-[#181C25] border border-white/[0.08] space-y-2">
+              <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm sm:text-base">
                 <Sparkles className="w-4 h-4" />
                 <span>ทำไมข่าวนี้ถึงสำคัญกับพอร์ตของคุณ?</span>
               </div>
-              <p className="leading-relaxed text-slate-200">{data.whyItMatters}</p>
+              <p className="leading-relaxed text-slate-100 font-normal">{data.whyItMatters}</p>
             </div>
 
             {/* Fundamental Impact */}
-            <div className="p-4 rounded-xl bg-[#181C25] border border-white/[0.06] space-y-1.5">
-              <span className="text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+            <div className="p-4 sm:p-5 rounded-xl bg-[#181C25] border border-white/[0.08] space-y-2">
+              <span className="text-slate-300 font-bold uppercase tracking-wider text-xs sm:text-sm">
                 ผลกระทบต่อพื้นฐานกิจการและมูลค่า (Fundamentals & Valuation)
               </span>
-              <p className="leading-relaxed text-slate-200">{data.fundamentalImpact}</p>
+              <p className="leading-relaxed text-slate-100 font-normal">{data.fundamentalImpact}</p>
             </div>
 
             {/* Scenarios: Bull / Base / Bear */}
-            <div className="space-y-2.5">
-              <span className="text-slate-400 font-bold uppercase tracking-wider text-[11px]">
+            <div className="space-y-3">
+              <span className="text-slate-300 font-bold uppercase tracking-wider text-xs sm:text-sm">
                 การประเมินสถานการณ์ 3 รูปแบบ (Scenario Analysis)
               </span>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 {/* Bull */}
-                <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-1">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs">
-                    <TrendingUp className="w-3.5 h-3.5" />
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs sm:text-sm">
+                    <TrendingUp className="w-4 h-4" />
                     <span>Bull Case (ปัจจัยบวก)</span>
                   </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">{data.scenarios.bull}</p>
+                  <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">{data.scenarios.bull}</p>
                 </div>
 
                 {/* Base */}
-                <div className="p-3.5 rounded-xl bg-slate-800/40 border border-slate-700/60 space-y-1">
-                  <div className="flex items-center gap-1.5 text-slate-300 font-bold text-xs">
-                    <Minus className="w-3.5 h-3.5" />
+                <div className="p-4 rounded-xl bg-slate-800/60 border border-slate-700/80 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-slate-200 font-bold text-xs sm:text-sm">
+                    <Minus className="w-4 h-4" />
                     <span>Base Case (คาดการณ์หลัก)</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">{data.scenarios.base}</p>
+                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-normal">{data.scenarios.base}</p>
                 </div>
 
                 {/* Bear */}
-                <div className="p-3.5 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-1">
-                  <div className="flex items-center gap-1.5 text-rose-400 font-bold text-xs">
-                    <TrendingDown className="w-3.5 h-3.5" />
+                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/25 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-rose-400 font-bold text-xs sm:text-sm">
+                    <TrendingDown className="w-4 h-4" />
                     <span>Bear Case (ความเสี่ยง)</span>
                   </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">{data.scenarios.bear}</p>
+                  <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">{data.scenarios.bear}</p>
                 </div>
               </div>
             </div>
 
             {/* Action Plan */}
-            <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30 space-y-1.5">
-              <div className="flex items-center gap-2 text-indigo-300 font-bold">
+            <div className="p-4 sm:p-5 rounded-xl bg-indigo-500/15 border border-indigo-500/35 space-y-2">
+              <div className="flex items-center gap-2 text-indigo-300 font-bold text-sm sm:text-base">
                 <Target className="w-4 h-4" />
                 <span>คำแนะนำเชิงกลยุทธ์สำหรับนักลงทุน (Action Plan)</span>
               </div>
-              <p className="leading-relaxed text-indigo-100 font-medium">{data.actionPlan}</p>
+              <p className="leading-relaxed text-indigo-100 font-medium text-sm sm:text-base">{data.actionPlan}</p>
             </div>
           </div>
         ) : null}
 
         {/* Footer */}
         <div className="pt-4 border-t border-white/[0.08] flex items-center justify-between">
-          <span className="text-[11px] text-slate-500 font-mono">
+          <span className="text-xs text-slate-400 font-mono">
             {data?.modelUsed ? `ประมวลผลด้วย ${data.modelUsed}` : 'Investment Intelligence Engine'}
           </span>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs sm:text-sm font-semibold text-white transition-colors cursor-pointer"
           >
             ปิดหน้าต่าง
           </button>

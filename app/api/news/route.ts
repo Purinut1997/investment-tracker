@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { fetchMarketNews, fetchCompanyNews } from '@/lib/news/fetch-news'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
+import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
 import {
   detectSentiment,
   classifyNewsCategory,
@@ -135,14 +136,38 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // 5. Generate or get Daily Brief
-    const userHoldingContexts = activeHoldings.map((h) => ({
-      ticker: h.ticker.toUpperCase(),
-      assetName: h.assetName,
-      assetType: h.assetType,
-      allocationPercent: Math.round(h.allocationPercent * 10) / 10,
-      unrealizedPnLPercent: Math.round(h.unrealizedPnLPercent * 10) / 10,
-    }))
+    // 5. Generate or get Daily Brief with grounded technical signals
+    const userHoldingContexts = await Promise.all(
+      activeHoldings.map(async (h) => {
+        const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
+        let sig = null
+        try {
+          sig = await fetchSingleTickerTechnicalSignal(h.ticker, marketHint)
+        } catch {
+          // ignore error and proceed
+        }
+        const price = sig?.currentPrice && sig.currentPrice > 0 ? sig.currentPrice : h.currentPrice
+
+        return {
+          ticker: h.ticker.toUpperCase(),
+          assetName: h.assetName,
+          assetType: h.assetType,
+          allocationPercent: Math.round(h.allocationPercent * 10) / 10,
+          unrealizedPnLPercent: Math.round(h.unrealizedPnLPercent * 10) / 10,
+          currentPrice: price,
+          currency: h.currency,
+          supportS1: sig?.supportS1 ?? (price > 0 ? Number((price * 0.975).toFixed(2)) : null),
+          supportS2: sig?.supportS2 ?? (price > 0 ? Number((price * 0.95).toFixed(2)) : null),
+          resistanceR1: sig?.resistanceR1 ?? (price > 0 ? Number((price * 1.03).toFixed(2)) : null),
+          sma50: sig?.sma50 ?? null,
+          sma200: sig?.sma200 ?? null,
+          rsi14: sig?.rsi14 ?? null,
+          isNearSupport: sig?.isNearSupport ?? false,
+          isOversold: sig?.isOversold ?? false,
+          technicalSummary: sig?.metricSummary ?? '',
+        }
+      })
+    )
 
     const hasGeminiKey = Boolean(userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY)
     const dailyBrief = await generateDailyBrief(userId, userHoldingContexts, rawItems, hasGeminiKey, false)
