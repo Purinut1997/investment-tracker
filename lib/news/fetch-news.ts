@@ -18,17 +18,14 @@ interface RawNewsItem {
   url: string
 }
 
-async function fetchYahooRssNews(tickers: string[] = []): Promise<RawNewsItem[]> {
+async function fetchGenericRss(url: string, defaultSource: string): Promise<RawNewsItem[]> {
   try {
-    const symbolQuery = tickers.length > 0 ? tickers.join(',') : '^GSPC,^IXIC,^DJI,SPY,QQQ'
-    const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(symbolQuery)}&region=US&lang=en-US`
-
     const res = await fetch(url, {
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       },
-      next: { revalidate: 1800 },
+      next: { revalidate: 900 },
     })
 
     if (!res.ok) return []
@@ -43,27 +40,43 @@ async function fetchYahooRssNews(tickers: string[] = []): Promise<RawNewsItem[]>
       const headline =
         block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ||
         block.match(/<title>(.*?)<\/title>/)?.[1]
-      const url = block.match(/<link>(.*?)<\/link>/)?.[1]
+      const link =
+        block.match(/<link><!\[CDATA\[(.*?)\]\]><\/link>/)?.[1] ||
+        block.match(/<link>(.*?)<\/link>/)?.[1] ||
+        block.match(/<guid[^>]*>(.*?)<\/guid>/)?.[1]
       const pubDateStr = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1]
       const summary =
         block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ||
         block.match(/<description>(.*?)<\/description>/)?.[1]
       const source =
-        block.match(/<source[^>]*>(.*?)<\/source>/)?.[1] || 'Yahoo Finance'
+        block.match(/<source[^>]*>(.*?)<\/source>/)?.[1] ||
+        block.match(/<dc:creator>(.*?)<\/dc:creator>/)?.[1] ||
+        defaultSource
 
-      if (headline && url) {
+      if (headline && link) {
         const datetime = pubDateStr ? Math.floor(new Date(pubDateStr).getTime() / 1000) : Math.floor(Date.now() / 1000)
         items.push({
-          headline: headline.trim(),
-          url: url.trim(),
+          headline: headline.replace(/&#x2019;/g, "'").replace(/&apos;/g, "'").replace(/&amp;/g, '&').trim(),
+          url: link.trim(),
           datetime,
-          summary: summary ? summary.trim() : undefined,
+          summary: summary ? summary.replace(/<[^>]+>/g, '').replace(/&#x2019;/g, "'").replace(/&apos;/g, "'").replace(/&amp;/g, '&').trim() : undefined,
           source: source.trim(),
         })
       }
     }
 
     return items
+  } catch (err) {
+    console.warn(`[News] Generic RSS fetch error from ${defaultSource}:`, err)
+    return []
+  }
+}
+
+async function fetchYahooRssNews(tickers: string[] = []): Promise<RawNewsItem[]> {
+  try {
+    const symbolQuery = tickers.length > 0 ? tickers.join(',') : '^GSPC,^IXIC,^DJI,SPY,QQQ'
+    const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(symbolQuery)}&region=US&lang=en-US`
+    return await fetchGenericRss(url, 'Yahoo Finance')
   } catch (err) {
     console.warn('[News] Yahoo RSS fetch error:', err)
     return []
@@ -83,13 +96,21 @@ export async function fetchMarketNews(): Promise<number> {
         if (Array.isArray(json)) items = json
       }
     } catch {
-      // fallback to Yahoo RSS
+      // fallback to RSS
     }
   }
 
-  // Fallback to Yahoo RSS if Finnhub is unavailable or key is missing
-  if (items.length === 0) {
-    items = await fetchYahooRssNews(['^GSPC', '^IXIC', '^DJI', 'SPY', 'VOO', 'QQQ'])
+  // Fetch macro & market news from CNBC Economy and MarketWatch
+  const [cnbcEconomy, marketWatch] = await Promise.all([
+    fetchGenericRss('https://www.cnbc.com/id/20910258/device/rss/rss.html', 'CNBC Economy'),
+    fetchGenericRss('https://feeds.content.dowjones.io/public/rss/mw_topstories', 'MarketWatch'),
+  ])
+
+  items.push(...cnbcEconomy, ...marketWatch)
+
+  if (items.length < 10) {
+    const yahooItems = await fetchYahooRssNews(['^GSPC', '^IXIC', '^DJI', 'SPY', 'VOO', 'QQQ'])
+    items.push(...yahooItems)
   }
 
   let addedCount = 0

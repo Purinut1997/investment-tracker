@@ -24,6 +24,11 @@ import {
   Activity,
   Calendar,
   Flame,
+  Siren,
+  CalendarClock,
+  ShieldCheck,
+  Wallet,
+  ArrowDownRight,
 } from 'lucide-react'
 import type {
   PortfolioDailyBrief,
@@ -31,6 +36,10 @@ import type {
   PortfolioAssetImpact,
   ActionPlanItem,
   InterestingStockOpportunity,
+  MacroShockAlert,
+  UpcomingCatalystEvent,
+  PortfolioDefensivePlaybook,
+  HoldingDefensiveAction,
 } from '@/lib/news/news-analyzer'
 
 interface AiPortfolioBriefCardProps {
@@ -38,7 +47,16 @@ interface AiPortfolioBriefCardProps {
   onRefreshBrief?: () => Promise<void>
 }
 
-type BriefTab = 'all' | 'highlights' | 'consensus' | 'holdings' | 'strategy' | 'actions' | 'watchlist'
+type BriefTab =
+  | 'all'
+  | 'catalysts'
+  | 'playbook'
+  | 'highlights'
+  | 'consensus'
+  | 'holdings'
+  | 'strategy'
+  | 'actions'
+  | 'watchlist'
 type ViewMode = 'executive' | 'speed'
 
 export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBriefCardProps) {
@@ -94,6 +112,26 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
       `📊 Investment Pro: สรุปภาพรวม & กลยุทธ์พอร์ตประจำวัน (${formattedDate})`,
       `บรรยากาศตลาด: ${brief.marketConsensus?.moodLabel || sentimentLabel} (${sentimentPercent}%)`,
       `\n💡 สรุปใจความสำคัญ:\n${brief.summaryOneLiner || brief.strategicTakeaway}`,
+      ...(brief.macroShockAlert
+        ? [
+            `\n🚨 สรุปแรงกระแทกมหภาค: ${brief.macroShockAlert.title}`,
+            `${brief.macroShockAlert.explanation}`,
+          ]
+        : []),
+      ...(brief.upcomingCatalysts && brief.upcomingCatalysts.length > 0
+        ? [
+            `\n📅 เรดาร์ตัวเลขสำคัญเร็วๆ นี้:`,
+            ...brief.upcomingCatalysts.map(
+              (c) => `- [${c.expectedTiming}] ${c.eventNameTh}: ตลาดคาด ${c.forecastText}`
+            ),
+          ]
+        : []),
+      ...(brief.defensivePlaybook
+        ? [
+            `\n🛡️ ท่าทีกลยุทธ์พอร์ต: ${brief.defensivePlaybook.overallStance}`,
+            `สภาพคล่อง: ${brief.defensivePlaybook.cashBufferAdvice}`,
+          ]
+        : []),
       `\n⚡ วันนี้เกิดอะไรขึ้น:`,
       ...(brief.todayHighlights || []).map((h) => `- [${h.tag}] ${h.title}: ${h.detail}`),
       `\n🎯 ผลกระทบต่อพอร์ตของฉัน:`,
@@ -243,15 +281,119 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
         </div>
       </div>
 
+      {/* 🚨 MACRO SHOCK ALERT BANNER (Fed & CPI Inflation Analysis) */}
+      {brief.macroShockAlert && (
+        <div className="p-5 sm:p-6 bg-gradient-to-r from-rose-950/40 via-[#1f131a]/60 to-[#12151C] border-b border-rose-500/25 relative z-10">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1.5">
+                  <Siren className="w-3.5 h-3.5 text-rose-400" />
+                  <span>แรงกระแทกสำคัญระดับมหภาค (Macro Shock Analysis)</span>
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-950/60 text-rose-400 border border-rose-800/40">
+                  ระดับความเสี่ยง: {brief.macroShockAlert.severity === 'critical' ? 'วิกฤต' : 'สูง (High)'}
+                </span>
+              </div>
+              <span className="text-xs text-rose-300/80 font-mono">
+                ทิศทางดอกเบี้ย Fed & ผลกระทบต่อพอร์ต
+              </span>
+            </div>
+
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-white leading-snug">
+                {brief.macroShockAlert.title}
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mt-1.5">
+                {brief.macroShockAlert.explanation}
+              </p>
+            </div>
+
+            {/* Drivers list */}
+            {brief.macroShockAlert.marketDrivers && brief.macroShockAlert.marketDrivers.length > 0 && (
+              <div className="pt-2 border-t border-rose-500/15">
+                <div className="text-[11px] font-semibold text-rose-300 mb-1.5 flex items-center gap-1.5">
+                  <ArrowDownRight className="w-3.5 h-3.5 text-rose-400" />
+                  <span>ปัจจัยขับเคลื่อนที่กดดันตลาดและราคาหุ้น:</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {brief.macroShockAlert.marketDrivers.map((driver, idx) => (
+                    <div
+                      key={idx}
+                      className="text-xs text-slate-300 bg-rose-950/25 border border-rose-500/15 p-2.5 rounded-xl flex items-start gap-2"
+                    >
+                      <span className="text-rose-400 font-bold shrink-0 mt-0.5">•</span>
+                      <span>{driver}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* SPEED SCAN MODE (TL;DR 60-Second View) */}
       {viewMode === 'speed' ? (
         <div className="p-5 sm:p-6 space-y-6 relative z-10 animate-fade-in">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 1. What Happened Flash */}
+            {/* 1. Upcoming Catalyst Flash */}
+            {brief.upcomingCatalysts && brief.upcomingCatalysts.length > 0 && (
+              <div className="p-4 rounded-2xl bg-[#181C25]/80 border border-rose-500/25 space-y-3">
+                <div className="flex items-center gap-2 text-rose-400 text-xs font-bold uppercase tracking-wider">
+                  <CalendarClock className="w-4 h-4 text-rose-400" />
+                  <span>เรดาร์ประกาศตัวเลขสำคัญเร็วๆ นี้ (Next Catalysts)</span>
+                </div>
+                <div className="space-y-2 text-xs">
+                  {brief.upcomingCatalysts.slice(0, 3).map((cat) => (
+                    <div key={cat.id} className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] space-y-1">
+                      <div className="flex items-center justify-between gap-1 flex-wrap">
+                        <span className="font-bold text-white">{cat.eventNameTh}</span>
+                        <span className="text-[10px] text-indigo-300 font-mono bg-indigo-500/20 px-1.5 py-0.5 rounded">
+                          {cat.expectedTiming}
+                        </span>
+                      </div>
+                      <p className="text-slate-300 text-[11px]">{cat.portfolioPreparation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 2. Defensive Playbook Flash */}
+            {brief.defensivePlaybook && (
+              <div className="p-4 rounded-2xl bg-[#181C25]/80 border border-emerald-500/25 space-y-3">
+                <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>แผนตั้งรับ & สภาพคล่องพอร์ต (Defensive Playbook)</span>
+                </div>
+                <div className="space-y-2 text-xs text-slate-300">
+                  <p>
+                    <strong className="text-emerald-300">ท่าทีหลัก:</strong> {brief.defensivePlaybook.overallStance}
+                  </p>
+                  <p>
+                    <strong className="text-indigo-300">เงินสดสำรอง:</strong> {brief.defensivePlaybook.cashBufferAdvice}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {(brief.defensivePlaybook.holdingPlaybook || []).map((hp) => (
+                      <span
+                        key={hp.symbol}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/[0.05] border border-white/[0.08] text-slate-200"
+                      >
+                        {hp.symbol}: <strong className="text-indigo-300">{hp.stanceLabel}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. What Happened Flash */}
             <div className="p-4 rounded-2xl bg-[#181C25]/80 border border-white/[0.07] space-y-3">
               <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
                 <Flame className="w-4 h-4 text-amber-400" />
-                <span>1. วันนี้เกิดอะไรขึ้น (Market Flash)</span>
+                <span>วันนี้เกิดอะไรขึ้น (Market Flash)</span>
               </div>
               <ul className="space-y-2 text-xs text-slate-300">
                 {(brief.todayHighlights || []).slice(0, 3).map((item) => (
@@ -266,51 +408,11 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
               </ul>
             </div>
 
-            {/* 2. Market Consensus Flash */}
-            <div className="p-4 rounded-2xl bg-[#181C25]/80 border border-white/[0.07] space-y-3">
-              <div className="flex items-center gap-2 text-blue-400 text-xs font-bold uppercase tracking-wider">
-                <Compass className="w-4 h-4 text-blue-400" />
-                <span>2. คนคาดการณ์ตลาดว่ายังไง (Consensus)</span>
-              </div>
-              <div className="space-y-2 text-xs text-slate-300">
-                <p>
-                  <strong className="text-white">มุมมองหลัก:</strong> {brief.marketConsensus?.summary}
-                </p>
-                <p>
-                  <strong className="text-white">ดอกเบี้ย FED:</strong> {brief.marketConsensus?.fedExpectation}
-                </p>
-                <p className="text-amber-300">
-                  <strong className="text-amber-400">จุดระวัง:</strong> {brief.marketConsensus?.keyRisksToWatch}
-                </p>
-              </div>
-            </div>
-
-            {/* 3. My Portfolio Impact Flash */}
-            <div className="p-4 rounded-2xl bg-[#181C25]/80 border border-white/[0.07] space-y-3">
-              <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
-                <Target className="w-4 h-4 text-emerald-400" />
-                <span>3. ส่งผลต่อพอร์ตของฉันอย่างไร (Holdings Impact)</span>
-              </div>
-              <div className="space-y-2 text-xs">
-                {(brief.holdingsImpact || []).slice(0, 4).map((hi) => (
-                  <div key={hi.symbol} className="flex items-start justify-between gap-2 border-b border-white/[0.04] pb-1.5 last:border-none">
-                    <div className="space-y-0.5">
-                      <span className="font-mono font-bold text-white mr-2">{hi.symbol}</span>
-                      <span className="text-slate-300">{hi.headline}</span>
-                    </div>
-                    <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded bg-white/[0.05] text-slate-300 border border-white/[0.08]">
-                      {hi.actionSuggestion}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* 4. Action Plan Flash */}
             <div className="p-4 rounded-2xl bg-[#181C25]/80 border border-white/[0.07] space-y-3">
               <div className="flex items-center gap-2 text-purple-400 text-xs font-bold uppercase tracking-wider">
                 <CheckCircle2 className="w-4 h-4 text-purple-400" />
-                <span>4. พอร์ตของฉันควรทำยังไง (Action Checklist)</span>
+                <span>พอร์ตของฉันควรทำยังไง (Action Checklist)</span>
               </div>
               <ul className="space-y-2 text-xs text-slate-300">
                 {(brief.actionPlan || []).map((action) => (
@@ -328,7 +430,7 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
           </div>
         </div>
       ) : (
-        /* EXECUTIVE DETAILED BRIEF (All 6 Pillars with Section Navigation) */
+        /* EXECUTIVE DETAILED BRIEF (All Pillars with Section Navigation) */
         <div className="p-5 sm:p-6 space-y-8 relative z-10">
           {/* Quick Pillar Filter Buttons */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin text-xs">
@@ -341,6 +443,26 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
               }`}
             >
               แสดงทั้งหมด
+            </button>
+            <button
+              onClick={() => setActiveTab('catalysts')}
+              className={`px-3 py-1.5 rounded-xl font-medium shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'catalysts'
+                  ? 'bg-rose-600 text-white font-bold shadow-md'
+                  : 'bg-[#181C25] text-slate-400 hover:text-slate-200 border border-white/[0.06]'
+              }`}
+            >
+              <span>📅 เรดาร์ประกาศตัวเลขสำคัญ</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('playbook')}
+              className={`px-3 py-1.5 rounded-xl font-medium shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'playbook'
+                  ? 'bg-emerald-600 text-white font-bold shadow-md'
+                  : 'bg-[#181C25] text-slate-400 hover:text-slate-200 border border-white/[0.06]'
+              }`}
+            >
+              <span>🛡️ แผนรับมือ & พอร์ตของคุณ</span>
             </button>
             <button
               onClick={() => setActiveTab('highlights')}
@@ -403,6 +525,220 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
               <span>🌟 หุ้นน่าจับตา</span>
             </button>
           </div>
+
+          {/* PILLAR: เรดาร์เหตุการณ์ & ประกาศตัวเลขสำคัญเร็วๆ นี้ */}
+          {(activeTab === 'all' || activeTab === 'catalysts') && brief.upcomingCatalysts && brief.upcomingCatalysts.length > 0 && (
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                    <CalendarClock className="w-3.5 h-3.5" />
+                  </div>
+                  <h3 className="text-sm font-bold text-white tracking-wide">
+                    เรดาร์เหตุการณ์ & ประกาศตัวเลขสำคัญเร็วๆ นี้ (Upcoming Macro Catalyst Radar)
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  วัน-เวลาตามเวลาไทย & ผลกระทบต่อตลาด
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {brief.upcomingCatalysts.map((event) => {
+                  const isCrit = event.importance === 'critical'
+                  const impBadge = isCrit
+                    ? 'text-rose-400 bg-rose-500/15 border-rose-500/30'
+                    : 'text-amber-400 bg-amber-500/15 border-amber-500/30'
+
+                  return (
+                    <div
+                      key={event.id}
+                      className="p-4 rounded-2xl bg-[#181C25]/85 border border-white/[0.08] hover:border-white/[0.18] transition-all flex flex-col justify-between space-y-3.5"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${impBadge}`}>
+                            {isCrit ? '🔴 สำคัญมาก (Critical)' : '🟠 สำคัญสูง (High)'}
+                          </span>
+                          <span className="text-[11px] font-mono font-medium text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/30 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-indigo-400" />
+                            <span>{event.expectedTiming}</span>
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="font-bold text-white text-xs sm:text-sm leading-snug">
+                            {event.eventNameTh}
+                          </h4>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {event.eventNameEn}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] text-xs">
+                          <span className="text-slate-400 font-medium">สิ่งที่ตลาดคาดการณ์: </span>
+                          <span className="text-white font-semibold">{event.forecastText}</span>
+                        </div>
+
+                        {/* Scenarios Comparison */}
+                        <div className="space-y-1.5 text-xs">
+                          <div className="p-2.5 rounded-xl bg-rose-950/20 border border-rose-500/20">
+                            <div className="text-[11px] font-bold text-rose-400 mb-1 flex items-center gap-1">
+                              <span>🔻 หากตัวเลขสูงกว่าคาด / ตึงตัว (Hot Scenario):</span>
+                            </div>
+                            <p className="text-slate-300 text-[11px] leading-relaxed">
+                              {event.marketImpactScenario.hot}
+                            </p>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/20">
+                            <div className="text-[11px] font-bold text-emerald-400 mb-1 flex items-center gap-1">
+                              <span>🟢 หากตัวเลขชะลอตัวลง / ผ่อนคลาย (Cool Scenario):</span>
+                            </div>
+                            <p className="text-slate-300 text-[11px] leading-relaxed">
+                              {event.marketImpactScenario.cool}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-white/[0.06] text-xs space-y-1">
+                        <span className="text-slate-400 text-[11px] font-medium flex items-center gap-1 text-indigo-300">
+                          <Target className="w-3 h-3" />
+                          <span>การเตรียมตัวของพอร์ตคุณ:</span>
+                        </span>
+                        <p className="text-slate-200 text-xs font-semibold leading-relaxed">
+                          {event.portfolioPreparation}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* PILLAR: แผนรับมือความผันผวน & กลยุทธ์พอร์ตของคุณ */}
+          {(activeTab === 'all' || activeTab === 'playbook') && brief.defensivePlaybook && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <h3 className="text-sm font-bold text-white tracking-wide">
+                    แผนรับมือความผันผวน & กลยุทธ์พอร์ตของคุณ (Portfolio Defensive Playbook)
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  ตั้งรับอย่างมีกลยุทธ์ ไม่ Panic Sell
+                </span>
+              </div>
+
+              {/* Overall Stance & Cash Buffer Banner */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div className="p-4 rounded-2xl bg-[#181C25]/90 border border-emerald-500/25 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>ท่าทีกลยุทธ์ภาพรวม (Overall Stance)</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-100 font-semibold leading-relaxed">
+                    {brief.defensivePlaybook.overallStance}
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-[#181C25]/90 border border-indigo-500/25 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                    <Wallet className="w-4 h-4" />
+                    <span>การบริหารเงินสดสำรอง (Cash Buffer Advice)</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-100 font-semibold leading-relaxed">
+                    {brief.defensivePlaybook.cashBufferAdvice}
+                  </p>
+                </div>
+              </div>
+
+              {/* Holding by Holding Action Playbook */}
+              {brief.defensivePlaybook.holdingPlaybook && brief.defensivePlaybook.holdingPlaybook.length > 0 && (
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>คำแนะนำเจาะลึกเฉพาะหุ้นในพอร์ตของคุณ (Holding Action Playbook)</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {brief.defensivePlaybook.holdingPlaybook.map((hp) => {
+                      const stanceColors =
+                        hp.stance === 'BUY_DIP'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : hp.stance === 'COLLECT_DIVIDEND'
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                          : hp.stance === 'WAIT'
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                          : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+
+                      return (
+                        <div
+                          key={hp.symbol}
+                          className="p-4 rounded-2xl bg-[#181C25]/85 border border-white/[0.08] hover:border-white/[0.18] transition-all flex flex-col justify-between space-y-3"
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-black font-mono text-white px-2.5 py-0.5 rounded-lg bg-white/[0.06] border border-white/[0.1]">
+                                {hp.symbol}
+                              </span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${stanceColors}`}>
+                                {hp.stanceLabel}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                              {hp.rationale}
+                            </p>
+                          </div>
+
+                          <div className="pt-2 border-t border-white/[0.06] text-xs">
+                            <span className="text-slate-400 text-[11px]">จุดสังเกต / ระดับราคา: </span>
+                            <span className="text-amber-300 font-semibold text-xs">
+                              {hp.supportOrActionLevel}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Contingency Scenarios A & B */}
+              {(brief.defensivePlaybook.scenarioAPlan || brief.defensivePlaybook.scenarioBPlan) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+                  {brief.defensivePlaybook.scenarioAPlan && (
+                    <div className="p-4 rounded-2xl bg-rose-950/20 border border-rose-500/25 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-rose-400 uppercase tracking-wider">
+                        <TrendingDown className="w-4 h-4" />
+                        <span>แผนกรณี A (Worst Case): {brief.defensivePlaybook.scenarioAPlan.condition}</span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
+                        {brief.defensivePlaybook.scenarioAPlan.action}
+                      </p>
+                    </div>
+                  )}
+
+                  {brief.defensivePlaybook.scenarioBPlan && (
+                    <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/25 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                        <TrendingUp className="w-4 h-4" />
+                        <span>แผนกรณี B (Rebound Case): {brief.defensivePlaybook.scenarioBPlan.condition}</span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-semibold">
+                        {brief.defensivePlaybook.scenarioBPlan.action}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* PILLAR 1: วันนี้เกิดอะไรขึ้น / ช่วงนี้เกิดอะไรขึ้น */}
           {(activeTab === 'all' || activeTab === 'highlights') && (

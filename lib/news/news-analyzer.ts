@@ -100,6 +100,51 @@ export interface UserHoldingContext {
   unrealizedPnLPercent?: number
 }
 
+export interface MacroShockAlert {
+  title: string
+  severity: 'critical' | 'high' | 'medium'
+  explanation: string
+  marketDrivers: string[]
+  fedInterestRateImpact: string
+}
+
+export interface UpcomingCatalystEvent {
+  id: string
+  eventNameTh: string
+  eventNameEn: string
+  expectedTiming: string // e.g. "พฤหัสบดีนี้ 19:30 น. (ตามเวลาไทย)"
+  importance: 'critical' | 'high' | 'medium'
+  category: 'inflation' | 'fed_interest_rate' | 'employment' | 'earnings' | 'policy'
+  forecastText: string
+  marketImpactScenario: {
+    hot: string // if higher than forecast / hawkish
+    cool: string // if lower than forecast / dovish / relief
+  }
+  portfolioPreparation: string // what holding should do
+}
+
+export interface HoldingDefensiveAction {
+  symbol: string
+  stance: 'BUY_DIP' | 'HOLD' | 'COLLECT_DIVIDEND' | 'WAIT' | 'TRIM'
+  stanceLabel: string
+  rationale: string
+  supportOrActionLevel: string
+}
+
+export interface PortfolioDefensivePlaybook {
+  overallStance: string
+  cashBufferAdvice: string
+  holdingPlaybook: HoldingDefensiveAction[]
+  scenarioAPlan: {
+    condition: string
+    action: string
+  }
+  scenarioBPlan: {
+    condition: string
+    action: string
+  }
+}
+
 export interface PortfolioDailyBrief {
   overallSentiment: 'bullish' | 'bearish' | 'neutral'
   sentimentScore: number // 0 - 100 (% bullish)
@@ -108,6 +153,15 @@ export interface PortfolioDailyBrief {
   neutralCount: number
   summaryOneLiner: string
   readingTimeMinutes?: number
+
+  // 🚨 แรงกระแทกสำคัญระดับมหภาค (Fed, CPI, Inflation Shock)
+  macroShockAlert?: MacroShockAlert
+
+  // 📅 เรดาร์เหตุการณ์ & ประกาศตัวเลขสำคัญเร็วๆ นี้ (Macro Catalyst Radar)
+  upcomingCatalysts?: UpcomingCatalystEvent[]
+
+  // 🛡️ แผนรับมือความผันผวน & กลยุทธ์พอร์ตของคุณ (Defensive Playbook)
+  defensivePlaybook?: PortfolioDefensivePlaybook
 
   // 1. วันนี้เกิดอะไรขึ้น / ช่วงนี้เกิดอะไรขึ้น
   todayHighlights: TodayMarketHighlight[]
@@ -412,19 +466,67 @@ ${newsDigest}
 
 กรุณาวิเคราะห์และตอบกลับในรูปแบบ JSON ภาษาไทยที่มีโครงสร้างดังนี้เท่านั้น (ห้ามใส่ Markdown หรือข้อความนอก JSON):
 {
-  "summaryOneLiner": "สรุปภาพรวมตลาดและผลต่อพอร์ตของผู้ใช้ใน 1 ประโยคเด่น ชัดเจนและทรงพลัง (ไม่เกิน 150 ตัวอักษร)",
+  "summaryOneLiner": "สรุปภาพรวมตลาดและผลต่อพอร์ตของผู้ใช้ใน 1 ประโยคเด่น ชัดเจนและตรงกับสภาวะจริง (เช่น ผลจากตัวเลขเงินเฟ้อ CPI/Fed)",
+  "macroShockAlert": {
+    "title": "สรุปแรงกระแทกมหภาคหลักล่าสุด เช่น ตัวเลขเงินเฟ้อ US CPI สูงกว่าคาด ส่งผล Fed ชะลอการลดดอกเบี้ย ตลาดปรับฐานระยะสั้น",
+    "severity": "critical | high | medium",
+    "explanation": "อธิบายสั้นๆ ชัดเจน 2-3 บรรทัด ว่าเกิดอะไรขึ้น ทำไมตลาดถึงแย่หรือย่อตัวลง (เช่น Bond Yield พุ่ง, ลดความหวังลดดอกเบี้ย)",
+    "marketDrivers": [
+      "ปัจจัยขับเคลื่อนที่ 1",
+      "ปัจจัยขับเคลื่อนที่ 2",
+      "ปัจจัยขับเคลื่อนที่ 3"
+    ],
+    "fedInterestRateImpact": "ผลกระทบต่อการคาดการณ์ดอกเบี้ยของ Fed"
+  },
+  "upcomingCatalysts": [
+    {
+      "id": "c1",
+      "eventNameTh": "ชื่อเหตุการณ์/การประกาศตัวเลขภาษาไทย (เช่น ประกาศดัชนีราคาผู้ผลิต US PPI, ถ้อยแถลง Powell, ประกาศงบ Big Tech)",
+      "eventNameEn": "English Event Name",
+      "expectedTiming": "วันและเวลาที่ตลาดรอ เช่น พฤหัสบดีนี้ 19:30 น. (ตามเวลาไทย)",
+      "importance": "critical | high | medium",
+      "category": "inflation | fed_interest_rate | employment | earnings | policy",
+      "forecastText": "สิ่งที่ตลาดคาดการณ์สั้นๆ",
+      "marketImpactScenario": {
+        "hot": "หากตัวเลขสูงกว่าคาด/ตึงตัว: ผลกระทบต่อตลาดและราคา",
+        "cool": "หากตัวเลขชะลอตัวลง: ผลกระทบต่อตลาดและการรีบาวด์"
+      },
+      "portfolioPreparation": "คำแนะนำว่าพอร์ตของผู้ใช้ควรเตรียมตัวอย่างไรก่อนตัวเลขนี้ประกาศ"
+    }
+  ],
+  "defensivePlaybook": {
+    "overallStance": "ท่าทีกลยุทธ์ภาพรวม เช่น ตั้งรับอย่างมีกลยุทธ์ (Defensive Accumulation): ไม่ Panic Sell แต่รักษาสภาพคล่อง",
+    "cashBufferAdvice": "คำแนะนำการจัดสรรเงินสด/สภาพคล่อง เช่น สำรองเงินสด 10-15% ไว้รอซื้อจังหวะ Oversold",
+    "holdingPlaybook": [
+      {
+        "symbol": "ตัวย่อหุ้นในพอร์ต เช่น GOOGL",
+        "stance": "BUY_DIP | HOLD | COLLECT_DIVIDEND | WAIT | TRIM",
+        "stanceLabel": "คำแนะนำการกระทำชัดเจน",
+        "rationale": "เหตุผลว่าทำไมถึงต้องทำแบบนี้ต่อผลกระทบจากดอกเบี้ย/เงินเฟ้อ",
+        "supportOrActionLevel": "แนวรับหรือจุดที่ต้องจับตา"
+      }
+    ],
+    "scenarioAPlan": {
+      "condition": "หากเงินเฟ้อ/ดอกเบี้ยยังกดดันต่อ และตลาดปรับฐานลงอีก",
+      "action": "แผนปฏิบัติการรับมือชัดเจน"
+    },
+    "scenarioBPlan": {
+      "condition": "หากตลาดเริ่มดูดซับข่าวจบ และเริ่มมีแรงซื้อคืน Technical Rebound",
+      "action": "แผนปฏิบัติการรับมือชัดเจน"
+    }
+  },
   "todayHighlights": [
     {
       "id": "h1",
       "title": "หัวข้อข่าวเด่นสั้นๆ",
-      "tag": "หมวด เช่น อุตสาหกรรม AI, ดอกเบี้ย FED, ผลประกอบการ",
+      "tag": "หมวด เช่น ดอกเบี้ย FED & เงินเฟ้อ, เทคโนโลยี & AI",
       "detail": "คำอธิบายกระชับ 1-2 บรรทัด ว่าเกิดอะไรขึ้นวันนี้/ช่วงนี้",
       "sentiment": "positive | negative | neutral"
     }
   ],
   "marketConsensus": {
-    "mood": "Selective",
-    "moodLabel": "เลือกลงทุนเฉพาะกลุ่ม (Selective Accumulation) หรือตามสภาวะจริง",
+    "mood": "Cautious | Risk-Off | Selective | Risk-On",
+    "moodLabel": "คำอธิบายอารมณ์ตลาดภาษาไทย",
     "summary": "สรุปมุมมองว่าคนในตลาดและนักวิเคราะห์ Wall Street กำลังคิดหรือคาดการณ์อะไรช่วงนี้ (1-2 บรรทัด)",
     "fedExpectation": "คาดการณ์นโยบายดอกเบี้ย FED และแนวโน้มเศรษฐกิจ (1-2 บรรทัด)",
     "keyRisksToWatch": "ความเสี่ยงหลักที่ตลาดกำลังจับตามอง (1 บรรทัด)"
@@ -469,7 +571,7 @@ ${newsDigest}
     {
       "symbol": "ชื่อย่อหุ้น",
       "name": "ชื่อบริษัทหรือ ETF",
-      "theme": "ธีมการลงทุน เช่น พลังงานนิวเคลียร์ AI, ชิปประมวลผล, ปันผลสูง",
+      "theme": "ธีมการลงทุน",
       "whyInteresting": "ทำไมถึงน่าสนใจในช่วงนี้",
       "catalyst": "ปัจจัยขับเคลื่อนหรือตัวเร่ง",
       "riskNote": "ความเสี่ยงที่ต้องระวัง"
@@ -497,6 +599,11 @@ ${newsDigest}
         neutralCount: neutral,
         summaryOneLiner: parsed.summaryOneLiner || heuristicBrief.summaryOneLiner,
         readingTimeMinutes: 2,
+        macroShockAlert: parsed.macroShockAlert || heuristicBrief.macroShockAlert,
+        upcomingCatalysts: Array.isArray(parsed.upcomingCatalysts) && parsed.upcomingCatalysts.length > 0
+          ? parsed.upcomingCatalysts
+          : heuristicBrief.upcomingCatalysts,
+        defensivePlaybook: parsed.defensivePlaybook || heuristicBrief.defensivePlaybook,
         todayHighlights: Array.isArray(parsed.todayHighlights) && parsed.todayHighlights.length > 0
           ? parsed.todayHighlights
           : heuristicBrief.todayHighlights,
@@ -541,49 +648,195 @@ function generateHeuristicDailyBrief(
   const topTickers = holdings.slice(0, 4).map((h) => h.ticker)
   const holdingsSymbols = new Set(holdings.map((h) => h.ticker.toUpperCase()))
 
+  // 🚨 Macro Shock Alert: Fed & CPI Shock
+  const macroShockAlert: MacroShockAlert = {
+    title: 'สรุปแรงกระแทกมหภาค: เงินเฟ้อ US CPI สูงกว่าคาด ส่งผล Fed ชะลอการลดดอกเบี้ย ตลาดเผชิญแรงขายปรับฐาน',
+    severity: 'high',
+    explanation: 'รายงานตัวเลขดัชนีราคาผู้บริโภค (US CPI) สหรัฐฯ ล่าสุดออกมาสูงกว่าที่ตลาดคาดการณ์ ส่งผลให้อัตราผลตอบแทนพันธบัตรรัฐบาลสหรัฐฯ อายุ 10 ปี (US 10-Yr Yield) ปรับตัวสูงขึ้น ตลาดลดความหวังการลดดอกเบี้ยเชิงรุกของ Fed ทำให้เกิดแรงขายทำกำไรในหุ้นกลุ่มเติบโตและเทคโนโลยี ดัชนีหลักจึงเผชิญการย่อตัวปรับฐานระยะสั้น',
+    marketDrivers: [
+      'เงินเฟ้อภาคบริการและค่าที่พักอาศัยสหรัฐฯ เหนียวแน่นกว่าคาด ส่งผลให้ Fed ต้องดำเนินนโยบาย Higher-for-Longer นานขึ้น',
+      'US 10-Year Bond Yield พุ่งขึ้น ส่งผลให้เกิด Multiple Compression กดดันระดับ Valuation ของหุ้นกลุ่ม High-Multiple Tech',
+      'ตลาดลดคาดการณ์จำนวนครั้งการลดดอกเบี้ยในปีนี้ ทำให้นักลงทุนสถาบันเข้าสู่โหมดปรับลดความเสี่ยง (De-risking)',
+      'ความกังวลว่าต้นทุนทางการเงินของภาคธุรกิจจะยังคงอยู่ในระดับสูงนานกว่าที่คาดการณ์ไว้เดิม',
+    ],
+    fedInterestRateImpact: 'เฟดมีแนวโน้มคงอัตราดอกเบี้ยสูงนานขึ้น และอาจเลื่อนรอบการปรับลดดอกเบี้ยออกไปจนกว่าจะเห็นตัวเลขเงินเฟ้อเย็นลงอย่างมีนัยสำคัญ',
+  }
+
+  // 📅 Upcoming Macro Catalyst Radar: 5 High-Impact Releases
+  const upcomingCatalysts: UpcomingCatalystEvent[] = [
+    {
+      id: 'c1',
+      eventNameTh: 'ดัชนีราคาผู้ผลิตสหรัฐฯ (US Producer Price Index - PPI)',
+      eventNameEn: 'US Producer Price Index (PPI MoM / YoY)',
+      expectedTiming: 'พฤหัสบดีนี้ 19:30 น. (ตามเวลาไทย)',
+      importance: 'critical',
+      category: 'inflation',
+      forecastText: 'ตลาดคาดขยายตัว +0.2% MoM (Core PPI +0.2%)',
+      marketImpactScenario: {
+        hot: 'หากตัวเลขสูงกว่าคาด (+0.3% ขึ้นไป): ตลาดจะกังวลว่าต้นทุนฝั่งผู้ผลิตจะส่งผ่านไปยังเงินเฟ้อผู้บริโภค (CPI) ต่อเนื่อง Bond Yield จะพุ่งต่อ และหุ้นเทคโนโลยีอาจย่อตัวลงอีก 1-2%',
+        cool: 'หากตัวเลขชะลอตัว (+0.1% หรือ 0.0%): จะช่วยปลดล็อกความกังวลเรื่องเงินเฟ้อ หนุนให้ดัชนี S&P 500 และ Nasdaq รีบาวด์กลับทันที',
+      },
+      portfolioPreparation: 'ถือเงินสดสำรอง 10-15% ไว้ในมือ อย่าเพิ่งรีบ All-in ก่อนทราบผลตัวเลข รอจังหวะตั้งรับหลังตลาดซึมซับข่าว',
+    },
+    {
+      id: 'c2',
+      eventNameTh: 'ถ้อยแถลงประธานเฟด Jerome Powell & บันทึกการประชุม FOMC Minutes',
+      eventNameEn: 'Fed Chair Powell Speech & FOMC Minutes',
+      expectedTiming: 'ศุกร์นี้ 21:00 น. / พุธหน้า 01:00 น. (ตามเวลาไทย)',
+      importance: 'critical',
+      category: 'fed_interest_rate',
+      forecastText: 'คาดส่งสัญญาณเข้มงวดแบบระมัดระวัง (Hawkish Hold) และย้ำว่าการลดดอกเบี้ยต้องเห็นหลักฐานเงินเฟ้อลดลงอย่างชัดเจน',
+      marketImpactScenario: {
+        hot: 'หากส่งสัญญาณว่า "อาจไม่ลดดอกเบี้ยในเร็วๆ นี้ หรือเปิดช่องขึ้นดอกเบี้ยหากเงินเฟ้อกลับมา": ตลาดหุ้นจะปรับฐานลงอีกระลอก',
+        cool: 'หากย้ำว่า "เงินเฟ้อระยะยาวยังคงเข้าสู่เป้าหมาย 2% และนโยบายปัจจุบันตึงตัวเพียงพอแล้ว": ตลาดจะคลายความตึงเครียดและเกิด Relief Rally',
+      },
+      portfolioPreparation: 'หุ้นกลุ่มปันผล (SCHD, SCB) จะช่วยค้ำพอร์ตได้ดี ไม่ควรตื่นตระหนกเทขายหุ้นพื้นฐานดีอย่าง GOOGL ที่แนวรับ',
+    },
+    {
+      id: 'c3',
+      eventNameTh: 'ยอดค้าปลีกสหรัฐฯ & ความเชื่อมั่นผู้บริโภค (US Retail Sales & Sentiment)',
+      eventNameEn: 'US Retail Sales & Michigan Consumer Sentiment',
+      expectedTiming: 'ศุกร์นี้ 19:30 น. (ตามเวลาไทย)',
+      importance: 'high',
+      category: 'employment',
+      forecastText: 'ตลาดคาดการณ์ยอดค้าปลีกขยายตัว +0.3% MoM บ่งชี้กำลังซื้อผู้บริโภค',
+      marketImpactScenario: {
+        hot: 'หากตัวเลขร้อนแรงเกินคาด: ตลาดกังวลเงินเฟ้อไม่ลง แต่ช่วยคลายกังวลเรื่องเศรษฐกิจถดถอย (No Landing)',
+        cool: 'หากตัวเลขชะลอลงอย่างมีระเบียบ: ตลาดมองเป็นสภาวะสมดุล (Soft Landing / Goldilocks) หนุนตลาดหุ้นฟื้นตัว',
+      },
+      portfolioPreparation: 'เกาะติดหุ้นกลุ่มเทคโนโลยีและการบริโภค เป็นโอกาสประเมินกำลังซื้อจริงของผู้บริโภคก่อนเข้าสู่งบไตรมาส',
+    },
+    {
+      id: 'c4',
+      eventNameTh: 'สัปดาห์เริ่มต้นประกาศงบ Big Tech & หุ้นกลุ่ม AI',
+      eventNameEn: 'Mega-Cap Big Tech Q3/Q4 Earnings Season Kickoff',
+      expectedTiming: 'เริ่มสัปดาห์หน้าเป็นต้นไป (หลังตลาดสหรัฐฯ ปิดทำการ)',
+      importance: 'high',
+      category: 'earnings',
+      forecastText: 'ตลาดคาดหวังรายได้ Cloud, Search และ AI Infrastructure เติบโตระดับ Double-Digit',
+      marketImpactScenario: {
+        hot: 'หาก Google และ Big Tech รายงานกำไรทะลุเป้า พร้อมยอดขาย AI ชัดเจน: ตลาดจะตัดขาดจากความกังวลเรื่องดอกเบี้ยและดีดตัวขึ้นแรง',
+        cool: 'หากงบชะลอตัว หรือ Capex บานปลายเกินรายได้: อาจเกิดแรงขายปรับ Multiple ลงมาที่ฐานราคาใหม่',
+      },
+      portfolioPreparation: 'เตรียมสภาพคล่องสำหรับ GOOGL และ QQQM หากราคาย่อตัวลงมาบริเวณแนวรับก่อนประกาศงบ',
+    },
+    {
+      id: 'c5',
+      eventNameTh: 'การประชุม กนง. ธนาคารแห่งประเทศไทย (BOT Rate Decision)',
+      eventNameEn: 'Bank of Thailand Monetary Policy Committee Decision',
+      expectedTiming: 'พุธนี้ 14:00 น. (ตามเวลาไทย)',
+      importance: 'medium',
+      category: 'policy',
+      forecastText: 'ตลาดจับตาการส่งสัญญาณหรือการปรับลดอัตราดอกเบี้ยนโยบายเพื่อกระตุ้นเศรษฐกิจในประเทศและจัดการค่าเงินบาท',
+      marketImpactScenario: {
+        hot: 'หากคงดอกเบี้ย: หนุนส่วนต่างรายได้ดอกเบี้ยสุทธิ (NIM) ของกลุ่มธนาคารอย่าง SCB ทรงตัวในระดับสูงต่อเนื่อง',
+        cool: 'หากลดดอกเบี้ย: อาจกดดัน NIM เล็กน้อย แต่ช่วยลดความเสี่ยงหนี้เสีย (NPL) และกระตุ้นการปล่อยสินเชื่อ',
+      },
+      portfolioPreparation: 'SCB มี Dividend Yield สูงระดับ 7-8% ทำหน้าที่เป็นเบาะกันกระแทกเงินเฟ้อ ถือรับเงินปันผลได้อย่างมั่นใจ',
+    },
+  ]
+
+  // 🛡️ Portfolio Defensive Playbook: Tailored to GOOGL, VOO, SCHD, QQQM, WDC, SCB
+  const defensivePlaybook: PortfolioDefensivePlaybook = {
+    overallStance: '🛡️ ตั้งรับอย่างมีกลยุทธ์ (Defensive Accumulation): ไม่ Panic Sell ที่แนวรับ รักษาวินัย DCA และเตรียมสภาพคล่องดักซื้อจุดกลับตัว',
+    cashBufferAdvice: 'แนะนำสำรองเงินสดหรือสภาพคล่องไว้ประมาณ 10 - 15% ของพอร์ต เพื่อเป็นกระสุนรอเข้าซื้อหุ้นคุณภาพในจังหวะตลาด Oversold จากความกังวลเรื่อง CPI/Fed',
+    holdingPlaybook: [
+      {
+        symbol: 'GOOGL',
+        stance: 'BUY_DIP',
+        stanceLabel: 'รอจังหวะสะสมเมื่อย่อตัว (Buy on Dip)',
+        rationale: 'เมื่อ Bond Yield พุ่ง หุ้น Tech มักโดนกดดันเรื่อง Valuation ชั่วคราว แต่ Alphabet มีกระแสเงินสดมหาศาล มีส่วนแบ่ง Search & Cloud แข็งแกร่ง ไม่ควรตกใจขาย แต่ให้มองเป็นโอกาสสะสมของดีราคาลด',
+        supportOrActionLevel: 'แนวรับทางเทคนิค $160 - $164 / ทยอยตั้ง Limit Order ไม้เล็กเมื่อ RSI เข้าใกล้เขต Oversold',
+      },
+      {
+        symbol: 'VOO',
+        stance: 'HOLD',
+        stanceLabel: 'ถือครองต่อเนื่อง & DCA ตามแผน (Core Anchor)',
+        rationale: 'S&P 500 กระจายความเสี่ยงใน 500 บริษัทชั้นนำ แม้จะปรับฐานระยะสั้นตามตัวเลขเงินเฟ้อ แต่สถิติย้อนหลังชี้ว่าการถือยาวและ DCA ให้ผลตอบแทนฟื้นตัวได้ดีที่สุดเสมอ',
+        supportOrActionLevel: 'ยึดวินัย DCA ประจำเดือนตามรอบปกติ ไม่จำเป็นต้องพยายามจับจุดต่ำสุด',
+      },
+      {
+        symbol: 'SCHD',
+        stance: 'COLLECT_DIVIDEND',
+        stanceLabel: 'กันชนความผันผวน & เก็บเกี่ยวปันผล (Defensive Cushion)',
+        rationale: 'หุ้นปันผลและกลุ่ม Value ทนทานต่อสภาวะดอกเบี้ยสูงได้ดีกว่ากลุ่ม Growth เม็ดเงินปันผลที่ได้ช่วยลด Maximum Drawdown ของพอร์ตรวม',
+        supportOrActionLevel: 'Reinvest เงินปันผลกลับเข้ามา หรือถือเป็นเงินสดสำรองไว้เสริมความมั่นคง',
+      },
+      {
+        symbol: 'QQQM',
+        stance: 'WAIT',
+        stanceLabel: 'ชะลอการไล่ราคา รอสัญญาณการสร้างฐาน (Wait & See)',
+        rationale: 'Nasdaq 100 มีความอ่อนไหวสูงต่ออัตราดอกเบี้ยและ Bond Yield จึงควรชะลอการซื้อไล่ราคา รอให้แรงขายจากข่าว CPI เริ่มชะลอและดัชนีสร้างฐานราคาก่อนสะสมไม้ใหม่',
+        supportOrActionLevel: 'รอสัญญาณแท่งเทียนกลับตัว หรือราคายืนเหนือเส้นค่าเฉลี่ย EMA 50 วัน',
+      },
+      {
+        symbol: 'WDC',
+        stance: 'HOLD',
+        stanceLabel: 'ถือเกาะติดรอบขาขึ้นของหน่วยความจำ (Cyclical Recovery)',
+        rationale: 'แม้มหภาคจะผันผวน แต่วัฏจักรความต้องการ Enterprise HDD และ AI Storage ยังคงเติบโตอย่างมีนัยสำคัญตามการขยายตัวของ Data Center',
+        supportOrActionLevel: 'ตั้งจุด Trailing Stop เพื่อปกป้องกำไรหากตลาดภาพรวมทรุดตัวแรง',
+      },
+      {
+        symbol: 'SCB',
+        stance: 'COLLECT_DIVIDEND',
+        stanceLabel: 'ถือรับกระแสเงินสดปันผลสูง 7-8% (High Yield Income)',
+        rationale: 'ดอกเบี้ยในระดับสูงช่วยรักษาอัตราส่วน NIM ของธนาคาร และ Dividend Yield ระดับ 7-8% เป็นเกราะป้องกันเงินเฟ้อและความผันผวนของตลาดต่างประเทศได้อย่างดี',
+        supportOrActionLevel: 'แนวรับ 102 - 105 บาท / ถือรับเงินปันผลรอบครึ่งปีตามรอบปกติ',
+      },
+    ],
+    scenarioAPlan: {
+      condition: 'หากเงินเฟ้อ/ดอกเบี้ยยังกดดันต่อ และตลาดปรับฐานลงอีก 3 - 5%',
+      action: 'ห้าม Panic Sell ที่แนวรับ ให้ใช้เงินสดสำรอง 10-15% ทยอยแบ่งไม้ซื้อ VOO และ GOOGL ในระดับราคาที่มี Margin of Safety สูง',
+    },
+    scenarioBPlan: {
+      condition: 'หากตลาดดูดซับข่าว CPI จบ และเริ่มมี Technical Rebound กลับขึ้นมา',
+      action: 'ถือครองหุ้นเดิมตามปกติ ไม่ไล่ราคาซื้อบนยอด ให้ปล่อยให้พอร์ตฟื้นตัวตามธรรมชาติ และพิจารณา Rebalance หากสัดส่วนเกินเป้าหมาย',
+    },
+  }
+
   // 1. Today Highlights
   const todayHighlights: TodayMarketHighlight[] = [
     {
       id: 'h1',
-      title: 'กระแส AI & โครงสร้างพื้นฐานพลังงานขยายตัวต่อเนื่อง',
-      tag: 'อุตสาหกรรมเทคโนโลยี & AI',
-      detail: 'บิ๊กเทคเดินหน้าลงนามสัญญาพลังงานสะอาดและพลังงานนิวเคลียร์ (SMRs) เพื่อรองรับศูนย์ข้อมูล Data Centers มั่นใจความต้องการชิปและคลาวด์ยังอยู่ในขาขึ้น',
-      sentiment: 'positive',
-      relatedSymbol: holdingsSymbols.has('GOOGL') ? 'GOOGL' : 'NVDA',
-    },
-    {
-      id: 'h2',
-      title: 'ทิศทางดอกเบี้ย FED & ตัวเลขเศรษฐกิจสหรัฐฯ',
-      tag: 'นโยบายการเงิน & มหภาค',
-      detail: 'ตลาดซึมซับการผ่อนคลายนโยบายแบบค่อยเป็นค่อยไป ขณะที่ตัวเลขตลาดแรงงานและเงินเฟ้อยังสะท้อนภาพเศรษฐกิจแบบ Soft Landing',
-      sentiment: 'neutral',
+      title: 'ตัวเลขเงินเฟ้อ US CPI สูงกว่าคาด ส่งผลให้ Bond Yield พุ่งขึ้น',
+      tag: 'เงินเฟ้อ & นโยบาย FED',
+      detail: 'รายงานดัชนีราคาผู้บริโภคสหรัฐฯ ล่าสุดสูงกว่าคาด ส่งผลให้อัตราผลตอบแทนพันธบัตร 10 ปีพุ่งขึ้น และตลาดลดความหวังการลดดอกเบี้ยเร็วของ Fed',
+      sentiment: 'negative',
       relatedSymbol: 'SPY',
     },
     {
+      id: 'h2',
+      title: 'หุ้นเทคโนโลยีเผชิญแรงขายทำกำไรระยะสั้นจาก Multiple Compression',
+      tag: 'เทคโนโลยี & บิ๊กเทค',
+      detail: 'หุ้นกลุ่ม AI และเติบโตสูงย่อตัวลงเนื่องจากแรงกดดันด้านอัตราคิดลด (Discount Rate) แต่นักวิเคราะห์มองเป็นโอกาสสะสมของดีราคาลดก่อนงบออก',
+      sentiment: 'neutral',
+      relatedSymbol: holdingsSymbols.has('GOOGL') ? 'GOOGL' : 'QQQM',
+    },
+    {
       id: 'h3',
-      title: 'ดัชนีหลักแกว่งตัวในกรอบสะสม รอผลประกอบการไตรมาส',
-      tag: 'ตลาดหุ้นโลก',
-      detail: 'นักลงทุนสถาบันเริ่มปรับพอร์ตคัดเลือกหุ้นรายตัว (Stock Picking) โดยเน้นบริษัทที่มีกระแสเงินสดแข็งแกร่งและอำนาจกำหนดราคา',
+      title: 'หุ้นปันผลและกลุ่ม Defensive ทำหน้าที่เป็นเกราะพยุงพอร์ต',
+      tag: 'เงินปันผล & สภาพคล่อง',
+      detail: 'กระแสเงินทุนบางส่วนโยกเข้าสู่หุ้นกลุ่ม Dividend และ Defensive ที่มีกระแสเงินสดมั่นคง ช่วยลดความผันผวนของพอร์ตโดยรวม',
       sentiment: 'positive',
-      relatedSymbol: 'VOO',
+      relatedSymbol: holdingsSymbols.has('SCHD') ? 'SCHD' : 'SCB',
     },
     {
       id: 'h4',
-      title: 'หุ้นปันผลและสินทรัพย์ป้องกันความเสี่ยงให้ผลตอบแทนสม่ำเสมอ',
-      tag: 'เงินปันผล & สภาพคล่อง',
-      detail: 'หุ้นกลุ่ม Dividend Growth และพันธบัตรระยะกลางช่วยลดความผันผวนของพอร์ตรวมในช่วงที่ตลาดยังรอปัจจัยชี้นำใหม่',
-      sentiment: 'positive',
-      relatedSymbol: holdingsSymbols.has('SCHD') ? 'SCHD' : 'SCB',
+      title: 'ตลาดรอจับตาตัวเลข PPI และถ้อยแถลง Powell สัปดาห์นี้',
+      tag: 'ตัวเลขเศรษฐกิจ & ปฏิทิน',
+      detail: 'นักลงทุนทั่วโลกชะลอการซื้อเชิงรุกเพื่อรอดูตัวเลขราคาผู้ผลิต PPI และทิศทางการส่งสัญญาณจากประธานเฟดก่อนตัดสินใจรอบใหม่',
+      sentiment: 'neutral',
+      relatedSymbol: 'VOO',
     },
   ]
 
   // 2. Market Consensus
   const marketConsensus: MarketConsensus = {
-    mood: 'Selective',
-    moodLabel: 'เลือกลงทุนเฉพาะกลุ่ม (Selective Risk-On)',
-    summary: 'ตลาดส่วนใหญ่มีมุมมองเชิงบวกอย่างระมัดระวัง เงินทุนไหลเข้าสู่กลุ่มเทคโนโลยีขนาดใหญ่และหุ้นที่มีเงินปันผลมั่นคง โดยเลี่ยงกลุ่มเก็งกำไรที่ Valuation สูงเกินจริง',
-    fedExpectation: 'ตลาดคาดการณ์ว่า FED มีแนวโน้มปรับลดอัตราดอกเบี้ยอย่างต่อเนื่องตามสภาวะเศรษฐกิจ โดยไม่มีสัญญาณภาวะเศรษฐกิจถดถอยรุนแรง',
-    keyRisksToWatch: 'อัตราผลตอบแทนพันธบัตรรัฐบาล (Bond Yields) และประเด็นภูมิรัฐศาสตร์ที่อาจกระทบราคาพลังงาน',
+    mood: 'Cautious',
+    moodLabel: 'ระมัดระวังความเสี่ยง & ปรับฐานรับมือดอกเบี้ย (Defensive / Risk-Off)',
+    summary: 'ตลาดส่วนใหญ่เข้าสู่โหมดระมัดระวังความเสี่ยง หลังตัวเลขเงินเฟ้อ CPI สหรัฐฯ สูงกว่าคาด ส่งผลให้ Bond Yield พุ่งขึ้น และนักลงทุนชะลอการลงทุนในหุ้น High-Multiple Tech',
+    fedExpectation: 'ตลาดปรับลดความคาดหวังการปรับลดอัตราดอกเบี้ยเชิงรุกของ Fed โดยมองว่า Fed จะดำเนินนโยบาย Higher-for-Longer นานขึ้นเพื่อควบคุมเงินเฟ้อ',
+    keyRisksToWatch: 'ทิศทางตัวเลขดัชนีราคาผู้ผลิต (PPI), ถ้อยแถลงของ Jerome Powell และผลประกอบการไตรมาสของบิ๊กเทค',
   }
 
   // 3. Holdings Direct Impact
@@ -594,10 +847,10 @@ function generateHeuristicDailyBrief(
         symbol: sym,
         assetName: h.assetName || 'Alphabet Inc.',
         allocationPercent: h.allocationPercent,
-        impact: 'positive',
-        headline: 'ได้ประโยชน์โดยตรงจากการขยายตัวของ AI และข้อตกลงพลังงานสำหรับ Data Center',
-        detail: 'การทำสัญญาพลังงานสะอาดระยะยาวช่วยคลายความกังวลเรื่องต้นทุนไฟฟ้าของระบบ Cloud และโมเดล AI เสริมความแข็งแกร่งของกำไรระยะยาว',
-        actionSuggestion: 'ถือครองตามแผนการลงทุนระยะยาวเพื่อรับผลตอบแทนทบต้น',
+        impact: 'mixed',
+        headline: 'โดนกดดันระยะสั้นจาก Bond Yield แต่มีพื้นฐานแกร่งและเงินสดล้นมือ',
+        detail: 'ราคาอาจย่อตัวตามกลุ่มเทคโนโลยีจากความกังวลเรื่องดอกเบี้ย แต่ธุรกิจ Search, YouTube และ Google Cloud ยังมีอัตรากำไรแข็งแกร่ง และเตรียมได้แรงหนุนจากงบ AI ไตรมาสนี้',
+        actionSuggestion: 'ไม่ตื่นตระหนกขายที่แนวรับ ทยอยตั้งรับสะสมหากราคาย่อตัวลงมาแตะแนวรับ $160 - $164',
       }
     }
     if (sym === 'VOO' || sym === 'SPY') {
@@ -605,10 +858,10 @@ function generateHeuristicDailyBrief(
         symbol: sym,
         assetName: h.assetName || 'Vanguard S&P 500 ETF',
         allocationPercent: h.allocationPercent,
-        impact: 'positive',
-        headline: 'ดัชนีสะท้อนสุขภาพเศรษฐกิจสหรัฐฯ และความแข็งแกร่งของบริษัท 500 อันดับแรก',
-        detail: 'การกระจายความเสี่ยงในหลายกลุ่มธุรกิจช่วยซับแรงกระแทกจากความผันผวนของหุ้นเดี่ยว แนวโน้มระยะยาวยังคงเติบโตตามกำไรบริษัทจดทะเบียน',
-        actionSuggestion: 'คงสัดส่วนเป็นแกนหลัก (Core Holding) และ DCA สม่ำเสมอ',
+        impact: 'neutral',
+        headline: 'ปรับฐานระยะสั้นตามดัชนีภาพรวม แต่มีเกราะกระจายความเสี่ยง 500 บริษัท',
+        detail: 'การกระจายตัวในกลุ่ม Defensive และ Value ช่วยพยุงไม่ให้ดัชนีทรุดตัวแรงเท่าหุ้นกลุ่มเดี่ยว การแกว่งตัวเป็นวัฏจักรปกติของตลาด',
+        actionSuggestion: 'ถือครองเป็นแกนหลักพอร์ต (Core Port) และทำตามวินัย DCA อย่างสม่ำเสมอ',
       }
     }
     if (sym === 'SCHD') {
@@ -616,10 +869,10 @@ function generateHeuristicDailyBrief(
         symbol: sym,
         assetName: h.assetName || 'Schwab US Dividend Equity ETF',
         allocationPercent: h.allocationPercent,
-        impact: 'neutral',
+        impact: 'positive',
         headline: 'ทำหน้าที่เป็นเกราะป้องกันความผันผวนและผลิตกระแสเงินสดปันผลสม่ำเสมอ',
-        detail: 'แม้ราคาอาจปรับขึ้นช้ากว่าหุ้นเทคโนโลยี แต่ Dividend Yield ประมาณ 3.4-3.6% ช่วยให้พอร์ตมี Cash Inflow ต่อเนื่องในทุกสภาวะตลาด',
-        actionSuggestion: 'ถือครองเพื่อรับกระแสเงินสด และนำเงินปันผลไปต่อยอด Reinvest',
+        detail: 'หุ้นกลุ่ม Dividend Growth ทนทานต่อสภาวะดอกเบี้ยสูงได้ดีกว่ากลุ่ม Growth Dividend Yield ระดับ 3.5% ช่วยเสริมสภาพคล่องให้พอร์ตในทุกสภาวะ',
+        actionSuggestion: 'ถือครองเพื่อรับกระแสเงินสด และเตรียมนำเงินปันผลไป Reinvest ซื้อหุ้นเติบโตตอนย่อตัว',
       }
     }
     if (sym === 'QQQM' || sym === 'QQQ') {
@@ -627,10 +880,10 @@ function generateHeuristicDailyBrief(
         symbol: sym,
         assetName: h.assetName || 'Invesco NASDAQ 100 ETF',
         allocationPercent: h.allocationPercent,
-        impact: 'positive',
-        headline: 'เกาะติดโมเมนตัมของบริษัทเทคโนโลยีและนวัตกรรมระดับโลก',
-        detail: 'หุ้นในกลุ่ม Nasdaq 100 ยังคงเป็นตัวขับเคลื่อนผลตอบแทนหลักของตลาด หากมีแรงขายทำกำไรระยะสั้นถือเป็นจังหวะสะสม',
-        actionSuggestion: 'ถือครองต่อไป หรือทยอยสะสมเพิ่มเมื่อดัชนีย่อตัว 3-5%',
+        impact: 'negative',
+        headline: 'เผชิญความผันผวนสูงจาก Bond Yield ที่ปรับตัวสูงขึ้น',
+        detail: 'Nasdaq 100 มีความอ่อนไหวสูงต่ออัตราผลตอบแทนพันธบัตร เมื่อเงินเฟ้อ CPI สูงกว่าคาด ดัชนีจึงเกิดแรงขายทำกำไรระยะสั้น',
+        actionSuggestion: 'ชะลอการซื้อไล่ราคา รอให้ดัชนีสร้างฐานสะสมเสร็จสิ้นก่อนเริ่มสะสมไม้ใหม่',
       }
     }
     if (sym === 'WDC') {
@@ -638,10 +891,10 @@ function generateHeuristicDailyBrief(
         symbol: sym,
         assetName: h.assetName || 'Western Digital Corp.',
         allocationPercent: h.allocationPercent,
-        impact: 'positive',
-        headline: 'รอบวัฏจักรหน่วยความจำและสตอเรจฟื้นตัวตามความต้องการ AI Storage',
-        detail: 'ความต้องการฮาร์ดดิสก์ความจุสูง (Enterprise HDDs) สำหรับ AI Infrastructure มีแนวโน้มเติบโต ช่วยหนุน Gross Margin ของบริษัท',
-        actionSuggestion: 'เกาะติดระดับแนวรับสำคัญ และติดตามตัวเลขรายได้ไตรมาสถัดไป',
+        impact: 'neutral',
+        headline: 'แม้มหภาคจะกดดัน แต่วงจรหน่วยความจำและ AI Storage ยังเป็นขาขึ้น',
+        detail: 'ความต้องการ Enterprise HDD และ NAND Flash สำหรับศูนย์ข้อมูล AI ยังแข็งแกร่ง ช่วยหนุน Gross Margin ของบริษัทในระยะ 6-12 เดือน',
+        actionSuggestion: 'ถือครองต่อโดยตั้ง Trailing Stop เพื่อปกป้องกำไรจากความผันผวนของตลาดรวม',
       }
     }
     if (sym === 'SCB') {
@@ -650,9 +903,9 @@ function generateHeuristicDailyBrief(
         assetName: h.assetName || 'SCB X PCL',
         allocationPercent: h.allocationPercent,
         impact: 'positive',
-        headline: 'อัตราผลตอบแทนเงินปันผลระดับสูงช่วยลดความผันผวนของพอร์ตโดยรวม',
-        detail: 'หุ้นธนาคารขนาดใหญ่ของไทยที่มีระดับ Dividend Yield สูงกว่า 7-8% ช่วยเพิ่มเสถียรภาพและสร้างผลตอบแทนสม่ำเสมอในสกุลเงินบาท',
-        actionSuggestion: 'ถือรับเงินปันผลตามแผน และใช้เป็นสินทรัพย์เสริมกระแสเงินสด',
+        headline: 'ได้รับผลบวกจากอัตราดอกเบี้ยที่ยังอยู่ในระดับสูง พร้อมปันผลระดับ 7-8%',
+        detail: 'ทิศทางดอกเบี้ยที่ยังไม่ปรับลดลงเร็วช่วยรักษา NIM ของธนาคาร และ Dividend Yield ระดับสูงช่วยลดความผันผวนของพอร์ตรวมในสกุลเงินบาท',
+        actionSuggestion: 'ถือรับเงินปันผลตามแผนงาน และใช้เป็นสินทรัพย์เสริมสภาพคล่อง',
       }
     }
 
@@ -673,10 +926,10 @@ function generateHeuristicDailyBrief(
       symbol: 'PORTFOLIO',
       assetName: 'ภาพรวมพอร์ตของคุณ',
       allocationPercent: 100,
-      impact: 'positive',
-      headline: 'พอร์ตลงทุนได้รับการจัดสรรอย่างสมดุลระหว่างการเติบโตและกระแสเงินสด',
-      detail: 'สินทรัพย์หลักยังคงได้รับแรงส่งจากกระแสการลงทุนระยะยาวและนโยบายการเงินที่ผ่อนคลายลง',
-      actionSuggestion: 'คงสัดส่วนการลงทุนตามแผน ไม่จำเป็นต้อง Panic Sell',
+      impact: 'neutral',
+      headline: 'พอร์ตลงทุนเผชิญแรงกดดันระยะสั้นจากเงินเฟ้อ แต่โครงสร้างยังมีความสมดุล',
+      detail: 'การมีทั้งสินทรัพย์เติบโตและสินทรัพย์ปันผลช่วยลดแรงกระแทกจากความผันผวนของอัตราดอกเบี้ยได้เป็นอย่างดี',
+      actionSuggestion: 'รักษาวินัยการถือครอง สำรองเงินสด 10-15% ไว้รอซื้อจังหวะย่อ',
     })
   }
 
@@ -684,18 +937,18 @@ function generateHeuristicDailyBrief(
   const timeframeStrategy: TimeframeStrategy = {
     shortTerm: {
       period: 'ระยะสั้น (1 - 7 วัน)',
-      action: 'หลีกเลี่ยงการเทรดตามอารมณ์หรือความตื่นตระหนกของข่าวรายวัน เน้นจับตาจุดรับเมื่อราคาหุ้นคุณภาพย่อตัว',
-      focus: 'การตอบสนองของดัชนีต่อตัวเลขเงินเฟ้อและถ้อยแถลงของประธาน FED',
+      action: 'ห้าม Panic Sell ที่แนวรับ สำรองเงินสด 10-15% และรอประเมินผลตัวเลข US PPI และถ้อยแถลง Powell',
+      focus: 'การตอบสนองของ Bond Yield 10 ปี และปฏิกิริยาของดัชนี S&P 500 ที่แนวรับ',
     },
     mediumTerm: {
       period: 'ระยะกลาง (1 - 3 เดือน)',
-      action: 'ทยอยสะสมหุ้นกลุ่ม Core Holdings (VOO, QQQM, GOOGL) ตามรอบ DCA และปล่อยให้เงินปันผลทบต้น',
-      focus: 'รายงานงบการเงินไตรมาสล่าสุด และทิศทางการลงทุน CapEx ด้าน AI ของบิ๊กเทค',
+      action: 'ทยอยสะสมหุ้นคุณภาพ (GOOGL, VOO) ในจังหวะ Oversold และปล่อยให้ SCHD, SCB จ่ายเงินปันผลเสริมกระแสเงินสด',
+      focus: 'ผลประกอบการไตรมาสของ Big Tech และการชี้แจงรายได้จากโครงการ AI',
     },
     longTerm: {
       period: 'ระยะยาว (6 - 12 เดือน+)',
-      action: 'ยึดมั่นในวินัยการถือครองสินทรัพย์คุณภาพสูง เพื่อให้พลังของดอกเบี้ยทบต้น (Compounding) ทำงานเต็มประสิทธิภาพ',
-      focus: 'เมกะเทรนด์ AI, โครงสร้างพื้นฐานพลังงานแห่งอนาคต, และเสถียรภาพทางการเงินของบริษัทที่ถือครอง',
+      action: 'ยึดมั่นในวินัยถือครองสินทรัพย์ที่มีคูเมืองแข็งแกร่ง ปล่อยให้ผลตอบแทนทบต้นทำงานเต็มที่',
+      focus: 'เมกะเทรนด์ AI, Cloud Computing, และการเติบโตของกำไรต่อหุ้น (EPS) ระยะยาว',
     },
   }
 
@@ -705,33 +958,33 @@ function generateHeuristicDailyBrief(
       id: 'a1',
       priority: 'high',
       type: 'HOLD',
-      badgeText: 'ถือครองต่อเนื่อง',
-      title: 'รักษาสถานะ Core Port (VOO & QQQM)',
-      detail: 'ไม่ตื่นตระหนกกับความผันผวนระยะสั้น สัดส่วนหลักของพอร์ตยังคงอยู่ในแนวโน้มขาขึ้นที่แข็งแกร่ง',
+      badgeText: 'ถือครองอย่างมีวินัย',
+      title: 'รักษาสถานะ Core Port (VOO & QQQM) ไม่ขายหนีความผันผวน',
+      detail: 'การปรับฐานจากข่าว CPI เป็นความผันผวนระยะสั้น การ Panic Sell มักทำให้ขายในจุดที่แย่ที่สุด',
     },
     {
       id: 'a2',
-      priority: 'medium',
+      priority: 'high',
       type: 'BUY_DIP',
       badgeText: 'รอจังหวะสะสม',
-      title: 'ตั้งเป้ารับ Big Tech (GOOGL) เมื่อราคาย่อตัว',
-      detail: 'หากราคาหุ้นเทคโนโลยีคุณภาพปรับฐานจากความกังวลเศรษฐกิจชั่วคราว ให้ถือเป็นจังหวะเพิ่มน้ำหนัก',
+      title: 'เตรียมตั้งรับ Big Tech (GOOGL) ที่แนวรับ $160 - $164',
+      detail: 'ใช้เงินสดสำรองทยอยตั้ง Limit Order ไม้เล็กเมื่อตลาด Overreact ต่อตัวเลขเศรษฐกิจ',
     },
     {
       id: 'a3',
       priority: 'medium',
       type: 'DIVIDEND',
       badgeText: 'เก็บเกี่ยวปันผล',
-      title: 'ปล่อยให้ SCHD และ SCB ผลิตกระแสเงินสดต่อเนื่อง',
-      detail: 'เก็บเงินปันผลที่ได้รับไว้เป็นสภาพคล่องสำรอง หรือนำไป Reinvest ทบต้นเพื่อขยายพอร์ต',
+      title: 'ใช้ SCHD และ SCB เป็นเกราะกันกระแทกเงินเฟ้อ',
+      detail: 'ปล่อยให้หุ้นปันผลสร้าง Cash Inflow อย่างต่อเนื่องเพื่อเป็นสภาพคล่องเสริมพอร์ต',
     },
     {
       id: 'a4',
-      priority: 'low',
+      priority: 'medium',
       type: 'WATCH',
-      badgeText: 'เกาะติดข้อมูล',
-      title: 'ตรวจสอบปฏิทินเศรษฐกิจสัปดาห์นี้',
-      detail: 'ดูวันประกาศตัวเลขเงินเฟ้อ CPI และรายงานงบการเงินเพื่อเตรียมสภาพคล่องให้พร้อมล่วงหน้า',
+      badgeText: 'เกาะติดเรดาร์',
+      title: 'จับตาตัวเลข PPI คืนวันพฤหัสบดี 19:30 น. อย่างใกล้ชิด',
+      detail: 'ตัวเลข PPI จะเป็นตัวชี้ขาดว่าตลาดจะสร้างฐานฟื้นตัวหรือปรับฐานลงต่อในระยะสั้น',
     },
   ]
 
@@ -754,28 +1007,28 @@ function generateHeuristicDailyBrief(
       riskNote: 'ระดับความคาดหวังของตลาดสูงมาก ความผันผวนรายวันอาจสูงหากมีข่าวชะลอตัวย่อย',
     },
     {
-      symbol: 'SMR',
-      name: 'NuScale Power Corp.',
-      theme: 'เตาปฏิกรณ์นิวเคลียร์ขนาดเล็ก (Small Modular Reactors)',
-      whyInteresting: 'ได้รับความสนใจอย่างกว้างขวางหลัง Alphabet/Google ประกาศแผนสนับสนุนเตาปฏิกรณ์ SMR เพื่อจ่ายพลังงานให้ Cloud',
-      catalyst: 'ความคืบหน้าในการขอใบอนุญาตและข้อตกลงเชิงพาณิชย์กับลูกค้าระดับโลก',
-      riskNote: 'ยังอยู่ในช่วงเริ่มต้นพัฒนาเชิงพาณิชย์ มีความเสี่ยงสูง เหมาะสำหรับเป็นพอร์ตเก็งกำไรสัดส่วนเล็ก',
-    },
-    {
       symbol: 'TLT',
       name: 'iShares 20+ Year Treasury Bond ETF',
-      theme: 'การป้องกันความเสี่ยง & วัฏจักรดอกเบี้ยขาลง',
-      whyInteresting: 'อัตราผลตอบแทน Yield อยู่ในระดับที่น่าสนใจ และมีโอกาสได้รับ Capital Gain เมื่อ FED ทยอยปรับลดอัตราดอกเบี้ย',
-      catalyst: 'การปรับลดดอกเบี้ยนโยบายของ FED ในการประชุมไตรมาสข้างหน้า',
-      riskNote: 'มีความอ่อนไหวสูงต่อตัวเลขเงินเฟ้อสหรัฐฯ หากเงินเฟ้อกลับมาพุ่งอาจกดดันราคาพันธบัตร',
+      theme: 'การป้องกันความเสี่ยง & พันธบัตรสหรัฐฯ',
+      whyInteresting: 'หลังตัวเลข CPI สูงกว่าคาด Yield 10 ปีพุ่งขึ้น ทำให้ราคา TLT ย่อตัวลงมาอยู่ในจุดที่ให้ผลตอบแทนปันผลสูงและมีความคุ้มค่าในการเก็งกำไรรอบรีบาวด์',
+      catalyst: 'เมื่อตัวเลขเงินเฟ้อเริ่มชะลอตัวในเดือนถัดไป หรือ Fed เริ่มกลับมาส่งสัญญาณผ่อนคลาย',
+      riskNote: 'ยังมีความผันผวนสูงหากตัวเลขเงินเฟ้อยังดื้อรั้นต่อเนื่อง ควรแบ่งไม้ลงทุน',
+    },
+    {
+      symbol: 'SMR',
+      name: 'NuScale Power Corp.',
+      theme: 'เตาปฏิกรณ์นิวเคลียร์ขนาดเล็ก (SMR)',
+      whyInteresting: 'ได้รับความสนใจอย่างกว้างขวางหลัง Alphabet/Google ประกาศแผนสนับสนุนเตาปฏิกรณ์ SMR เพื่อจ่ายพลังงานให้ Cloud',
+      catalyst: 'ความคืบหน้าในการขอใบอนุญาตและข้อตกลงเชิงพาณิชย์กับลูกค้าระดับโลก',
+      riskNote: 'ยังอยู่ในช่วงเริ่มต้นพัฒนาเชิงพาณิชย์ มีความเสี่ยงสูง เหมาะสำหรับพอร์ตเก็งกำไรสัดส่วนเล็ก',
     },
   ]
 
-  const summaryOneLiner = `ตลาดอยู่ในช่วงคัดเลือกหุ้นรายตัว (Selective) พอร์ตของคุณ (${topTickers.join(', ') || 'หุ้นรวม'}) ยังได้แรงหนุนสำคัญจากกระแส AI Infrastructure และมีเกราะป้องกันจากเงินปันผล`
+  const summaryOneLiner = `ตลาดเผชิญแรงกดดันระยะสั้นจากเงินเฟ้อ US CPI ที่สูงกว่าคาด ส่งผล Fed ชะลอการลดดอกเบี้ย พอร์ตของคุณ (${topTickers.join(', ') || 'หุ้นรวม'}) ควรตั้งรับอย่างมีกลยุทธ์ ไม่ Panic Sell และสำรองเงินสด 10-15% ดักซื้อจังหวะย่อ`
 
-  const tailwinds = `สินทรัพย์หลักในพอร์ต (${topTickers.join(', ') || 'หุ้นรวม'}) ได้รับแรงหนุนจากกระแสความต้องการเทคโนโลยี AI และเสถียรภาพของเงินปันผล`
-  const headwinds = `ความผันผวนของอัตราผลตอบแทนพันธบัตรและการรอคอยตัวเลขเงินเฟ้อยังคงสร้างการแกว่งตัวระยะสั้น`
-  const strategicTakeaway = `ถือครอง Core Portfolio ตามแผน ไม่จำเป็นต้อง Panic Sell รอจังหวะสะสมในวันที่ราคาย่อตัว`
+  const tailwinds = `สินทรัพย์กลุ่มปันผล (SCHD, SCB) ช่วยเป็นเกราะลด Drawdown ขณะที่ธุรกิจ AI & Cloud ของ GOOGL ยังเติบโตแข็งแกร่ง`
+  const headwinds = `ตัวเลขเงินเฟ้อ US CPI ที่สูงกว่าคาด ส่งผลให้ Bond Yield พุ่งขึ้น และ Fed มีแนวโน้มคงดอกเบี้ยสูงนานขึ้น (Higher-for-Longer)`
+  const strategicTakeaway = `ยึดแผน Defensive Accumulation: ไม่ Panic Sell ที่แนวรับ สำรองเงินสด 10-15% ไว้เข้าซื้อของดีราคาลด และเกาะติดตัวเลข PPI พฤหัสบดีนี้`
 
   return {
     overallSentiment,
@@ -785,6 +1038,9 @@ function generateHeuristicDailyBrief(
     neutralCount: neutral,
     summaryOneLiner,
     readingTimeMinutes: 2,
+    macroShockAlert,
+    upcomingCatalysts,
+    defensivePlaybook,
     todayHighlights,
     marketConsensus,
     holdingsImpact,
