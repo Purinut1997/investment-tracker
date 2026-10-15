@@ -136,8 +136,16 @@ export async function GET(req: NextRequest) {
     })
 
     // 5. Generate or get Daily Brief
+    const userHoldingContexts = activeHoldings.map((h) => ({
+      ticker: h.ticker.toUpperCase(),
+      assetName: h.assetName,
+      assetType: h.assetType,
+      allocationPercent: Math.round(h.allocationPercent * 10) / 10,
+      unrealizedPnLPercent: Math.round(h.unrealizedPnLPercent * 10) / 10,
+    }))
+
     const hasGeminiKey = Boolean(userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY)
-    const dailyBrief = await generateDailyBrief(userId, userTickers, rawItems, hasGeminiKey)
+    const dailyBrief = await generateDailyBrief(userId, userHoldingContexts, rawItems, hasGeminiKey, false)
 
     return NextResponse.json({
       items: enrichedItems,

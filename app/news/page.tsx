@@ -7,12 +7,14 @@ import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import {
   Newspaper,
-  Filter,
   Loader2,
   RefreshCw,
   AlertCircle,
   Search,
   Calendar,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { AiPortfolioBriefCard } from '@/components/news/AiPortfolioBriefCard'
 import { HoldingsSentimentBar, HoldingSummaryItem } from '@/components/news/HoldingsSentimentBar'
@@ -32,6 +34,7 @@ export default function NewsPage() {
   const [selectedTicker, setSelectedTicker] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [deepDiveItem, setDeepDiveItem] = useState<EnrichedNewsItem | null>(null)
+  const [showRawNews, setShowRawNews] = useState(true)
 
   const queryParams = new URLSearchParams({
     category,
@@ -74,12 +77,12 @@ export default function NewsPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6 max-w-[1600px] mx-auto w-full animate-fade-in pb-12">
+      <div className="space-y-6 max-w-[1600px] mx-auto w-full animate-fade-in pb-16">
         {/* Header */}
         <PageHeader
           eyebrow="Market Intelligence"
-          title="ศูนย์ข่าวสารและสรุปภาพรวมการลงทุน"
-          description="สังเคราะห์ข่าวสารและผลกระทบต่อสินทรัพย์ในพอร์ตของคุณ พร้อมบทวิเคราะห์เพื่อการตัดสินใจจริง"
+          title="สรุปข่าวสาร & กลยุทธ์พอร์ตประจำวัน"
+          description="สรุปเหตุการณ์สำคัญรอบวัน มุมมองตลาด ผลกระทบต่อพอร์ตของคุณ แนวทางระยะสั้น-กลาง-ยาว และหุ้นน่าจับตาในที่เดียว"
           action={
             <div className="flex items-center gap-2">
               <Link
@@ -100,115 +103,160 @@ export default function NewsPage() {
           }
         />
 
-        {/* AI Portfolio Daily Brief Card (Executive TL;DR) */}
+        {/* AI Portfolio Daily Brief (Executive Digest: 6 Core Pillars) */}
         <AiPortfolioBriefCard
           brief={dailyBrief}
           onRefreshBrief={handleRefreshBrief}
         />
 
-        {/* Holdings Sentiment Quick Bar */}
-        {userHoldings.length > 0 && (
-          <HoldingsSentimentBar
-            holdings={userHoldings}
-            selectedTicker={selectedTicker}
-            onSelectTicker={(ticker) => {
-              setSelectedTicker(ticker)
-              if (ticker) {
-                setCategory('portfolio')
-              }
-            }}
-          />
-        )}
+        {/* Underlying News Feed Section (Collapsible & Filterable) */}
+        <div className="space-y-4 pt-2">
+          {/* Section Divider & Toggle Header */}
+          <div className="p-4 rounded-2xl bg-[#12151C] border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg shadow-black/20">
+            <div className="flex items-center justify-between w-full md:w-auto gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                  <Newspaper className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white tracking-wide">
+                      คลังข่าวต้นฉบับ & บทวิเคราะห์รายตัว
+                    </h3>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.06] text-slate-400 border border-white/[0.08]">
+                      {filteredItems.length} ข่าว
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    สำหรับเจาะลึกข่าวต้นทางภาษาอังกฤษ พร้อมบทวิเคราะห์ AI 3 บรรทัดและแบบจำลองสถานการณ์
+                  </p>
+                </div>
+              </div>
 
-        {/* Tab Switcher & Search Bar */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-[#12151C] border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-3.5 shadow-xl shadow-black/30">
-          {/* Categories Tabs */}
-          <div className="flex flex-wrap bg-[#181C25] p-1 rounded-xl border border-white/[0.08] gap-1">
-            {CATEGORY_TABS.map((tab) => {
-              const isActive = category === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setCategory(tab.id)
-                    setSelectedTicker('')
-                  }}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Search Box */}
-          <div className="relative min-w-[220px]">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="ค้นหาตามชื่อหุ้นหรือหัวข้อข่าว..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#181C25] border border-white/[0.08] rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors"
-            />
-          </div>
-        </div>
-
-        {/* News Feed Grid */}
-        {isLoading ? (
-          <div className="py-24 flex flex-col items-center justify-center gap-3 text-slate-500">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-            <span className="text-xs font-medium">กำลังโหลดและวิเคราะห์ข่าวสารล่าสุด...</span>
-          </div>
-        ) : error ? (
-          <div className="p-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center flex flex-col items-center justify-center">
-            <AlertCircle className="w-8 h-8 text-rose-400 mb-3" />
-            <p className="text-xs text-rose-300 mb-4">ไม่สามารถโหลดฟีดข่าวสารได้ในขณะนี้</p>
-            <button
-              onClick={() => revalidate()}
-              className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-white"
-            >
-              ลองอีกครั้ง
-            </button>
-          </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="p-16 rounded-2xl bg-[#12151C] border border-white/[0.08] text-center flex flex-col items-center justify-center min-h-[320px] shadow-xl shadow-black/30">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4">
-              <Newspaper className="w-7 h-7" />
-            </div>
-            <h3 className="font-bold text-white text-base mb-1">
-              {searchQuery ? 'ไม่พบข่าวที่ตรงกับคำค้นหา' : 'ยังไม่มีข่าวในหมวดนี้'}
-            </h3>
-            <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
-              {searchQuery
-                ? 'ลองค้นหาด้วยคำอื่น หรือกดล้างคำค้นหา'
-                : 'ระบบจะอัปเดตฟีดข่าวสารอัตโนมัติเมื่อมีข่าวใหม่ที่เกี่ยวข้องกับสินทรัพย์ของคุณ'}
-            </p>
-            {searchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
-                className="mt-4 px-3.5 py-1.5 rounded-xl bg-slate-800 text-xs text-slate-300 hover:text-white"
+                onClick={() => setShowRawNews(!showRawNews)}
+                className="p-1.5 rounded-xl bg-[#181C25] text-slate-400 hover:text-white border border-white/[0.08] transition-colors md:hidden"
               >
-                ล้างคำค้นหา
+                {showRawNews ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
-            )}
+            </div>
+
+            <div className="flex items-center gap-2.5 self-end md:self-auto">
+              {/* Search Box */}
+              <div className="relative min-w-[200px] sm:min-w-[240px]">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="ค้นหาตามชื่อหุ้นหรือหัวข้อ..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#181C25] border border-white/[0.08] rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              <button
+                onClick={() => setShowRawNews(!showRawNews)}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] text-xs font-medium transition-colors cursor-pointer"
+              >
+                <span>{showRawNews ? 'ซ่อนฟีดข่าว' : 'แสดงฟีดข่าว'}</span>
+                {showRawNews ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5 text-indigo-400" />}
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredItems.map((item) => (
-              <ActionableNewsCard
-                key={item.id}
-                item={item}
-                onDeepDive={(selected) => setDeepDiveItem(selected)}
-              />
-            ))}
-          </div>
-        )}
+
+          {showRawNews && (
+            <div className="space-y-4 animate-fade-in">
+              {/* Holdings Sentiment Quick Filter Pills */}
+              {userHoldings.length > 0 && (
+                <HoldingsSentimentBar
+                  holdings={userHoldings}
+                  selectedTicker={selectedTicker}
+                  onSelectTicker={(ticker) => {
+                    setSelectedTicker(ticker)
+                    if (ticker) {
+                      setCategory('portfolio')
+                    }
+                  }}
+                />
+              )}
+
+              {/* Categories Tabs */}
+              <div className="flex flex-wrap bg-[#12151C] p-1.5 rounded-2xl border border-white/[0.08] gap-1 shadow-lg shadow-black/20">
+                {CATEGORY_TABS.map((tab) => {
+                  const isActive = category === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setCategory(tab.id)
+                        setSelectedTicker('')
+                      }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isActive
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <span>{tab.icon}</span>
+                      <span>{tab.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* News Feed Grid */}
+              {isLoading ? (
+                <div className="py-24 flex flex-col items-center justify-center gap-3 text-slate-500">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                  <span className="text-xs font-medium">กำลังโหลดและวิเคราะห์ข่าวสารล่าสุด...</span>
+                </div>
+              ) : error ? (
+                <div className="p-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center flex flex-col items-center justify-center">
+                  <AlertCircle className="w-8 h-8 text-rose-400 mb-3" />
+                  <p className="text-xs text-rose-300 mb-4">ไม่สามารถโหลดฟีดข่าวสารได้ในขณะนี้</p>
+                  <button
+                    onClick={() => revalidate()}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-white cursor-pointer"
+                  >
+                    ลองอีกครั้ง
+                  </button>
+                </div>
+              ) : filteredItems.length === 0 ? (
+                <div className="p-16 rounded-2xl bg-[#12151C] border border-white/[0.08] text-center flex flex-col items-center justify-center min-h-[300px] shadow-xl shadow-black/30">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4">
+                    <Newspaper className="w-7 h-7" />
+                  </div>
+                  <h3 className="font-bold text-white text-base mb-1">
+                    {searchQuery ? 'ไม่พบข่าวที่ตรงกับคำค้นหา' : 'ยังไม่มีข่าวในหมวดนี้'}
+                  </h3>
+                  <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+                    {searchQuery
+                      ? 'ลองค้นหาด้วยคำอื่น หรือกดล้างคำค้นหา'
+                      : 'ระบบจะอัปเดตฟีดข่าวสารอัตโนมัติเมื่อมีข่าวใหม่ที่เกี่ยวข้องกับสินทรัพย์ของคุณ'}
+                  </p>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="mt-4 px-3.5 py-1.5 rounded-xl bg-slate-800 text-xs text-slate-300 hover:text-white cursor-pointer"
+                    >
+                      ล้างคำค้นหา
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredItems.map((item) => (
+                    <ActionableNewsCard
+                      key={item.id}
+                      item={item}
+                      onDeepDive={(selected) => setDeepDiveItem(selected)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Deep Dive Modal */}
         <NewsDeepDiveModal

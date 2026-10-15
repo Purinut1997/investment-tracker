@@ -22,16 +22,22 @@ export async function POST(req: NextRequest) {
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
     const activeHoldings = holdingsResult.holdings.filter((h) => h.quantity > 0)
-    const userTickers = activeHoldings.map((h) => h.ticker.toUpperCase())
+    const userHoldingContexts = activeHoldings.map((h) => ({
+      ticker: h.ticker.toUpperCase(),
+      assetName: h.assetName,
+      assetType: h.assetType,
+      allocationPercent: Math.round(h.allocationPercent * 10) / 10,
+      unrealizedPnLPercent: Math.round(h.unrealizedPnLPercent * 10) / 10,
+    }))
 
     // Fetch recent news
     const recentNews = await prisma.newsItem.findMany({
       orderBy: { publishedAt: 'desc' },
-      take: 20,
+      take: 25,
     })
 
     const hasGeminiKey = Boolean(userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY)
-    const brief = await generateDailyBrief(userId, userTickers, recentNews, hasGeminiKey)
+    const brief = await generateDailyBrief(userId, userHoldingContexts, recentNews, hasGeminiKey, true)
 
     return NextResponse.json({ brief })
   } catch (error: any) {
