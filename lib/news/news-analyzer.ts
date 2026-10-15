@@ -8,6 +8,7 @@
  */
 
 import { NewsSentiment } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
 
 export interface SynthesizedTakeaways {
@@ -156,6 +157,39 @@ export interface PortfolioDefensivePlaybook {
   }
 }
 
+export interface MarketDecisionTierItem {
+  id: string
+  title: string
+  subTitle?: string
+  status: 'bullish' | 'bearish' | 'neutral' | 'watch'
+  statusLabel: string
+  keyMetric?: string
+  insight: string
+  actionGuidance: string
+}
+
+export interface MarketDecisionFramework {
+  overallStance: 'BUY' | 'HOLD' | 'WAIT'
+  stanceLabel: string
+  stanceBadgeColor: string
+  summaryHeadline: string
+  threeCoreQuestions: {
+    marketFacing: string
+    earningsTrend: string
+    valuationRiskReward: string
+  }
+  tier1Regular: MarketDecisionTierItem[]
+  tier2BuyTiming: MarketDecisionTierItem[]
+  tier3EventDriven: MarketDecisionTierItem[]
+  officialSources: Array<{
+    name: string
+    url: string
+    description: string
+    category: string
+  }>
+  disciplineRule: string
+}
+
 export interface PortfolioDailyBrief {
   overallSentiment: 'bullish' | 'bearish' | 'neutral'
   sentimentScore: number // 0 - 100 (% bullish)
@@ -164,6 +198,9 @@ export interface PortfolioDailyBrief {
   neutralCount: number
   summaryOneLiner: string
   readingTimeMinutes?: number
+
+  // 🧭 กรอบติดตามตลาด 3 ระดับ & แผนตัดสินใจ (ซื้อ • ถือ • รอ)
+  decisionFramework?: MarketDecisionFramework
 
   // 🚨 แรงกระแทกสำคัญระดับมหภาค (Fed, CPI, Inflation Shock)
   macroShockAlert?: MacroShockAlert
@@ -389,9 +426,76 @@ interface BriefCacheEntry {
 const briefCache = new Map<string, BriefCacheEntry>()
 const BRIEF_CACHE_TTL_MS = 20 * 60 * 1000 // 20 minutes
 
-export function invalidateDailyBriefCache(userId?: string) {
+export function getTodayBangkokDateString(): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  return formatter.format(new Date())
+}
+
+export interface DailyBriefHistoryMeta {
+  briefDate: string
+  overallSentiment: string
+  sentimentScore: number
+  summaryHeadline: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export async function getDailyBriefHistoryList(userId: string): Promise<DailyBriefHistoryMeta[]> {
+  try {
+    return await prisma.dailyBriefHistory.findMany({
+      where: { userId },
+      select: {
+        briefDate: true,
+        overallSentiment: true,
+        sentimentScore: true,
+        summaryHeadline: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { briefDate: 'desc' },
+      take: 30,
+    })
+  } catch (error) {
+    console.error('[getDailyBriefHistoryList]', error)
+    return []
+  }
+}
+
+export async function getDailyBriefByDate(userId: string, briefDate: string): Promise<PortfolioDailyBrief | null> {
+  try {
+    const record = await prisma.dailyBriefHistory.findUnique({
+      where: {
+        userId_briefDate: {
+          userId,
+          briefDate,
+        },
+      },
+    })
+    if (!record || !record.briefData) return null
+    return record.briefData as unknown as PortfolioDailyBrief
+  } catch (error) {
+    console.error('[getDailyBriefByDate]', error)
+    return null
+  }
+}
+
+export function invalidateDailyBriefCache(userId?: string, date?: string) {
   if (userId) {
-    briefCache.delete(userId)
+    if (date) {
+      briefCache.delete(`${userId}:${date}`)
+    } else {
+      for (const key of briefCache.keys()) {
+        if (key.startsWith(`${userId}:`)) {
+          briefCache.delete(key)
+        }
+      }
+      briefCache.delete(userId)
+    }
   } else {
     briefCache.clear()
   }
@@ -402,8 +506,12 @@ export async function generateDailyBrief(
   userHoldingsInput: UserHoldingContext[] | string[],
   recentNews: Array<{ headline: string; symbol: string | null; sentiment: NewsSentiment | null }>,
   geminiApiKeyConfigured: boolean,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  targetDate?: string
 ): Promise<PortfolioDailyBrief> {
+  const briefDate = targetDate || getTodayBangkokDateString()
+  const cacheKey = `${userId}:${briefDate}`
+
   // Normalize user holdings
   const holdings: UserHoldingContext[] = (userHoldingsInput || []).map((item) => {
     if (typeof item === 'string') {
@@ -418,11 +526,22 @@ export async function generateDailyBrief(
 
   const userTickers = holdings.map((h) => h.ticker)
 
-  // Check in-memory cache
+  // Check in-memory cache first
   if (!forceRefresh) {
-    const cached = briefCache.get(userId)
+    const cached = briefCache.get(cacheKey) || briefCache.get(userId)
     if (cached && Date.now() - cached.timestamp < BRIEF_CACHE_TTL_MS) {
       return cached.brief
+    }
+
+    // Check DB history
+    try {
+      const dbBrief = await getDailyBriefByDate(userId, briefDate)
+      if (dbBrief) {
+        briefCache.set(cacheKey, { brief: dbBrief, timestamp: Date.now() })
+        return dbBrief
+      }
+    } catch (err) {
+      console.warn('[News Analyzer] Failed to fetch brief from DB:', err)
     }
   }
 
@@ -654,6 +773,7 @@ ${newsDigest}
         interestingStocks: Array.isArray(parsed.interestingStocks) && parsed.interestingStocks.length > 0
           ? parsed.interestingStocks
           : heuristicBrief.interestingStocks,
+        decisionFramework: parsed.decisionFramework || heuristicBrief.decisionFramework,
         tailwinds: parsed.tailwinds || heuristicBrief.tailwinds,
         headwinds: parsed.headwinds || heuristicBrief.headwinds,
         strategicTakeaway: parsed.strategicTakeaway || heuristicBrief.strategicTakeaway,
@@ -667,7 +787,37 @@ ${newsDigest}
   }
 
   // Cache final brief
-  briefCache.set(userId, { brief: finalBrief, timestamp: Date.now() })
+  briefCache.set(cacheKey, { brief: finalBrief, timestamp: Date.now() })
+
+  // Persist to Database DailyBriefHistory
+  try {
+    await prisma.dailyBriefHistory.upsert({
+      where: {
+        userId_briefDate: {
+          userId,
+          briefDate,
+        },
+      },
+      update: {
+        overallSentiment: finalBrief.overallSentiment,
+        sentimentScore: finalBrief.sentimentScore,
+        summaryHeadline: finalBrief.summaryOneLiner || finalBrief.strategicTakeaway || null,
+        briefData: finalBrief as any,
+        modelUsed: finalBrief.modelUsed || (geminiApiKeyConfigured ? 'gemini-flash' : 'rule-engine'),
+      },
+      create: {
+        userId,
+        briefDate,
+        overallSentiment: finalBrief.overallSentiment,
+        sentimentScore: finalBrief.sentimentScore,
+        summaryHeadline: finalBrief.summaryOneLiner || finalBrief.strategicTakeaway || null,
+        briefData: finalBrief as any,
+        modelUsed: finalBrief.modelUsed || (geminiApiKeyConfigured ? 'gemini-flash' : 'rule-engine'),
+      },
+    })
+  } catch (dbErr) {
+    console.error('[News Analyzer] Failed to persist daily brief to DB:', dbErr)
+  }
 
   return finalBrief
 }
@@ -1109,10 +1259,230 @@ function generateHeuristicDailyBrief(
     timeframeStrategy,
     actionPlan,
     interestingStocks,
+    decisionFramework: buildDefaultMarketDecisionFramework(overallSentiment, sentimentScore, topTickers),
     tailwinds,
     headwinds,
     strategicTakeaway,
     generatedAt: new Date().toISOString(),
+  }
+}
+
+export function buildDefaultMarketDecisionFramework(
+  overallSentiment: 'bullish' | 'bearish' | 'neutral',
+  sentimentScore: number,
+  userTickers: string[] = []
+): MarketDecisionFramework {
+  const isBull = overallSentiment === 'bullish'
+  const isBear = overallSentiment === 'bearish'
+
+  const overallStance: 'BUY' | 'HOLD' | 'WAIT' = isBull && sentimentScore >= 65
+    ? 'BUY'
+    : isBear || sentimentScore <= 35
+    ? 'WAIT'
+    : 'HOLD'
+
+  const stanceLabel = overallStance === 'BUY'
+    ? '🟢 โซนทยอยสะสมตามแผน (Selective Accumulation)'
+    : overallStance === 'WAIT'
+    ? '🔴 ชะลอการซื้อ & เน้นถือเงินสดรอจังหวะ (Wait & Preserve Cash)'
+    : '🟡 ถือครองตามแผน & รอจังหวะย่อตัวแตะแนวรับ (Hold Steady & Buy on Dips)'
+
+  const stanceBadgeColor = overallStance === 'BUY'
+    ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+    : overallStance === 'WAIT'
+    ? 'text-rose-400 bg-rose-500/15 border-rose-500/30'
+    : 'text-amber-400 bg-amber-500/15 border-amber-500/30'
+
+  const summaryHeadline = overallStance === 'BUY'
+    ? 'ตลาดให้โอกาสในการทยอยสะสมหุ้นพื้นฐานแกร่งที่ย่อตัวลงมาแตะแนวรับสำคัญตามแผน DCA'
+    : overallStance === 'WAIT'
+    ? 'ตลาดอยู่ในภาวะความเสี่ยงสูงหรือเผชิญแรงกดดันมหภาค ควรชะลอการไล่ราคาและสำรองสภาพคล่องเงินสด'
+    : 'ตลาดอยู่ในกรอบแกว่งตัวรอความชัดเจน ถือครองสินทรัพย์หลักตามสัดส่วนเดิม และตั้ง Limit Order รอซื้อเมื่อย่อตัว'
+
+  return {
+    overallStance,
+    stanceLabel,
+    stanceBadgeColor,
+    summaryHeadline,
+    threeCoreQuestions: {
+      marketFacing: 'ตลาดกำลังซึมซับทิศทางดอกเบี้ย Fed และตัวเลขเงินเฟ้อที่ยังคงมีความไม่แน่นอน แต่มีแรงพยุงจากสภาพคล่องของกลุ่มเทคโนโลยีขนาดใหญ่และกระแส AI',
+      earningsTrend: 'ผลกำไรของบริษัทผู้นำ (Big Tech / Market Leaders) ยังคงเติบโตระดับสูงและงบลงทุน AI ยังเพิ่มขึ้นอย่างมีนัยสำคัญ',
+      valuationRiskReward: 'Valuation ดัชนีหลักค่อนข้างตึงตัว (Forward P/E ~20-22x) จึงไม่ควรไล่ราคาที่จุดสูงสุด แต่คุ้มค่าหากดักซื้อเมื่อย่อตัวแตะแนวรับ',
+    },
+    tier1Regular: [
+      {
+        id: 't1-1',
+        title: 'S&P 500 และ Nasdaq',
+        subTitle: 'ดัชนีชี้นำภาพรวมตลาดและโมเมนตัมหลัก',
+        status: isBull ? 'bullish' : 'neutral',
+        statusLabel: isBull ? 'โมเมนตัมบวก' : 'แกว่งตัวทดสอบแนวต้าน',
+        keyMetric: 'SPX ~5,850+ | NDX ~20,400+',
+        insight: 'ดัชนีหลักยังคงอยู่ในโครงสร้างแนวโน้มขาขึ้นระยะยาว แต่อาจเผชิญแรงขายทำกำไรระยะสั้นในรอบการประกาศตัวเลขเศรษฐกิจ',
+        actionGuidance: 'เน้นถือหุ้นพื้นฐานดีตามรอบ ไม่ไล่ราคาช่วง New High รอจังหวะย่อตัว 2-3% ค่อยสะสม',
+      },
+      {
+        id: 't1-2',
+        title: 'US 10Y Yield และแนวโน้ม Fed',
+        subTitle: 'อัตราผลตอบแทนพันธบัตร 10 ปี & ทิศทางดอกเบี้ย',
+        status: 'watch',
+        statusLabel: 'จับตาระดับ 4.0% - 4.3%',
+        keyMetric: 'US 10Y Yield: 4.15%',
+        insight: 'เมื่อ Bond Yield พุ่งขึ้น จะกดดัน Valuation ของหุ้นกลุ่มเทคโนโลยี High-PE แต่หาก Yield เริ่มชะลอตัวจะส่งผลบวกต่อสินทรัพย์เสี่ยง',
+        actionGuidance: 'หาก Yield ขยับขึ้นเหนือ 4.25% ให้เตรียมกระสุนดักซื้อหุ้นเทคโนโลยีชั้นนำที่โดนเทขายเกินจริง',
+      },
+      {
+        id: 't1-3',
+        title: 'เงินเฟ้อและตลาดแรงงาน',
+        subTitle: 'US CPI, Core PCE & Non-Farm Payrolls',
+        status: 'neutral',
+        statusLabel: 'เงินเฟ้อชะลอช้าแต่ตลาดแรงงานยังแกร่ง',
+        keyMetric: 'CPI Target: 2.0% | Non-Farm ~150k-200k',
+        insight: 'ตลาดให้ความสำคัญสูงสุดกับตัวเลขเงินเฟ้อและอัตราการว่างงานเพื่อคาดการณ์จังหวะการลดดอกเบี้ยของ Fed',
+        actionGuidance: 'หลีกเลี่ยงการเปิดสถานะเก็งกำไรขนาดใหญ่ก่อนวันประกาศตัวเลข CPI หรือการประชุม FOMC',
+      },
+      {
+        id: 't1-4',
+        title: 'ผลประกอบการและประมาณการกำไร',
+        subTitle: 'Corporate Earnings & Forward EPS Guidance',
+        status: 'bullish',
+        statusLabel: 'EPS เติบโตแข็งแกร่งกว่าคาด',
+        keyMetric: 'S&P 500 Q3/Q4 EPS Growth ~9.5%',
+        insight: 'ผลประกอบการจริงเป็นเสาหลักที่ค้ำยันดัชนี แม้ Valuation จะตึงตัว แต่กำไรที่เติบโตจริงจะช่วยลดระดับ P/E ลงได้',
+        actionGuidance: 'เลือกลงทุนในบริษัทที่มี Pricing Power, Free Cash Flow สม่ำเสมอ และหนี้สินต่ำ',
+      },
+      {
+        id: 't1-5',
+        title: 'ข่าวสำคัญที่กระทบตลาดวงกว้าง',
+        subTitle: 'Macro Breaking News & Broad Market Drivers',
+        status: 'watch',
+        statusLabel: 'เฝ้าระวังปัจจัยนโยบายรัฐ',
+        keyMetric: 'Broad Market Shocks',
+        insight: 'การประกาศนโยบายการค้า มาตรการภาษี และความตึงเครียดทางภูมิรัฐศาสตร์มักสร้างแรงกระแทกระยะสั้น',
+        actionGuidance: 'แยกแยะระหว่างความตระหนกชั่วคราว (Sentiment Noise) กับการเปลี่ยนแปลงพื้นฐานธุรกิจ (Structural)',
+      },
+    ],
+    tier2BuyTiming: [
+      {
+        id: 't2-1',
+        title: 'Valuation ของ VOO และ QQQM',
+        subTitle: 'Forward P/E & 5-Year Historical Percentile',
+        status: 'neutral',
+        statusLabel: 'Valuation ค่อนข้างตึงตัว',
+        keyMetric: 'VOO Fwd P/E ~21.5x | QQQM ~26.2x',
+        insight: 'ระดับ Valuation สูงกว่าค่าเฉลี่ย 5 ปีเล็กน้อย สะท้อนว่าตลาดอยู่ในโซน Fair-to-Rich Valuation',
+        actionGuidance: 'เน้นวิธีทยอยซื้อตามรอบ DCA หรือรอซื้อไม้ใหญ่เมื่อมีรอบปรับฐาน (Correction) 5-7%',
+      },
+      {
+        id: 't2-2',
+        title: 'VIX และความกว้างของตลาด',
+        subTitle: 'Fear Index & % Stocks Above 50/200 DMA',
+        status: isBear ? 'bearish' : 'bullish',
+        statusLabel: 'ความผันผวนอยู่ในกรอบปกติ',
+        keyMetric: 'VIX: 15-18 | Market Breadth: 62%',
+        insight: 'VIX ต่ำกว่า 20 บ่งชี้ความเสี่ยงต่ำ แต่หาก VIX พุ่งทะลุ 25-30 จะเป็นจุดเกิด Panic Buy Opportunity ที่ได้ราคาดีที่สุด',
+        actionGuidance: 'สำรองเงินสด 10-15% ไว้เสมอ เพื่อพร้อมซื้อเมื่อ VIX ดีดตัวสูงผิดปกติ',
+      },
+      {
+        id: 't2-3',
+        title: 'DXY และ USD/THB',
+        subTitle: 'ดัชนีดอลลาร์ & อัตราแลกเปลี่ยนเงินบาท',
+        status: 'neutral',
+        statusLabel: 'บาททรงตัวแข็งค่าปานกลาง',
+        keyMetric: 'DXY ~102 | USD/THB ~33.5 - 34.5',
+        insight: 'ช่วงที่ค่าเงินบาทแข็งค่าคือช่วงเวลาที่ได้เปรียบในการแลกเงินบาทไปเป็น USD เพื่อเตรียมซื้อหุ้นต่างประเทศ',
+        actionGuidance: 'ทยอยแลกเงิน USD สะสมไว้ในบัญชีลงทุนเมื่อ USD/THB ย่อลงมาใกล้แนวรับ',
+      },
+      {
+        id: 't2-4',
+        title: 'แนวโน้มรายได้และการลงทุน AI',
+        subTitle: 'AI Capex & Monetization Momentum',
+        status: 'bullish',
+        statusLabel: 'งบลงทุน Hyperscalers ยังเร่งตัว',
+        keyMetric: 'Big Tech AI Capex > $200B/yr',
+        insight: 'เม็ดเงินลงทุน AI ยังคงเป็นธีมเมกะเทรนด์หลักที่ขับเคลื่อนเศรษฐกิจ โดยเฉพาะกลุ่ม Semi, Cloud และ Data Centers',
+        actionGuidance: 'คงสัดส่วนหุ้นแกนนำเทคโนโลยีและโครงสร้างพื้นฐาน AI ไว้เป็นเสาหลักของพอร์ต',
+      },
+      {
+        id: 't2-5',
+        title: 'ราคาปัจจุบันเทียบกับแผนทยอยซื้อ',
+        subTitle: 'DCA Execution & Key Support Zones',
+        status: 'watch',
+        statusLabel: 'จับตาแนวรับสำคัญ S1 / SMA50',
+        keyMetric: 'Support Levels Tracking',
+        insight: 'การซื้อหุ้นที่แตะแนวรับเส้นค่าเฉลี่ย 50 วัน (SMA50) หรือ 200 วัน (SMA200) ให้ Risk/Reward Ratio ที่คุ้มค่าที่สุด',
+        actionGuidance: 'ตั้ง Order รับซื้อตามกรอบแนวรับ S1 ในแผนประจำวัน แทนการไล่ซื้อตามราคาตลาด',
+      },
+    ],
+    tier3EventDriven: [
+      {
+        id: 't3-1',
+        title: 'สงคราม ภาษี และมาตรการคว่ำบาตร',
+        subTitle: 'Geopolitics, Tariffs & Trade Restrictions',
+        status: 'watch',
+        statusLabel: 'ติดตามสถานการณ์ความขัดแย้ง',
+        keyMetric: 'Geopolitical Risk Index',
+        insight: 'ความเสี่ยงด้านภูมิรัฐศาสตร์มักทำให้ราคาสินค้าโภคภัณฑ์ผันผวนและนักลงทุนสลับเข้าสินทรัพย์ปลอดภัย',
+        actionGuidance: 'หลีกเลี่ยงหุ้นที่มีความเสี่ยงสูงด้านข้อพิพาทการค้า และเน้นบริษัทที่มี Global Moat แข็งแกร่ง',
+      },
+      {
+        id: 't3-2',
+        title: 'น้ำมัน ทองคำ และสินค้าโภคภัณฑ์',
+        subTitle: 'WTI Crude Oil & Gold Safe Haven',
+        status: 'neutral',
+        statusLabel: 'ทองคำแข็งแกร่ง น้ำมันทรงตัว',
+        keyMetric: 'WTI Oil ~$72 | Gold ~$2,650+',
+        insight: 'ราคาน้ำมันส่งผลต่อเงินเฟ้อทางตรง ขณะที่ทองคำเป็นสินทรัพย์ประกันความเสี่ยงจากความไม่แน่นอนของระบบเงินตรา',
+        actionGuidance: 'ควรถือทองคำในพอร์ต 5-10% เพื่อเป็นกันชนลดความผันผวนรวมของพอร์ต',
+      },
+      {
+        id: 't3-3',
+        title: 'ปัญหาธนาคาร สินเชื่อ และสภาพคล่อง',
+        subTitle: 'Credit Spreads & Systemic Liquidity',
+        status: 'bullish',
+        statusLabel: 'สภาพคล่องระบบยังมั่นคง',
+        keyMetric: 'High Yield Credit Spreads: Low',
+        insight: 'Credit Spreads ที่แคบสะท้อนว่าตลาดยังไม่มีความกังวลเรื่องการล้มละลายหรือการตึงตัวของระบบสินเชื่อ',
+        actionGuidance: 'ติดตามสุขภาพของธนาคารพาณิชย์และระดับดอกเบี้ยเงินกู้ภาคเอกชน',
+      },
+      {
+        id: 't3-4',
+        title: 'ข่าวเฉพาะบริษัทที่คุณถือหรือสนใจ',
+        subTitle: 'Single Stock Catalyst & Fundamental Shifts',
+        status: 'watch',
+        statusLabel: 'ตรวจสอบผลกระทบรายตัว',
+        keyMetric: userTickers.slice(0, 4).join(', ') || 'หุ้นในพอร์ต',
+        insight: 'การประกาศผลงาน วงเงินซื้อหุ้นคืน (Buyback) หรือการเพิ่มเงินปันผล ช่วยดันราคาเฉพาะตัวได้ดีกว่าตลาดรวม',
+        actionGuidance: 'คลิกดูบทวิเคราะห์เจาะลึก 3 บรรทัดและแบบจำลองสถานการณ์ (Deep Dive) ในส่วนคลังข่าวด้านล่าง',
+      },
+    ],
+    officialSources: [
+      {
+        name: 'Fed — ดอกเบี้ยและนโยบายการเงิน',
+        url: 'https://www.federalreserve.gov/monetarypolicy.htm',
+        description: 'มติการประชุม FOMC, Dot Plot, แถลงการณ์ประธาน Fed และอัตราดอกเบี้ยนโยบาย',
+        category: 'นโยบายการเงิน',
+      },
+      {
+        name: 'BLS — ปฏิทินตัวเลขเศรษฐกิจ',
+        url: 'https://www.bls.gov/schedule/2026/',
+        description: 'ปฏิทินวันและเวลาประกาศตัวเลข CPI, PPI, การจ้างงานนอกภาคเกษตร และอัตราว่างงาน',
+        category: 'สถิติแรงงานและเงินเฟ้อ',
+      },
+      {
+        name: 'FRED — ข้อมูลเศรษฐกิจและดอกเบี้ย',
+        url: 'https://fred.stlouisfed.org/',
+        description: 'กราฟและฐานข้อมูลเศรษฐกิจมหภาค Yield Curve, อัตราเงินเฟ้อ และสภาพคล่อง M2',
+        category: 'ฐานข้อมูลเศรษฐกิจสหรัฐฯ',
+      },
+      {
+        name: 'Reuters — ข่าวตลาดการเงิน',
+        url: 'https://www.reuters.com/markets/',
+        description: 'สำนักข่าวการเงินระดับโลก ข่าวความเคลื่อนไหวตลาดหุ้น สินค้าโภคภัณฑ์ และภูมิรัฐศาสตร์',
+        category: 'ข่าวตลาดการเงินโลก',
+      },
+    ],
+    disciplineRule:
+      'ก่อนซื้อหุ้น ให้ตอบได้ 3 ข้อว่า: ตลาดกำลังเผชิญอะไร, กำไรของธุรกิจมีแนวโน้มอย่างไร และราคาปัจจุบันคุ้มกับความเสี่ยงหรือไม่ — หากข้อมูลเหล่านี้ไม่เปลี่ยน ก็ไม่จำเป็นต้องเปลี่ยนแผนลงทุนทุกวัน',
   }
 }
 

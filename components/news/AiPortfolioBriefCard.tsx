@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Wallet,
   ArrowDownRight,
+  History,
 } from 'lucide-react'
 import type {
   PortfolioDailyBrief,
@@ -41,14 +42,20 @@ import type {
   PortfolioDefensivePlaybook,
   HoldingDefensiveAction,
 } from '@/lib/news/news-analyzer'
+import { buildDefaultMarketDecisionFramework } from '@/lib/news/news-analyzer'
+import { MarketDecisionFrameworkCard } from './MarketDecisionFrameworkCard'
 
 interface AiPortfolioBriefCardProps {
   brief: PortfolioDailyBrief | null
   onRefreshBrief?: () => Promise<void>
+  isHistorical?: boolean
+  selectedDate?: string
+  onBackToToday?: () => void
 }
 
 type BriefTab =
   | 'all'
+  | 'decision'
   | 'catalysts'
   | 'playbook'
   | 'highlights'
@@ -59,7 +66,13 @@ type BriefTab =
   | 'watchlist'
 type ViewMode = 'executive' | 'speed'
 
-export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBriefCardProps) {
+export function AiPortfolioBriefCard({
+  brief,
+  onRefreshBrief,
+  isHistorical = false,
+  selectedDate,
+  onBackToToday,
+}: AiPortfolioBriefCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<BriefTab>('all')
   const [viewMode, setViewMode] = useState<ViewMode>('executive')
@@ -167,17 +180,37 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
               <Clock className="w-3.5 h-3.5 text-indigo-400" />
               <span>อ่านจบใน {brief.readingTimeMinutes || 2} นาที</span>
             </span>
-            <span className="text-xs text-slate-400 font-mono hidden sm:inline">
-              • อัปเดต {formattedDate}
-            </span>
+            {isHistorical ? (
+              <span className="text-xs font-mono font-medium px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 shadow-sm">
+                <History className="w-3.5 h-3.5 text-amber-400" />
+                <span>ประวัติย้อนหลัง: {formattedDate}</span>
+              </span>
+            ) : (
+              <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                • อัปเดต {formattedDate}
+              </span>
+            )}
           </div>
           <p className="text-sm text-slate-300 leading-relaxed max-w-3xl">
-            สังเคราะห์เหตุการณ์สำคัญล่าสุด ผลกระทบเจาะจงรายตัวในพอร์ตของคุณ พร้อมแผนปฏิบัติการระยะสั้น-กลาง-ยาว
+            {isHistorical
+              ? `บันทึกประวัติกลยุทธ์และผลการวิเคราะห์พอร์ตที่บันทึกไว้ ณ วันที่ ${formattedDate}`
+              : 'สังเคราะห์เหตุการณ์สำคัญล่าสุด ผลกระทบเจาะจงรายตัวในพอร์ตของคุณ พร้อมแผนปฏิบัติการระยะสั้น-กลาง-ยาว'}
           </p>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2.5 self-start lg:self-center shrink-0 flex-wrap">
+          {/* Return to Today Button (when in historical mode) */}
+          {isHistorical && onBackToToday && (
+            <button
+              onClick={onBackToToday}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-indigo-600/30 active:scale-98"
+            >
+              <Sparkles className="w-4 h-4 text-indigo-200" />
+              <span>กลับสู่บทสรุปวันนี้</span>
+            </button>
+          )}
+
           {/* Mode Switcher */}
           <div className="flex items-center bg-[#181C25] p-1 rounded-xl border border-white/[0.08] text-xs sm:text-sm">
             <button
@@ -223,8 +256,8 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
             )}
           </button>
 
-          {/* Refresh AI Brief */}
-          {onRefreshBrief && (
+          {/* Refresh AI Brief (only in today live mode) */}
+          {!isHistorical && onRefreshBrief && (
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
@@ -445,6 +478,16 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
               แสดงทั้งหมด
             </button>
             <button
+              onClick={() => setActiveTab('decision')}
+              className={`px-3.5 py-2 rounded-xl font-semibold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'decision'
+                  ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white font-bold shadow-md shadow-indigo-600/30'
+                  : 'bg-[#181C25] text-slate-300 hover:text-white border border-white/[0.08]'
+              }`}
+            >
+              <span>🎯 วินิจฉัย 3 ระดับ (ซื้อ•ถือ•รอ)</span>
+            </button>
+            <button
               onClick={() => setActiveTab('catalysts')}
               className={`px-3.5 py-2 rounded-xl font-semibold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === 'catalysts'
@@ -525,6 +568,20 @@ export function AiPortfolioBriefCard({ brief, onRefreshBrief }: AiPortfolioBrief
               <span>🌟 หุ้นน่าจับตา</span>
             </button>
           </div>
+
+          {/* PILLAR: กรอบติดตามตลาด 3 ระดับ & แผนตัดสินใจ (ซื้อ • ถือ • รอ) */}
+          {(activeTab === 'all' || activeTab === 'decision') && (
+            <MarketDecisionFrameworkCard
+              framework={
+                brief.decisionFramework ||
+                buildDefaultMarketDecisionFramework(
+                  brief.overallSentiment,
+                  brief.sentimentScore,
+                  (brief.holdingsImpact || []).map((h) => h.symbol)
+                )
+              }
+            />
+          )}
 
           {/* PILLAR: เรดาร์เหตุการณ์ & ประกาศตัวเลขสำคัญเร็วๆ นี้ */}
           {(activeTab === 'all' || activeTab === 'catalysts') && brief.upcomingCatalysts && brief.upcomingCatalysts.length > 0 && (

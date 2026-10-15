@@ -16,7 +16,15 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id
 
   try {
-    invalidateDailyBriefCache(userId)
+    let targetDate: string | undefined = undefined
+    try {
+      const body = await req.json()
+      if (body?.date) targetDate = body.date
+    } catch {
+      // no body
+    }
+
+    invalidateDailyBriefCache(userId, targetDate)
     const userSettings = await prisma.userSettings.findUnique({
       where: { userId },
       select: { baseCurrency: true, geminiApiKeyEncrypted: true },
@@ -63,9 +71,9 @@ export async function POST(req: NextRequest) {
     })
 
     const hasGeminiKey = Boolean(userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY)
-    const brief = await generateDailyBrief(userId, userHoldingContexts, recentNews, hasGeminiKey, true)
+    const brief = await generateDailyBrief(userId, userHoldingContexts, recentNews, hasGeminiKey, true, targetDate)
 
-    return NextResponse.json({ brief })
+    return NextResponse.json({ brief, date: targetDate })
   } catch (error: any) {
     console.error('[news brief POST]', error)
     return NextResponse.json({ error: error.message || 'Failed to generate brief' }, { status: 500 })

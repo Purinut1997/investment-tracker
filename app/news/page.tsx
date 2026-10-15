@@ -15,6 +15,10 @@ import {
   ChevronDown,
   ChevronUp,
   SlidersHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  History,
+  Sparkles,
 } from 'lucide-react'
 import { AiPortfolioBriefCard } from '@/components/news/AiPortfolioBriefCard'
 import { HoldingsSentimentBar, HoldingSummaryItem } from '@/components/news/HoldingsSentimentBar'
@@ -29,6 +33,41 @@ const CATEGORY_TABS: Array<{ id: NewsCategory; label: string; icon: string }> = 
   { id: 'general', label: 'ตลาดการเงินโลก', icon: '🌐' },
 ]
 
+function getTodayBangkokDateString(): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  return formatter.format(new Date())
+}
+
+function formatThaiDate(dateStr: string): string {
+  try {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+    return date.toLocaleDateString('th-TH', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+  } catch {
+    return dateStr
+  }
+}
+
+function shiftDate(dateStr: string, days: number): string {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const d = new Date(year, month - 1, day)
+  d.setDate(d.getDate() + days)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export default function NewsPage() {
   const [category, setCategory] = useState<NewsCategory>('portfolio')
   const [selectedTicker, setSelectedTicker] = useState('')
@@ -36,14 +75,19 @@ export default function NewsPage() {
   const [deepDiveItem, setDeepDiveItem] = useState<EnrichedNewsItem | null>(null)
   const [showRawNews, setShowRawNews] = useState(true)
 
+  const todayStr = React.useMemo(() => getTodayBangkokDateString(), [])
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr)
+  const isToday = selectedDate === todayStr
+
   const queryParams = new URLSearchParams({
     category,
     ...(selectedTicker && { symbol: selectedTicker }),
+    ...(selectedDate && { date: selectedDate }),
   })
 
   const { data, isLoading, error, mutate: revalidate } = useSWR(
     `/api/news?${queryParams.toString()}`,
-    { refreshInterval: 120000 }
+    { refreshInterval: isToday ? 120000 : 0 }
   )
 
   const newsItems: EnrichedNewsItem[] = Array.isArray(data?.items) ? data.items : []
@@ -51,6 +95,7 @@ export default function NewsPage() {
     ? data.userHoldingsSummary
     : []
   const dailyBrief = data?.dailyBrief ?? null
+  const historyDates = Array.isArray(data?.historyDates) ? data.historyDates : []
 
   // Local filter for search query
   const filteredItems = newsItems.filter((item) => {
@@ -66,7 +111,11 @@ export default function NewsPage() {
 
   const handleRefreshBrief = async () => {
     try {
-      const res = await fetch('/api/news/brief', { method: 'POST' })
+      const res = await fetch('/api/news/brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: selectedDate }),
+      })
       if (res.ok) {
         await revalidate()
       }
@@ -103,11 +152,124 @@ export default function NewsPage() {
           }
         />
 
-        {/* AI Portfolio Daily Brief (Executive Digest: 6 Core Pillars) */}
-        <AiPortfolioBriefCard
-          brief={dailyBrief}
-          onRefreshBrief={handleRefreshBrief}
-        />
+        {/* Daily History Date Navigator Bar */}
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-[#12151C] border border-white/[0.08] shadow-lg shadow-black/20 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Date Navigation & Controls */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center bg-[#181C25] p-1 rounded-xl border border-white/[0.08]">
+              <button
+                onClick={() => setSelectedDate(shiftDate(selectedDate, -1))}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                title="วันก่อนหน้า"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setSelectedDate(todayStr)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  isToday
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${isToday ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span>วันนี้</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedDate(shiftDate(selectedDate, 1))}
+                disabled={isToday}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer disabled:opacity-30 disabled:pointer-events-none"
+                title="วันถัดไป"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Date Picker Input */}
+            <div className="flex items-center gap-2 bg-[#181C25] px-3 py-1.5 rounded-xl border border-white/[0.08]">
+              <Calendar className="w-4 h-4 text-indigo-400 shrink-0" />
+              <input
+                type="date"
+                value={selectedDate}
+                max={todayStr}
+                onChange={(e) => {
+                  if (e.target.value) setSelectedDate(e.target.value)
+                }}
+                className="bg-transparent text-xs sm:text-sm text-slate-200 focus:outline-none cursor-pointer scheme-dark"
+              />
+              <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                ({formatThaiDate(selectedDate)})
+              </span>
+            </div>
+          </div>
+
+          {/* History Archive Chips / Quick Access */}
+          {historyDates.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              <span className="text-xs text-slate-400 font-medium shrink-0 flex items-center gap-1 mr-1">
+                <History className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden lg:inline">ประวัติที่บันทึก:</span>
+              </span>
+              {historyDates.slice(0, 5).map((item: any) => {
+                const isSelected = item.briefDate === selectedDate
+                const isBull = item.overallSentiment === 'bullish'
+                const isBear = item.overallSentiment === 'bearish'
+                const dotColor = isBull ? 'bg-emerald-400' : isBear ? 'bg-rose-400' : 'bg-amber-400'
+
+                return (
+                  <button
+                    key={item.briefDate}
+                    onClick={() => setSelectedDate(item.briefDate)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-mono font-medium shrink-0 flex items-center gap-1.5 transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-indigo-600/30 text-indigo-200 border-indigo-500/50 shadow-sm'
+                        : 'bg-[#181C25] hover:bg-[#202532] text-slate-300 border-white/[0.06]'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                    <span>{item.briefDate === todayStr ? 'วันนี้' : formatThaiDate(item.briefDate)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* AI Portfolio Daily Brief (Executive Digest: 6 Core Pillars) or Empty State */}
+        {dailyBrief ? (
+          <AiPortfolioBriefCard
+            brief={dailyBrief}
+            onRefreshBrief={handleRefreshBrief}
+            isHistorical={!isToday}
+            selectedDate={selectedDate}
+            onBackToToday={() => setSelectedDate(todayStr)}
+          />
+        ) : (
+          <div className="rounded-3xl bg-[#12151C] border border-white/[0.08] p-8 text-center space-y-4 shadow-xl shadow-black/20">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <History className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                ไม่พบบันทึกประวัติของวันที่ {formatThaiDate(selectedDate)}
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto">
+                ไม่มีบันทึกสรุปข่าวกรองและกลยุทธ์พอร์ตที่บันทึกไว้ในวันดังกล่าว คุณสามารถเลือกวันที่บันทึกไว้ด้านบน หรือกลับสู่บทสรุปปัจจุบัน
+              </p>
+            </div>
+            <div className="pt-2 flex justify-center">
+              <button
+                onClick={() => setSelectedDate(todayStr)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-indigo-600/30"
+              >
+                <Sparkles className="w-4 h-4 text-indigo-200" />
+                <span>กลับสู่บทสรุปวันนี้</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Underlying News Feed Section (Collapsible & Filterable) */}
         <div className="space-y-4 pt-2">

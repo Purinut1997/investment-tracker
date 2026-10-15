@@ -9,6 +9,9 @@ import {
   classifyNewsCategory,
   generateThaiSynthesis,
   generateDailyBrief,
+  getDailyBriefHistoryList,
+  getDailyBriefByDate,
+  getTodayBangkokDateString,
   NewsCategory,
 } from '@/lib/news/news-analyzer'
 
@@ -22,6 +25,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const categoryParam = (searchParams.get('category') ?? 'portfolio') as NewsCategory
   const symbol = searchParams.get('symbol')
+  const dateParam = searchParams.get('date')
+
+  const todayDate = getTodayBangkokDateString()
+  const selectedDate = dateParam || todayDate
+  const isHistorical = selectedDate !== todayDate
 
   try {
     // 1. Get user settings and active holdings
@@ -34,7 +42,10 @@ export async function GET(req: NextRequest) {
     const activeHoldings = holdingsResult.holdings.filter((h) => h.quantity > 0)
     const userTickers = activeHoldings.map((h) => h.ticker.toUpperCase())
 
-    // 2. Fetch news items
+    // 2. Fetch history dates metadata for date selector
+    const historyDates = await getDailyBriefHistoryList(userId)
+
+    // 3. Fetch news items
     let whereClause: any = {}
 
     if (symbol) {
@@ -94,7 +105,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // 3. Enrich items with sentiment & Thai synthesis
+    // 4. Enrich items with sentiment & Thai synthesis
     const enrichedItems = rawItems.map((item) => {
       const sentiment = item.sentiment ?? detectSentiment(item.headline, item.summary)
       const isHeld = item.symbol ? userTickers.includes(item.symbol.toUpperCase()) : false
@@ -115,7 +126,7 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // 4. Calculate Holdings Sentiment Summary for quick strip
+    // 5. Calculate Holdings Sentiment Summary for quick strip
     const holdingsSummary = activeHoldings.map((h) => {
       const sym = h.ticker.toUpperCase()
       const symbolNews = rawItems.filter(
@@ -136,47 +147,59 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // 5. Generate or get Daily Brief with grounded technical signals
-    const userHoldingContexts = await Promise.all(
-      activeHoldings.map(async (h) => {
-        const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
-        let sig = null
-        try {
-          sig = await fetchSingleTickerTechnicalSignal(h.ticker, marketHint)
-        } catch {
-          // ignore error and proceed
-        }
-        const price = sig?.currentPrice && sig.currentPrice > 0 ? sig.currentPrice : h.currentPrice
+    // 6. Generate or retrieve Daily Brief (Historical Archive vs Today's Live/Cached Brief)
+    let dailyBrief = null
 
-        return {
-          ticker: h.ticker.toUpperCase(),
-          assetName: h.assetName,
-          assetType: h.assetType,
-          allocationPercent: Math.round(h.allocationPercent * 10) / 10,
-          unrealizedPnLPercent: Math.round(h.unrealizedPnLPercent * 10) / 10,
-          currentPrice: price,
-          currency: h.currency,
-          supportS1: sig?.supportS1 ?? (price > 0 ? Number((price * 0.975).toFixed(2)) : null),
-          supportS2: sig?.supportS2 ?? (price > 0 ? Number((price * 0.95).toFixed(2)) : null),
-          resistanceR1: sig?.resistanceR1 ?? (price > 0 ? Number((price * 1.03).toFixed(2)) : null),
-          sma50: sig?.sma50 ?? null,
-          sma200: sig?.sma200 ?? null,
-          rsi14: sig?.rsi14 ?? null,
-          isNearSupport: sig?.isNearSupport ?? false,
-          isOversold: sig?.isOversold ?? false,
-          technicalSummary: sig?.metricSummary ?? '',
-        }
-      })
-    )
+    if (isHistorical) {
+      // Historical view: load the preserved snapshot from DB
+      dailyBrief = await getDailyBriefByDate(userId, selectedDate)
+    } else {
+      // Today view: generate or fetch cached/persisted brief for today
+      const userHoldingContexts = await Promise.all(
+        activeHoldings.map(async (h) => {
+          const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
+          let sig = null
+          try {
+            sig = await fetchSingleTickerTechnicalSignal(h.ticker, marketHint)
+          } catch {
+            // ignore error and proceed
+          }
+          const price = sig?.currentPrice && sig.currentPrice > 0 ? sig.currentPrice : h.currentPrice
 
-    const hasGeminiKey = Boolean(userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY)
-    const dailyBrief = await generateDailyBrief(userId, userHoldingContexts, rawItems, hasGeminiKey, false)
+          return {
+            ticker: h.ticker.toUpperCase(),
+            assetName: h.assetName,
+            assetType: h.assetType,
+            allocationPercent: Math.round(h.allocationPercent * 10) / 10,
+            unrealizedPnLPercent: Math.round(h.unrealizedPnLPercent * 10) / 10,
+            currentPrice: price,
+            currency: h.currency,
+            supportS1: sig?.supportS1 ?? (price > 0 ? Number((price * 0.975).toFixed(2)) : null),
+            supportS2: sig?.supportS2 ?? (price > 0 ? Number((price * 0.95).toFixed(2)) : null),
+            resistanceR1: sig?.resistanceR1 ?? (price > 0 ? Number((price * 1.03).toFixed(2)) : null),
+            sma50: sig?.sma50 ?? null,
+            sma200: sig?.sma200 ?? null,
+            rsi14: sig?.rsi14 ?? null,
+            isNearSupport: sig?.isNearSupport ?? false,
+            isOversold: sig?.isOversold ?? false,
+            technicalSummary: sig?.metricSummary ?? '',
+          }
+        })
+      )
+
+      const hasGeminiKey = Boolean(userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY)
+      dailyBrief = await generateDailyBrief(userId, userHoldingContexts, rawItems, hasGeminiKey, false, todayDate)
+    }
 
     return NextResponse.json({
       items: enrichedItems,
       userTickers,
       userHoldingsSummary: holdingsSummary,
       dailyBrief,
+      historyDates,
+      selectedDate,
+      todayDate,
+      isHistorical,
       category: categoryParam,
       totalCount: enrichedItems.length,
     })

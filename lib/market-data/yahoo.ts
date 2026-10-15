@@ -39,6 +39,14 @@ export class YahooFinanceProvider implements MarketDataProvider {
       yfTicker = '%5EDJI'
     } else if (rawSymbol === 'GOLD' || rawSymbol === 'XAU' || rawSymbol === 'GC.F') {
       yfTicker = 'GC%3DF'
+    } else if (rawSymbol === 'US10Y' || rawSymbol === 'TNX' || rawSymbol === '^TNX') {
+      yfTicker = '%5ETNX'
+    } else if (rawSymbol === 'VIX' || rawSymbol === '^VIX') {
+      yfTicker = '%5EVIX'
+    } else if (rawSymbol === 'DXY' || rawSymbol === 'USDX' || rawSymbol === 'DX-Y.NYB') {
+      yfTicker = 'DX-Y.NYB'
+    } else if (rawSymbol === 'OIL' || rawSymbol === 'WTI' || rawSymbol === 'CL=F') {
+      yfTicker = 'CL%3DF'
     } else if (market === 'TH' && !rawSymbol.endsWith('.BK')) {
       yfTicker = `${rawSymbol}.BK`
     }
