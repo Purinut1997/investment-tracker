@@ -26,6 +26,9 @@ import {
   Zap,
   Check,
   Award,
+  FileText,
+  Bookmark,
+  Quote,
 } from 'lucide-react'
 import { StructuredAiData } from './StockDetailModal'
 
@@ -65,6 +68,7 @@ const HIGHLIGHT_MAP: { terms: string[]; className: string }[] = [
       'ADVANC',
       'SCHD',
       'NVDA',
+      'ASML',
       'คูเมือง',
       'โครงสร้างพื้นฐาน',
       'ฐานลูกค้าขนาดใหญ่',
@@ -101,6 +105,7 @@ const HIGHLIGHT_MAP: { terms: string[]; className: string }[] = [
       '100 Index',
       'ไม่ควรสูงเกิน 1.5 - 2.0 เท่า',
       'ควรมากกว่า 10-15%',
+      'ยิ่งต่ำยิ่งดี',
     ],
     className: 'text-emerald-300 font-bold bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/25',
   },
@@ -123,11 +128,13 @@ const HIGHLIGHT_MAP: { terms: string[]; className: string }[] = [
   {
     terms: [
       'การเปลี่ยนแปลงทางเทคโนโลยี',
+      'Tech Disruption',
       'Disruption',
       'กฎหมายควบคุมจากภาครัฐ',
       'สงครามตัดราคา',
       'พฤติกรรมผู้บริโภคที่เปลี่ยนไป',
       'ภาระดอกเบี้ย',
+      'ความเสี่ยงทางการเงิน',
       'ความเสี่ยงสภาพคล่อง',
     ],
     className: 'text-rose-300 font-bold',
@@ -137,16 +144,13 @@ const HIGHLIGHT_MAP: { terms: string[]; className: string }[] = [
 function HighlightedContent({ text }: { text: string }) {
   if (!text) return null
 
-  // Flatten all patterns into a single regex with capturing groups
   const allTerms: { term: string; className: string }[] = []
   HIGHLIGHT_MAP.forEach((item) => {
     item.terms.forEach((t) => allTerms.push({ term: t, className: item.className }))
   })
 
-  // Sort longest term first to avoid partial replacements
   allTerms.sort((a, b) => b.term.length - a.term.length)
 
-  // Escape regex special chars
   const pattern = new RegExp(
     `(${allTerms.map((t) => t.term.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})`,
     'gi'
@@ -169,40 +173,6 @@ function HighlightedContent({ text }: { text: string }) {
       })}
     </span>
   )
-}
-
-// Helper to breakdown long business overview into distinct readable points
-function parseBusinessPoints(rawText: string | undefined, defaultName: string, defaultSymbol: string) {
-  if (!rawText) {
-    return [
-      {
-        title: 'โครงสร้างธุรกิจและผลิตภัณฑ์หลัก',
-        content: `${defaultName} (${defaultSymbol}) ดำเนินธุรกิจในกลุ่มอุตสาหกรรมหลักที่มีแหล่งรายได้จากการขายผลิตภัณฑ์ บริการ หรือสัญญาระยะยาว`,
-      },
-      {
-        title: 'แหล่งที่มาของกระแสเงินสด',
-        content: 'สร้างกระแสเงินสดจากการบริโภคของลูกค้า หรือการลงทุนในโครงสร้างพื้นฐานระดับประเทศและสากลที่มีเสถียรภาพ',
-      },
-    ]
-  }
-
-  // Check if text has distinct sentences or themes
-  // For SCHD or typical ETF / corporate profiles
-  const sentences = rawText.split(/(?<=[.!?。])\s+|\n+/).filter((s) => s.trim().length > 0)
-
-  if (sentences.length >= 2) {
-    return sentences.map((sent, idx) => ({
-      title: idx === 0 ? 'วัตถุประสงค์ & โมเดลธุรกิจหลัก' : idx === 1 ? 'เกณฑ์การคัดเลือก & สร้างผลตอบแทน' : 'จุดเด่นเชิงกลยุทธ์',
-      content: sent.trim(),
-    }))
-  }
-
-  return [
-    {
-      title: 'ภาพรวมลักษณะธุรกิจ',
-      content: rawText,
-    },
-  ]
 }
 
 export function StockFourPillarsTab({
@@ -238,6 +208,9 @@ export function StockFourPillarsTab({
     return val.toLocaleString()
   }
 
+  // Adjust PB if extreme due to buybacks/currency
+  const displayPb = pb ? (pb > 500 ? Number((pb / 100).toFixed(2)) : Number(pb.toFixed(2))) : null
+
   // Fallback defaults for financial ratios if not yet populated from Yahoo
   const effectiveRoe = roe ?? (pe && pb ? Number(((pb / pe) * 100).toFixed(1)) : 16.5)
   const effectiveDE = debtToEquity ?? 0.65
@@ -269,7 +242,7 @@ export function StockFourPillarsTab({
   const getPbBadge = (val: number | null | undefined) => {
     if (!val || val <= 0) return { label: 'N/A', color: 'text-slate-300 bg-slate-800/80 border-slate-700' }
     if (val < 1.0) return { label: '🟢 ต่ำกว่ามูลค่าทรัพย์สินสุทธิ (< 1.0 เท่า)', color: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30 font-bold' }
-    if (val <= 2.5) return { label: '🔵 อยู่ในเกณฑ์มาตรฐานธุรกิจทั่วไป', color: 'text-indigo-300 bg-indigo-500/15 border-indigo-500/30 font-bold' }
+    if (val <= 3.0) return { label: '🔵 อยู่ในเกณฑ์มาตรฐานธุรกิจทั่วไป', color: 'text-indigo-300 bg-indigo-500/15 border-indigo-500/30 font-bold' }
     return { label: '🟡 เน้นสินทรัพย์ทางปัญญาและเทคโนโลยี (Asset-Light)', color: 'text-amber-300 bg-amber-500/15 border-amber-500/30 font-bold' }
   }
 
@@ -298,29 +271,26 @@ export function StockFourPillarsTab({
   }
 
   const peInfo = getPeBadge(pe)
-  const pbInfo = getPbBadge(pb)
+  const pbInfo = getPbBadge(displayPb)
   const yieldInfo = getYieldBadge(dividendYield)
   const deInfo = getDeBadge(effectiveDE)
   const roeInfo = getRoeBadge(effectiveRoe)
 
-  // Parse structured points for business
-  const businessPoints = parseBusinessPoints(structuredAi?.businessOverview, name, symbol)
-
   return (
     <div className="space-y-6 sm:space-y-7 animate-in fade-in duration-200">
-      {/* ── HEADER SUMMARY & READINESS SCORECARD ─────────────────── */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#161B29] via-[#131622] to-[#0D1018] border border-white/[0.12] shadow-2xl relative overflow-hidden space-y-5">
-        <div className="absolute -top-16 -right-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* ── 0. EXECUTIVE REPORT HEADER (บทนำและคะแนนความพร้อม) ─────────────────── */}
+      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#161B29] via-[#121622] to-[#0A0D15] border border-white/[0.12] shadow-2xl relative overflow-hidden space-y-4">
+        <div className="absolute -top-20 -right-20 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-2 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-3 py-1 rounded-lg text-xs sm:text-sm font-bold bg-indigo-500/25 text-indigo-200 border border-indigo-500/40 flex items-center gap-1.5 shadow-sm">
-                <Target className="w-4 h-4 text-indigo-400" />
-                <span>กรอบการวิเคราะห์ 4 ด้านก่อนลงทุน (4 Pillars Framework)</span>
+                <FileText className="w-4 h-4 text-indigo-400" />
+                <span>บทวิเคราะห์ 4 ด้านก่อนตัดสินใจลงทุน (4 Pillars Investment Thesis)</span>
               </span>
               <span className="text-xs sm:text-sm text-slate-300 font-mono bg-white/[0.06] px-2.5 py-0.5 rounded-md border border-white/[0.08]">
-                {symbol} ({isThai ? 'หุ้นไทย SET' : 'หุ้นสหรัฐฯ US'})
+                {symbol} • {name}
               </span>
             </div>
 
@@ -328,19 +298,19 @@ export function StockFourPillarsTab({
               การวิเคราะห์หุ้น 1 ตัวก่อนตัดสินใจลงทุน ควรพิจารณาข้อมูลหลัก 4 ด้าน
             </h3>
 
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              เพื่อให้เห็นภาพรวมของธุรกิจและความคุ้มค่าในการลงทุนอย่างรอบด้าน ครอบคลุมทั้ง{' '}
-              <strong className="text-indigo-300 font-bold">1. ลักษณะธุรกิจ</strong>,{' '}
-              <strong className="text-amber-300 font-bold">2. ความถูกแพง</strong>,{' '}
-              <strong className="text-emerald-300 font-bold">3. สุขภาพการเงิน</strong> และ{' '}
-              <strong className="text-sky-300 font-bold">4. อนาคตกับความเสี่ยง</strong>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              เพื่อให้เห็นภาพรวมของธุรกิจและความคุ้มค่าในการลงทุนอย่างรอบด้าน โดยแบ่งชุดเนื้อหาออกเป็น 4 หมวดหมู่สำคัญ ได้แก่:{' '}
+              <strong className="text-indigo-300">1. ลักษณะธุรกิจและการทำกำไร</strong>,{' '}
+              <strong className="text-amber-300">2. ความถูกแพงของหุ้น</strong>,{' '}
+              <strong className="text-emerald-300">3. สุขภาพทางการเงิน</strong> และ{' '}
+              <strong className="text-sky-300">4. อนาคตและความเสี่ยง</strong>
             </p>
           </div>
 
-          {/* Overall Investment Readiness Score */}
-          <div className="flex items-center gap-4 shrink-0 p-4 rounded-2xl bg-[#090C13] border border-white/[0.12] shadow-inner">
-            <div className="text-center min-w-[120px]">
-              <div className="text-xs text-slate-300 font-bold uppercase tracking-wider">
+          {/* Readiness Score Strip */}
+          <div className="flex items-center gap-4 shrink-0 p-4 rounded-2xl bg-[#090C13] border border-white/[0.12] shadow-inner self-start md:self-auto">
+            <div className="text-center min-w-[125px]">
+              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">
                 คะแนนความพร้อมลงทุน
               </div>
               <div className="flex items-baseline justify-center gap-1.5 my-1">
@@ -356,71 +326,28 @@ export function StockFourPillarsTab({
           </div>
         </div>
 
-        {/* 4 Category Pill Progress Indicators */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-white/[0.08]">
-          <div className="p-3 rounded-xl bg-[#121624] border border-indigo-500/25 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xs">
-                1
-              </div>
-              <div>
-                <div className="text-xs text-slate-400 font-medium">โมเดลธุรกิจ</div>
-                <div className="text-xs sm:text-sm font-bold text-white">Business Model</div>
-              </div>
-            </div>
-            <span className="text-sm sm:text-base font-extrabold text-indigo-300 font-mono">
-              {scoreMoat} <span className="text-xs text-slate-500 font-normal">/25</span>
-            </span>
+        {/* 4 Category Score Highlights */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-white/[0.08] text-xs sm:text-sm">
+          <div className="px-3 py-2 rounded-xl bg-[#121624] border border-indigo-500/25 flex items-center justify-between">
+            <span className="text-slate-300 font-medium">1. โมเดลธุรกิจ</span>
+            <span className="font-extrabold text-indigo-300 font-mono">{scoreMoat} / 25</span>
           </div>
-
-          <div className="p-3 rounded-xl bg-[#121624] border border-amber-500/25 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">
-                2
-              </div>
-              <div>
-                <div className="text-xs text-slate-400 font-medium">ความถูกแพง</div>
-                <div className="text-xs sm:text-sm font-bold text-white">Valuation</div>
-              </div>
-            </div>
-            <span className="text-sm sm:text-base font-extrabold text-amber-300 font-mono">
-              {scoreValuation} <span className="text-xs text-slate-500 font-normal">/25</span>
-            </span>
+          <div className="px-3 py-2 rounded-xl bg-[#121624] border border-amber-500/25 flex items-center justify-between">
+            <span className="text-slate-300 font-medium">2. ความถูกแพง</span>
+            <span className="font-extrabold text-amber-300 font-mono">{scoreValuation} / 25</span>
           </div>
-
-          <div className="p-3 rounded-xl bg-[#121624] border border-emerald-500/25 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
-                3
-              </div>
-              <div>
-                <div className="text-xs text-slate-400 font-medium">สุขภาพการเงิน</div>
-                <div className="text-xs sm:text-sm font-bold text-white">Financial Health</div>
-              </div>
-            </div>
-            <span className="text-sm sm:text-base font-extrabold text-emerald-300 font-mono">
-              {scoreHealth} <span className="text-xs text-slate-500 font-normal">/25</span>
-            </span>
+          <div className="px-3 py-2 rounded-xl bg-[#121624] border border-emerald-500/25 flex items-center justify-between">
+            <span className="text-slate-300 font-medium">3. สุขภาพการเงิน</span>
+            <span className="font-extrabold text-emerald-300 font-mono">{scoreHealth} / 25</span>
           </div>
-
-          <div className="p-3 rounded-xl bg-[#121624] border border-sky-500/25 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-xs">
-                4
-              </div>
-              <div>
-                <div className="text-xs text-slate-400 font-medium">อนาคต & ความเสี่ยง</div>
-                <div className="text-xs sm:text-sm font-bold text-white">Future & Risks</div>
-              </div>
-            </div>
-            <span className="text-sm sm:text-base font-extrabold text-sky-300 font-mono">
-              {scoreFuture} <span className="text-xs text-slate-500 font-normal">/25</span>
-            </span>
+          <div className="px-3 py-2 rounded-xl bg-[#121624] border border-sky-500/25 flex items-center justify-between">
+            <span className="text-slate-300 font-medium">4. อนาคต & เสี่ยง</span>
+            <span className="font-extrabold text-sky-300 font-mono">{scoreFuture} / 25</span>
           </div>
         </div>
       </div>
 
-      {/* ── PILLAR 1: BUSINESS MODEL & PROFITABILITY ─────────────── */}
+      {/* ── 1. BUSINESS MODEL (หมวดที่ 1: ลักษณะธุรกิจและการทำกำไร) ─────────────── */}
       <div className="p-5 sm:p-6 rounded-2xl bg-[#111420] border border-indigo-500/35 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/[0.08] gap-2">
           <div className="flex items-center gap-3">
@@ -432,111 +359,70 @@ export function StockFourPillarsTab({
                 <span>1. ลักษณะธุรกิจและการทำกำไร (Business Model)</span>
               </h4>
               <p className="text-xs sm:text-sm text-slate-300">
-                บริษัททำธุรกิจอะไร รายได้หลักมาจากไหน และมีคูเมืองป้องกันคู่แข่ง (Economic Moat) แข็งแกร่งเพียงใด
+                ทำความเข้าใจว่าบริษัททำธุรกิจอะไร แหล่งที่มาของรายได้ และความสามารถในการรักษาคูเมืองทางธุรกิจ
               </p>
             </div>
           </div>
           <span className="text-xs sm:text-sm font-bold text-indigo-300 font-mono bg-indigo-500/15 px-3 py-1 rounded-lg border border-indigo-500/30 self-start sm:self-auto">
-            เสาหลักที่ 1
+            หมวดที่ 1
           </span>
         </div>
 
-        {/* Categories Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Box 1: Business Overview & Revenue Sources */}
-          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="font-bold text-sm sm:text-base text-indigo-300 flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-indigo-400" />
-                  <span>บริษัททำธุรกิจอะไร และรายได้หลักมาจากไหน?</span>
-                </div>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                  โครงสร้างรายได้
-                </span>
-              </div>
-
-              {/* Parsed Points */}
-              <div className="space-y-2.5">
-                {businessPoints.map((pt, idx) => (
-                  <div key={idx} className="p-3 rounded-lg bg-[#0E121C] border border-white/[0.06] space-y-1">
-                    <div className="text-xs font-bold text-indigo-200 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                      <span>{pt.title}</span>
-                    </div>
-                    <div className="text-xs sm:text-sm text-slate-200 leading-relaxed">
-                      <HighlightedContent text={pt.content} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Narrative Flow for Business Model */}
+        <div className="space-y-4 text-sm sm:text-[14.5px] leading-relaxed text-slate-200">
+          {/* Paragraph 1: Business Overview & Core Revenue */}
+          <div className="p-4 rounded-xl bg-[#151926] border border-white/[0.08] space-y-2">
+            <div className="font-bold text-indigo-300 text-sm sm:text-base flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-indigo-400" />
+              <span>บริษัททำธุรกิจอะไร และรายได้หลักมาจากไหน?</span>
             </div>
-
-            <div className="pt-3 border-t border-white/[0.06] text-xs sm:text-sm text-slate-300 flex items-start gap-2 bg-indigo-950/20 p-2.5 rounded-lg border border-indigo-500/20">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <p className="text-slate-200">
+              {structuredAi?.businessOverview ? (
+                <HighlightedContent text={structuredAi.businessOverview} />
+              ) : (
+                <HighlightedContent
+                  text={`${name} (${symbol}) ดำเนินธุรกิจในกลุ่มอุตสาหกรรมหลักที่มีแหล่งรายได้จากการจำหน่ายผลิตภัณฑ์ บริการ หรือสัญญาลิขสิทธิ์ระดับสากล โดยเน้นการสร้างกระแสเงินสดจากการบริโภคหรือการลงทุนโครงสร้างพื้นฐานที่มีความจำเป็นต่อเนื่อง ส่งผลให้มีกระแสเงินสดสม่ำเสมอและมีความแน่นอนทางธุรกิจ`}
+                />
+              )}
+            </p>
+            <div className="pt-2 text-xs text-slate-400 flex items-center gap-1.5 border-t border-white/[0.04]">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
               <span>
-                <strong>เกณฑ์ตัดสินใจ:</strong> โมเดลธุรกิจต้องเข้าใจง่าย ชัดเจน และมีกระแสเงินสดจากการดำเนินงานที่สม่ำเสมอ
+                <strong>เกณฑ์พิจารณา:</strong> โมเดลธุรกิจที่ดีต้องเข้าใจง่าย ไม่ซับซ้อน และมีแหล่งที่มาของรายได้และกระแสเงินสดชัดเจน
               </span>
             </div>
           </div>
 
-          {/* Box 2: Competitive Advantage & Moat + Benchmark Case */}
-          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="font-bold text-sm sm:text-base text-indigo-300 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                  <span>มีข้อได้เปรียบทางการแข่งขันที่เลียนแบบยากหรือไม่? (Moat)</span>
-                </div>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                  คูเมืองป้องกันคู่แข่ง
-                </span>
-              </div>
-
-              <div className="text-xs sm:text-sm text-slate-200 leading-relaxed space-y-2 p-3 rounded-lg bg-[#0E121C] border border-white/[0.06]">
-                <p>
-                  <HighlightedContent text="มีแต้มต่อทางธุรกิจที่คู่แข่งรายใหม่เข้ามาแย่งชิงส่วนแบ่งได้ยาก เช่น มี Network Effect, ลูกค้ามีต้นทุนการย้ายค่ายสูง (Switching Cost) หรือมี โครงสร้างพื้นฐาน และ ฐานลูกค้าขนาดใหญ่" />
-                </p>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">
-                    🛡️ Wide Economic Moat
-                  </span>
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                    👥 High Switching Cost
-                  </span>
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-200 border border-amber-500/30">
-                    📶 Network Effect
-                  </span>
-                </div>
-              </div>
-
-              {/* Benchmark Example Callout (ADVANC) */}
-              <div className="p-3.5 rounded-xl bg-gradient-to-r from-indigo-950/40 to-[#12182B] border border-indigo-500/30 space-y-1.5">
-                <div className="text-xs sm:text-sm font-bold text-indigo-200 flex items-center gap-2">
-                  <span>💡 ตัวอย่างกรณีศึกษา (Benchmark Case):</span>
-                  <span className="px-2 py-0.5 rounded text-xs font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/40">
-                    ADVANC
-                  </span>
-                </div>
-                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
-                  หุ้นกลุ่มสื่อสารอย่าง <strong className="text-indigo-300">ADVANC</strong> มี{' '}
-                  <strong className="text-white">โครงสร้างพื้นฐาน เสาสัญญาณ และคลื่นความถี่ครบทุกย่าน</strong> พร้อม{' '}
-                  <strong className="text-emerald-300 font-bold">ฐานลูกค้ากว่า 45 ล้านราย</strong> ทำให้มีรายได้และกระแสเงินสดสม่ำเสมอ คู่แข่งรายใหม่แทบเป็นไปไม่ได้ที่จะเข้ามาเจาะตลาดในระดับเดียวกัน
-                </p>
-              </div>
+          {/* Paragraph 2: Economic Moat & Competitive Advantage */}
+          <div className="p-4 rounded-xl bg-[#151926] border border-white/[0.08] space-y-2.5">
+            <div className="font-bold text-indigo-300 text-sm sm:text-base flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-indigo-400" />
+              <span>มีข้อได้เปรียบทางการแข่งขันที่คู่แข่งเลียนแบบได้ยากหรือไม่? (Economic Moat)</span>
             </div>
+            <p className="text-slate-200">
+              <HighlightedContent
+                text="การประเมินคูเมืองทางธุรกิจ (Economic Moat) คือการดูว่าบริษัทมีแต้มต่อที่คู่แข่งรายใหม่เข้ามาแย่งชิงส่วนแบ่งการตลาดได้ยากหรือไม่ ไม่ว่าจะเป็นข้อได้เปรียบด้านขนาด (Economies of Scale), การมีสิทธิบัตรเทคโนโลยีเฉพาะทาง, ลูกค้ามีต้นทุนในการเปลี่ยนไปใช้เจ้าอื่นสูงมาก (Switching Cost) หรือมี Network Effect ที่ยิ่งมีผู้ใช้เยอะ ยิ่งมีมูลค่าสูงขึ้น"
+              />
+            </p>
 
-            <div className="pt-3 border-t border-white/[0.06] text-xs sm:text-sm text-slate-300 flex items-start gap-2 bg-indigo-950/20 p-2.5 rounded-lg border border-indigo-500/20">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <span>
-                <strong>เกณฑ์ตัดสินใจ:</strong> ธุรกิจที่มีคูเมืองแข็งแกร่งจะรักษาอัตรากำไร (Margin) ได้ยาวนาน แม้เกิดภาวะเงินเฟ้อหรือวิกฤตเศรษฐกิจ
-              </span>
+            {/* Case Study Callout: ADVANC */}
+            <div className="mt-3 p-4 rounded-xl bg-gradient-to-r from-indigo-950/40 via-[#13192B] to-[#151A2C] border border-indigo-500/35 space-y-2 shadow-inner">
+              <div className="flex items-center gap-2 text-indigo-200 font-bold text-sm">
+                <Quote className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>ตัวอย่างกรณีศึกษาคูเมืองทางธุรกิจ: หุ้นกลุ่มสื่อสารอย่าง ADVANC</span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed pl-6">
+                หุ้นกลุ่มสื่อสารอย่าง <strong className="text-indigo-300 font-bold">ADVANC</strong> ถือเป็นตัวอย่างคลาสสิกของธุรกิจที่มีคูเมืองกว้างมาก จากการครอบครอง{' '}
+                <strong className="text-white font-bold">โครงสร้างพื้นฐาน เสาสัญญาณ และคลื่นความถี่โทรคมนาคมครบทุกย่านทั่วประเทศ</strong> พร้อมกับ{' '}
+                <strong className="text-emerald-300 font-bold bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/25">ฐานลูกค้าขนาดใหญ่กว่า 45 ล้านราย</strong>{' '}
+                ทำให้บริษัทมีรายได้และกระแสเงินสดเข้ามาอย่างสม่ำเสมอในทุกเดือน และแทบเป็นไปไม่ได้เลยที่คู่แข่งรายใหม่จะทุ่มเงินมหาศาลเพื่อเจาะตลาดหรือสร้างโครงข่ายมาแข่งขันในระดับเดียวกัน
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── PILLAR 2: VALUATION ASSESSMENT ───────────────────────── */}
+      {/* ── 2. VALUATION (หมวดที่ 2: ความถูกแพงของหุ้น) ─────────────── */}
       <div className="p-5 sm:p-6 rounded-2xl bg-[#111420] border border-amber-500/35 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/[0.08] gap-2">
           <div className="flex items-center gap-3">
@@ -553,126 +439,102 @@ export function StockFourPillarsTab({
             </div>
           </div>
           <span className="text-xs sm:text-sm font-bold text-amber-300 font-mono bg-amber-500/15 px-3 py-1 rounded-lg border border-amber-500/30 self-start sm:self-auto">
-            เสาหลักที่ 2
+            หมวดที่ 2
           </span>
         </div>
 
-        {/* 3 Valuation Metric Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* 1. P/E Ratio */}
-          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm sm:text-base text-amber-300 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4" />
-                  <span>P/E Ratio</span>
+        {/* Narrative Rows: Wide, spacious, comfortable to read */}
+        <div className="space-y-3.5 text-sm sm:text-[14.5px] leading-relaxed text-slate-200">
+          {/* Row 2.1: P/E Ratio */}
+          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-xs shrink-0">
+                  2.1
                 </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/[0.06] text-slate-300">
-                  ราคาต่อกำไร
+                <span className="font-bold text-base text-white">
+                  P/E Ratio (อัตราส่วนราคาต่อกำไรสุทธิ)
                 </span>
               </div>
-
-              {/* Big Metric Display */}
-              <div className="p-3 rounded-lg bg-[#0E121C] border border-white/[0.06] text-center">
-                <div className="text-xs text-slate-400">อัตราส่วน P/E ปัจจุบัน</div>
-                <div className="text-2xl sm:text-3xl font-black text-white font-mono my-0.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg text-sm sm:text-base font-black text-amber-300 font-mono bg-amber-500/15 border border-amber-500/30">
                   {pe ? `${pe} เท่า` : forwardPe ? `${forwardPe} เท่า (Fwd)` : 'N/A'}
-                </div>
-                <div className="text-xs text-amber-300 font-semibold">
-                  {pe ? `ซื้อราคานี้ คืนทุนใน ~${pe} ปี` : 'ใช้ Forward P/E หรือประเมินจากกำไรล่วงหน้า'}
-                </div>
-              </div>
-
-              <div className="text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1">
-                <p>
-                  <strong>ความหมายสำคัญ:</strong> บอกว่าซื้อหุ้นราคานี้{' '}
-                  <strong className="text-amber-300">กี่ปีถึงจะคืนทุน</strong> (ยิ่งต่ำยิ่งดี) แต่ต้องนำไปเทียบกับค่าเฉลี่ยของบริษัทอื่นในอุตสาหกรรมเดียวกันด้วย
-                </p>
+                </span>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${peInfo.color}`}>
+                  {peInfo.label}
+                </span>
               </div>
             </div>
 
-            <div className={`p-2.5 rounded-lg border text-xs sm:text-sm leading-snug ${peInfo.color}`}>
-              <strong>สถานะประเมิน:</strong> {peInfo.label}
-            </div>
+            <p className="text-slate-200">
+              <strong className="text-amber-300">ความหมายสำคัญ:</strong> บอกว่าซื้อหุ้นราคานี้{' '}
+              <strong className="text-white font-bold underline decoration-amber-400/50 underline-offset-4">กี่ปีถึงจะคืนทุน</strong>{' '}
+              {pe ? `(ตัวอย่างเช่น ที่ระดับ P/E ${pe} เท่า หากบริษัทสร้างกำไรเท่าเดิม จะใช้เวลาประมาณ ${pe} ปีในการคืนทุน)` : ''}{' '}
+              โดยหลักการทั่วไป <strong className="text-emerald-300 font-bold bg-emerald-500/15 px-1 py-0.5 rounded border border-emerald-500/20">ยิ่งต่ำยิ่งดี</strong>{' '}
+              แต่ต้องนำไปเปรียบเทียบกับค่าเฉลี่ยของบริษัทอื่นในอุตสาหกรรมเดียวกันเสมอ หุ้นกลุ่มเติบโตสูงมักซื้อขายด้วย P/E สูงเพราะตลาดคาดหวังกำไรในอนาคตจะโตชดเชย
+            </p>
           </div>
 
-          {/* 2. P/BV Ratio */}
-          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm sm:text-base text-amber-300 flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4" />
-                  <span>P/BV Ratio</span>
+          {/* Row 2.2: P/BV Ratio */}
+          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-xs shrink-0">
+                  2.2
                 </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-white/[0.06] text-slate-300">
-                  เทียบมูลค่าทางบัญชี
+                <span className="font-bold text-base text-white">
+                  P/BV (ราคาต่อมูลค่าทางบัญชี)
                 </span>
               </div>
-
-              {/* Big Metric Display */}
-              <div className="p-3 rounded-lg bg-[#0E121C] border border-white/[0.06] text-center">
-                <div className="text-xs text-slate-400">อัตราส่วน P/BV ปัจจุบัน</div>
-                <div className="text-2xl sm:text-3xl font-black text-white font-mono my-0.5">
-                  {pb ? `${pb} เท่า` : 'N/A'}
-                </div>
-                <div className="text-xs text-indigo-300 font-semibold">
-                  {pb && pb < 1.0 ? 'ต่ำกว่ามูลค่าทรัพย์สินสุทธิ' : 'เทียบส่วนของทุนทางบัญชี'}
-                </div>
-              </div>
-
-              <div className="text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1">
-                <p>
-                  <strong>ความหมายสำคัญ:</strong> บอกว่าราคาหุ้นตอนนี้แพงกว่า{' '}
-                  <strong className="text-amber-300">มูลค่าทรัพย์สินสุทธิ (Book Value)</strong> ของบริษัทกี่เท่า หากต่ำกว่า 1.0 แปลว่าซื้อหุ้นได้ถูกกว่าทรัพย์สินสุทธิของกิจการ
-                </p>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg text-sm sm:text-base font-black text-white font-mono bg-white/[0.08] border border-white/[0.12]">
+                  {displayPb ? `${displayPb} เท่า` : 'N/A'}
+                </span>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${pbInfo.color}`}>
+                  {pbInfo.label}
+                </span>
               </div>
             </div>
 
-            <div className={`p-2.5 rounded-lg border text-xs sm:text-sm leading-snug ${pbInfo.color}`}>
-              <strong>สถานะประเมิน:</strong> {pbInfo.label}
-            </div>
+            <p className="text-slate-200">
+              <strong className="text-amber-300">ความหมายสำคัญ:</strong> บอกว่าราคาหุ้นตอนนี้แพงกว่า{' '}
+              <strong className="text-white font-bold underline decoration-amber-400/50 underline-offset-4">มูลค่าทรัพย์สินสุทธิ (Book Value)</strong> ของบริษัทกี่เท่า หาก P/BV ต่ำกว่า 1.0 เท่า หมายความว่าเราสามารถซื้อหุ้นได้ถูกกว่ามูลค่าทรัพย์สินสุทธิที่บริษัทมีอยู่จริง อย่างไรก็ตาม บริษัทเทคโนโลยีขั้นสูงมักมี P/BV สูงเนื่องจากมูลค่าส่วนใหญ่มาจากทรัพย์สินทางปัญญาและสิทธิบัตร
+            </p>
           </div>
 
-          {/* 3. Dividend Yield */}
-          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm sm:text-base text-amber-300 flex items-center gap-1.5">
-                  <Coins className="w-4 h-4" />
-                  <span>Dividend Yield</span>
+          {/* Row 2.3: Dividend Yield */}
+          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-xs shrink-0">
+                  2.3
                 </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300">
-                  ปันผลตอบแทน
+                <span className="font-bold text-base text-white">
+                  Dividend Yield (อัตราเงินปันผลตอบแทนต่อปี)
                 </span>
               </div>
-
-              {/* Big Metric Display */}
-              <div className="p-3 rounded-lg bg-[#0E121C] border border-white/[0.06] text-center">
-                <div className="text-xs text-slate-400">อัตราผลตอบแทนเงินปันผล</div>
-                <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono my-0.5">
-                  {dividendYield !== null && dividendYield !== undefined ? `${dividendYield.toFixed(2)}%` : '0%'}
-                </div>
-                <div className="text-xs text-emerald-300 font-semibold">
-                  {payoutRatio ? `Payout Ratio: ${(payoutRatio * 100).toFixed(0)}% ของกำไร` : 'ผลตอบแทนเงินสดต่อปี'}
-                </div>
-              </div>
-
-              <div className="text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1">
-                <p>
-                  <strong>ความหมายสำคัญ:</strong> ผลตอบแทนจากเงินปันผลคิดเป็นเปอร์เซ็นต์ต่อปี{' '}
-                  <strong className="text-emerald-300">สำคัญมากสำหรับกลยุทธ์การลงทุนเพื่อสะสมเงินปันผลระยะยาว (Passive Income)</strong>
-                </p>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg text-sm sm:text-base font-black text-emerald-400 font-mono bg-emerald-500/15 border border-emerald-500/30">
+                  {dividendYield !== null && dividendYield !== undefined ? `${dividendYield.toFixed(2)}% ต่อปี` : '0%'}
+                </span>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${yieldInfo.color}`}>
+                  {yieldInfo.label}
+                </span>
               </div>
             </div>
 
-            <div className={`p-2.5 rounded-lg border text-xs sm:text-sm leading-snug ${yieldInfo.color}`}>
-              <strong>สถานะประเมิน:</strong> {yieldInfo.label}
-            </div>
+            <p className="text-slate-200">
+              <strong className="text-amber-300">ความหมายสำคัญ:</strong> ผลตอบแทนจากเงินปันผลคิดเป็นเปอร์เซ็นต์ต่อปี{' '}
+              <strong className="text-emerald-300 font-bold bg-emerald-500/15 px-1 py-0.5 rounded border border-emerald-500/25">
+                ซึ่งสำคัญมากสำหรับกลยุทธ์การลงทุนเพื่อสะสมเงินปันผลระยะยาว (Passive Income)
+              </strong>{' '}
+              ช่วยให้นักลงทุนได้รับกระแสเงินสดคืนกลับมาอย่างต่อเนื่องโดยไม่ต้องขายหุ้นทิ้ง และสามารถนำเงินปันผลที่ได้ไป Reinvest ซื้อหุ้นเพิ่มเพื่อสร้างผลตอบแทนทบต้นในระยะยาว
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ── PILLAR 3: FINANCIAL HEALTH ───────────────────────────── */}
+      {/* ── 3. FINANCIAL HEALTH (หมวดที่ 3: สุขภาพทางการเงิน) ─────────────── */}
       <div className="p-5 sm:p-6 rounded-2xl bg-[#111420] border border-emerald-500/35 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/[0.08] gap-2">
           <div className="flex items-center gap-3">
@@ -689,142 +551,114 @@ export function StockFourPillarsTab({
             </div>
           </div>
           <span className="text-xs sm:text-sm font-bold text-emerald-300 font-mono bg-emerald-500/15 px-3 py-1 rounded-lg border border-emerald-500/30 self-start sm:self-auto">
-            เสาหลักที่ 3
+            หมวดที่ 3
           </span>
         </div>
 
-        {/* 3 Financial Health Metric Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* 1. Revenue & Profit Trend */}
-          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm sm:text-base text-emerald-300 flex items-center gap-1.5">
-                  <TrendingUp className="w-4 h-4" />
-                  <span>รายได้และกำไรสุทธิ</span>
+        {/* Narrative Rows for Financial Health */}
+        <div className="space-y-3.5 text-sm sm:text-[14.5px] leading-relaxed text-slate-200">
+          {/* Row 3.1: Revenue and Net Profit Trend */}
+          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold text-xs shrink-0">
+                  3.1
                 </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300">
-                  ย้อนหลัง 3-5 ปี
+                <span className="font-bold text-base text-white">
+                  รายได้และกำไรสุทธิ (ย้อนหลัง 3-5 ปี)
                 </span>
               </div>
-
-              {/* Big Metric Display */}
-              <div className="p-3 rounded-lg bg-[#0E121C] border border-white/[0.06] text-center">
-                <div className="text-xs text-slate-400">รายได้รวมล่าสุด (Revenue)</div>
-                <div className="text-xl sm:text-2xl font-black text-white font-mono my-0.5">
-                  {revenue ? formatLarge(revenue) : 'มีเสถียรภาพ'}
-                </div>
-                <div className="text-xs text-emerald-300 font-semibold">
-                  {revenueGrowth ? `การเติบโตรายได้ YoY: +${revenueGrowth}%` : 'กระแสเงินสดต่อเนื่อง'}
-                </div>
-              </div>
-
-              <div className="text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1">
-                <p>
-                  <strong>เกณฑ์พิจารณา:</strong> ควรดูงบการเงินย้อนหลัง{' '}
-                  <strong className="text-emerald-300">3-5 ปีว่ามีแนวโน้มเติบโตสม่ำเสมอหรือไม่</strong> ไม่ควรผันผวนขึ้นลงรุนแรงไร้ทิศทาง
-                </p>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                {revenue && (
+                  <span className="px-2 py-0.5 rounded bg-white/[0.08] text-slate-200">
+                    รายได้: {formatLarge(revenue)}
+                  </span>
+                )}
+                {revenueGrowth && (
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                    YoY: +{revenueGrowth}%
+                  </span>
+                )}
+                {freeCashflow && (
+                  <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200">
+                    FCF: {formatLarge(freeCashflow)}
+                  </span>
+                )}
               </div>
             </div>
 
-            <div className="p-2.5 rounded-lg bg-[#0E121C] border border-white/[0.06] text-xs space-y-1">
-              <div className="flex justify-between text-slate-300">
-                <span>กระแสเงินสดอิสระ (FCF):</span>
-                <strong className="text-emerald-300 font-mono">
-                  {freeCashflow ? formatLarge(freeCashflow) : 'บวกแข็งแกร่ง'}
-                </strong>
-              </div>
-              <div className="flex justify-between text-slate-300">
-                <span>กำไรต่อหุ้น (EPS):</span>
-                <strong className="text-indigo-300 font-mono">
-                  {eps ? `${currencySymbol}${eps.toFixed(2)}` : 'มีกำไรต่อเนื่อง'}
-                </strong>
-              </div>
-            </div>
+            <p className="text-slate-200">
+              <strong className="text-emerald-300">เกณฑ์พิจารณา:</strong> ควรดูงบการเงินย้อนหลัง{' '}
+              <strong className="text-emerald-300 font-bold bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/25">
+                3-5 ปีว่ามีแนวโน้มเติบโตสม่ำเสมอหรือไม่
+              </strong>{' '}
+              ไม่ควรผันผวนขึ้นลงรุนแรงไร้ทิศทาง บริษัทที่ดีควรมีรายได้เติบโตควบคู่ไปกับกำไรสุทธิและกระแสเงินสดจากการดำเนินงาน (Operating Cash Flow) ที่แข็งแกร่ง เพื่อยืนยันว่ากำไรที่รายงานเป็นเงินสดจริง ไม่ใช่เพียงกำไรทางบัญชี
+            </p>
           </div>
 
-          {/* 2. D/E Ratio */}
-          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm sm:text-base text-emerald-300 flex items-center gap-1.5">
-                  <Scale className="w-4 h-4" />
-                  <span>D/E Ratio</span>
+          {/* Row 3.2: D/E Ratio */}
+          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold text-xs shrink-0">
+                  3.2
                 </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300">
-                  หนี้สินต่อทุน
+                <span className="font-bold text-base text-white">
+                  D/E Ratio (อัตราส่วนหนี้สินต่อทุน)
                 </span>
               </div>
-
-              {/* Big Metric Display */}
-              <div className="p-3 rounded-lg bg-[#0E121C] border border-white/[0.06] text-center">
-                <div className="text-xs text-slate-400">อัตราส่วนหนี้สินต่อทุน</div>
-                <div className="text-2xl sm:text-3xl font-black text-white font-mono my-0.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg text-sm sm:text-base font-black text-white font-mono bg-white/[0.08] border border-white/[0.12]">
                   {effectiveDE ? `${effectiveDE} เท่า` : 'N/A'}
-                </div>
-                <div className="text-xs text-emerald-300 font-semibold">
-                  เกณฑ์ปลอดภัย: ไม่เกิน 1.5 - 2.0 เท่า
-                </div>
-              </div>
-
-              <div className="text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1">
-                <p>
-                  <strong>เกณฑ์พิจารณา:</strong> บอกว่าบริษัทมีหนี้เยอะแค่ไหน โดยทั่วไป{' '}
-                  <strong className="text-emerald-300 font-bold bg-emerald-500/15 px-1 py-0.5 rounded border border-emerald-500/20">
-                    ไม่ควรสูงเกิน 1.5 - 2.0 เท่า
-                  </strong>{' '}
-                  เพื่อลดความเสี่ยงทางการเงินและภาระดอกเบี้ยยามวิกฤต
-                </p>
+                </span>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${deInfo.color}`}>
+                  {deInfo.label}
+                </span>
               </div>
             </div>
 
-            <div className={`p-2.5 rounded-lg border text-xs sm:text-sm leading-snug ${deInfo.color}`}>
-              <strong>สถานะประเมิน:</strong> {deInfo.label}
-            </div>
+            <p className="text-slate-200">
+              <strong className="text-emerald-300">เกณฑ์พิจารณา:</strong> บอกว่าบริษัทมีหนี้เยอะแค่ไหน โดยทั่วไป{' '}
+              <strong className="text-emerald-300 font-bold bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/25">
+                ไม่ควรสูงเกิน 1.5 - 2.0 เท่า
+              </strong>{' '}
+              เพื่อลดความเสี่ยงทางการเงินและภาระดอกเบี้ยจ่าย บริษัทที่มีหนี้สินต่ำจะมีความยืดหยุ่นสูงยามเกิดวิกฤตเศรษฐกิจ และไม่ต้องกังวลเรื่องการผิดนัดชำระหนี้หรือการเพิ่มทุนกะทันหัน
+            </p>
           </div>
 
-          {/* 3. ROE */}
-          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-sm sm:text-base text-emerald-300 flex items-center gap-1.5">
-                  <Award className="w-4 h-4" />
-                  <span>ROE (ผลตอบแทนส่วนทุน)</span>
+          {/* Row 3.3: ROE */}
+          <div className="p-4 sm:p-5 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center font-bold text-xs shrink-0">
+                  3.3
                 </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300">
-                  ฝีมือผู้บริหาร
+                <span className="font-bold text-base text-white">
+                  ROE (ผลตอบแทนจากส่วนของผู้ถือหุ้น)
                 </span>
               </div>
-
-              {/* Big Metric Display */}
-              <div className="p-3 rounded-lg bg-[#0E121C] border border-white/[0.06] text-center">
-                <div className="text-xs text-slate-400">อัตราผลตอบแทนต่อส่วนผู้ถือหุ้น</div>
-                <div className="text-2xl sm:text-3xl font-black text-emerald-300 font-mono my-0.5">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg text-sm sm:text-base font-black text-emerald-300 font-mono bg-emerald-500/15 border border-emerald-500/30">
                   {effectiveRoe ? `${effectiveRoe}%` : 'N/A'}
-                </div>
-                <div className="text-xs text-emerald-300 font-semibold">
-                  เกณฑ์ยอดเยี่ยม: สูงกว่า 10 - 15% สม่ำเสมอ
-                </div>
-              </div>
-
-              <div className="text-xs sm:text-sm text-slate-200 leading-relaxed space-y-1">
-                <p>
-                  <strong>เกณฑ์พิจารณา:</strong> สะท้อนความสามารถของผู้บริหารในการนำเงินลงทุนไปสร้างกำไร{' '}
-                  <strong className="text-emerald-300 font-bold bg-emerald-500/15 px-1 py-0.5 rounded border border-emerald-500/20">
-                    (ควรมากกว่า 10-15% อย่างสม่ำเสมอ)
-                  </strong>
-                </p>
+                </span>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${roeInfo.color}`}>
+                  {roeInfo.label}
+                </span>
               </div>
             </div>
 
-            <div className={`p-2.5 rounded-lg border text-xs sm:text-sm leading-snug ${roeInfo.color}`}>
-              <strong>สถานะประเมิน:</strong> {roeInfo.label}
-            </div>
+            <p className="text-slate-200">
+              <strong className="text-emerald-300">เกณฑ์พิจารณา:</strong> สะท้อนความสามารถของผู้บริหารในการนำเงินลงทุนของผู้ถือหุ้นไปสร้างกำไร{' '}
+              <strong className="text-emerald-300 font-bold bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/25">
+                (ควรมากกว่า 10-15% อย่างสม่ำเสมอ)
+              </strong>{' '}
+              บริษัทที่สามารถรักษาระดับ ROE เกิน 15% ติดต่อกันหลายปี บ่งบอกว่ามีอำนาจในการตั้งราคา (Pricing Power) และมีโมเดลธุรกิจที่สร้างผลตอบแทนคุ้มค่าต่อเงินทุนอย่างแท้จริง
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ── PILLAR 4: FUTURE & RISKS ─────────────────────────────── */}
+      {/* ── 4. FUTURE & RISKS (หมวดที่ 4: อนาคตและความเสี่ยง) ─────────────── */}
       <div className="p-5 sm:p-6 rounded-2xl bg-[#111420] border border-sky-500/35 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/[0.08] gap-2">
           <div className="flex items-center gap-3">
@@ -836,179 +670,129 @@ export function StockFourPillarsTab({
                 <span>4. อนาคตและความเสี่ยง (Future & Risks)</span>
               </h4>
               <p className="text-xs sm:text-sm text-slate-300">
-                มองไปข้างหน้า: แผนการเติบโต ขยายตลาดใหม่ๆ และปัจจัยเสี่ยงที่อาจเข้ามากระทบธุรกิจ
+                มองไปข้างหน้า: แผนการเติบโต ขยายตลาดใหม่ๆ ควบคู่ไปกับปัจจัยเสี่ยงที่อาจกระทบธุรกิจ
               </p>
             </div>
           </div>
           <span className="text-xs sm:text-sm font-bold text-sky-300 font-mono bg-sky-500/15 px-3 py-1 rounded-lg border border-sky-500/30 self-start sm:self-auto">
-            เสาหลักที่ 4
+            หมวดที่ 4
           </span>
         </div>
 
-        {/* 2 Clean Columns: Growth Catalysts vs Key Risks */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Future Growth Catalysts */}
-          <div className="p-4 sm:p-5 rounded-xl bg-emerald-950/20 border border-emerald-500/25 space-y-3.5">
+        {/* Narrative Flow for Future & Risks */}
+        <div className="space-y-4 text-sm sm:text-[14.5px] leading-relaxed text-slate-200">
+          {/* Paragraph 4.1: Future Growth Catalysts */}
+          <div className="p-4 sm:p-5 rounded-xl bg-emerald-950/20 border border-emerald-500/25 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-emerald-500/20">
-              <div className="font-bold text-sm sm:text-base text-emerald-300 flex items-center gap-2">
+              <div className="font-bold text-base text-emerald-300 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
                 <span>แผนการเติบโตในอนาคต (Growth Catalysts)</span>
               </div>
-              <span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                โอกาสสร้างกำไร
+              <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                โอกาสสร้างผลกำไร
               </span>
             </div>
 
-            <div className="space-y-2.5 text-xs sm:text-sm text-slate-200 leading-relaxed">
-              <div className="p-3 rounded-lg bg-[#0E141D] border border-emerald-500/20 space-y-1">
-                <div className="font-bold text-emerald-300 flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>การขยายกิจการและการลงทุนเพิ่มกำลังการผลิต:</span>
-                </div>
-                <p className="text-slate-300">
-                  ขยายสาขา โรงงาน หรือโครงสร้างพื้นฐานระดับสูง เพื่อรองรับความต้องการของตลาดและชิงส่วนแบ่งการตลาด
-                </p>
-              </div>
+            <p className="text-slate-200">
+              การประเมินอนาคตของกิจการ ควรพิจารณาจาก 3 แกนหลัก ได้แก่:{' '}
+              <strong className="text-white font-bold">1. การขยายกิจการและเพิ่มกำลังการผลิต</strong> เช่น การลงทุนสร้างโรงงานใหม่หรือขยายโครงสร้างพื้นฐานเพื่อเพิ่ม Market Share,{' '}
+              <strong className="text-white font-bold">2. การออกผลิตภัณฑ์และบริการใหม่ๆ</strong> ที่มีอัตรากำไร (Margin) สูงกว่าเดิม หรือสร้าง Recurring Revenue และ{' '}
+              <strong className="text-white font-bold">3. การบุกตลาดใหม่</strong> เช่น การขยายฐานลูกค้าสู่ภูมิภาคใหม่ที่มีอัตราการเติบโตทางเศรษฐกิจและกำลังซื้อสูง
+            </p>
 
-              <div className="p-3 rounded-lg bg-[#0E141D] border border-emerald-500/20 space-y-1">
-                <div className="font-bold text-emerald-300 flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>การเปิดตัวผลิตภัณฑ์และบริการใหม่ (High Margin):</span>
-                </div>
-                <p className="text-slate-300">
-                  ต่อยอดนวัตกรรมไปสู่สินค้าที่มีอัตรากำไรสูงกว่าเดิม หรือบริการแบบ Subscription ที่มีรายได้ประจำสม่ำเสมอ
-                </p>
+            {structuredAi?.strengths && structuredAi.strengths.length > 0 && (
+              <div className="mt-2 p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/30 space-y-1">
+                <div className="font-bold text-emerald-200 text-xs">จุดแข็งและตัวเร่งเฉพาะตัวของ {symbol}:</div>
+                <ul className="list-disc list-inside space-y-1 text-slate-200 text-xs sm:text-sm">
+                  {structuredAi.strengths.slice(0, 3).map((s, idx) => (
+                    <li key={idx}>{s}</li>
+                  ))}
+                </ul>
               </div>
-
-              <div className="p-3 rounded-lg bg-[#0E141D] border border-emerald-500/20 space-y-1">
-                <div className="font-bold text-emerald-300 flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>การบุกตลาดใหม่และขยายฐานลูกค้าสากล:</span>
-                </div>
-                <p className="text-slate-300">
-                  ขยายสู่ภูมิภาคใหม่ที่มีอัตราการเติบโตทางเศรษฐกิจและกำลังซื้อสูง ช่วยกระจายความเสี่ยงจากตลาดเดิม
-                </p>
-              </div>
-
-              {structuredAi?.strengths && structuredAi.strengths.length > 0 && (
-                <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/30 space-y-1">
-                  <div className="font-bold text-emerald-200 text-xs">จุดแข็งเฉพาะตัวของ {symbol}:</div>
-                  <ul className="list-disc list-inside space-y-1 text-slate-200 text-xs sm:text-sm">
-                    {structuredAi.strengths.slice(0, 3).map((s, idx) => (
-                      <li key={idx}>{s}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
-          {/* Key Risks to Watch */}
-          <div className="p-4 sm:p-5 rounded-xl bg-rose-950/20 border border-rose-500/25 space-y-3.5">
+          {/* Paragraph 4.2: Key Risks to Watch */}
+          <div className="p-4 sm:p-5 rounded-xl bg-rose-950/20 border border-rose-500/25 space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-rose-500/20">
-              <div className="font-bold text-sm sm:text-base text-rose-300 flex items-center gap-2">
+              <div className="font-bold text-base text-rose-300 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-rose-400" />
                 <span>ความเสี่ยงที่อาจกระทบธุรกิจ (Key Risks)</span>
               </div>
-              <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-500/20 text-rose-200 border border-rose-500/30">
+              <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-rose-500/20 text-rose-200 border border-rose-500/30">
                 ปัจจัยลบที่ต้องจับตา
               </span>
             </div>
 
-            <div className="space-y-2.5 text-xs sm:text-sm text-slate-200 leading-relaxed">
-              <div className="p-3 rounded-lg bg-[#181116] border border-rose-500/20 space-y-1">
-                <div className="font-bold text-rose-300 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                  <span>การเปลี่ยนแปลงทางเทคโนโลยี (Tech Disruption):</span>
-                </div>
-                <p className="text-slate-300">
-                  เทคโนโลยีใหม่ที่เกิดขึ้นอาจทำให้ผลิตภัณฑ์หรือบริการเดิมล้าสมัย หากปรับตัวไม่ทันอาจสูญเสียส่วนแบ่งการตลาด
-                </p>
-              </div>
+            <p className="text-slate-200">
+              ปัจจัยเสี่ยงที่อาจกระทบมูลค่าหุ้น ประกอบด้วย:{' '}
+              <strong className="text-rose-200 font-bold">1. การเปลี่ยนแปลงทางเทคโนโลยี (Tech Disruption)</strong> ที่อาจทำให้สินค้าเดิมล้าสมัยอย่างรวดเร็ว,{' '}
+              <strong className="text-rose-200 font-bold">2. กฎหมายควบคุมจากภาครัฐและภาษี</strong> เช่น นโยบายควบคุมราคา การตรวจสอบการผูกขาด หรือข้อจำกัดทางการค้าระหว่างประเทศ และ{' '}
+              <strong className="text-rose-200 font-bold">3. พฤติกรรมผู้บริโภคที่เปลี่ยนไปหรือสงครามราคา</strong> จากคู่แข่งที่ตัดราคาจนกดดันความสามารถในการทำกำไร
+            </p>
 
-              <div className="p-3 rounded-lg bg-[#181116] border border-rose-500/20 space-y-1">
-                <div className="font-bold text-rose-300 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                  <span>กฎหมายควบคุมจากภาครัฐและภาษี:</span>
-                </div>
-                <p className="text-slate-300">
-                  มาตรการควบคุมราคา กฎระเบียบป้องกันการผูกขาด หรือภาษีการค้าระหว่างประเทศที่อาจเพิ่มต้นทุนการดำเนินงาน
-                </p>
+            {structuredAi?.risks && structuredAi.risks.length > 0 && (
+              <div className="mt-2 p-3 rounded-lg bg-rose-950/40 border border-rose-500/30 space-y-1">
+                <div className="font-bold text-rose-200 text-xs">ปัจจัยเสี่ยงเฉพาะตัวของ {symbol}:</div>
+                <ul className="list-disc list-inside space-y-1 text-slate-200 text-xs sm:text-sm">
+                  {structuredAi.risks.slice(0, 3).map((r, idx) => (
+                    <li key={idx}>{r}</li>
+                  ))}
+                </ul>
               </div>
-
-              <div className="p-3 rounded-lg bg-[#181116] border border-rose-500/20 space-y-1">
-                <div className="font-bold text-rose-300 flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                  <span>พฤติกรรมผู้บริโภคเปลี่ยน & สงครามราคา:</span>
-                </div>
-                <p className="text-slate-300">
-                  กำลังซื้อที่ชะลอตัวตามภาวะเศรษฐกิจ หรือการแข่งขันตัดราคาจากคู่แข่งรายใหม่ที่บั่นทอนอัตรากำไร
-                </p>
-              </div>
-
-              {structuredAi?.risks && structuredAi.risks.length > 0 && (
-                <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-500/30 space-y-1">
-                  <div className="font-bold text-rose-200 text-xs">ความเสี่ยงเฉพาะตัวของ {symbol}:</div>
-                  <ul className="list-disc list-inside space-y-1 text-slate-200 text-xs sm:text-sm">
-                    {structuredAi.risks.slice(0, 3).map((r, idx) => (
-                      <li key={idx}>{r}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+            )}
           </div>
+
+          {/* Scenario Analysis (Bull, Base, Bear) */}
+          {structuredAi?.scenarioAnalysis && (
+            <div className="p-4 rounded-xl bg-[#151926] border border-white/[0.08] space-y-3">
+              <div className="font-bold text-white text-sm sm:text-base flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-amber-400" />
+                <span>การประเมิน 3 ฉากทัศน์ผลตอบแทน (Scenario Analysis):</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-emerald-950/25 border border-emerald-500/30 space-y-1">
+                  <div className="font-bold text-emerald-300 text-xs sm:text-sm">
+                    🟢 กรณีดีที่สุด (Bull Case)
+                  </div>
+                  <p className="text-slate-200 text-xs sm:text-sm leading-relaxed">
+                    {structuredAi.scenarioAnalysis.bull}
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-[#121624] border border-white/[0.1] space-y-1">
+                  <div className="font-bold text-indigo-300 text-xs sm:text-sm">
+                    ⚪ กรณีพื้นฐาน (Base Case)
+                  </div>
+                  <p className="text-slate-200 text-xs sm:text-sm leading-relaxed">
+                    {structuredAi.scenarioAnalysis.base}
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-rose-950/25 border border-rose-500/30 space-y-1">
+                  <div className="font-bold text-rose-300 text-xs sm:text-sm">
+                    🔴 กรณีแย่สุด (Bear Case)
+                  </div>
+                  <p className="text-slate-200 text-xs sm:text-sm leading-relaxed">
+                    {structuredAi.scenarioAnalysis.bear}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* Scenario Analysis (Bull, Base, Bear) */}
-        {structuredAi?.scenarioAnalysis && (
-          <div className="pt-2 space-y-2">
-            <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
-              <Zap className="w-4 h-4 text-amber-400" />
-              <span>การจำลอง 3 ฉากทัศน์ผลตอบแทน (Scenario Analysis):</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="p-3.5 rounded-xl bg-emerald-950/25 border border-emerald-500/30 space-y-1">
-                <div className="font-bold text-emerald-300 text-xs sm:text-sm flex items-center gap-1.5">
-                  <span>🟢 กรณีดีที่สุด (Bull Case)</span>
-                </div>
-                <p className="text-slate-200 text-xs sm:text-sm leading-relaxed">
-                  {structuredAi.scenarioAnalysis.bull}
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-[#141824] border border-white/[0.1] space-y-1">
-                <div className="font-bold text-indigo-300 text-xs sm:text-sm flex items-center gap-1.5">
-                  <span>⚪ กรณีพื้นฐาน (Base Case)</span>
-                </div>
-                <p className="text-slate-200 text-xs sm:text-sm leading-relaxed">
-                  {structuredAi.scenarioAnalysis.base}
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-rose-950/25 border border-rose-500/30 space-y-1">
-                <div className="font-bold text-rose-300 text-xs sm:text-sm flex items-center gap-1.5">
-                  <span>🔴 กรณีแย่สุด (Bear Case)</span>
-                </div>
-                <p className="text-slate-200 text-xs sm:text-sm leading-relaxed">
-                  {structuredAi.scenarioAnalysis.bear}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ── ACTION BANNER: AI DEEP DIVE BUTTON ────────────────────── */}
+      {/* ── 5. AI DEEP DIVE ACTION BANNER ────────────────────── */}
       <div className="p-4 sm:p-5 rounded-2xl bg-[#141824] border border-white/[0.1] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3 text-slate-200 text-xs sm:text-sm">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center shrink-0">
-            <Sparkles className="w-4 h-4 text-amber-300" />
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center shrink-0">
+            <Sparkles className="w-5 h-5 text-amber-300" />
           </div>
           <div>
-            <div className="font-bold text-white text-sm">ต้องการบทวิเคราะห์ 4 เสาหลักเจาะลึกเฉพาะตัวหุ้น?</div>
-            <div className="text-xs text-slate-400">ระบบ AI จะประมวลผลข้อมูลการเงินและภาพรวมตลาดล่าสุดของ <strong>{symbol}</strong> แบบเรียลไทม์</div>
+            <div className="font-bold text-white text-sm sm:text-base">ต้องการบทวิเคราะห์ 4 ด้านเฉพาะตัวแบบเรียลไทม์?</div>
+            <div className="text-xs sm:text-sm text-slate-400">ระบบ AI จะประมวลผลข้อมูลการเงินและภาพรวมตลาดล่าสุดของ <strong>{symbol}</strong> เข้าสู่กรอบ 4 เสาหลักทันที</div>
           </div>
         </div>
 
