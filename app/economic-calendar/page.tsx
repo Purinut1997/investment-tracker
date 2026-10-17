@@ -91,11 +91,11 @@ export default function EconomicCalendarPage() {
               </Link>
 
               <Link
-                href="/news"
-                className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.08] px-3.5 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98"
+                href="/dividends"
+                className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-200 hover:text-white border border-indigo-500/40 px-3.5 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98"
               >
-                <Newspaper className="w-3.5 h-3.5 text-indigo-400" />
-                <span>สรุปข่าวเศรษฐกิจ</span>
+                <span className="text-sm">🪙</span>
+                <span>ปฏิทินปันผล & สถิติ XD</span>
               </Link>
             </div>
           }
