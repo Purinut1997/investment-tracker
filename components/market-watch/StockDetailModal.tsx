@@ -48,6 +48,7 @@ import { CandlestickChart } from '@/components/market-watch/CandlestickChart'
 import { FullscreenChartModal } from '@/components/market-watch/FullscreenChartModal'
 import { VolumeChartPanel } from '@/components/market-watch/VolumeChartPanel'
 import { StockHistoricalStatsTab } from '@/components/market-watch/StockHistoricalStatsTab'
+import { StockFourPillarsTab } from '@/components/market-watch/StockFourPillarsTab'
 
 export interface StructuredAiData {
   summary?: string
@@ -590,7 +591,7 @@ export function StockDetailModal({
   market = 'US',
 }: StockDetailModalProps) {
   const [range, setRange] = useState<TimeRange>('1m')
-  const [activeTab, setActiveTab] = useState<'chart' | 'stats'>('chart')
+  const [activeTab, setActiveTab] = useState<'chart' | 'four_pillars' | 'stats'>('chart')
   const [chartType, setChartType] = useState<'area' | 'candle'>('area')
   const [showSR, setShowSR] = useState(true)
   const [showSMA, setShowSMA] = useState(true)
@@ -864,12 +865,12 @@ export function StockDetailModal({
           </div>
         </div>
 
-        {/* Tab Navigation: Chart & Technicals vs Historical Stats & Dividends */}
-        <div className="px-5 sm:px-6 pt-3 pb-0 border-b border-white/[0.08] bg-[#12151C]/90 flex items-center gap-3 shrink-0">
+        {/* Tab Navigation: Chart & Technicals vs 4 Pillars vs Historical Stats */}
+        <div className="px-5 sm:px-6 pt-3 pb-0 border-b border-white/[0.08] bg-[#12151C]/90 flex items-center gap-3 overflow-x-auto scrollbar-none shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('chart')}
-            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer ${
+            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer shrink-0 ${
               activeTab === 'chart'
                 ? 'text-white'
                 : 'text-slate-400 hover:text-slate-200'
@@ -884,8 +885,27 @@ export function StockDetailModal({
 
           <button
             type="button"
+            onClick={() => setActiveTab('four_pillars')}
+            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer shrink-0 ${
+              activeTab === 'four_pillars'
+                ? 'text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Target className="w-4 h-4 text-amber-400" />
+            <span>🎯 วิเคราะห์ 4 ด้านก่อนลงทุน</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              4 เสาหลัก
+            </span>
+            {activeTab === 'four_pillars' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('stats')}
-            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer ${
+            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer shrink-0 ${
               activeTab === 'stats'
                 ? 'text-white'
                 : 'text-slate-400 hover:text-slate-200'
@@ -923,6 +943,29 @@ export function StockDetailModal({
             <div className="py-12 p-6 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center text-rose-300 text-xs">
               ไม่สามารถดึงข้อมูลรายละเอียดของ {symbol} ได้ในขณะนี้
             </div>
+          ) : activeTab === 'four_pillars' ? (
+            <StockFourPillarsTab
+              symbol={symbol}
+              name={data?.name || initialName || symbol}
+              currencySymbol={currencySymbol}
+              currentPrice={data?.currentPrice ?? 0}
+              market={market}
+              pe={data?.pe}
+              forwardPe={data?.forwardPe}
+              pb={data?.pb}
+              dividendYield={data?.dividendYield}
+              payoutRatio={data?.payoutRatio}
+              revenue={data?.revenue}
+              revenueGrowth={data?.revenueGrowth}
+              eps={data?.eps}
+              freeCashflow={data?.freeCashflow}
+              marketCap={data?.marketCap}
+              roe={data?.roe}
+              debtToEquity={data?.debtToEquity}
+              structuredAi={activeStructured}
+              isAiLoading={isAiLoading}
+              onGenerateAi={handleGenerateAiInsight}
+            />
           ) : activeTab === 'stats' ? (
             <StockHistoricalStatsTab
               symbol={symbol}

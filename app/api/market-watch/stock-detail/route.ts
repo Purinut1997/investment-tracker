@@ -63,6 +63,8 @@ interface CachedFundamentalsResult {
   fiftyTwoWeekHigh: number | null
   fiftyTwoWeekLow: number | null
   rawHistoryChartResult: any
+  roe: number | null
+  debtToEquity: number | null
 }
 
 // 1. Chart cache (3 minutes) to avoid repeated Yahoo queries on timeframe switches
@@ -492,6 +494,8 @@ async function fetchFundamentalsData(
       fiftyTwoWeekHigh: fiftyTwoWeekHigh || null,
       fiftyTwoWeekLow: fiftyTwoWeekLow || null,
       rawHistoryChartResult: yahooHistoryData?.chart?.result?.[0] || null,
+      roe: ySummary?.roe ?? null,
+      debtToEquity: ySummary?.debtToEquity ?? null,
     }
 
     fundamentalsCache.set(cacheKey, { data: result, timestamp: Date.now() })
@@ -653,6 +657,8 @@ export async function GET(req: NextRequest) {
       eps: fundamentals.eps,
       freeCashflow: fundamentals.freeCashflow,
       marketCap: fundamentals.marketCap,
+      roe: fundamentals.roe,
+      debtToEquity: fundamentals.debtToEquity,
       analystTarget,
       userPosition,
       chartPoints: chartData.chartPoints,

@@ -64,6 +64,8 @@ export interface YahooQuoteSummaryData {
   revenueGrowth: number | null
   eps: number | null
   freeCashflow: number | null
+  roe: number | null
+  debtToEquity: number | null
 }
 
 const quoteSummaryCache = new Map<string, { data: YahooQuoteSummaryData | null; timestamp: number }>()
@@ -127,6 +129,15 @@ export async function getYahooQuoteSummary(symbol: string): Promise<YahooQuoteSu
       const eps = stats.trailingEps?.raw ?? financial.revenuePerShare?.raw ?? null
       const freeCashflow = financial.freeCashflow?.raw ?? financial.operatingCashflow?.raw ?? null
 
+      const roeRaw = financial.returnOnEquity?.raw ?? null
+      const deRaw = financial.debtToEquity?.raw ?? null
+      const roe = roeRaw !== null && roeRaw !== undefined ? Number((Number(roeRaw) * 100).toFixed(2)) : null
+      let debtToEquity: number | null = null
+      if (deRaw !== null && deRaw !== undefined) {
+        const val = Number(deRaw)
+        debtToEquity = val > 15 ? Number((val / 100).toFixed(2)) : Number(val.toFixed(2))
+      }
+
       const result: YahooQuoteSummaryData = {
         pe: pe ? Number(pe) : null,
         forwardPe: forwardPe ? Number(forwardPe) : null,
@@ -139,6 +150,8 @@ export async function getYahooQuoteSummary(symbol: string): Promise<YahooQuoteSu
         revenueGrowth: revenueGrowth ? Number(revenueGrowth) * 100 : null, // percentage
         eps: eps ? Number(eps) : null,
         freeCashflow: freeCashflow ? Number(freeCashflow) : null,
+        roe,
+        debtToEquity,
       }
 
       quoteSummaryCache.set(rawSymbol, { data: result, timestamp: Date.now() })
