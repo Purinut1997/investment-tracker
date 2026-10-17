@@ -29,6 +29,7 @@ import {
   CalendarCheck,
   Calendar,
   LayoutGrid,
+  Coins,
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
@@ -59,6 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'รายการธุรกรรม',   href: '/transactions', icon: ArrowLeftRight },
       { label: 'ผลตอบแทนรายตัว',  href: '/performance',  icon: BarChart3 },
+      { label: 'ปฏิทินปันผล & สถิติ XD', href: '/dividends', icon: Coins, badge: 'ใหม่' },
       { label: 'บัญชีการเงิน',    href: '/accounts',     icon: Wallet },
       { label: 'รายงานภาษี',      href: '/tax-report',   icon: ReceiptText },
     ]
