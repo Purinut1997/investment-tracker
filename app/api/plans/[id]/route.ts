@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import { invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
 import { z } from 'zod'
 
 const UpdatePresetSchema = z.object({
@@ -58,6 +59,7 @@ export async function PUT(
       },
     })
 
+    invalidateUserPortfolioCache(session.user.id)
     return NextResponse.json(updated)
   } catch (error) {
     console.error('[plans PUT]', error)
@@ -83,6 +85,7 @@ export async function DELETE(
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     await prisma.investmentPreset.delete({ where: { id } })
+    invalidateUserPortfolioCache(session.user.id)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('[plans DELETE]', error)

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { calculateUserHoldings } from '@/lib/analytics/holdings'
+import { calculateUserHoldings, invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
 import { z } from 'zod'
 
 const PresetSchema = z.object({
@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    invalidateUserPortfolioCache(userId)
     return NextResponse.json(created, { status: 201 })
   } catch (error: any) {
     console.error('[plans POST]', error)

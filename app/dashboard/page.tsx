@@ -27,6 +27,13 @@ import {
   Layers,
 } from 'lucide-react'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
+import { QuickAddModal } from '@/components/QuickAddModal'
+import {
+  extractStrategyBuckets,
+  computeBucketsWithHoldings,
+  STRATEGY_TYPE_META,
+} from '@/lib/analytics/strategy-buckets'
+import { TechnicalSignal } from '@/lib/market-data/technical-signals'
 import {
   ResponsiveContainer,
   PieChart,
@@ -116,6 +123,13 @@ export default function DashboardPage() {
     name?: string
     market?: string
   } | null>(null)
+  const [quickTradeData, setQuickTradeData] = useState<{
+    ticker: string
+    action: 'BUY' | 'SELL'
+    market?: 'US' | 'TH'
+    price?: number
+  } | null>(null)
+  const [selectedBucketFilter, setSelectedBucketFilter] = useState<string>('ALL')
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
   // Stale-While-Revalidate Instant Paint (0ms LCP on repeat visits)
   const [cachedSummary, setCachedSummary] = useState<any>(() => {
@@ -158,6 +172,14 @@ export default function DashboardPage() {
   )
 
   const holdings: HoldingItem[] = Array.isArray(summary?.holdings) ? summary.holdings : []
+  const holdingTickersParam = holdings.map((h) => h.ticker.toUpperCase()).join(',')
+  const { data: techSignalsData } = useSWR<{ signals: Record<string, TechnicalSignal> }>(
+    holdingTickersParam
+      ? `/api/market-data/technical-signals?tickers=${holdingTickersParam}`
+      : null,
+    { revalidateOnFocus: false, dedupingInterval: 120000 }
+  )
+  const techSignals = techSignalsData?.signals || {}
 
   const accounts = parseAccountsPayload(summary?.accounts)
   const totalCash = summary?.totalCash ?? 0
@@ -234,6 +256,87 @@ export default function DashboardPage() {
   // Extract target allocation per ticker from active preset if available
   const activePreset = summary?.activePreset || summary?.presets?.find((p: any) => p.isDefault) || summary?.presets?.[0]
   const subTargets = activePreset?.targetAllocation?._subTargets || activePreset?.subTargets || {}
+  const strategyBuckets = extractStrategyBuckets(activePreset?.targetAllocation, holdings)
+  const { computedBuckets, tickerToBucketMap } = computeBucketsWithHoldings(
+    strategyBuckets,
+    holdings,
+    totalCash,
+    netWorth
+  )
+
+  // Compute instant actionable signals today (Buy dips / Short-term Take Profit / Overbought alerts)
+  const actionableSignalsToday = holdings
+    .map((h) => {
+      const sym = h.ticker.toUpperCase()
+      const sig = techSignals[sym]
+      const bucket = tickerToBucketMap[sym]
+      const pnl = Number(h.unrealizedPnLPercent || 0)
+      const isShortTerm = bucket?.strategyType === 'SHORT_TERM'
+      const tp = bucket?.takeProfitPercent ?? 15
+      const sl = bucket?.stopLossPercent ?? 8
+
+      if (isShortTerm && pnl >= tp) {
+        return {
+          ticker: sym,
+          holding: h,
+          bucket,
+          sig,
+          type: 'TAKE_PROFIT' as const,
+          badge: `🎯 ถึงเป้าทำกำไร (+${pnl.toFixed(1)}%)`,
+          reason: `อยู่ในตะกร้าเก็งสั้น "${bucket.name}" กำไรทะลุเป้า +${tp}% ${sig?.resistanceR1 ? `(ต้าน R1: ${h.currency === 'USD' ? '$' : '฿'}${sig.resistanceR1.toFixed(2)})` : ''}`,
+          recommendedAction: 'SELL' as const,
+          priority: 100,
+        }
+      }
+      if (isShortTerm && pnl <= -sl) {
+        return {
+          ticker: sym,
+          holding: h,
+          bucket,
+          sig,
+          type: 'STOP_LOSS' as const,
+          badge: `🛡️ เตือนจุด Stop Loss (${pnl.toFixed(1)}%)`,
+          reason: `ขาดทุนแตะเกณฑ์ -${sl}% ในตะกร้าเก็งสั้น ควรเช็กแนวรับ S1 ก่อนตัดสินใจ`,
+          recommendedAction: 'SELL' as const,
+          priority: 95,
+        }
+      }
+      if (sig?.signalType === 'STRONG_DIP_BUY' || sig?.isNearSupport || sig?.isOversold) {
+        return {
+          ticker: sym,
+          holding: h,
+          bucket,
+          sig,
+          type: 'DIP_BUY' as const,
+          badge: sig.badgeText || '🔥 ชนแนวรับ S1 / น่าช้อน',
+          reason: `ราคา ${h.currency === 'USD' ? '$' : '฿'}${Number(h.currentPrice).toFixed(2)} ${sig.supportS1 ? `ใกล้แนวรับ S1 (${h.currency === 'USD' ? '$' : '฿'}${sig.supportS1.toFixed(2)})` : ''} ${sig.rsi14 ? `• RSI ${sig.rsi14}` : ''}`,
+          recommendedAction: 'BUY' as const,
+          priority: 90,
+        }
+      }
+      if (sig?.isOverbought) {
+        return {
+          ticker: sym,
+          holding: h,
+          bucket,
+          sig,
+          type: 'OVERBOUGHT' as const,
+          badge: `⚠️ RSI Overbought (${sig.rsi14})`,
+          reason: `ราคาวิ่งขึ้นเร็วระยะสั้น แนะนำชะลอซื้อไล่ราคา หรือแบ่งล็อกกำไรหากเป็นหุ้นสั้น`,
+          recommendedAction: 'SELL' as const,
+          priority: 75,
+        }
+      }
+      return null
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b?.priority || 0) - (a?.priority || 0))
+    .slice(0, 4)
+
+  const filteredHoldings =
+    selectedBucketFilter === 'ALL'
+      ? holdings
+      : holdings.filter((h) => tickerToBucketMap[h.ticker.toUpperCase()]?.id === selectedBucketFilter)
 
   const targetMap: Record<string, number> = {}
   if (activePreset?.targetAllocation) {
@@ -510,60 +613,181 @@ export default function DashboardPage() {
 
         </div>
 
-        {/* ── TODAY'S MARKET INTELLIGENCE PULSE ────────────────── */}
-        {marketPulse && (
-          <div className="p-3.5 sm:px-5 sm:py-3 rounded-2xl bg-[#12151C] border border-white/[0.08] flex items-center justify-between gap-3 text-xs shadow-md hover:border-white/[0.15] transition-all">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span className="font-bold text-indigo-400 shrink-0">Market Pulse:</span>
-              <span className="text-slate-300 truncate">
-                {marketPulse.symbol ? <strong className="text-white font-mono mr-1">[{marketPulse.symbol}]</strong> : null}
-                {marketPulse.headline}
-              </span>
-            </div>
-            <Link
-              href="/news"
-              className="text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 shrink-0 text-xs transition-colors hover:underline"
-            >
-              <span>อ่านข่าวพอร์ต</span>
-              <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-        )}
-
-        {/* ── UPCOMING CATALYSTS STRIP (ปฏิทินปันผล & รายงานงบ 30 วัน) ──── */}
-        {upcomingCatalysts.length > 0 && (
-          <div className="p-4 rounded-2xl bg-[#12151C] border border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-3.5 shadow-lg">
-            <div className="flex items-center gap-2.5 shrink-0">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-                <Calendar className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-white tracking-wide">
-                  กำหนดการสำคัญที่กำลังจะมาถึง (Upcoming Catalysts)
+        {/* ── 30-SECOND ACTION CENTER: วันนี้ควรทำอะไร & ตะกร้ากลยุทธ์ ───────── */}
+        <div className="rounded-3xl bg-[#12151C] border border-white/[0.08] p-5 sm:p-6 space-y-5 shadow-xl">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-white/[0.06]">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                  30-Second Command Center
                 </span>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  ปฏิทินขึ้นเครื่องหมาย XD เงินปันผล และรายงานผลประกอบการของหุ้นในพอร์ต
-                </p>
+                {marketPulse && (
+                  <Link
+                    href="/news"
+                    className="inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-indigo-300 transition-colors"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <strong className="text-indigo-400">ข่าวพอร์ต:</strong>
+                    <span className="truncate max-w-[260px] sm:max-w-[420px]">
+                      {marketPulse.symbol ? `[${marketPulse.symbol}] ` : ''}
+                      {marketPulse.headline}
+                    </span>
+                  </Link>
+                )}
               </div>
+              <h2 className="text-base sm:text-lg font-bold text-white mt-1.5">
+                ภาพรวมตะกร้ากลยุทธ์ & สิ่งที่ควรทำวันนี้
+              </h2>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {upcomingCatalysts.map((cat: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#181C25] border border-white/[0.08] text-xs"
-                >
-                  <span className="font-bold font-mono text-indigo-300">{cat.symbol}</span>
-                  <span className="text-slate-300">{cat.title.split('—')[1]?.trim() || cat.title}</span>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    {cat.badge}
-                  </span>
-                </div>
-              ))}
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <Link
+                href="/plans"
+                className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>ถาม AI รายตะกร้า & จัดพอร์ต</span>
+              </Link>
             </div>
           </div>
-        )}
+
+          {/* Strategy Buckets Quick Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            {computedBuckets.map((b) => {
+              const meta = STRATEGY_TYPE_META[b.strategyType] || STRATEGY_TYPE_META.CUSTOM
+              const isSelected = selectedBucketFilter === b.id
+              return (
+                <div
+                  key={b.id}
+                  onClick={() =>
+                    b.strategyType !== 'CASH' &&
+                    setSelectedBucketFilter(isSelected ? 'ALL' : b.id)
+                  }
+                  className={`p-3.5 rounded-2xl border transition-all ${
+                    b.strategyType !== 'CASH' ? 'cursor-pointer' : ''
+                  } ${
+                    isSelected
+                      ? 'bg-indigo-600/15 border-indigo-500/50 shadow-lg'
+                      : 'bg-[#171B24] hover:bg-[#1C212D] border-white/[0.06]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-white truncate">
+                      {b.emoji} {b.name}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.badgeClass}`}
+                    >
+                      {meta.shortLabel}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between mt-2.5 font-mono">
+                    <span className="text-sm font-bold text-white">
+                      ฿{Math.round(b.actualValueBase).toLocaleString()}
+                    </span>
+                    <span className="text-xs text-slate-300">
+                      จริง <strong className="text-white">{b.actualPercent}%</strong> / เป้า {b.targetPercent}%
+                    </span>
+                  </div>
+                  {b.strategyType !== 'CASH' && (
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] font-mono">
+                      <span className="text-slate-400">{b.holdings.length} หุ้นในตะกร้า</span>
+                      <span
+                        className={`font-bold ${
+                          b.unrealizedPnLBase >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {b.unrealizedPnLBase >= 0 ? '+' : ''}
+                        {b.unrealizedPnLPercent.toFixed(1)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Actionable Signals Today */}
+          {actionableSignalsToday.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  🔥 สัญญาณต้องจับตาวันนี้จากพอร์ตของคุณ ({actionableSignalsToday.length} รายการ)
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  คำนวณสดจาก RSI(14), แนวรับ S1 / แนวต้าน R1 และเป้าทำกำไร
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {actionableSignalsToday.map((item: any) => (
+                  <div
+                    key={item.ticker}
+                    className="p-3 rounded-2xl bg-[#171B24] border border-white/[0.07] flex items-center justify-between gap-3"
+                  >
+                    <div
+                      onClick={() =>
+                        setSelectedStock({
+                          symbol: item.ticker,
+                          name: item.holding.assetName,
+                          market: item.holding.market,
+                        })
+                      }
+                      className="min-w-0 cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono font-bold text-sm text-white hover:text-indigo-300">
+                          {item.ticker}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                            item.type === 'DIP_BUY'
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                              : item.type === 'TAKE_PROFIT'
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1 truncate">{item.reason}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQuickTradeData({
+                          ticker: item.ticker,
+                          action: item.recommendedAction,
+                          market: (item.holding.market as 'US' | 'TH') || 'US',
+                          price: Number(item.holding.currentPrice) || undefined,
+                        })
+                      }
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 cursor-pointer transition-all ${
+                        item.recommendedAction === 'BUY'
+                          ? 'bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30'
+                          : 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/30'
+                      }`}
+                    >
+                      {item.recommendedAction === 'BUY' ? '+ ซื้อสะสม' : 'แบ่งขาย'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-[#161A23] border border-white/[0.05] flex items-center justify-between text-xs text-slate-300">
+              <span>
+                ✅ วันนี้ยังไม่มีหุ้นในพอร์ตที่ชนแนวรับสำคัญหรือทะลุโซน Overbought/Oversold — สามารถถือรอรอบตามแผนได้สบายใจ
+              </span>
+              {upcomingCatalysts.length > 0 && (
+                <Link href="/dividends" className="text-amber-300 hover:underline font-semibold shrink-0 ml-2">
+                  📅 มีกำหนดการปันผล/งบ {upcomingCatalysts.length} รายการ →
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* ── AI RADAR & RISK SENTINEL QUICK WIDGET ─────────── */}
         {radarData?.riskReport && (
@@ -1035,54 +1259,87 @@ export default function DashboardPage() {
 
         {/* ── BOTTOM ROW: HOLDINGS TABLE ─────────────────────── */}
         <div className="glass-panel rounded-3xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 bg-slate-900/40">
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h3 className="text-sm sm:text-base font-bold text-white tracking-wide">สินทรัพย์ที่ถือครองในพอร์ต (Holdings)</h3>
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-full">
-                  💡 คลิกที่รายการเพื่อดูการ์ดหุ้น & กราฟเทคนิค
-                </span>
+          <div className="px-6 py-4 border-b border-slate-800/80 flex flex-col gap-3 bg-slate-900/40">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="text-sm sm:text-base font-bold text-white tracking-wide">สินทรัพย์ที่ถือครองในพอร์ต (Holdings)</h3>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-full">
+                    💡 คลิกชื่อหุ้นเพื่อดูข้อมูลพื้นฐาน 4 เสาหลัก & กราฟเทคนิค
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">แสดงตะกร้ากลยุทธ์ สัญญาณแนวรับ S1/R1 ต้นทุน และกำไรขาดทุนสะสม</p>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">แสดงรายการสินทรัพย์ ต้นทุน ราคาปิดตลาดล่าสุด และกำไรขาดทุนสะสม</p>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                <Link
+                  href="/performance"
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+                  title="ดูผลตอบแทนตลอดชีพ แยกส่วนที่ขายแล้วและยังถืออยู่"
+                >
+                  <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>กำไรรายตัวรวมขายแล้ว</span>
+                </Link>
+                <Link
+                  href="/dividends"
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-300 hover:text-white bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>ปฏิทินปันผล XD</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleRefreshPrices}
+                  disabled={refreshingPrices}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  title="ดึงราคาปิดตลาดล่าสุดจาก Yahoo Finance"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${refreshingPrices ? 'animate-spin' : ''}`} />
+                  <span>{refreshingPrices ? 'กำลังดึงราคา...' : 'รีเฟรชราคา'}</span>
+                </button>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-              <Link
-                href="/performance"
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm"
-                title="ดูผลตอบแทนตลอดชีพ แยกส่วนที่ขายแล้วและยังถืออยู่"
-              >
-                <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
-                <span>สรุปกำไรรายตัว (P&L)</span>
-                <ArrowRight className="w-3 h-3" />
-              </Link>
+
+            {/* Strategy Bucket Filter Pills */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-1">
               <button
                 type="button"
-                onClick={handleRefreshPrices}
-                disabled={refreshingPrices}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition-all flex items-center gap-1.5 disabled:opacity-50"
-                title="ดึงราคาปิดตลาดล่าสุดจาก Yahoo Finance"
+                onClick={() => setSelectedBucketFilter('ALL')}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  selectedBucketFilter === 'ALL'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-[#171B24] text-slate-400 hover:text-white border border-white/[0.06]'
+                }`}
               >
-                <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${refreshingPrices ? 'animate-spin' : ''}`} />
-                <span>{refreshingPrices ? 'กำลังดึงราคา...' : 'รีเฟรชราคาล่าสุด'}</span>
+                ทั้งหมด ({holdings.length})
               </button>
-              <Link
-                href="/transactions"
-                className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1.5"
-              >
-                ประวัติทั้งหมด <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              {computedBuckets
+                .filter((b) => b.strategyType !== 'CASH')
+                .map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setSelectedBucketFilter(b.id)}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      selectedBucketFilter === b.id
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-[#171B24] text-slate-300 hover:text-white border border-white/[0.06]'
+                    }`}
+                  >
+                    {b.emoji} {b.name} ({b.holdings.length})
+                  </button>
+                ))}
             </div>
           </div>
 
-          {holdings.length === 0 ? (
+          {filteredHoldings.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <p className="text-sm font-semibold text-white mb-1">ยังไม่มีสินทรัพย์ในพอร์ต</p>
-              <p className="text-xs text-slate-400 max-w-xs mb-4">เริ่มต้นสร้างพอร์ตโดยการเพิ่มรายการซื้อขายแรกของคุณ</p>
+              <p className="text-sm font-semibold text-white mb-1">ไม่มีสินทรัพย์ในหมวดที่เลือก</p>
+              <p className="text-xs text-slate-400 max-w-xs mb-4">คุณสามารถจัดหุ้นเข้าตะกร้ากลยุทธ์ได้ที่หน้าจัดพอร์ต</p>
               <Link
-                href="/transactions"
+                href="/plans"
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors"
               >
-                เพิ่มธุรกรรม
+                ไปที่หน้าจัดตะกร้าพอร์ต
               </Link>
             </div>
           ) : (
@@ -1091,8 +1348,8 @@ export default function DashboardPage() {
                 <thead>
                   <tr>
                     <th className="!text-xs !font-bold !text-slate-300">สินทรัพย์</th>
-                    <th className="hidden sm:table-cell !text-xs !font-bold !text-slate-300">ตลาด</th>
-                    <th className="text-center hidden md:table-cell !text-xs !font-bold !text-slate-300">แนวโน้ม</th>
+                    <th className="hidden sm:table-cell !text-xs !font-bold !text-slate-300">ตะกร้ากลยุทธ์</th>
+                    <th className="hidden md:table-cell !text-xs !font-bold !text-slate-300">สัญญาณเทคนิค & แนวรับ S1</th>
                     <th className="text-right !text-xs !font-bold !text-slate-300">จำนวน</th>
                     <th className="text-right hidden lg:table-cell !text-xs !font-bold !text-slate-300">ต้นทุนเฉลี่ย</th>
                     <th className="text-right !text-xs !font-bold !text-slate-300">ราคาปัจจุบัน</th>
@@ -1101,10 +1358,15 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {holdings.map((h) => {
+                  {filteredHoldings.map((h) => {
                     const isUsd = h.currency === 'USD' || h.market === 'US'
                     const sym = isUsd ? '$' : '฿'
                     const hProfit = (h.unrealizedPnLBase ?? h.unrealizedPnL) >= 0
+                    const bucket = tickerToBucketMap[h.ticker.toUpperCase()]
+                    const bucketMeta = bucket
+                      ? STRATEGY_TYPE_META[bucket.strategyType] || STRATEGY_TYPE_META.CUSTOM
+                      : null
+                    const sig = techSignals[h.ticker.toUpperCase()]
                     return (
                       <tr 
                         key={h.assetId} 
@@ -1114,7 +1376,7 @@ export default function DashboardPage() {
                           market: h.market || (isUsd ? 'US' : 'TH')
                         })}
                         className="transition-all duration-150 group cursor-pointer hover:bg-indigo-950/25 border-b border-slate-800/40"
-                        title={`คลิกเพื่อดูการ์ดหุ้นและกราฟเทคนิค ${h.ticker}`}
+                        title={`คลิกเพื่อดูพื้นฐาน 4 Pillars และกราฟเทคนิค ${h.ticker}`}
                       >
                         <td>
                           <div className="flex items-center gap-3">
@@ -1125,7 +1387,7 @@ export default function DashboardPage() {
                                   {h.ticker}
                                 </span>
                                 <span className="hidden group-hover:inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-300 bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded transition-all">
-                                  การ์ดหุ้น <ExternalLink className="w-2.5 h-2.5" />
+                                  พื้นฐาน & กราฟ <ExternalLink className="w-2.5 h-2.5" />
                                 </span>
                               </div>
                               <div className="text-xs text-slate-300 truncate max-w-[150px] sm:max-w-[200px] mt-0.5 font-medium">
@@ -1135,16 +1397,39 @@ export default function DashboardPage() {
                           </div>
                         </td>
                         <td className="hidden sm:table-cell">
-                          <span className={`text-xs font-mono font-bold uppercase px-2.5 py-1 rounded-md border ${
-                            isUsd ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
-                          }`}>
-                            {h.market || (isUsd ? 'US' : 'TH')}
-                          </span>
+                          {bucket && bucketMeta ? (
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${bucketMeta.badgeClass}`}>
+                              <span>{bucket.emoji}</span>
+                              <span>{bucketMeta.shortLabel}</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs font-mono text-slate-400">
+                              {h.market || (isUsd ? 'US' : 'TH')}
+                            </span>
+                          )}
                         </td>
-                        <td className="text-center hidden md:table-cell">
-                          <div className="flex justify-center">
-                            <Sparkline seed={h.ticker} trend={hProfit ? 'up' : 'down'} width={60} height={20} />
-                          </div>
+                        <td className="hidden md:table-cell">
+                          {sig ? (
+                            <div className="space-y-0.5">
+                              <span
+                                className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                                  sig.signalType === 'STRONG_DIP_BUY' || sig.isNearSupport
+                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                    : sig.isOverbought
+                                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                    : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
+                                }`}
+                              >
+                                {sig.badgeText}
+                              </span>
+                              <div className="text-[10px] font-mono text-slate-400">
+                                {sig.supportS1 ? `รับ S1: ${sym}${sig.supportS1.toFixed(2)}` : ''}
+                                {sig.rsi14 ? ` • RSI ${sig.rsi14}` : ''}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-500 font-mono">กำลังคำนวณ...</span>
+                          )}
                         </td>
                         <td className="text-right font-mono text-sm font-semibold text-slate-100" title={String(h.quantity)}>
                           {Number(h.quantity).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}
@@ -1230,6 +1515,18 @@ export default function DashboardPage() {
           initialName={selectedStock?.name}
           market={selectedStock?.market}
         />
+
+        {quickTradeData && (
+          <QuickAddModal
+            initialTab="manual"
+            initialData={quickTradeData}
+            onClose={() => setQuickTradeData(null)}
+            onSuccess={() => {
+              setQuickTradeData(null)
+              mutate('/api/portfolio/summary')
+            }}
+          />
+        )}
 
       </div>
     </AppShell>

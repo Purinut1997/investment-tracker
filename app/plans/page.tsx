@@ -42,6 +42,12 @@ import {
 import CountUp from 'react-countup'
 import { SubAllocationDrillDown } from '@/components/plans/SubAllocationDrillDown'
 import { AiAdvisorDisplay } from '@/components/plans/AiAdvisorDisplay'
+import { StrategyBucketsSection } from '@/components/plans/StrategyBucketsSection'
+import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
+import {
+  extractStrategyBuckets,
+  StrategyBucket,
+} from '@/lib/analytics/strategy-buckets'
 import {
   calculatePortfolioRebalance,
   RebalanceMode,
@@ -76,6 +82,7 @@ interface AllocationPreset {
   presetName: string
   riskProfile: string
   targetAllocation: Record<string, number>
+  rawTargetAllocation?: Record<string, any>
   subTargets?: Record<string, Record<string, number>>
   monthlyContribution: number | string
   targetAmount: number | string
@@ -112,6 +119,7 @@ function parsePresets(data: unknown): AllocationPreset[] {
       const subTargets = rawAlloc._subTargets || {}
       return {
         ...item,
+        rawTargetAllocation: rawAlloc,
         targetAllocation: asAllocation(item.targetAllocation),
         subTargets,
       }
@@ -159,6 +167,7 @@ export default function PlansPage() {
       [key]: newSubTargets,
     }
     const updatedAllocation = {
+      ...(activePreset.rawTargetAllocation || {}),
       ...activePreset.targetAllocation,
       _subTargets: updatedSubTargets,
     }
@@ -178,6 +187,60 @@ export default function PlansPage() {
       await revalidate()
     } catch (err: any) {
       console.error('[save sub-targets]', err)
+    }
+  }
+
+  const strategyBuckets = useMemo(
+    () => extractStrategyBuckets(activePreset?.rawTargetAllocation, holdings),
+    [activePreset?.rawTargetAllocation, holdings]
+  )
+
+  const [selectedStockDetail, setSelectedStockDetail] = useState<{
+    symbol: string
+    name?: string
+    market?: string
+  } | null>(null)
+
+  async function handleSaveBuckets(newBuckets: StrategyBucket[]) {
+    try {
+      if (!activePreset?.id) {
+        const res = await fetch('/api/plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            presetName: 'แผนจัดพอร์ตหลัก (Dime! Style)',
+            riskProfile: 'moderate',
+            targetAllocation: {
+              US: 60,
+              TH: 30,
+              CASH: 10,
+              _buckets: newBuckets,
+            },
+            monthlyContribution: cashInflow || 10000,
+            targetAmount: 2000000,
+            isDefault: true,
+          }),
+        })
+        if (!res.ok) throw new Error('ไม่สามารถสร้างแผนเริ่มต้นได้')
+      } else {
+        const updatedAllocation = {
+          ...(activePreset.rawTargetAllocation || {}),
+          ...activePreset.targetAllocation,
+          ...(activePreset.subTargets ? { _subTargets: activePreset.subTargets } : {}),
+          _buckets: newBuckets,
+        }
+        const res = await fetch(`/api/plans/${activePreset.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetAllocation: updatedAllocation,
+          }),
+        })
+        if (!res.ok) throw new Error('ไม่สามารถบันทึกตะกร้ากลยุทธ์ได้')
+      }
+      await revalidate()
+    } catch (err) {
+      console.error('[handleSaveBuckets]', err)
     }
   }
 
@@ -617,6 +680,26 @@ export default function PlansPage() {
             </div>
           </div>
         </div>
+
+        {/* ─── DIME!-STYLE CUSTOM STRATEGY BUCKETS & PER-BUCKET AI ─────────── */}
+        <StrategyBucketsSection
+          buckets={strategyBuckets}
+          holdings={holdings}
+          totalCashBase={totalCash}
+          totalPortfolioValue={totalValue}
+          baseCurrency={baseCurrency}
+          dcaBudget={cashInflow}
+          onSaveBuckets={handleSaveBuckets}
+          onSelectStock={(stock) => setSelectedStockDetail(stock)}
+          onQuickTrade={(tradeData) => {
+            setQuickAddInitialData({
+              symbol: tradeData.symbol,
+              assetType: tradeData.assetType || 'stock',
+              market: tradeData.market || 'US',
+            })
+            setQuickAddOpen(true)
+          }}
+        />
 
         {/* ─── ACTIVE PRESET SELECTOR & REBALANCE SIMULATOR ────────────────── */}
         {activePreset && (
@@ -1662,6 +1745,15 @@ export default function PlansPage() {
       {quickAddOpen && (
         <QuickAddModal
           initialTab="manual"
+          initialData={
+            quickAddInitialData
+              ? {
+                  ticker: quickAddInitialData.symbol,
+                  action: 'BUY',
+                  market: (quickAddInitialData.market as 'US' | 'TH') || 'US',
+                }
+              : undefined
+          }
           onClose={() => {
             setQuickAddOpen(false)
             setQuickAddInitialData(null)
@@ -1672,6 +1764,15 @@ export default function PlansPage() {
           }}
         />
       )}
+
+      {/* Fundamental & Technical Stock Detail Modal */}
+      <StockDetailModal
+        isOpen={Boolean(selectedStockDetail)}
+        onClose={() => setSelectedStockDetail(null)}
+        symbol={selectedStockDetail?.symbol ?? null}
+        initialName={selectedStockDetail?.name}
+        market={selectedStockDetail?.market}
+      />
     </AppShell>
   )
 }

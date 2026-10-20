@@ -39,6 +39,7 @@ import { parseAccountsPayload } from '@/lib/accounts'
 interface NavItem {
   label: string
   href: string
+  matchPrefixes?: string[]
   icon: React.ComponentType<{ className?: string }>
   badge?: string
 }
@@ -50,45 +51,80 @@ interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    groupName: 'ภาพรวม',
+    groupName: 'ศูนย์บัญชาการหลัก (4 เมนูครบจบ)',
     items: [
-      { label: 'แดชบอร์ด',        href: '/dashboard',    icon: LayoutDashboard },
-    ]
-  },
-  {
-    groupName: 'พอร์ตของฉัน',
-    items: [
-      { label: 'รายการธุรกรรม',   href: '/transactions', icon: ArrowLeftRight },
-      { label: 'ผลตอบแทนรายตัว',  href: '/performance',  icon: BarChart3 },
-      { label: 'ปฏิทินปันผล & สถิติ XD', href: '/dividends', icon: Coins, badge: 'ใหม่' },
-      { label: 'บัญชีการเงิน',    href: '/accounts',     icon: Wallet },
-      { label: 'รายงานภาษี',      href: '/tax-report',   icon: ReceiptText },
-    ]
-  },
-  {
-    groupName: 'วางแผน',
-    items: [
-      { label: 'บันทึกแผนประจำวัน', href: '/daily-plan',   icon: CalendarCheck, badge: 'ใหม่' },
-      { label: 'เรดาร์โอกาส & ความเสี่ยง', href: '/radar', icon: Radar, badge: 'AI PRO' },
-      { label: 'เป้าหมาย & ปรับสมดุลพอร์ต', href: '/plans', icon: PieChart },
-      { label: 'พยากรณ์พอร์ต',   href: '/forecast',     icon: Sparkles, badge: 'AI' },
-    ]
-  },
-  {
-    groupName: 'ตลาดและข้อมูล',
-    items: [
-      { label: 'จับตาตลาด',       href: '/market-watch', icon: TrendingUp },
-      { label: 'แผนผังตลาด (Heatmap)', href: '/market-map', icon: LayoutGrid, badge: 'ใหม่' },
-      { label: 'ปฏิทินเศรษฐกิจ',   href: '/economic-calendar', icon: Calendar },
-      { label: 'สรุปข่าวเศรษฐกิจ', href: '/news',        icon: Newspaper },
-    ]
+      {
+        label: 'ภาพรวม & แอ็กชันวันนี้',
+        href: '/dashboard',
+        matchPrefixes: ['/dashboard', '/performance', '/dividends', '/daily-plan'],
+        icon: LayoutDashboard,
+      },
+      {
+        label: 'จัดพอร์ต & ถาม AI รายส่วน',
+        href: '/plans',
+        matchPrefixes: ['/plans', '/radar', '/forecast'],
+        icon: PieChart,
+        badge: 'AI',
+      },
+      {
+        label: 'ตลาด & ข่าวพอร์ต',
+        href: '/market-watch',
+        matchPrefixes: ['/market-watch', '/news', '/market-map', '/economic-calendar'],
+        icon: TrendingUp,
+      },
+      {
+        label: 'ธุรกรรม & บัญชี',
+        href: '/transactions',
+        matchPrefixes: ['/transactions', '/accounts', '/tax-report'],
+        icon: ArrowLeftRight,
+      },
+    ],
   },
   {
     groupName: 'ระบบ',
     items: [
-      { label: 'ตั้งค่าระบบ',     href: '/settings',     icon: Settings },
-    ]
-  }
+      { label: 'ตั้งค่าระบบ & AI', href: '/settings', matchPrefixes: ['/settings'], icon: Settings },
+    ],
+  },
+]
+
+const HUB_SUB_TABS: Array<{
+  hubPrefixes: string[]
+  tabs: Array<{ label: string; href: string; icon: React.ComponentType<{ className?: string }>; badge?: string }>
+}> = [
+  {
+    hubPrefixes: ['/dashboard', '/performance', '/dividends', '/daily-plan'],
+    tabs: [
+      { label: 'ภาพรวม & สัญญาณวันนี้', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'กำไรรายตัว (รวมขายแล้ว)', href: '/performance', icon: BarChart3 },
+      { label: 'ปฏิทินปันผล & สถิติ XD', href: '/dividends', icon: Coins },
+    ],
+  },
+  {
+    hubPrefixes: ['/plans', '/radar', '/forecast'],
+    tabs: [
+      { label: 'ตะกร้ากลยุทธ์ & ถาม AI รายส่วน', href: '/plans', icon: PieChart, badge: 'Dime! Style' },
+      { label: 'เรดาร์ความเสี่ยง & โอกาส', href: '/radar', icon: Radar },
+      { label: 'จำลองพอร์ต 10 ปี (Monte Carlo)', href: '/forecast', icon: Sparkles },
+    ],
+  },
+  {
+    hubPrefixes: ['/market-watch', '/news', '/market-map', '/economic-calendar'],
+    tabs: [
+      { label: 'กระดานจับตาตลาด (Watchlist)', href: '/market-watch', icon: TrendingUp },
+      { label: 'สรุปข่าวกระทบพอร์ต AI', href: '/news', icon: Newspaper },
+      { label: 'แผนผังตลาด (Heatmap)', href: '/market-map', icon: LayoutGrid },
+      { label: 'ปฏิทินเศรษฐกิจโลก', href: '/economic-calendar', icon: Calendar },
+    ],
+  },
+  {
+    hubPrefixes: ['/transactions', '/accounts', '/tax-report'],
+    tabs: [
+      { label: 'ประวัติซื้อขาย & นำเข้าสลิป', href: '/transactions', icon: ArrowLeftRight },
+      { label: 'บัญชี & กระเป๋าเงินสด Dime!', href: '/accounts', icon: Wallet },
+      { label: 'รายงานภาษี FIFO', href: '/tax-report', icon: ReceiptText },
+    ],
+  },
 ]
 
 const SUPERADMIN_NAV: NavItem[] = [
@@ -221,7 +257,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {collapsed && <div className="h-px bg-slate-800/80 w-6 mx-auto my-2" />}
 
               {group.items.map((item) => {
-                const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
+                const active = item.matchPrefixes
+                  ? item.matchPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+                  : pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
                 const Icon = item.icon
                 return (
                   <Link
@@ -509,8 +547,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Main Canvas Area */}
-        <main className="flex-1 min-w-0 w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8 flex flex-col justify-between">
-          <div>{children}</div>
+        <main className="flex-1 min-w-0 w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-5 sm:py-7 flex flex-col justify-between">
+          <div>
+            {(() => {
+              const matchedHub = HUB_SUB_TABS.find((hub) =>
+                hub.hubPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+              )
+              if (!matchedHub) return null
+              return (
+                <div className="mb-6 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-b border-white/[0.07]">
+                  {matchedHub.tabs.map((tab) => {
+                    const TabIcon = tab.icon
+                    const isTabActive =
+                      pathname === tab.href || pathname.startsWith(`${tab.href}/`)
+                    return (
+                      <Link
+                        key={tab.href}
+                        href={tab.href}
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-t-xl text-xs font-semibold whitespace-nowrap transition-all border-b-2 no-underline ${
+                          isTabActive
+                            ? 'border-indigo-500 text-white bg-indigo-500/10'
+                            : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]'
+                        }`}
+                      >
+                        <TabIcon
+                          className={`w-3.5 h-3.5 ${
+                            isTabActive ? 'text-indigo-400' : 'text-slate-400'
+                          }`}
+                        />
+                        <span>{tab.label}</span>
+                        {tab.badge && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold">
+                            {tab.badge}
+                          </span>
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )
+            })()}
+            {children}
+          </div>
           <footer className="mt-14 pt-6 border-t border-white/[0.05] text-center">
             <p className="text-xs text-slate-500 font-mono">
               Investment Pro © {new Date().getFullYear()} • Created by{' '}
@@ -523,49 +601,78 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── MOBILE BOTTOM NAV (Pseudo-Glass: 0% GPU Blur Penalty) ── */}
       <nav className="app-mobile-only fixed bottom-0 left-0 right-0 z-30 bg-[#0B0E14] border-t border-white/[0.08] shadow-[0_-4px_24px_rgba(0,0,0,0.6)] px-2 py-2 justify-around items-center">
         {[
-          { href: '/dashboard',    icon: LayoutDashboard, label: 'แดชบอร์ด' },
-          { href: '/transactions', icon: ArrowLeftRight,   label: 'ธุรกรรม' },
-        ].map(({ href, icon: Icon, label }) => (
-          <Link
-            key={href}
-            href={href}
-            className={`flex flex-col items-center py-1 px-3 rounded-xl text-[10px] font-medium transition-colors no-underline ${
-              pathname === href ? 'text-indigo-400 font-semibold' : 'text-slate-400'
-            }`}
-          >
-            <Icon className="w-5 h-5 mb-1" />
-            <span>{label}</span>
-          </Link>
-        ))}
+          {
+            href: '/dashboard',
+            match: ['/dashboard', '/performance', '/dividends', '/daily-plan'],
+            icon: LayoutDashboard,
+            label: 'ภาพรวม',
+          },
+          {
+            href: '/plans',
+            match: ['/plans', '/radar', '/forecast'],
+            icon: PieChart,
+            label: 'จัดพอร์ต/AI',
+          },
+        ].map(({ href, match, icon: Icon, label }) => {
+          const active = match.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`flex flex-col items-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition-colors no-underline ${
+                active ? 'text-indigo-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Icon className="w-5 h-5 mb-1" />
+              <span>{label}</span>
+            </Link>
+          )
+        })}
 
-        <Link href={ctaHref} onClick={hasAccounts ? (event) => { event.preventDefault(); openQuickAdd() } : undefined} className="flex flex-col items-center justify-center gap-0.5 min-h-11 py-1.5 px-3 rounded-xl text-[10px] font-bold text-white bg-indigo-600">
+        <Link
+          href={ctaHref}
+          onClick={
+            hasAccounts
+              ? (event) => {
+                  event.preventDefault()
+                  openQuickAdd()
+                }
+              : undefined
+          }
+          className="flex flex-col items-center justify-center gap-0.5 min-h-11 py-1.5 px-3 rounded-xl text-[10px] font-bold text-white bg-indigo-600 shadow-md shadow-indigo-600/30"
+        >
           <Plus className="w-5 h-5" />
-          <span>{hasAccounts ? 'บันทึก' : 'สร้างบัญชี'}</span>
+          <span>{hasAccounts ? 'บันทึกด่วน' : 'สร้างบัญชี'}</span>
         </Link>
 
         {[
-          { href: '/accounts', icon: Wallet, label: 'บัญชี' },
-          { href: '/market-watch', icon: TrendingUp, label: 'ตลาด' },
-        ].map(({ href, icon: Icon, label }) => (
-          <Link
-            key={href}
-            href={href}
-            className={`flex flex-col items-center py-1 px-3 rounded-xl text-[10px] font-medium transition-colors no-underline ${
-              pathname === href ? 'text-indigo-400 font-semibold' : 'text-slate-400'
-            }`}
-          >
-            <Icon className="w-5 h-5 mb-1" />
-            <span>{label}</span>
-          </Link>
-        ))}
-
-        <button
-          onClick={() => setMobileMenuOpen(true)}
-          className="flex flex-col items-center py-1 px-3 rounded-xl text-[10px] font-medium text-slate-400"
-        >
-          <Menu className="w-5 h-5 mb-1" />
-          <span>เมนู</span>
-        </button>
+          {
+            href: '/market-watch',
+            match: ['/market-watch', '/news', '/market-map', '/economic-calendar'],
+            icon: TrendingUp,
+            label: 'ตลาด/ข่าว',
+          },
+          {
+            href: '/transactions',
+            match: ['/transactions', '/accounts', '/tax-report'],
+            icon: ArrowLeftRight,
+            label: 'ธุรกรรม',
+          },
+        ].map(({ href, match, icon: Icon, label }) => {
+          const active = match.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`flex flex-col items-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition-colors no-underline ${
+                active ? 'text-indigo-400 font-semibold' : 'text-slate-400'
+              }`}
+            >
+              <Icon className="w-5 h-5 mb-1" />
+              <span>{label}</span>
+            </Link>
+          )
+        })}
       </nav>
 
       {quickAddOpen && <QuickAddModal onClose={() => setQuickAddOpen(false)} />}
