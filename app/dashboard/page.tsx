@@ -4,9 +4,7 @@ import React, { useState, useEffect } from 'react'
 import useSWR, { mutate } from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
-import { PageHeader } from '@/components/PageHeader'
 import { DashboardEmptyState } from '@/components/DashboardEmptyState'
-import { Sparkline } from '@/components/Sparkline'
 import { StockLogo } from '@/components/StockLogo'
 import {
   Sparkles,
@@ -22,9 +20,12 @@ import {
   ExternalLink,
   Radar,
   BarChart3,
-  Calendar,
   TrendingUp,
-  Layers,
+  ShieldCheck,
+  Wallet,
+  Target,
+  Zap,
+  Plus,
 } from 'lucide-react'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import { QuickAddModal } from '@/components/QuickAddModal'
@@ -44,7 +45,7 @@ import {
   Area,
   XAxis,
   YAxis,
-  CartesianGrid
+  CartesianGrid,
 } from 'recharts'
 import { HealthScoreResult } from '@/lib/analytics/health-score'
 import { HoldingItem } from '@/lib/analytics/holdings'
@@ -65,15 +66,26 @@ const PIE_COLORS = [
   '#e11d48', // Rose
 ]
 
+const BUCKET_BAR_COLORS: Record<string, string> = {
+  LONG_TERM: '#6366f1',
+  DIVIDEND: '#10b981',
+  SHORT_TERM: '#f59e0b',
+  CASH: '#06b6d4',
+  CUSTOM: '#ec4899',
+}
+
 const CustomAreaTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="p-3.5 rounded-2xl glass-panel border border-slate-700/80 shadow-2xl text-xs space-y-2 min-w-[160px]">
+      <div className="p-3.5 rounded-2xl bg-[#141822]/95 backdrop-blur-xl border border-white/[0.12] shadow-2xl text-xs space-y-2 min-w-[170px]">
         <p className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">{label}</p>
         {payload.map((entry: any, index: number) => (
           <div key={`item-${index}`} className="flex items-center justify-between gap-4">
             <span className="flex items-center gap-2 text-slate-300">
-              <span className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: entry.stroke || entry.color }} />
+              <span
+                className="w-2 h-2 rounded-full shadow-sm"
+                style={{ backgroundColor: entry.stroke || entry.color }}
+              />
               <span className="font-medium">{entry.name}</span>
             </span>
             <span className="font-mono font-bold text-white tabular-nums">
@@ -90,11 +102,15 @@ const CustomAreaTooltip = ({ active, payload, label }: any) => {
 function DashboardLoadingState() {
   return (
     <AppShell>
-      <div className="w-full max-w-5xl mx-auto min-h-[60vh] flex flex-col justify-center gap-6 animate-fade-in" aria-busy="true">
+      <div
+        className="w-full max-w-[1600px] mx-auto min-h-[60vh] flex flex-col justify-center gap-6 animate-fade-in"
+        aria-busy="true"
+      >
         <div className="h-8 w-64 rounded-lg bg-slate-800/80 animate-pulse" />
-        <div className="h-4 w-96 max-w-full rounded bg-slate-800/60 animate-pulse" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-          {[1, 2, 3, 4].map((item) => <div key={item} className="h-36 rounded-2xl bg-slate-900/70 border border-slate-800 animate-pulse" />)}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <div className="lg:col-span-6 h-52 rounded-3xl bg-slate-900/70 border border-slate-800 animate-pulse" />
+          <div className="lg:col-span-3 h-52 rounded-3xl bg-slate-900/70 border border-slate-800 animate-pulse" />
+          <div className="lg:col-span-3 h-52 rounded-3xl bg-slate-900/70 border border-slate-800 animate-pulse" />
         </div>
       </div>
     </AppShell>
@@ -108,7 +124,10 @@ function DashboardErrorState() {
         <AlertTriangle className="w-8 h-8 text-amber-400 mb-4" />
         <h1 className="text-xl font-semibold text-white">โหลดข้อมูลพอร์ตไม่สำเร็จ</h1>
         <p className="text-sm text-slate-400 mt-2 mb-6">ลองโหลดหน้านี้อีกครั้งเพื่อดึงข้อมูลล่าสุด</p>
-        <button onClick={() => window.location.reload()} className="min-h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white">
+        <button
+          onClick={() => window.location.reload()}
+          className="min-h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold text-white cursor-pointer"
+        >
           ลองอีกครั้ง
         </button>
       </div>
@@ -131,7 +150,8 @@ export default function DashboardPage() {
   } | null>(null)
   const [selectedBucketFilter, setSelectedBucketFilter] = useState<string>('ALL')
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
-  // Stale-While-Revalidate Instant Paint (0ms LCP on repeat visits)
+  const [allocationView, setAllocationView] = useState<'assets' | 'classes'>('assets')
+
   const [cachedSummary, setCachedSummary] = useState<any>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -144,7 +164,6 @@ export default function DashboardPage() {
     return null
   })
 
-  // Single Unified Fast SWR call for all core Dashboard data
   const { data: summaryRaw, error: summaryError, isLoading: sumLoading } = useSWR<any>(
     '/api/portfolio/summary',
     {
@@ -165,11 +184,10 @@ export default function DashboardPage() {
     }
   }, [summaryRaw])
 
-  // Non-blocking secondary widget: only fetch AI Radar AFTER summary has loaded
-  const { data: radarData } = useSWR(
-    summary ? '/api/radar' : null,
-    { revalidateOnFocus: false, dedupingInterval: 60000 }
-  )
+  const { data: radarData } = useSWR(summary ? '/api/radar' : null, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60000,
+  })
 
   const holdings: HoldingItem[] = Array.isArray(summary?.holdings) ? summary.holdings : []
   const holdingTickersParam = holdings.map((h) => h.ticker.toUpperCase()).join(',')
@@ -184,7 +202,7 @@ export default function DashboardPage() {
   const accounts = parseAccountsPayload(summary?.accounts)
   const totalCash = summary?.totalCash ?? 0
   const totalValue = summary?.totalValue ?? 0
-  const netWorth = summary?.netWorth ?? (totalValue + totalCash)
+  const netWorth = summary?.netWorth ?? totalValue + totalCash
   const totalCost = summary?.totalCost ?? 0
   const unrealizedPnL = summary?.unrealizedPnL ?? 0
   const unrealizedPnLPercent = summary?.unrealizedPnLPercent ?? 0
@@ -200,10 +218,13 @@ export default function DashboardPage() {
   const todayPnL = summary?.todayPnL ?? 0
   const todayPnLPercent = summary?.todayPnLPercent ?? 0
   const isTodayProfit = todayPnL >= 0
-  const upcomingCatalysts = Array.isArray(summary?.upcomingCatalysts) ? summary.upcomingCatalysts : []
+  const upcomingCatalysts = Array.isArray(summary?.upcomingCatalysts)
+    ? summary.upcomingCatalysts
+    : []
   const marketPulse = summary?.marketPulse ?? null
-  const assetClassAllocation = Array.isArray(summary?.assetClassAllocation) ? summary.assetClassAllocation : []
-  const [allocationView, setAllocationView] = useState<'assets' | 'classes'>('assets')
+  const assetClassAllocation = Array.isArray(summary?.assetClassAllocation)
+    ? summary.assetClassAllocation
+    : []
 
   const hasAccounts = accounts.length > 0 || (summary?.accounts?.length ?? 0) > 0
   const hasHoldings = holdings.length > 0 || totalCost > 0
@@ -245,17 +266,21 @@ export default function DashboardPage() {
 
   if (!hasAccounts || !hasHoldings) {
     return (
-      <DashboardEmptyState 
-        hasAccounts={hasAccounts} 
-        hasHoldings={hasHoldings} 
-        hasPlans={hasPlans} 
+      <DashboardEmptyState
+        hasAccounts={hasAccounts}
+        hasHoldings={hasHoldings}
+        hasPlans={hasPlans}
       />
     )
   }
 
-  // Extract target allocation per ticker from active preset if available
-  const activePreset = summary?.activePreset || summary?.presets?.find((p: any) => p.isDefault) || summary?.presets?.[0]
-  const subTargets = activePreset?.targetAllocation?._subTargets || activePreset?.subTargets || {}
+  // Extract target allocation & strategy buckets
+  const activePreset =
+    summary?.activePreset ||
+    summary?.presets?.find((p: any) => p.isDefault) ||
+    summary?.presets?.[0]
+  const subTargets =
+    activePreset?.targetAllocation?._subTargets || activePreset?.subTargets || {}
   const strategyBuckets = extractStrategyBuckets(activePreset?.targetAllocation, holdings)
   const { computedBuckets, tickerToBucketMap } = computeBucketsWithHoldings(
     strategyBuckets,
@@ -264,7 +289,7 @@ export default function DashboardPage() {
     netWorth
   )
 
-  // Compute instant actionable signals today (Buy dips / Short-term Take Profit / Overbought alerts)
+  // Compute actionable signals today
   const actionableSignalsToday = holdings
     .map((h) => {
       const sym = h.ticker.toUpperCase()
@@ -283,7 +308,11 @@ export default function DashboardPage() {
           sig,
           type: 'TAKE_PROFIT' as const,
           badge: `🎯 ถึงเป้าทำกำไร (+${pnl.toFixed(1)}%)`,
-          reason: `อยู่ในตะกร้าเก็งสั้น "${bucket.name}" กำไรทะลุเป้า +${tp}% ${sig?.resistanceR1 ? `(ต้าน R1: ${h.currency === 'USD' ? '$' : '฿'}${sig.resistanceR1.toFixed(2)})` : ''}`,
+          reason: `อยู่ในตะกร้า "${bucket.name}" กำไรทะลุเป้า +${tp}% ${
+            sig?.resistanceR1
+              ? `(แนวต้าน R1: ${h.currency === 'USD' ? '$' : '฿'}${sig.resistanceR1.toFixed(2)})`
+              : ''
+          }`,
           recommendedAction: 'SELL' as const,
           priority: 100,
         }
@@ -308,8 +337,14 @@ export default function DashboardPage() {
           bucket,
           sig,
           type: 'DIP_BUY' as const,
-          badge: sig.badgeText || '🔥 ชนแนวรับ S1 / น่าช้อน',
-          reason: `ราคา ${h.currency === 'USD' ? '$' : '฿'}${Number(h.currentPrice).toFixed(2)} ${sig.supportS1 ? `ใกล้แนวรับ S1 (${h.currency === 'USD' ? '$' : '฿'}${sig.supportS1.toFixed(2)})` : ''} ${sig.rsi14 ? `• RSI ${sig.rsi14}` : ''}`,
+          badge: sig.badgeText || '🔥 ทดสอบแนวรับสำคัญ',
+          reason: `ราคาปัจจุบัน ${h.currency === 'USD' ? '$' : '฿'}${Number(
+            h.currentPrice
+          ).toFixed(2)} ${
+            sig.supportS1
+              ? `ใกล้แนวรับ S1 (${h.currency === 'USD' ? '$' : '฿'}${sig.supportS1.toFixed(2)})`
+              : ''
+          } ${sig.rsi14 ? `• RSI ${sig.rsi14.toFixed(1)}` : ''}`,
           recommendedAction: 'BUY' as const,
           priority: 90,
         }
@@ -321,8 +356,8 @@ export default function DashboardPage() {
           bucket,
           sig,
           type: 'OVERBOUGHT' as const,
-          badge: `⚠️ RSI Overbought (${sig.rsi14})`,
-          reason: `ราคาวิ่งขึ้นเร็วระยะสั้น แนะนำชะลอซื้อไล่ราคา หรือแบ่งล็อกกำไรหากเป็นหุ้นสั้น`,
+          badge: `⚠️ RSI Overbought (${sig.rsi14?.toFixed(0)})`,
+          reason: `ราคาปรับขึ้นร้อนแรงระยะสั้น แนะนำชะลอซื้อไล่ราคา หรือแบ่งล็อกกำไร`,
           recommendedAction: 'SELL' as const,
           priority: 75,
         }
@@ -336,12 +371,33 @@ export default function DashboardPage() {
   const filteredHoldings =
     selectedBucketFilter === 'ALL'
       ? holdings
-      : holdings.filter((h) => tickerToBucketMap[h.ticker.toUpperCase()]?.id === selectedBucketFilter)
+      : holdings.filter(
+          (h) => tickerToBucketMap[h.ticker.toUpperCase()]?.id === selectedBucketFilter
+        )
+
+  // Find best performer in portfolio for quick insight
+  const topGainerHolding =
+    holdings.length > 0
+      ? [...holdings].sort(
+          (a, b) => Number(b.unrealizedPnLPercent || 0) - Number(a.unrealizedPnLPercent || 0)
+        )[0]
+      : null
+
+  const investedRatioPercent =
+    netWorth > 0 ? Math.min(100, Math.max(0, (totalValue / netWorth) * 100)) : 0
+  const cashRatioPercent =
+    netWorth > 0 ? Math.min(100, Math.max(0, (totalCash / netWorth) * 100)) : 0
+
+  const totalCashFlowRealized = totalRealizedGain + totalDividends
+  const dividendShareOfCashFlow =
+    totalCashFlowRealized > 0
+      ? Math.min(100, Math.max(0, (totalDividends / totalCashFlowRealized) * 100))
+      : 50
 
   const targetMap: Record<string, number> = {}
   if (activePreset?.targetAllocation) {
     for (const [key, val] of Object.entries(activePreset.targetAllocation)) {
-      if (key !== '_subTargets' && typeof val === 'number') {
+      if (key !== '_subTargets' && key !== '_buckets' && typeof val === 'number') {
         targetMap[key.toUpperCase()] = val
       }
     }
@@ -357,12 +413,12 @@ export default function DashboardPage() {
     }
   }
 
-  // Multi-colored asset allocation with target & deviation
   const allocationData = holdings.map((h, i) => {
     const tickerUpper = h.ticker.toUpperCase()
     const targetPercent = targetMap[tickerUpper] ?? null
     const actualPercent = Number(h.allocationPercent.toFixed(1))
-    const deviation = targetPercent !== null ? Number((actualPercent - targetPercent).toFixed(1)) : null
+    const deviation =
+      targetPercent !== null ? Number((actualPercent - targetPercent).toFixed(1)) : null
 
     return {
       name: h.ticker,
@@ -377,79 +433,111 @@ export default function DashboardPage() {
     }
   })
 
-  // Real performance milestones calculated from transactions vs S&P 500 benchmark
-  const allPerformanceData: { month: string; value: number; benchmark: number }[] = Array.isArray(summary?.performanceData)
-    ? summary.performanceData
-    : []
+  const allPerformanceData: { month: string; value: number; benchmark: number }[] =
+    Array.isArray(summary?.performanceData) ? summary.performanceData : []
 
-  // Slice data according to selected timeframe
-  // performanceData is monthly (1 point per month), so map timeframe -> month count
   const monthLimits: Record<string, number> = {
-    '1D': 2,   // show latest 2 months (no daily data available)
-    '1W': 2,   // show latest 2 months
-    '1M': 3,   // show latest 3 months
-    '6M': 6,   // show latest 6 months
-    '1Y': 12,  // show latest 12 months
-    'ALL': Infinity,
+    '1D': 2,
+    '1W': 2,
+    '1M': 3,
+    '6M': 6,
+    '1Y': 12,
+    ALL: Infinity,
   }
   const limit = monthLimits[timeframe] ?? Infinity
-  const performanceData = limit === Infinity
-    ? allPerformanceData
-    : allPerformanceData.slice(-limit)
+  const performanceData =
+    limit === Infinity ? allPerformanceData : allPerformanceData.slice(-limit)
 
   const isHighGrade = (healthScore?.score ?? 0) >= 80
-  const isMidGrade  = (healthScore?.score ?? 0) >= 60
+  const isMidGrade = (healthScore?.score ?? 0) >= 60
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-6 sm:gap-8 w-full max-w-[1600px] mx-auto animate-fade-in">
-        
-        {/* Top Header */}
-        <PageHeader
-          eyebrow="Portfolio Overview"
-          title="ภาพรวมพอร์ตการลงทุน"
-          description="มูลค่าสินทรัพย์ ผลตอบแทนรวม และรายการที่ต้องตรวจสอบจากธุรกรรมของคุณ"
-          action={
-            <div className="flex items-center gap-2">
-              <Link
-                href="/radar"
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm"
-              >
-                <Radar className="w-3.5 h-3.5 text-indigo-400" />
-                <span>เรดาร์ความเสี่ยง AI</span>
-              </Link>
-              <button
-                type="button"
-                onClick={handleRefreshPrices}
-                disabled={refreshingPrices}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-[#181C25] hover:bg-[#202532] border border-white/[0.1] transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
-                title="ดึงราคาปิดตลาดล่าสุดจาก Yahoo Finance และคำนวณกำไร/ขาดทุนใหม่"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${refreshingPrices ? 'animate-spin' : ''}`} />
-                <span>{refreshingPrices ? 'กำลังดึงราคาล่าสุด...' : 'รีเฟรชราคาหุ้น'}</span>
-              </button>
-              <Link
-                href="/plans"
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-[#181C25] hover:bg-[#202532] border border-white/[0.1] transition-all flex items-center gap-1.5"
-              >
-                <PieIcon className="w-3.5 h-3.5 text-indigo-400" />
-                <span>แผนปรับพอร์ต</span>
-              </Link>
+      <div className="flex flex-col gap-5 sm:gap-6 w-full max-w-[1600px] mx-auto animate-fade-in pb-12">
+        {/* ── HEADER BAR WITH LIVE STATUS & QUICK ACTIONS ───────────── */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Wealth Command Center
+              </span>
+              {healthScore && (
+                <span
+                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    isHighGrade
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : isMidGrade
+                      ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  }`}
+                >
+                  สุขภาพพอร์ต: เกรด {healthScore.grade} ({healthScore.score}/100)
+                </span>
+              )}
+              {radarData?.riskReport && (
+                <Link
+                  href="/radar"
+                  className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/[0.08] transition-colors flex items-center gap-1.5"
+                >
+                  <Radar className="w-3 h-3 text-indigo-400" />
+                  <span>
+                    ความเสี่ยงพอร์ต:{' '}
+                    <strong className="text-white">{radarData.riskReport.overallRiskLevel}</strong>
+                  </span>
+                </Link>
+              )}
             </div>
-          }
-        />
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              ภาพรวมพอร์ต & สัญญาณลงทุนวันนี้
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleRefreshPrices}
+              disabled={refreshingPrices}
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:text-white bg-[#151923] hover:bg-[#1C2230] border border-white/[0.1] transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-sm"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 text-emerald-400 ${refreshingPrices ? 'animate-spin' : ''}`}
+              />
+              <span>{refreshingPrices ? 'กำลังดึงราคาล่าสุด...' : 'รีเฟรชราคาหุ้น'}</span>
+            </button>
+
+            <Link
+              href="/radar"
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-200 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <Radar className="w-3.5 h-3.5 text-indigo-400" />
+              <span>เรดาร์ความเสี่ยง AI</span>
+            </Link>
+
+            <Link
+              href="/plans"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/25"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>จัดตะกร้าพอร์ต & ถาม AI</span>
+            </Link>
+          </div>
+        </div>
 
         {/* Deviation Alert (if any) */}
         {summary?.unackAlert && (
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start justify-between gap-3 text-amber-200 text-sm shadow-lg shadow-amber-500/5">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-amber-200 text-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
                 <AlertTriangle className="w-4 h-4" />
               </div>
               <div>
-                <p className="font-semibold text-amber-300">สัดส่วนสินทรัพย์เบี่ยงเบนจากเป้าหมาย</p>
-                <p className="text-xs text-amber-200/80 mt-0.5 leading-relaxed">
-                  {summary.unackAlert.aiSummaryText || 'สัดส่วนบางสินทรัพย์เบี่ยงเบนเกินเกณฑ์ที่กำหนดในแผนการลงทุน'}
+                <p className="font-semibold text-amber-300 text-xs sm:text-sm">
+                  สัดส่วนสินทรัพย์เบี่ยงเบนจากเป้าหมาย
+                </p>
+                <p className="text-xs text-amber-200/80 mt-0.5">
+                  {summary.unackAlert.aiSummaryText ||
+                    'สัดส่วนบางสินทรัพย์เบี่ยงเบนเกินเกณฑ์ที่กำหนดในแผนการลงทุน'}
                 </p>
               </div>
             </div>
@@ -462,34 +550,41 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── TOP KPI CARDS ─────────────────────────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
-          {/* Main Portfolio Value (Hero) */}
-          <div className="xl:col-span-2 glass-panel p-6 sm:p-7 rounded-2xl flex flex-col justify-between">
-            <div className="flex items-start justify-between">
+        {/* ── 1. HERO WEALTH KPI ROW (12-COLUMN BENTO GRID) ───────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
+          {/* Card 1: Total Net Worth Hero (6 Columns) */}
+          <div className="lg:col-span-6 rounded-3xl bg-gradient-to-br from-[#161B28] via-[#121620] to-[#0F131C] border border-white/[0.09] p-6 sm:p-7 relative overflow-hidden shadow-2xl shadow-black/40 flex flex-col justify-between">
+            <div className="absolute -top-20 -right-20 w-72 h-72 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative z-10 flex items-start justify-between gap-3">
               <div>
-                <span className="text-[11px] font-bold tracking-wider uppercase text-indigo-400">มูลค่าพอร์ตการลงทุนรวม</span>
-                <p className="text-xs text-slate-400 mt-0.5">Total Portfolio Net Worth</p>
+                <span className="text-xs font-bold tracking-wider uppercase text-indigo-400 flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5" />
+                  มูลค่าพอร์ตการลงทุนสุทธิ (Total Net Worth)
+                </span>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  รวมมูลค่าหุ้นตามราคาตลาดล่าสุด + เงินสดสำรองในพอร์ต
+                </p>
               </div>
-              <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700/80 text-slate-300 font-mono">
+              <span className="text-xs px-3 py-1 rounded-full bg-white/[0.06] border border-white/[0.1] text-slate-200 font-mono font-semibold">
                 THB (฿)
               </span>
             </div>
 
-            <div className="my-5">
-              <div className="flex items-baseline gap-3 flex-wrap">
-                <p className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-none font-mono tabular-nums">
-                  ฿<CountUp end={netWorth} duration={1.2} separator="," decimals={2} />
+            <div className="relative z-10 my-5">
+              <div className="flex items-baseline gap-3.5 flex-wrap">
+                <p className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-none font-mono tabular-nums">
+                  ฿<CountUp end={netWorth} duration={1.1} separator="," decimals={2} />
                 </p>
 
-                {/* Today's Return Badge */}
+                {/* Today's Change Pill */}
                 <div
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs sm:text-sm font-bold font-mono border ${
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold font-mono border ${
                     isTodayProfit
-                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
                   }`}
-                  title="ผลตอบแทนประจำวันคำนวณจากราคาปิดล่าสุดของสินทรัพย์ในพอร์ต"
                 >
                   {isTodayProfit ? (
                     <ArrowUpRight className="w-3.5 h-3.5" />
@@ -497,165 +592,320 @@ export default function DashboardPage() {
                     <ArrowDownRight className="w-3.5 h-3.5" />
                   )}
                   <span>
-                    วันนี้: {isTodayProfit ? '+' : ''}฿
+                    วันนี้ {isTodayProfit ? '+' : ''}฿
                     {Math.abs(todayPnL).toLocaleString('en-US', {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
-                    })}
-                  </span>
-                  <span className="opacity-90">
+                    })}{' '}
                     ({isTodayProfit ? '+' : ''}
                     {todayPnLPercent.toFixed(2)}%)
                   </span>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 mt-3">
-                <span className="text-xs text-slate-400 font-mono tabular-nums">
-                  สินทรัพย์: ฿{totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span className="text-slate-600">•</span>
-                <Link
-                  href="/accounts"
-                  className="text-xs text-emerald-400 hover:text-emerald-300 font-mono tabular-nums flex items-center gap-1 transition-colors"
-                >
-                  <span>เงินสด: ฿{totalCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </Link>
-                <span className="text-slate-600">•</span>
-                <span className={`text-xs font-semibold flex items-center gap-0.5 ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {isProfit ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                  {unrealizedPnLPercent.toFixed(2)}% กำไรสะสม
-                </span>
+              {/* Invested vs Cash Visual Split Bar */}
+              <div className="mt-5 space-y-2">
+                <div className="w-full h-2.5 rounded-full bg-[#0B0E14] overflow-hidden flex p-0.5 border border-white/[0.06]">
+                  <div
+                    className="h-full rounded-l-full bg-gradient-to-r from-indigo-500 to-violet-400 transition-all duration-500"
+                    style={{ width: `${investedRatioPercent}%` }}
+                    title={`สินทรัพย์ลงทุน: ${investedRatioPercent.toFixed(1)}%`}
+                  />
+                  <div
+                    className="h-full rounded-r-full bg-emerald-400/85 transition-all duration-500"
+                    style={{ width: `${cashRatioPercent}%` }}
+                    title={`เงินสดสำรอง: ${cashRatioPercent.toFixed(1)}%`}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs font-mono flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
+                    <span className="text-slate-300">
+                      สินทรัพย์ลงทุน ({ holdings.length } ตัว):{' '}
+                      <strong className="text-white">
+                        ฿{totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </strong>{' '}
+                      <span className="text-indigo-300">({investedRatioPercent.toFixed(1)}%)</span>
+                    </span>
+                  </div>
+
+                  <Link
+                    href="/accounts"
+                    className="flex items-center gap-2 hover:underline text-emerald-300"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
+                    <span>
+                      เงินสดสำรอง:{' '}
+                      <strong className="text-emerald-300">
+                        ฿{totalCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </strong>{' '}
+                      ({cashRatioPercent.toFixed(1)}%)
+                    </span>
+                  </Link>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-slate-800/80">
+            <div className="relative z-10 pt-3.5 border-t border-white/[0.07] flex items-center justify-between gap-2 flex-wrap text-xs">
               <Link
                 href="/forecast"
-                className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 transition-colors"
+                className="font-semibold text-indigo-300 hover:text-white flex items-center gap-1.5 transition-colors"
               >
-                <Sparkles className="w-3.5 h-3.5" /> จำลองพยากรณ์พอร์ตด้วย AI <ArrowRight className="w-3 h-3" />
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <span>จำลองพยากรณ์อนาคตพอร์ตด้วย AI</span>
+                <ArrowRight className="w-3 h-3" />
               </Link>
-              <span className="text-[11px] text-slate-500 font-mono">{holdings.length} สินทรัพย์</span>
+              <Link
+                href="/daily-plan"
+                className="text-slate-400 hover:text-slate-200 font-medium flex items-center gap-1 transition-colors"
+              >
+                <span>แผนลงทุนรายวัน</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
           </div>
 
-          {/* Unrealized P&L */}
-          <div className="glass-panel p-6 rounded-2xl flex flex-col justify-between">
-            <div className="flex items-start justify-between">
+          {/* Card 2: Unrealized P&L & Cost Comparison (3 Columns) */}
+          <div className="lg:col-span-3 rounded-3xl bg-[#121620] border border-white/[0.08] p-6 flex flex-col justify-between shadow-xl shadow-black/30 relative overflow-hidden">
+            <div className="flex items-start justify-between gap-2">
               <div>
-                <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">กำไร/ขาดทุน ทางบัญชี</span>
-                <p className="text-xs text-slate-400 mt-0.5">Unrealized P&L</p>
+                <span className="text-xs font-bold tracking-wider uppercase text-slate-300">
+                  กำไร/ขาดทุนสะสม (ถือครอง)
+                </span>
+                <p className="text-[11px] text-slate-400 mt-0.5">Unrealized P&amp;L</p>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-lg font-bold border flex items-center gap-1 ${
-                isProfit
-                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                  : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-              }`}>
-                {isProfit ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+              <span
+                className={`text-xs px-2.5 py-1 rounded-xl font-bold font-mono border flex items-center gap-1 ${
+                  isProfit
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                    : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                }`}
+              >
+                {isProfit ? (
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                ) : (
+                  <ArrowDownRight className="w-3.5 h-3.5" />
+                )}
+                {isProfit ? '+' : ''}
                 {unrealizedPnLPercent.toFixed(2)}%
               </span>
             </div>
 
-            <div className="my-4">
-              <p className={`text-3xl sm:text-4xl font-bold tabular-nums tracking-tight leading-none font-mono ${
-                isProfit ? 'text-emerald-400' : 'text-rose-400'
-              }`}>
-                {isProfit ? '+' : ''}฿<CountUp end={Math.abs(unrealizedPnL)} duration={1.2} separator="," decimals={2} />
+            <div className="my-4 space-y-3">
+              <p
+                className={`text-3xl sm:text-4xl font-black tabular-nums tracking-tight leading-none font-mono ${
+                  isProfit ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                {isProfit ? '+' : '-'}฿
+                <CountUp end={Math.abs(unrealizedPnL)} duration={1.1} separator="," decimals={2} />
               </p>
-              <p className="text-xs text-slate-400 mt-2">
-                {isProfit ? 'มูลค่าตลาดสูงกว่าต้นทุน' : 'มูลค่าตลาดต่ำกว่าต้นทุน'}
-              </p>
+
+              {/* Cost Basis vs Current Market Value Mini Card */}
+              <div className="p-3 rounded-2xl bg-[#171C28] border border-white/[0.06] space-y-1.5 text-xs font-mono">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>ต้นทุนรวม:</span>
+                  <span className="text-slate-200 font-semibold">
+                    ฿{Math.round(totalCost).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>มูลค่าปัจจุบัน:</span>
+                  <span className="text-white font-bold">
+                    ฿{Math.round(totalValue).toLocaleString()}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="pt-3.5 border-t border-slate-800/80 flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">เทรนด์สัปดาห์นี้</span>
-              <Sparkline seed="portfolio-pnl" trend={isProfit ? 'up' : 'down'} width={80} height={22} />
+            <div className="pt-3 border-t border-white/[0.07] flex items-center justify-between text-xs">
+              <span className="text-slate-400">ดาวเด่นในพอร์ต:</span>
+              {topGainerHolding ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedStock({
+                      symbol: topGainerHolding.ticker,
+                      name: topGainerHolding.assetName,
+                      market: topGainerHolding.market,
+                    })
+                  }
+                  className="font-mono font-bold text-emerald-400 hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>{topGainerHolding.ticker}</span>
+                  <span>
+                    ({topGainerHolding.unrealizedPnLPercent >= 0 ? '+' : ''}
+                    {topGainerHolding.unrealizedPnLPercent.toFixed(1)}%)
+                  </span>
+                </button>
+              ) : (
+                <span className="text-slate-500">—</span>
+              )}
             </div>
           </div>
 
-          {/* Realized Gain & Dividends */}
-          <div className="glass-panel p-6 rounded-2xl flex flex-col justify-between">
-            <div className="flex items-start justify-between">
+          {/* Card 3: Realized Gains + Dividends Cash Flow (3 Columns) */}
+          <div className="lg:col-span-3 rounded-3xl bg-[#121620] border border-white/[0.08] p-6 flex flex-col justify-between shadow-xl shadow-black/30 relative overflow-hidden">
+            <div className="flex items-start justify-between gap-2">
               <div>
-                <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">กำไรขายแล้ว + ปันผล</span>
-                <p className="text-xs text-slate-400 mt-0.5">Cash Flow Realized (THB)</p>
+                <span className="text-xs font-bold tracking-wider uppercase text-slate-300">
+                  กำไรขายแล้ว + ปันผลรับ
+                </span>
+                <p className="text-[11px] text-slate-400 mt-0.5">Realized Cash Flow (THB)</p>
               </div>
-              <span className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center">
+              <span className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 flex items-center justify-center shrink-0">
                 <Coins className="w-4 h-4" />
               </span>
             </div>
 
-            <div className="my-4">
-              <p className="text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tight leading-none font-mono">
-                ฿<CountUp end={totalRealizedGain + totalDividends} duration={1.2} separator="," decimals={2} />
+            <div className="my-4 space-y-3">
+              <p className="text-3xl sm:text-4xl font-black text-white tabular-nums tracking-tight leading-none font-mono">
+                ฿
+                <CountUp
+                  end={totalCashFlowRealized}
+                  duration={1.1}
+                  separator=","
+                  decimals={2}
+                />
               </p>
-              <div className="flex flex-col gap-1 mt-2">
-                <span className="text-xs text-slate-400 tabular-nums">
-                  เงินปันผลสะสม: ฿{totalDividends.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  {totalDividendsUSD > 0 && (
-                    <span className="text-slate-500 ml-1">(${totalDividendsUSD.toFixed(2)} USD)</span>
-                  )}
-                </span>
-                {totalRealizedGainUSD > 0 && (
-                  <span className="text-xs text-slate-500 tabular-nums">
-                    ยอดขายสะสม: ${totalRealizedGainUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+
+              {/* Breakdown Box: Dividends vs Realized Sales */}
+              <div className="p-3 rounded-2xl bg-[#171C28] border border-white/[0.06] space-y-1.5 text-xs font-mono">
+                <div className="flex items-center justify-between">
+                  <span className="text-emerald-400 font-sans font-medium">💰 ปันผลสะสมสุทธิ:</span>
+                  <span className="text-white font-semibold">
+                    ฿{totalDividends.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
-                )}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-cyan-400 font-sans font-medium">📈 กำไรขายล็อกแล้ว:</span>
+                  <span className="text-slate-200 font-semibold">
+                    {totalRealizedGainUSD > 0
+                      ? `$${totalRealizedGainUSD.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+                      : `฿${Math.round(totalRealizedGain).toLocaleString()}`}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-[#0D1017] overflow-hidden flex pt-0.5">
+                  <div
+                    className="h-full bg-emerald-400"
+                    style={{ width: `${dividendShareOfCashFlow}%` }}
+                  />
+                  <div
+                    className="h-full bg-cyan-400"
+                    style={{ width: `${100 - dividendShareOfCashFlow}%` }}
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="pt-3.5 border-t border-slate-800/80 flex items-center justify-between">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">กระแสเงินสดรับ</span>
-              <Sparkline seed="portfolio-dividend" trend="up" width={80} height={22} />
+            <div className="pt-3 border-t border-white/[0.07] flex items-center justify-between text-xs">
+              <Link
+                href="/performance"
+                className="text-indigo-300 hover:text-white font-semibold flex items-center gap-1 transition-colors"
+              >
+                <span>ดูกำไรรายตัว</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+              <Link
+                href="/dividends"
+                className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 transition-colors"
+              >
+                <span>ปฏิทินปันผล XD</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
           </div>
-
         </div>
 
-        {/* ── 30-SECOND ACTION CENTER: วันนี้ควรทำอะไร & ตะกร้ากลยุทธ์ ───────── */}
-        <div className="rounded-3xl bg-[#12151C] border border-white/[0.08] p-5 sm:p-6 space-y-5 shadow-xl">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-white/[0.06]">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                  30-Second Command Center
+        {/* ── 2. 30-SECOND COMMAND CENTER: DIME! BUCKETS & TODAY'S SIGNALS ───── */}
+        <div className="rounded-3xl bg-gradient-to-b from-[#141824] to-[#11141D] border border-white/[0.09] p-5 sm:p-6 space-y-5 shadow-2xl shadow-black/30">
+          {/* Header + Live News Ticker */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-4 border-b border-white/[0.07]">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1.5">
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  30-Second Strategy Hub
                 </span>
+
                 {marketPulse && (
                   <Link
                     href="/news"
-                    className="inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-indigo-300 transition-colors"
+                    className="inline-flex items-center gap-2 px-3 py-0.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] text-xs text-slate-200 hover:text-indigo-300 transition-all"
                   >
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <strong className="text-indigo-400">ข่าวพอร์ต:</strong>
-                    <span className="truncate max-w-[260px] sm:max-w-[420px]">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    <strong className="text-indigo-400 shrink-0">ข่าวล่าสุด:</strong>
+                    <span className="truncate max-w-[240px] sm:max-w-[460px]">
                       {marketPulse.symbol ? `[${marketPulse.symbol}] ` : ''}
                       {marketPulse.headline}
                     </span>
+                    <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
                   </Link>
                 )}
               </div>
-              <h2 className="text-base sm:text-lg font-bold text-white mt-1.5">
-                ภาพรวมตะกร้ากลยุทธ์ & สิ่งที่ควรทำวันนี้
+
+              <h2 className="text-base sm:text-lg font-bold text-white">
+                ตะกร้ากลยุทธ์พอร์ต (Dime! Style) &amp; สัญญาณต้องทำวันนี้
               </h2>
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {selectedBucketFilter !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedBucketFilter('ALL')}
+                  className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-slate-200 cursor-pointer"
+                >
+                  ล้างตัวกรองตะกร้า
+                </button>
+              )}
               <Link
                 href="/plans"
-                className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all"
+                className="px-4 py-2 rounded-xl bg-indigo-600/25 hover:bg-indigo-600 text-indigo-200 hover:text-white border border-indigo-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>ถาม AI รายตะกร้า & จัดพอร์ต</span>
+                <span>ถาม AI รายตะกร้า &amp; ปรับสัดส่วน</span>
               </Link>
             </div>
           </div>
 
-          {/* Strategy Buckets Quick Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          {/* Visual Stacked Bar Across All Strategy Buckets */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span>โครงสร้างพอร์ตจริงตามตะกร้ากลยุทธ์ (คลิกที่การ์ดเพื่อกรองตารางหุ้นด้านล่าง)</span>
+              <span className="font-mono text-slate-300">รวม 100% ของพอร์ตสุทธิ</span>
+            </div>
+            <div className="w-full h-2.5 rounded-full bg-[#0B0E14] overflow-hidden flex p-0.5 border border-white/[0.06] gap-0.5">
+              {computedBuckets.map((b) => {
+                const barColor = BUCKET_BAR_COLORS[b.strategyType] || '#6366f1'
+                if (b.actualPercent <= 0) return null
+                return (
+                  <div
+                    key={b.id}
+                    className="h-full first:rounded-l-full last:rounded-r-full transition-all duration-500"
+                    style={{
+                      width: `${Math.max(2, b.actualPercent)}%`,
+                      backgroundColor: barColor,
+                    }}
+                    title={`${b.name}: จริง ${b.actualPercent}% (เป้า ${b.targetPercent}%)`}
+                  />
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 4 Strategy Bucket Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
             {computedBuckets.map((b) => {
               const meta = STRATEGY_TYPE_META[b.strategyType] || STRATEGY_TYPE_META.CUSTOM
               const isSelected = selectedBucketFilter === b.id
+              const barColor = BUCKET_BAR_COLORS[b.strategyType] || '#6366f1'
+              const progressRatio =
+                b.targetPercent > 0
+                  ? Math.min(100, Math.round((b.actualPercent / b.targetPercent) * 100))
+                  : 100
+
               return (
                 <div
                   key={b.id}
@@ -663,37 +913,70 @@ export default function DashboardPage() {
                     b.strategyType !== 'CASH' &&
                     setSelectedBucketFilter(isSelected ? 'ALL' : b.id)
                   }
-                  className={`p-3.5 rounded-2xl border transition-all ${
+                  className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 ${
                     b.strategyType !== 'CASH' ? 'cursor-pointer' : ''
                   } ${
                     isSelected
-                      ? 'bg-indigo-600/15 border-indigo-500/50 shadow-lg'
-                      : 'bg-[#171B24] hover:bg-[#1C212D] border-white/[0.06]'
+                      ? 'bg-indigo-600/15 border-indigo-500 shadow-lg shadow-indigo-600/10 scale-[1.01]'
+                      : 'bg-[#171C28]/90 hover:bg-[#1C2230] border-white/[0.07] hover:border-white/[0.15]'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-white truncate">
-                      {b.emoji} {b.name}
-                    </span>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.badgeClass}`}
-                    >
-                      {meta.shortLabel}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between mt-2.5 font-mono">
-                    <span className="text-sm font-bold text-white">
-                      ฿{Math.round(b.actualValueBase).toLocaleString()}
-                    </span>
-                    <span className="text-xs text-slate-300">
-                      จริง <strong className="text-white">{b.actualPercent}%</strong> / เป้า {b.targetPercent}%
-                    </span>
-                  </div>
-                  {b.strategyType !== 'CASH' && (
-                    <div className="mt-1.5 flex items-center justify-between text-[11px] font-mono">
-                      <span className="text-slate-400">{b.holdings.length} หุ้นในตะกร้า</span>
+                  <div className="space-y-2.5">
+                    {/* Bucket Title + Badge */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-white truncate">
+                        {b.emoji} {b.name}
+                      </span>
                       <span
-                        className={`font-bold ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${meta.badgeClass}`}
+                      >
+                        {meta.shortLabel}
+                      </span>
+                    </div>
+
+                    {/* Value & Target Comparison */}
+                    <div className="flex items-baseline justify-between font-mono">
+                      <span className="text-lg font-extrabold text-white">
+                        ฿{Math.round(b.actualValueBase).toLocaleString()}
+                      </span>
+                      <span className="text-xs text-slate-300">
+                        จริง <strong className="text-white">{b.actualPercent}%</strong>{' '}
+                        <span className="text-slate-500">/ เป้า {b.targetPercent}%</span>
+                      </span>
+                    </div>
+
+                    {/* Mini Progress Bar */}
+                    <div className="w-full h-1.5 rounded-full bg-[#0D1017] overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${progressRatio}%`,
+                          backgroundColor: barColor,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bottom: Ticker Chips & Bucket Return */}
+                  {b.strategyType !== 'CASH' ? (
+                    <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1 flex-wrap min-w-0">
+                        {b.holdings.length > 0 ? (
+                          b.holdings.slice(0, 4).map((h) => (
+                            <span
+                              key={h.ticker}
+                              className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/[0.06] text-slate-200 border border-white/[0.06]"
+                            >
+                              {h.ticker}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[11px] text-slate-500">ยังไม่มีหุ้น</span>
+                        )}
+                      </div>
+
+                      <span
+                        className={`text-xs font-mono font-bold shrink-0 ${
                           b.unrealizedPnLBase >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
@@ -701,28 +984,39 @@ export default function DashboardPage() {
                         {b.unrealizedPnLPercent.toFixed(1)}%
                       </span>
                     </div>
+                  ) : (
+                    <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-slate-400">
+                      <span>พร้อมช้อนเมื่อตลาดย่อ</span>
+                      <Link href="/accounts" className="text-cyan-400 hover:underline font-semibold">
+                        จัดการเงินสด →
+                      </Link>
+                    </div>
                   )}
                 </div>
               )
             })}
           </div>
 
-          {/* Actionable Signals Today */}
+          {/* Actionable Signals Strip */}
           {actionableSignalsToday.length > 0 ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                  🔥 สัญญาณต้องจับตาวันนี้จากพอร์ตของคุณ ({actionableSignalsToday.length} รายการ)
+            <div className="pt-1 space-y-2.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                  <span>
+                    สัญญาณต้องจับตาวันนี้จากพอร์ตของคุณ ({actionableSignalsToday.length} รายการ)
+                  </span>
                 </span>
-                <span className="text-[11px] text-slate-400">
-                  คำนวณสดจาก RSI(14), แนวรับ S1 / แนวต้าน R1 และเป้าทำกำไร
+                <span className="text-[11px] text-slate-400 font-mono">
+                  วิเคราะห์สดจากแนวรับ S1 / แนวต้าน R1 / RSI(14) และเป้ากำไรรายตะกร้า
                 </span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {actionableSignalsToday.map((item: any) => (
                   <div
                     key={item.ticker}
-                    className="p-3 rounded-2xl bg-[#171B24] border border-white/[0.07] flex items-center justify-between gap-3"
+                    className="p-3.5 rounded-2xl bg-[#171C28] border border-white/[0.08] hover:border-indigo-500/40 transition-all flex items-center justify-between gap-3"
                   >
                     <div
                       onClick={() =>
@@ -732,25 +1026,28 @@ export default function DashboardPage() {
                           market: item.holding.market,
                         })
                       }
-                      className="min-w-0 cursor-pointer"
+                      className="flex items-center gap-3 min-w-0 cursor-pointer"
                     >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono font-bold text-sm text-white hover:text-indigo-300">
-                          {item.ticker}
-                        </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                            item.type === 'DIP_BUY'
-                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                              : item.type === 'TAKE_PROFIT'
-                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                              : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
+                      <StockLogo ticker={item.ticker} name={item.holding.assetName} size={36} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-extrabold text-sm text-white hover:text-indigo-300">
+                            {item.ticker}
+                          </span>
+                          <span
+                            className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                              item.type === 'DIP_BUY'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                : item.type === 'TAKE_PROFIT'
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 mt-1 truncate">{item.reason}</p>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-1 truncate">{item.reason}</p>
                     </div>
 
                     <button
@@ -763,10 +1060,10 @@ export default function DashboardPage() {
                           price: Number(item.holding.currentPrice) || undefined,
                         })
                       }
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 cursor-pointer transition-all ${
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-all ${
                         item.recommendedAction === 'BUY'
-                          ? 'bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30'
-                          : 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/30'
+                          ? 'bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/35'
+                          : 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/35'
                       }`}
                     >
                       {item.recommendedAction === 'BUY' ? '+ ซื้อสะสม' : 'แบ่งขาย'}
@@ -776,12 +1073,18 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="p-3.5 rounded-2xl bg-[#161A23] border border-white/[0.05] flex items-center justify-between text-xs text-slate-300">
-              <span>
-                ✅ วันนี้ยังไม่มีหุ้นในพอร์ตที่ชนแนวรับสำคัญหรือทะลุโซน Overbought/Oversold — สามารถถือรอรอบตามแผนได้สบายใจ
+            <div className="p-3.5 rounded-2xl bg-[#161A24] border border-white/[0.06] flex items-center justify-between text-xs text-slate-300">
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  วันนี้ยังไม่มีหุ้นในพอร์ตที่หลุดแนวรับสำคัญหรือเข้าโซน Overbought/Oversold — ถือรอรอบตามแผนได้สบายใจ
+                </span>
               </span>
               {upcomingCatalysts.length > 0 && (
-                <Link href="/dividends" className="text-amber-300 hover:underline font-semibold shrink-0 ml-2">
+                <Link
+                  href="/dividends"
+                  className="text-amber-300 hover:underline font-semibold shrink-0 ml-2"
+                >
                   📅 มีกำหนดการปันผล/งบ {upcomingCatalysts.length} รายการ →
                 </Link>
               )}
@@ -789,81 +1092,34 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── AI RADAR & RISK SENTINEL QUICK WIDGET ─────────── */}
-        {radarData?.riskReport && (
-          <div className="rounded-3xl glass-panel p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl relative overflow-hidden border-indigo-500/20">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="flex items-center gap-3.5 relative z-10">
-              <div className="w-11 h-11 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0">
-                <Radar className="w-5 h-5 animate-pulse" />
-              </div>
+        {/* ── 3. MIDDLE ROW: PERFORMANCE CHART & ASSET ALLOCATION ───────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Left: Portfolio Growth Chart (7 Columns) */}
+          <div className="lg:col-span-7 rounded-3xl bg-[#121620] border border-white/[0.08] p-6 flex flex-col justify-between shadow-xl shadow-black/25">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white tracking-wide">
-                    เรดาร์ความเสี่ยง & โอกาสลงทุน (AI Sentinel & Alpha Radar)
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    AI PRO
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5 text-xs text-slate-400">
-                  <span className="flex items-center gap-1.5">
-                    ระดับความเสี่ยง:
-                    <strong className={`font-semibold px-2 py-0.5 rounded-md ${
-                      radarData.riskReport.overallRiskLevel === 'CRITICAL' ? 'text-rose-400 bg-rose-500/10' :
-                      radarData.riskReport.overallRiskLevel === 'ELEVATED' ? 'text-orange-400 bg-orange-500/10' :
-                      radarData.riskReport.overallRiskLevel === 'MODERATE' ? 'text-amber-400 bg-amber-500/10' :
-                      'text-emerald-400 bg-emerald-500/10'
-                    }`}>
-                      {radarData.riskReport.overallRiskLevel} ({radarData.riskReport.overallRiskScore}/100)
-                    </strong>
-                  </span>
-                  <span className="text-slate-600">•</span>
-                  <span>กระสุนเงินสด: <strong className="text-emerald-400 font-mono">฿{Number(radarData.totalCash || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong> ({radarData.riskReport.liquidity?.cashRatioPercent?.toFixed(1)}%)</span>
-                  <span className="text-slate-600">•</span>
-                  <span>โอกาสตรวจพบ: <strong className="text-white font-mono">{radarData.opportunityReport?.opportunities?.length ?? 0} รายการ</strong></span>
-                </div>
-              </div>
-            </div>
-
-            <Link
-              href="/radar"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/25 transition-all active:scale-95 shrink-0 relative z-10"
-            >
-              <span>เปิดเรดาร์วิเคราะห์เต็มรูปแบบ</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        )}
-
-        {/* ── MIDDLE ROW: RETURN CHART & ALLOCATION ─────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Main Chart (65%) */}
-          <div className="lg:col-span-2 glass-panel rounded-3xl p-6 sm:p-7 flex flex-col">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base sm:text-lg font-bold text-white">ผลการเติบโตของพอร์ตลงทุน</h2>
-                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-medium">
-                    vs SPX Benchmark
+                  <h2 className="text-base sm:text-lg font-bold text-white">
+                    ผลการเติบโตของพอร์ตลงทุน
+                  </h2>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold">
+                    vs S&amp;P 500
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  กราฟแสดงแนวโน้มมูลค่ารวมเปรียบเทียบกับดัชนีมาตรฐานตลาด
+                <p className="text-xs text-slate-400 mt-0.5">
+                  เปรียบเทียบแนวโน้มการเติบโตของพอร์ตคุณกับดัชนีตลาดสหรัฐฯ
                 </p>
               </div>
 
-              {/* Timeframe Buttons */}
-              <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+              <div className="flex items-center gap-1 bg-[#171C28] p-1 rounded-xl border border-white/[0.07] self-start sm:self-auto">
                 {['1D', '1W', '1M', '6M', '1Y', 'ALL'].map((tf) => (
                   <button
                     key={tf}
                     onClick={() => setTimeframe(tf)}
-                    className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                    className={`text-xs px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
                       tf === timeframe
                         ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                        : 'text-slate-400 hover:text-white'
                     }`}
                   >
                     {tf}
@@ -873,25 +1129,69 @@ export default function DashboardPage() {
             </div>
 
             {performanceData.length > 1 ? (
-              <div className="w-full flex-1 min-h-[320px]">
+              <div className="w-full flex-1 min-h-[310px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={performanceData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                  <AreaChart
+                    data={performanceData}
+                    margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+                  >
                     <defs>
                       <linearGradient id="portGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor="#6366f1" stopOpacity={0.4} />
-                        <stop offset="90%"  stopColor="#6366f1" stopOpacity={0.0} />
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.45} />
+                        <stop offset="90%" stopColor="#6366f1" stopOpacity={0.0} />
                       </linearGradient>
                       <linearGradient id="benchGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor="#64748b" stopOpacity={0.2} />
+                        <stop offset="0%" stopColor="#64748b" stopOpacity={0.2} />
                         <stop offset="100%" stopColor="#64748b" stopOpacity={0.0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="month" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} dy={8} />
-                    <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`} />
-                    <Tooltip content={<CustomAreaTooltip />} cursor={{ stroke: 'rgba(99, 102, 241, 0.4)', strokeWidth: 1.5, strokeDasharray: '4 4' }} />
-                    <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#portGrad)" name="พอร์ตของคุณ" />
-                    <Area type="monotone" dataKey="benchmark" stroke="#64748b" strokeWidth={1.5} strokeDasharray="4 4" fillOpacity={1} fill="url(#benchGrad)" name="S&P 500" />
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="rgba(255,255,255,0.05)"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="month"
+                      stroke="#64748b"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      dy={8}
+                    />
+                    <YAxis
+                      stroke="#64748b"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip
+                      content={<CustomAreaTooltip />}
+                      cursor={{
+                        stroke: 'rgba(99, 102, 241, 0.4)',
+                        strokeWidth: 1.5,
+                        strokeDasharray: '4 4',
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#6366f1"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#portGrad)"
+                      name="พอร์ตของคุณ"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="benchmark"
+                      stroke="#64748b"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 4"
+                      fillOpacity={1}
+                      fill="url(#benchGrad)"
+                      name="S&P 500"
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -899,138 +1199,79 @@ export default function DashboardPage() {
               <div className="flex-1 flex flex-col items-center justify-center text-center py-16">
                 <Activity className="w-8 h-8 text-slate-600 mb-2" />
                 <p className="text-sm font-semibold text-white">กำลังสร้างประวัติผลตอบแทน</p>
-                <p className="text-xs text-slate-500 mt-1">ระบบจะแสดงแนวโน้มเมื่อมีข้อมูลมูลค่าพอร์ตตามช่วงเวลา</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  ระบบจะแสดงแนวโน้มเมื่อมีข้อมูลมูลค่าพอร์ตตามช่วงเวลา
+                </p>
               </div>
             )}
           </div>
 
-          {/* Right Column: Health Score & Asset Allocation (35%) */}
-          <div className="lg:col-span-1 flex flex-col gap-6">
-            
-            {/* Portfolio Health Score */}
-            <div className="glass-panel rounded-3xl p-6 flex flex-col gap-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">ดัชนีสุขภาพพอร์ต</span>
-                  <p className="text-xs text-slate-400 mt-0.5">ระดับการกระจายความเสี่ยงของพอร์ต</p>
+          {/* Right: Interactive Asset Allocation & Rebalance Monitor (5 Columns) */}
+          <div className="lg:col-span-5 rounded-3xl bg-[#121620] border border-white/[0.08] p-6 flex flex-col justify-between shadow-xl shadow-black/25">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base sm:text-lg font-bold text-white">สัดส่วนสินทรัพย์</h2>
+                  {activePreset && allocationView === 'assets' && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                      จริง vs เป้าหมาย
+                    </span>
+                  )}
                 </div>
-                {healthScore ? (
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${
-                    isHighGrade
-                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                      : isMidGrade
-                      ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
-                      : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                  }`}>
-                    ระดับ {healthScore.grade}
-                  </span>
-                ) : (
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-xl border bg-slate-800/80 text-slate-400 border-slate-700/80">
-                    ยังไม่มีคะแนน
-                  </span>
-                )}
+                <p className="text-xs text-slate-400 mt-0.5">
+                  ชี้หรือคลิกที่รายการเพื่อดูรายละเอียดรายตัว
+                </p>
               </div>
 
-              {healthScore ? (
-                <>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-white tabular-nums tracking-tight font-mono">
-                      {healthScore.score}
-                    </span>
-                    <span className="text-sm text-slate-500 font-mono">/ 100</span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="w-full h-2 bg-slate-800/80 rounded-full overflow-hidden p-0.5">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          isHighGrade ? 'bg-emerald-500' : isMidGrade ? 'bg-indigo-500' : 'bg-rose-500'
-                        }`}
-                        style={{ width: `${healthScore.score}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">ระดับการกระจายความเสี่ยง</span>
-                      <span className={`font-semibold ${isHighGrade ? 'text-emerald-400' : isMidGrade ? 'text-indigo-400' : 'text-rose-400'}`}>
-                        {isHighGrade ? 'สมดุลยอดเยี่ยม' : isMidGrade ? 'กระจายตัวดี' : 'กระจุกตัวสูง'}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="py-4">
-                  <p className="text-2xl font-bold text-slate-500 font-mono">— / 100</p>
-                  <p className="text-xs text-slate-400 mt-3 leading-relaxed">
-                    โหลดข้อมูลพอร์ตสำเร็จ แต่ยังไม่มีคะแนนสุขภาพให้แสดง ระบบจะคำนวณเมื่อมีข้อมูลสินทรัพย์ครบ
-                  </p>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex bg-[#171C28] p-0.5 rounded-xl border border-white/[0.08] text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAllocationView('assets')
+                      setActivePieIndex(null)
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                      allocationView === 'assets'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    รายหุ้น
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAllocationView('classes')
+                      setActivePieIndex(null)
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                      allocationView === 'classes'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    หมวดสินทรัพย์
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
 
-            {/* Asset Allocation Donut - Hybrid FinTech Glow & Rebalance Sentinel */}
-            <div className="glass-panel rounded-3xl p-6 flex flex-col justify-between relative overflow-hidden">
-              {/* Header with Title, Badge, and View Mode Toggle */}
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">สัดส่วนสินทรัพย์</span>
-                    {activePreset && allocationView === 'assets' && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                        Target vs Actual
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">Asset Allocation</p>
-                </div>
-                
-                <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                  {/* View Mode Segmented Control */}
-                  <div className="flex bg-[#181C25] p-0.5 rounded-xl border border-white/[0.08] text-[10px]">
-                    <button
-                      type="button"
-                      onClick={() => { setAllocationView('assets'); setActivePieIndex(null); }}
-                      className={`px-2 py-0.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                        allocationView === 'assets'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      สินทรัพย์
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setAllocationView('classes'); setActivePieIndex(null); }}
-                      className={`px-2 py-0.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                        allocationView === 'classes'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      หมวดหมู่
-                    </button>
-                  </div>
-
-                  <Link
-                    href="/plans"
-                    className="text-[11px] font-medium text-indigo-300 hover:text-white transition-all flex items-center gap-1 bg-indigo-600/15 hover:bg-indigo-600/25 px-2.5 py-1 rounded-xl border border-indigo-500/30 shadow-sm"
-                    title="ไปที่หน้าแผนการลงทุนเพื่อปรับสัดส่วนเป้าหมาย หรือจำลองการ Rebalance"
-                  >
-                    <span>ปรับแผน</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </Link>
-                </div>
-              </div>
-
-              {/* Glowing Dynamic Donut Chart */}
-              <div className="h-44 w-full flex items-center justify-center relative my-2">
-                {(allocationView === 'classes' ? assetClassAllocation : allocationData).length > 0 ? (
+            {/* Side-by-Side Donut + Scrollable Asset Bars */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center my-auto pt-2">
+              {/* Donut Chart (5 cols) */}
+              <div className="sm:col-span-5 h-44 w-full flex items-center justify-center relative">
+                {(allocationView === 'classes' ? assetClassAllocation : allocationData).length >
+                0 ? (
                   <>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={allocationView === 'classes' ? assetClassAllocation : allocationData}
-                          innerRadius={50}
-                          outerRadius={70}
+                          data={
+                            allocationView === 'classes' ? assetClassAllocation : allocationData
+                          }
+                          innerRadius={52}
+                          outerRadius={72}
                           paddingAngle={3}
                           cornerRadius={4}
                           dataKey="value"
@@ -1038,20 +1279,22 @@ export default function DashboardPage() {
                           onMouseEnter={(_, index) => setActivePieIndex(index)}
                           onMouseLeave={() => setActivePieIndex(null)}
                         >
-                          {(allocationView === 'classes' ? assetClassAllocation : allocationData).map((entry: any, index: number) => {
+                          {(allocationView === 'classes'
+                            ? assetClassAllocation
+                            : allocationData
+                          ).map((entry: any, index: number) => {
                             const isSelected = activePieIndex === index
                             return (
                               <Cell
                                 key={`cell-${index}`}
                                 fill={entry.color}
                                 stroke={isSelected ? '#ffffff' : 'rgba(15, 23, 42, 0.8)'}
-                                strokeWidth={isSelected ? 2.5 : 1}
+                                strokeWidth={isSelected ? 2 : 1}
                                 style={{
                                   outline: 'none',
                                   cursor: 'pointer',
                                   transition: 'all 200ms ease',
                                   opacity: activePieIndex === null || isSelected ? 1 : 0.35,
-                                  filter: isSelected ? `drop-shadow(0 0 8px ${entry.color})` : 'none',
                                 }}
                               />
                             )
@@ -1060,254 +1303,173 @@ export default function DashboardPage() {
                       </PieChart>
                     </ResponsiveContainer>
 
-                    {/* Dynamic Center Display */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4 transition-all duration-300">
-                      {activePieIndex !== null && (allocationView === 'classes' ? assetClassAllocation : allocationData)[activePieIndex] ? (
-                        <div className="animate-fade-in flex flex-col items-center">
-                          <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400 max-w-[130px] truncate">
-                            {(allocationView === 'classes' ? assetClassAllocation : allocationData)[activePieIndex].name}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
+                      {activePieIndex !== null &&
+                      (allocationView === 'classes' ? assetClassAllocation : allocationData)[
+                        activePieIndex
+                      ] ? (
+                        <div className="flex flex-col items-center">
+                          <span className="text-[11px] font-bold uppercase text-slate-300 truncate max-w-[95px]">
+                            {
+                              (allocationView === 'classes'
+                                ? assetClassAllocation
+                                : allocationData)[activePieIndex].name
+                            }
                           </span>
-                          <span className="text-2xl font-bold font-mono text-white tracking-tight leading-none mt-0.5">
-                            {(allocationView === 'classes' ? assetClassAllocation : allocationData)[activePieIndex].percent}%
+                          <span className="text-xl font-black font-mono text-white leading-none mt-0.5">
+                            {
+                              (allocationView === 'classes'
+                                ? assetClassAllocation
+                                : allocationData)[activePieIndex].percent
+                            }
+                            %
                           </span>
-                          <span className="text-[11px] font-mono font-semibold text-indigo-300 mt-1">
-                            ฿{(allocationView === 'classes' ? assetClassAllocation : allocationData)[activePieIndex].value.toLocaleString()}
+                          <span className="text-[10px] font-mono text-indigo-300 mt-0.5">
+                            ฿
+                            {(allocationView === 'classes'
+                              ? assetClassAllocation
+                              : allocationData)[activePieIndex].value.toLocaleString()}
                           </span>
-                          {allocationView === 'assets' && (allocationData[activePieIndex] as any)?.deviation !== null && (
-                            <span className={`text-[10px] font-semibold font-mono mt-0.5 px-1.5 py-0.2 rounded-md ${
-                              (allocationData[activePieIndex] as any).deviation > 1.5
-                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                                : (allocationData[activePieIndex] as any).deviation < -1.5
-                                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                                : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                            }`}>
-                              {(allocationData[activePieIndex] as any).deviation > 0
-                                ? `+${(allocationData[activePieIndex] as any).deviation}%`
-                                : `${(allocationData[activePieIndex] as any).deviation}%`} เป้า
-                            </span>
-                          )}
                         </div>
                       ) : (
                         <div className="flex flex-col items-center">
-                          <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
-                            {allocationView === 'classes' ? 'มูลค่าพอร์ตรวม' : 'มูลค่าสินทรัพย์'}
+                          <span className="text-[10px] uppercase font-semibold text-slate-400">
+                            {allocationView === 'classes' ? 'พอร์ตรวม' : 'หุ้นรวม'}
                           </span>
-                          <span className="text-xl font-bold text-white tabular-nums font-mono leading-tight mt-0.5">
-                            ฿{Math.round(allocationView === 'classes' ? netWorth : totalValue).toLocaleString()}
+                          <span className="text-base font-extrabold text-white font-mono mt-0.5">
+                            ฿
+                            {Math.round(
+                              allocationView === 'classes' ? netWorth : totalValue
+                            ).toLocaleString()}
                           </span>
-                          <span className="text-[11px] text-indigo-300 font-medium font-mono mt-0.5">
-                            {(allocationView === 'classes' ? assetClassAllocation : allocationData).length} {allocationView === 'classes' ? 'หมวดหมู่' : 'รายการ'}
+                          <span className="text-[10px] text-indigo-300 font-mono">
+                            {
+                              (allocationView === 'classes'
+                                ? assetClassAllocation
+                                : allocationData
+                              ).length
+                            }{' '}
+                            รายการ
                           </span>
                         </div>
                       )}
                     </div>
                   </>
                 ) : (
-                  <div className="text-xs text-slate-500 font-medium">ไม่มีข้อมูลสินทรัพย์</div>
+                  <div className="text-xs text-slate-500">ไม่มีข้อมูล</div>
                 )}
               </div>
 
-              {/* Asset List & Rebalance Indicators */}
-              <div className="mt-2 pt-3 border-t border-slate-800/80">
-                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2 px-1">
-                  <span>{allocationView === 'classes' ? 'หมวดหมู่สินทรัพย์' : 'สินทรัพย์ / ประเภท'}</span>
-                  <span>สัดส่วน & มูลค่า</span>
-                </div>
-
-                {allocationView === 'classes' ? (
-                  <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
-                    {assetClassAllocation.map((item: any, i: number) => {
-                      const isActive = activePieIndex === i
-                      return (
-                        <div
-                          key={item.name}
-                          onMouseEnter={() => setActivePieIndex(i)}
-                          onMouseLeave={() => setActivePieIndex(null)}
-                          className={`p-2.5 rounded-xl transition-all border ${
-                            isActive
-                              ? 'bg-slate-800/90 border-slate-700 shadow-lg scale-[1.01]'
-                              : 'bg-slate-900/40 hover:bg-slate-800/50 border-white/[0.04]'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between text-xs mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full shrink-0"
-                                style={{ backgroundColor: item.color }}
-                              />
-                              <span className="font-bold text-slate-100">{item.name}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs font-semibold text-slate-300">
-                                ฿{item.value.toLocaleString()}
-                              </span>
-                              <span
-                                className="font-mono text-xs font-bold px-1.5 py-0.5 rounded"
-                                style={{ backgroundColor: `${item.color}22`, color: item.color }}
-                              >
-                                {item.percent}%
-                              </span>
-                            </div>
-                          </div>
-                          <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-300"
-                              style={{ width: `${Math.min(item.percent, 100)}%`, backgroundColor: item.color }}
+              {/* Scrollable List (7 cols) */}
+              <div className="sm:col-span-7 space-y-1.5 max-h-[250px] overflow-y-auto pr-1">
+                {(allocationView === 'classes' ? assetClassAllocation : allocationData).map(
+                  (item: any, i: number) => {
+                    const isActive = activePieIndex === i
+                    return (
+                      <div
+                        key={item.name}
+                        onMouseEnter={() => setActivePieIndex(i)}
+                        onMouseLeave={() => setActivePieIndex(null)}
+                        onClick={() =>
+                          allocationView === 'assets' &&
+                          setSelectedStock({
+                            symbol: item.name,
+                            name: item.fullName,
+                            market: item.market,
+                          })
+                        }
+                        className={`p-2.5 rounded-xl transition-all border ${
+                          allocationView === 'assets' ? 'cursor-pointer' : ''
+                        } ${
+                          isActive
+                            ? 'bg-[#1D2333] border-indigo-500/40 shadow-md'
+                            : 'bg-[#171C28]/70 hover:bg-[#1B2130] border-white/[0.05]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: item.color }}
                             />
+                            <span className="font-bold text-white truncate">{item.name}</span>
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
-                    {allocationData.map((item, i) => {
-                      const isActive = activePieIndex === i
-                      return (
-                        <div
-                          key={item.name}
-                          onMouseEnter={() => setActivePieIndex(i)}
-                          onMouseLeave={() => setActivePieIndex(null)}
-                          onClick={() => setSelectedStock({ symbol: item.name, name: item.fullName, market: item.market })}
-                          className={`p-2 rounded-xl transition-all cursor-pointer border ${
-                            isActive
-                              ? 'bg-slate-800/90 border-slate-700 shadow-lg scale-[1.01]'
-                              : 'bg-slate-900/40 hover:bg-slate-800/50 border-white/[0.04] hover:border-slate-700/60'
-                          }`}
-                          title="คลิกเพื่อดูรายละเอียดและกราฟเทคนิค"
-                        >
-                          <div className="flex items-center justify-between text-xs mb-1.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full shrink-0 transition-all"
-                                style={{
-                                  backgroundColor: item.color,
-                                  boxShadow: isActive ? `0 0 10px ${item.color}` : 'none',
-                                }}
-                              />
-                              <span className="font-bold text-slate-100 truncate">{item.name}</span>
-                              <span className="text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700/50">
-                                {item.assetType}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="font-mono text-xs font-semibold text-slate-300">
-                                ฿{item.value.toLocaleString()}
-                              </span>
-                              <span
-                                className="font-mono text-xs font-bold px-1.5 py-0.5 rounded"
-                                style={{
-                                  backgroundColor: `${item.color}22`,
-                                  color: item.color,
-                                }}
-                              >
-                                {item.percent}%
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Progress Bar with Target Indicator */}
-                          <div className="relative w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-300"
+                          <div className="flex items-center gap-2 shrink-0 font-mono">
+                            <span className="text-slate-300 text-xs">
+                              ฿{item.value.toLocaleString()}
+                            </span>
+                            <span
+                              className="text-xs font-bold px-1.5 py-0.5 rounded"
                               style={{
-                                width: `${Math.min(item.percent, 100)}%`,
-                                backgroundColor: item.color,
+                                backgroundColor: `${item.color}22`,
+                                color: item.color,
                               }}
-                            />
-                            {item.targetPercent !== null && (
-                              <div
-                                className="absolute top-0 bottom-0 w-1 bg-white rounded-full shadow-sm z-10"
-                                style={{ left: `calc(${Math.min(item.targetPercent, 100)}% - 2px)` }}
-                                title={`เป้าหมาย: ${item.targetPercent}%`}
-                              />
-                            )}
+                            >
+                              {item.percent}%
+                            </span>
                           </div>
-
-                          {/* Target vs Actual Deviation Footer */}
-                          {item.targetPercent !== null && (
-                            <div className="flex items-center justify-between text-[10px] mt-1 font-mono">
-                              <span className="text-slate-400">เป้า {item.targetPercent}%</span>
-                              <span
-                                className={`font-semibold ${
-                                  item.deviation! > 1.5
-                                    ? 'text-amber-400'
-                                    : item.deviation! < -1.5
-                                    ? 'text-rose-400'
-                                    : 'text-emerald-400'
-                                }`}
-                              >
-                                {item.deviation! > 1.5
-                                  ? `+${item.deviation}% เกินเป้า`
-                                  : item.deviation! < -1.5
-                                  ? `${item.deviation}% ต่ำกว่าเป้า`
-                                  : 'สมดุลตามแผน'}
-                              </span>
-                            </div>
-                          )}
                         </div>
-                      )
-                    })}
-                  </div>
+
+                        <div className="w-full h-1.5 bg-[#0D1017] rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              width: `${Math.min(item.percent, 100)}%`,
+                              backgroundColor: item.color,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  }
                 )}
               </div>
             </div>
-
           </div>
         </div>
 
-        {/* ── BOTTOM ROW: HOLDINGS TABLE ─────────────────────── */}
-        <div className="glass-panel rounded-3xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-800/80 flex flex-col gap-3 bg-slate-900/40">
+        {/* ── 4. BOTTOM ROW: MODERN HOLDINGS TABLE ─────────────────────────── */}
+        <div className="rounded-3xl bg-[#121620] border border-white/[0.08] overflow-hidden shadow-2xl shadow-black/30">
+          <div className="px-6 py-5 border-b border-white/[0.07] flex flex-col gap-3.5 bg-[#151A26]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <h3 className="text-sm sm:text-base font-bold text-white tracking-wide">สินทรัพย์ที่ถือครองในพอร์ต (Holdings)</h3>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-full">
-                    💡 คลิกชื่อหุ้นเพื่อดูข้อมูลพื้นฐาน 4 เสาหลัก & กราฟเทคนิค
+                  <h3 className="text-base sm:text-lg font-bold text-white">
+                    สินทรัพย์ที่ถือครองในพอร์ต ({filteredHoldings.length} รายการ)
+                  </h3>
+                  <span className="text-xs font-medium text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2.5 py-0.5 rounded-full">
+                    คลิกชื่อหุ้นเพื่อดูข้อมูลพื้นฐาน 4 Pillars &amp; กราฟเทคนิค
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">แสดงตะกร้ากลยุทธ์ สัญญาณแนวรับ S1/R1 ต้นทุน และกำไรขาดทุนสะสม</p>
               </div>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+
+              <div className="flex flex-wrap items-center gap-2">
                 <Link
                   href="/performance"
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm"
-                  title="ดูผลตอบแทนตลอดชีพ แยกส่วนที่ขายแล้วและยังถืออยู่"
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-200 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all flex items-center gap-1.5"
                 >
                   <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>กำไรรายตัวรวมขายแล้ว</span>
+                  <span>กำไรรายตัว (รวมขายแล้ว)</span>
                 </Link>
                 <Link
                   href="/dividends"
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-300 hover:text-white bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-300 hover:text-white bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 transition-all flex items-center gap-1.5"
                 >
                   <Coins className="w-3.5 h-3.5 text-emerald-400" />
                   <span>ปฏิทินปันผล XD</span>
                 </Link>
-                <button
-                  type="button"
-                  onClick={handleRefreshPrices}
-                  disabled={refreshingPrices}
-                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 transition-all flex items-center gap-1.5 disabled:opacity-50"
-                  title="ดึงราคาปิดตลาดล่าสุดจาก Yahoo Finance"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${refreshingPrices ? 'animate-spin' : ''}`} />
-                  <span>{refreshingPrices ? 'กำลังดึงราคา...' : 'รีเฟรชราคา'}</span>
-                </button>
               </div>
             </div>
 
             {/* Strategy Bucket Filter Pills */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
                 onClick={() => setSelectedBucketFilter('ALL')}
-                className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   selectedBucketFilter === 'ALL'
                     ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-[#171B24] text-slate-400 hover:text-white border border-white/[0.06]'
+                    : 'bg-[#181E2C] text-slate-300 hover:text-white border border-white/[0.06]'
                 }`}
               >
                 ทั้งหมด ({holdings.length})
@@ -1319,10 +1481,10 @@ export default function DashboardPage() {
                     key={b.id}
                     type="button"
                     onClick={() => setSelectedBucketFilter(b.id)}
-                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                       selectedBucketFilter === b.id
                         ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-[#171B24] text-slate-300 hover:text-white border border-white/[0.06]'
+                        : 'bg-[#181E2C] text-slate-300 hover:text-white border border-white/[0.06]'
                     }`}
                   >
                     {b.emoji} {b.name} ({b.holdings.length})
@@ -1333,8 +1495,12 @@ export default function DashboardPage() {
 
           {filteredHoldings.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <p className="text-sm font-semibold text-white mb-1">ไม่มีสินทรัพย์ในหมวดที่เลือก</p>
-              <p className="text-xs text-slate-400 max-w-xs mb-4">คุณสามารถจัดหุ้นเข้าตะกร้ากลยุทธ์ได้ที่หน้าจัดพอร์ต</p>
+              <p className="text-sm font-semibold text-white mb-1">
+                ไม่มีสินทรัพย์ในตะกร้าที่เลือก
+              </p>
+              <p className="text-xs text-slate-400 max-w-xs mb-4">
+                คุณสามารถย้ายหุ้นเข้าตะกร้ากลยุทธ์ได้ที่หน้าจัดพอร์ต
+              </p>
               <Link
                 href="/plans"
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors"
@@ -1348,13 +1514,24 @@ export default function DashboardPage() {
                 <thead>
                   <tr>
                     <th className="!text-xs !font-bold !text-slate-300">สินทรัพย์</th>
-                    <th className="hidden sm:table-cell !text-xs !font-bold !text-slate-300">ตะกร้ากลยุทธ์</th>
-                    <th className="hidden md:table-cell !text-xs !font-bold !text-slate-300">สัญญาณเทคนิค & แนวรับ S1</th>
+                    <th className="hidden sm:table-cell !text-xs !font-bold !text-slate-300">
+                      ตะกร้ากลยุทธ์
+                    </th>
+                    <th className="hidden md:table-cell !text-xs !font-bold !text-slate-300">
+                      สัญญาณเทคนิค &amp; แนวรับ S1
+                    </th>
                     <th className="text-right !text-xs !font-bold !text-slate-300">จำนวน</th>
-                    <th className="text-right hidden lg:table-cell !text-xs !font-bold !text-slate-300">ต้นทุนเฉลี่ย</th>
-                    <th className="text-right !text-xs !font-bold !text-slate-300">ราคาปัจจุบัน</th>
-                    <th className="text-right !text-xs !font-bold !text-slate-300">มูลค่ารวม</th>
-                    <th className="text-right hidden sm:table-cell !text-xs !font-bold !text-slate-300">กำไร/ขาดทุน</th>
+                    <th className="text-right hidden lg:table-cell !text-xs !font-bold !text-slate-300">
+                      ต้นทุนเฉลี่ย
+                    </th>
+                    <th className="text-right !text-xs !font-bold !text-slate-300">ราคาตลาด</th>
+                    <th className="text-right !text-xs !font-bold !text-slate-300">
+                      มูลค่า &amp; สัดส่วน
+                    </th>
+                    <th className="text-right hidden sm:table-cell !text-xs !font-bold !text-slate-300">
+                      กำไร/ขาดทุน
+                    </th>
+                    <th className="text-right !text-xs !font-bold !text-slate-300">จัดการด่วน</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1367,38 +1544,43 @@ export default function DashboardPage() {
                       ? STRATEGY_TYPE_META[bucket.strategyType] || STRATEGY_TYPE_META.CUSTOM
                       : null
                     const sig = techSignals[h.ticker.toUpperCase()]
+
                     return (
-                      <tr 
-                        key={h.assetId} 
-                        onClick={() => setSelectedStock({
-                          symbol: h.ticker,
-                          name: h.assetName,
-                          market: h.market || (isUsd ? 'US' : 'TH')
-                        })}
-                        className="transition-all duration-150 group cursor-pointer hover:bg-indigo-950/25 border-b border-slate-800/40"
-                        title={`คลิกเพื่อดูพื้นฐาน 4 Pillars และกราฟเทคนิค ${h.ticker}`}
+                      <tr
+                        key={h.assetId}
+                        onClick={() =>
+                          setSelectedStock({
+                            symbol: h.ticker,
+                            name: h.assetName,
+                            market: h.market || (isUsd ? 'US' : 'TH'),
+                          })
+                        }
+                        className="transition-all duration-150 group cursor-pointer hover:bg-indigo-950/25 border-b border-slate-800/50"
                       >
                         <td>
                           <div className="flex items-center gap-3">
                             <StockLogo ticker={h.ticker} name={h.assetName} size={38} />
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="font-extrabold text-sm sm:text-base text-white group-hover:text-indigo-300 transition-colors tracking-tight">
+                                <span className="font-extrabold text-sm sm:text-base text-white group-hover:text-indigo-300 transition-colors">
                                   {h.ticker}
                                 </span>
-                                <span className="hidden group-hover:inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-300 bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded transition-all">
-                                  พื้นฐาน & กราฟ <ExternalLink className="w-2.5 h-2.5" />
+                                <span className="hidden group-hover:inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-300 bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded">
+                                  พื้นฐาน <ExternalLink className="w-2.5 h-2.5" />
                                 </span>
                               </div>
-                              <div className="text-xs text-slate-300 truncate max-w-[150px] sm:max-w-[200px] mt-0.5 font-medium">
+                              <div className="text-xs text-slate-400 truncate max-w-[150px] sm:max-w-[190px] mt-0.5">
                                 {h.assetName}
                               </div>
                             </div>
                           </div>
                         </td>
+
                         <td className="hidden sm:table-cell">
                           {bucket && bucketMeta ? (
-                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${bucketMeta.badgeClass}`}>
+                            <span
+                              className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border ${bucketMeta.badgeClass}`}
+                            >
                               <span>{bucket.emoji}</span>
                               <span>{bucketMeta.shortLabel}</span>
                             </span>
@@ -1408,6 +1590,7 @@ export default function DashboardPage() {
                             </span>
                           )}
                         </td>
+
                         <td className="hidden md:table-cell">
                           {sig ? (
                             <div className="space-y-0.5">
@@ -1422,67 +1605,129 @@ export default function DashboardPage() {
                               >
                                 {sig.badgeText}
                               </span>
-                              <div className="text-[10px] font-mono text-slate-400">
+                              <div className="text-[11px] font-mono text-slate-400">
                                 {sig.supportS1 ? `รับ S1: ${sym}${sig.supportS1.toFixed(2)}` : ''}
-                                {sig.rsi14 ? ` • RSI ${sig.rsi14}` : ''}
+                                {sig.rsi14 ? ` • RSI ${sig.rsi14.toFixed(1)}` : ''}
                               </div>
                             </div>
                           ) : (
                             <span className="text-xs text-slate-500 font-mono">กำลังคำนวณ...</span>
                           )}
                         </td>
-                        <td className="text-right font-mono text-sm font-semibold text-slate-100" title={String(h.quantity)}>
-                          {Number(h.quantity).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })}
+
+                        <td className="text-right font-mono text-sm font-semibold text-slate-200">
+                          {Number(h.quantity).toLocaleString('en-US', {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 4,
+                          })}
                         </td>
-                        <td className="text-right font-mono text-sm font-semibold text-slate-200 hidden lg:table-cell" title={`${sym}${Number(h.avgCost).toFixed(4)}`}>
-                          {sym}{Number(h.avgCost).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+
+                        <td className="text-right font-mono text-sm font-semibold text-slate-300 hidden lg:table-cell">
+                          {sym}
+                          {Number(h.avgCost).toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </td>
+
                         <td className="text-right font-mono">
                           <div className="text-sm sm:text-base text-white font-bold">
-                            {sym}{Number(h.currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {sym}
+                            {Number(h.currentPrice).toLocaleString('en-US', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </div>
-                          {(h as any).todayChangePercent !== undefined && (
-                            <div className={`text-[11px] font-semibold flex items-center justify-end gap-0.5 mt-0.5 ${
-                              (h as any).todayChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                            }`}>
-                              {(h as any).todayChangePercent >= 0 ? '+' : ''}
-                              {(h as any).todayChangePercent.toFixed(2)}% วันนี้
-                            </div>
-                          )}
                         </td>
+
                         <td className="text-right font-mono">
                           <div className="text-sm sm:text-base font-extrabold text-white">
-                            ฿{Number(h.currentValueBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ฿
+                            {Number(h.currentValueBase).toLocaleString('en-US', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </div>
-                          {isUsd && (
-                            <div className="text-xs text-indigo-400 font-semibold mt-0.5">
-                              ${Number(h.currentValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                          )}
-                        </td>
-                        <td className="text-right font-mono hidden sm:table-cell">
-                          {/* Main Profit/Loss Amount - prominent font and bright green/red */}
-                          <div className={`text-sm sm:text-base font-extrabold tracking-tight ${
-                            hProfit ? 'text-emerald-400 !text-emerald-400' : 'text-rose-400 !text-rose-400'
-                          }`}>
-                            {hProfit ? '+' : ''}{sym}{Number(h.unrealizedPnL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
-                          {/* Percentage badge and converted THB amount */}
-                          <div className="mt-1 flex items-center justify-end gap-1.5 flex-wrap">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold border ${
-                              hProfit
-                                ? 'bg-emerald-500/15 text-emerald-300 !text-emerald-300 border-emerald-500/30'
-                                : 'bg-rose-500/15 text-rose-300 !text-rose-300 border-rose-500/30'
-                            }`}>
-                              {hProfit ? '+' : ''}{h.unrealizedPnLPercent.toFixed(2)}%
-                            </span>
+                          <div className="flex items-center justify-end gap-1.5 mt-0.5 text-xs">
                             {isUsd && (
-                              <span className={`text-xs font-semibold ${
-                                hProfit ? 'text-emerald-400/90 !text-emerald-400/90' : 'text-rose-400/90 !text-rose-400/90'
-                              }`}>
-                                (≈ {hProfit ? '+' : ''}฿{Number(h.unrealizedPnLBase).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                              <span className="text-indigo-300 font-semibold">
+                                $
+                                {Number(h.currentValue).toLocaleString('en-US', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
                               </span>
                             )}
+                            <span className="text-slate-400">
+                              ({h.allocationPercent.toFixed(1)}%)
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="text-right font-mono hidden sm:table-cell">
+                          <div
+                            className={`text-sm sm:text-base font-extrabold tracking-tight ${
+                              hProfit ? 'text-emerald-400' : 'text-rose-400'
+                            }`}
+                          >
+                            {hProfit ? '+' : ''}
+                            {sym}
+                            {Number(h.unrealizedPnL).toLocaleString('en-US', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </div>
+                          <div className="mt-1 flex items-center justify-end gap-1.5">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold border ${
+                                hProfit
+                                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                  : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                              }`}
+                            >
+                              {hProfit ? '+' : ''}
+                              {h.unrealizedPnLPercent.toFixed(2)}%
+                            </span>
+                          </div>
+                        </td>
+
+                        <td
+                          className="text-right"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                          }}
+                        >
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setQuickTradeData({
+                                  ticker: h.ticker,
+                                  action: 'BUY',
+                                  market: (h.market as 'US' | 'TH') || (isUsd ? 'US' : 'TH'),
+                                  price: Number(h.currentPrice) || undefined,
+                                })
+                              }
+                              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer"
+                              title={`บันทึกซื้อ ${h.ticker} เพิ่ม`}
+                            >
+                              +ซื้อ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setQuickTradeData({
+                                  ticker: h.ticker,
+                                  action: 'SELL',
+                                  market: (h.market as 'US' | 'TH') || (isUsd ? 'US' : 'TH'),
+                                  price: Number(h.currentPrice) || undefined,
+                                })
+                              }
+                              className="px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-rose-500/25 text-slate-300 hover:text-rose-200 border border-white/[0.08] text-xs font-semibold transition-all cursor-pointer"
+                              title={`บันทึกขาย ${h.ticker}`}
+                            >
+                              ขาย
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1527,7 +1772,6 @@ export default function DashboardPage() {
             }}
           />
         )}
-
       </div>
     </AppShell>
   )
