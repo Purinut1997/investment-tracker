@@ -109,7 +109,10 @@ export default function NewsPage() {
     )
   })
 
+  const [isRefreshingNews, setIsRefreshingNews] = useState(false)
+
   const handleRefreshBrief = async () => {
+    setIsRefreshingNews(true)
     try {
       const res = await fetch('/api/news/brief', {
         method: 'POST',
@@ -121,6 +124,8 @@ export default function NewsPage() {
       }
     } catch (err) {
       console.error('Failed to refresh brief', err)
+    } finally {
+      setIsRefreshingNews(false)
     }
   }
 
@@ -142,11 +147,12 @@ export default function NewsPage() {
                 <span>ปฏิทินเศรษฐกิจ</span>
               </Link>
               <button
-                onClick={() => revalidate()}
-                className="bg-[#181C25] hover:bg-[#202532] text-slate-200 hover:text-white border border-white/[0.08] px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+                onClick={handleRefreshBrief}
+                disabled={isRefreshingNews}
+                className="bg-[#181C25] hover:bg-[#202532] disabled:opacity-60 text-slate-200 hover:text-white border border-white/[0.08] px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
               >
-                <RefreshCw className="w-4 h-4 text-indigo-400" />
-                <span>รีเฟรชข้อมูล</span>
+                <RefreshCw className={`w-4 h-4 text-indigo-400 ${isRefreshingNews ? 'animate-spin' : ''}`} />
+                <span>{isRefreshingNews ? 'กำลังดึงข่าวสด...' : 'ดึงข่าวสด & วิเคราะห์ใหม่'}</span>
               </button>
             </div>
           }

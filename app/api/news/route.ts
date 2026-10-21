@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { fetchMarketNews, fetchCompanyNews } from '@/lib/news/fetch-news'
+import {
+  fetchMarketNews,
+  fetchCompanyNews,
+  refreshPortfolioAndMarketNews,
+} from '@/lib/news/fetch-news'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
 import {
@@ -12,8 +16,18 @@ import {
   getDailyBriefHistoryList,
   getDailyBriefByDate,
   getTodayBangkokDateString,
+  isHeadlineRelevantToTicker,
+  invalidateDailyBriefCache,
   NewsCategory,
 } from '@/lib/news/news-analyzer'
+
+export const maxDuration = 45
+
+const NEWS_STALE_THRESHOLD_MS = 90 * 60 * 1000 // Refresh news if oldest latest fetch > 90 minutes
+const MIN_RECENT_NEWS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // Only show & analyze news within last 7 days
+
+// Track last full refresh timestamp per user in memory to avoid redundant RSS bursts within 5 mins
+const lastUserNewsSyncMap = new Map<string, number>()
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -26,6 +40,7 @@ export async function GET(req: NextRequest) {
   const categoryParam = (searchParams.get('category') ?? 'portfolio') as NewsCategory
   const symbol = searchParams.get('symbol')
   const dateParam = searchParams.get('date')
+  const forceRefreshParam = searchParams.get('refresh') === '1'
 
   const todayDate = getTodayBangkokDateString()
   const selectedDate = dateParam || todayDate
@@ -45,65 +60,116 @@ export async function GET(req: NextRequest) {
     // 2. Fetch history dates metadata for date selector
     const historyDates = await getDailyBriefHistoryList(userId)
 
-    // 3. Fetch news items
-    let whereClause: any = {}
+    const sevenDaysAgo = new Date(Date.now() - MIN_RECENT_NEWS_WINDOW_MS)
 
-    if (symbol) {
-      whereClause.symbol = symbol.toUpperCase()
-    } else if (categoryParam === 'portfolio') {
-      if (userTickers.length > 0) {
-        whereClause.OR = [
-          { symbol: { in: userTickers } },
-          ...userTickers.map((t) => ({ headline: { contains: t, mode: 'insensitive' as const } })),
-        ]
-      } else {
-        whereClause.symbol = { not: null }
+    // 3. Build query filter (restrict to recent news within last 7 days)
+    const buildWhereClause = () => {
+      const clause: any = {
+        publishedAt: { gte: sevenDaysAgo },
       }
-    } else if (categoryParam === 'earnings') {
-      whereClause.OR = [
-        { headline: { contains: 'earnings', mode: 'insensitive' as const } },
-        { headline: { contains: 'revenue', mode: 'insensitive' as const } },
-        { headline: { contains: 'eps', mode: 'insensitive' as const } },
-        { headline: { contains: 'dividend', mode: 'insensitive' as const } },
-        { headline: { contains: 'quarterly', mode: 'insensitive' as const } },
-        { summary: { contains: 'earnings', mode: 'insensitive' as const } },
-      ]
-    } else if (categoryParam === 'macro') {
-      whereClause.OR = [
-        { headline: { contains: 'fed', mode: 'insensitive' as const } },
-        { headline: { contains: 'rate', mode: 'insensitive' as const } },
-        { headline: { contains: 'inflation', mode: 'insensitive' as const } },
-        { headline: { contains: 'cpi', mode: 'insensitive' as const } },
-        { headline: { contains: 'yield', mode: 'insensitive' as const } },
-        { headline: { contains: 'powell', mode: 'insensitive' as const } },
-      ]
-    } else {
-      // General market
-      // Allow all
+
+      if (symbol) {
+        const cleanSym = symbol.toUpperCase()
+        clause.OR = [
+          { symbol: cleanSym },
+          { headline: { contains: cleanSym, mode: 'insensitive' as const } },
+        ]
+      } else if (categoryParam === 'portfolio') {
+        if (userTickers.length > 0) {
+          clause.OR = [
+            { symbol: { in: userTickers } },
+            ...userTickers.map((t) => ({ headline: { contains: t, mode: 'insensitive' as const } })),
+          ]
+        } else {
+          clause.symbol = { not: null }
+        }
+      } else if (categoryParam === 'earnings') {
+        clause.OR = [
+          { headline: { contains: 'earnings', mode: 'insensitive' as const } },
+          { headline: { contains: 'revenue', mode: 'insensitive' as const } },
+          { headline: { contains: 'eps', mode: 'insensitive' as const } },
+          { headline: { contains: 'dividend', mode: 'insensitive' as const } },
+          { headline: { contains: 'quarterly', mode: 'insensitive' as const } },
+          { summary: { contains: 'earnings', mode: 'insensitive' as const } },
+        ]
+      } else if (categoryParam === 'macro') {
+        clause.OR = [
+          { headline: { contains: 'fed', mode: 'insensitive' as const } },
+          { headline: { contains: 'rate', mode: 'insensitive' as const } },
+          { headline: { contains: 'inflation', mode: 'insensitive' as const } },
+          { headline: { contains: 'cpi', mode: 'insensitive' as const } },
+          { headline: { contains: 'yield', mode: 'insensitive' as const } },
+          { headline: { contains: 'powell', mode: 'insensitive' as const } },
+        ]
+      }
+
+      return clause
     }
 
     let rawItems = await prisma.newsItem.findMany({
-      where: whereClause,
+      where: buildWhereClause(),
       orderBy: { publishedAt: 'desc' },
-      take: 40,
+      take: 50,
     })
 
-    // If cache is empty or sparse, trigger fresh fetch and re-query
-    if (rawItems.length < 5) {
-      if (categoryParam === 'general' || categoryParam === 'macro') {
-        await fetchMarketNews()
-      } else if (userTickers.length > 0) {
-        await Promise.all(userTickers.slice(0, 4).map((t) => fetchCompanyNews(t)))
+    // Check if news in DB is stale or missing coverage for user's holdings
+    const nowMs = Date.now()
+    const latestFetchedAtMs =
+      rawItems.length > 0
+        ? Math.max(...rawItems.map((i) => new Date(i.fetchedAt || i.publishedAt).getTime()))
+        : 0
+    const isNewsStale = nowMs - latestFetchedAtMs > NEWS_STALE_THRESHOLD_MS
+
+    const coveredTickersCount = userTickers.filter((sym) =>
+      rawItems.some(
+        (n) => n.symbol === sym || isHeadlineRelevantToTicker(n.headline, sym, n.summary)
+      )
+    ).length
+    const isMissingHoldingsCoverage =
+      userTickers.length > 0 && coveredTickersCount < Math.min(userTickers.length, 3)
+
+    const lastSyncMs = lastUserNewsSyncMap.get(userId) ?? 0
+    const cooldownPassed = nowMs - lastSyncMs > 5 * 60 * 1000
+
+    let didFetchFreshNews = false
+
+    if (
+      forceRefreshParam ||
+      rawItems.length < 6 ||
+      isNewsStale ||
+      (isMissingHoldingsCoverage && cooldownPassed)
+    ) {
+      lastUserNewsSyncMap.set(userId, nowMs)
+      didFetchFreshNews = true
+
+      if (symbol) {
+        const holdingMatch = activeHoldings.find((h) => h.ticker.toUpperCase() === symbol.toUpperCase())
+        const marketHint = holdingMatch
+          ? holdingMatch.market || (holdingMatch.currency === 'THB' ? 'TH' : 'US')
+          : undefined
+        await fetchCompanyNews(symbol, marketHint)
+      } else if (activeHoldings.length > 0) {
+        await refreshPortfolioAndMarketNews(activeHoldings)
       } else {
         await fetchMarketNews()
       }
 
       rawItems = await prisma.newsItem.findMany({
-        where: whereClause,
+        where: buildWhereClause(),
         orderBy: { publishedAt: 'desc' },
-        take: 40,
+        take: 50,
       })
     }
+
+    // Also load all recent portfolio news (within 7 days) so the holdings sentiment strip
+    // and AI daily brief always have full coverage across all held tickers regardless of active UI filter
+    const allRecentNews = await prisma.newsItem.findMany({
+      where: {
+        publishedAt: { gte: sevenDaysAgo },
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: 60,
+    })
 
     // 4. Enrich items with sentiment & Thai synthesis
     const enrichedItems = rawItems.map((item) => {
@@ -126,15 +192,21 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // 5. Calculate Holdings Sentiment Summary for quick strip
+    // 5. Calculate Holdings Sentiment Summary across all recent news (last 7 days)
     const holdingsSummary = activeHoldings.map((h) => {
       const sym = h.ticker.toUpperCase()
-      const symbolNews = rawItems.filter(
-        (n) => n.symbol === sym || n.headline.toUpperCase().includes(sym)
+      const symbolNews = allRecentNews.filter(
+        (n) => n.symbol === sym || isHeadlineRelevantToTicker(n.headline, sym, n.summary)
       )
-      const pos = symbolNews.filter((n) => (n.sentiment ?? detectSentiment(n.headline, n.summary)) === 'positive').length
-      const neg = symbolNews.filter((n) => (n.sentiment ?? detectSentiment(n.headline, n.summary)) === 'negative').length
-      const neu = symbolNews.filter((n) => (n.sentiment ?? detectSentiment(n.headline, n.summary)) === 'neutral').length
+      const pos = symbolNews.filter(
+        (n) => (n.sentiment ?? detectSentiment(n.headline, n.summary)) === 'positive'
+      ).length
+      const neg = symbolNews.filter(
+        (n) => (n.sentiment ?? detectSentiment(n.headline, n.summary)) === 'negative'
+      ).length
+      const neu = symbolNews.filter(
+        (n) => (n.sentiment ?? detectSentiment(n.headline, n.summary)) === 'neutral'
+      ).length
 
       return {
         symbol: sym,
@@ -151,10 +223,8 @@ export async function GET(req: NextRequest) {
     let dailyBrief = null
 
     if (isHistorical) {
-      // Historical view: load the preserved snapshot from DB
       dailyBrief = await getDailyBriefByDate(userId, selectedDate)
     } else {
-      // Today view: generate or fetch cached/persisted brief for today
       const userHoldingContexts = await Promise.all(
         activeHoldings.map(async (h) => {
           const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
@@ -187,8 +257,25 @@ export async function GET(req: NextRequest) {
         })
       )
 
-      const hasGeminiKey = Boolean(userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY)
-      dailyBrief = await generateDailyBrief(userId, userHoldingContexts, rawItems, hasGeminiKey, false, todayDate)
+      const hasGeminiKey = Boolean(
+        userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY
+      )
+
+      // If we just fetched fresh news because the DB previously only had stale news,
+      // invalidate any cached brief for today so the brief reflects the fresh news immediately.
+      const shouldForceBriefRefresh = forceRefreshParam || (didFetchFreshNews && isNewsStale)
+      if (shouldForceBriefRefresh) {
+        invalidateDailyBriefCache(userId, todayDate)
+      }
+
+      dailyBrief = await generateDailyBrief(
+        userId,
+        userHoldingContexts,
+        allRecentNews,
+        hasGeminiKey,
+        shouldForceBriefRefresh,
+        todayDate
+      )
     }
 
     return NextResponse.json({

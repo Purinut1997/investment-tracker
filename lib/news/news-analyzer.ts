@@ -328,28 +328,48 @@ export function classifyNewsCategory(
 // ============================================================
 // 3. Ticker Relevance Check
 // ============================================================
-export function isHeadlineRelevantToTicker(headline: string, symbol: string | null): boolean {
+export function isHeadlineRelevantToTicker(headline: string, symbol: string | null, summary?: string | null): boolean {
   if (!symbol) return true
-  const upperHeadline = headline.toUpperCase()
+  const combined = `${headline} ${summary || ''}`.toUpperCase()
   const cleanSym = symbol.toUpperCase().trim()
 
-  // Common ticker company name map
+  // Common ticker company & ETF name map
   const nameMap: Record<string, string[]> = {
     NVDA: ['NVIDIA', 'NVDA'],
     META: ['META', 'FACEBOOK'],
     AAPL: ['APPLE', 'AAPL', 'IPHONE'],
     MSFT: ['MICROSOFT', 'MSFT', 'AZURE'],
     GOOGL: ['GOOGLE', 'ALPHABET', 'GOOGL', 'GOOG'],
+    GOOG: ['GOOGLE', 'ALPHABET', 'GOOGL', 'GOOG'],
     AMZN: ['AMAZON', 'AMZN', 'AWS'],
     TSLA: ['TESLA', 'TSLA', 'MUSK'],
+    WDC: ['WESTERN DIGITAL', 'WDC'],
+    SNDK: ['SANDISK', 'SNDK'],
+    AMD: ['ADVANCED MICRO DEVICES', 'AMD'],
+    AVGO: ['BROADCOM', 'AVGO'],
+    TSM: ['TSMC', 'TAIWAN SEMICONDUCTOR', 'TSM'],
+    MU: ['MICRON', 'MU'],
+    INTC: ['INTEL', 'INTC'],
     BTC: ['BITCOIN', 'BTC', 'CRYPTO'],
     ETH: ['ETHEREUM', 'ETH'],
     SPY: ['S&P 500', 'SPY', 'S&P'],
+    VOO: ['VOO', 'VANGUARD S&P 500', 'S&P 500', 'VANGUARD'],
     QQQ: ['NASDAQ', 'QQQ', 'TECH STOCKS'],
+    QQQM: ['QQQM', 'NASDAQ 100', 'NASDAQ-100', 'INVESCO NASDAQ'],
+    SCHD: ['SCHD', 'SCHWAB U.S. DIVIDEND', 'DIVIDEND ETF', 'SCHWAB DIVIDEND'],
+    SCB: ['SCB', 'SCBX', 'ไทยพาณิชย์', 'เอสซีบี'],
+    KBANK: ['KBANK', 'กสิกร', 'KASIKORN'],
+    PTT: ['PTT', 'ปตท.'],
+    ADVANC: ['ADVANC', 'AIS', 'แอดวานซ์'],
+    AOT: ['AOT', 'ท่าอากาศยาน'],
+    DELTA: ['DELTA', 'เดลต้า'],
+    BDMS: ['BDMS', 'กรุงเทพดุสิต'],
+    CPALL: ['CPALL', 'ซีพี ออลล์'],
+    GULF: ['GULF', 'กัลฟ์'],
   }
 
   const aliases = nameMap[cleanSym] || [cleanSym]
-  return aliases.some((alias) => upperHeadline.includes(alias))
+  return aliases.some((alias) => combined.includes(alias))
 }
 
 // ============================================================
@@ -504,7 +524,7 @@ export function invalidateDailyBriefCache(userId?: string, date?: string) {
 export async function generateDailyBrief(
   userId: string,
   userHoldingsInput: UserHoldingContext[] | string[],
-  recentNews: Array<{ headline: string; symbol: string | null; sentiment: NewsSentiment | null }>,
+  recentNews: Array<{ headline: string; symbol: string | null; sentiment: NewsSentiment | null; publishedAt?: Date | string }>,
   geminiApiKeyConfigured: boolean,
   forceRefresh: boolean = false,
   targetDate?: string
@@ -545,12 +565,21 @@ export async function generateDailyBrief(
     }
   }
 
+  // Filter out stale news older than 7 days when recent news is available
+  const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const freshFilteredNews = recentNews.filter((n) => {
+    if (!n.publishedAt) return true
+    const ts = new Date(n.publishedAt).getTime()
+    return !Number.isNaN(ts) && ts >= sevenDaysAgoMs
+  })
+  const effectiveNews = freshFilteredNews.length > 0 ? freshFilteredNews : recentNews
+
   // 1. Calculate sentiment metrics
   let positive = 0
   let negative = 0
   let neutral = 0
 
-  for (const n of recentNews) {
+  for (const n of effectiveNews) {
     if (n.sentiment === 'positive') positive++
     else if (n.sentiment === 'negative') negative++
     else neutral++
@@ -563,7 +592,7 @@ export async function generateDailyBrief(
   // Generate baseline / heuristic brief first
   const heuristicBrief = generateHeuristicDailyBrief(
     holdings,
-    recentNews,
+    effectiveNews,
     positive,
     negative,
     neutral,
@@ -574,11 +603,39 @@ export async function generateDailyBrief(
   let finalBrief: PortfolioDailyBrief = heuristicBrief
 
   // If Gemini is available, attempt AI-powered executive synthesis
-  if (geminiApiKeyConfigured && recentNews.length > 0) {
+  if (geminiApiKeyConfigured && effectiveNews.length > 0) {
     try {
-      const newsDigest = recentNews
-        .slice(0, 10)
-        .map((n) => `- [${n.symbol || 'MARKET'}] ${n.headline}`)
+      // Build balanced news digest: pick up to 2 latest items per held ticker + latest general market items
+      const selectedDigestItems: typeof effectiveNews = []
+      const usedHeadlines = new Set<string>()
+
+      for (const ticker of userTickers) {
+        const tickerMatches = effectiveNews
+          .filter((n) => n.symbol?.toUpperCase() === ticker || isHeadlineRelevantToTicker(n.headline, ticker))
+          .slice(0, 2)
+        for (const item of tickerMatches) {
+          if (!usedHeadlines.has(item.headline)) {
+            usedHeadlines.add(item.headline)
+            selectedDigestItems.push(item)
+          }
+        }
+      }
+
+      for (const item of effectiveNews) {
+        if (selectedDigestItems.length >= 18) break
+        if (!usedHeadlines.has(item.headline)) {
+          usedHeadlines.add(item.headline)
+          selectedDigestItems.push(item)
+        }
+      }
+
+      const newsDigest = selectedDigestItems
+        .map((n) => {
+          const dateTag = n.publishedAt
+            ? new Date(n.publishedAt).toISOString().split('T')[0]
+            : briefDate
+          return `- [${dateTag}] [${n.symbol || 'MARKET'}] ${n.headline}`
+        })
         .join('\n')
 
       const holdingsDigest = holdings.length > 0
@@ -603,12 +660,12 @@ export async function generateDailyBrief(
         : 'หุ้นเทคโนโลยีและดัชนีหลัก'
 
       const prompt = `คุณคือหัวหน้านักกลยุทธ์การลงทุนอาวุโส (Chief Investment Strategist) ของ Investment Pro
-ทำหน้าที่สรุปบทวิเคราะห์ข่าวสารและกลยุทธ์พอร์ตประจำวัน (Executive Daily Portfolio Intelligence Brief) ให้อ่านง่าย สั้น กระชับ ได้ใจความ เหมาะสำหรับนักลงทุนอ่านจบใน 2 นาที
+ทำหน้าที่สรุปบทวิเคราะห์ข่าวสารและกลยุทธ์พอร์ตประจำวัน (Executive Daily Portfolio Intelligence Brief) ประจำวันที่ ${briefDate} ให้อ่านง่าย สั้น กระชับ ได้ใจความ เหมาะสำหรับนักลงทุนอ่านจบใน 2 นาที
 
 ข้อมูลพอร์ตของผู้ใช้ (อ้างอิงราคาตลาดและระดับเทคนิคจริงของระบบ):
 ${holdingsDigest}
 
-ข่าวสารสำคัญล่าสุดในตลาด:
+ข่าวสารสำคัญล่าสุดในตลาด (อ้างอิงเฉพาะข่าวสดใหม่ด้านล่างนี้):
 ${newsDigest}
 
 *** กฎเหล็กที่สำคัญที่สุดเรื่องระดับราคาและแนวรับใน holdingPlaybook (STRICT PRICING ACCURACY RULE): ***

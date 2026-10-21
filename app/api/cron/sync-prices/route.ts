@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { getCachedOrFetchPrice, invalidatePriceCache } from '@/lib/market-data/cache-layer'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
+import { refreshPortfolioAndMarketNews } from '@/lib/news/fetch-news'
+import { invalidateDailyBriefCache } from '@/lib/news/news-analyzer'
 
 export const maxDuration = 60 // Allow 60 seconds on Vercel
 
@@ -18,6 +20,9 @@ export async function GET(req: NextRequest) {
   const results = {
     syncedAssets: 0,
     syncedFx: 0,
+    prunedNews: 0,
+    syncedMarketNews: 0,
+    syncedCompanyNews: 0,
     errors: [] as string[],
     timestamp: new Date().toISOString(),
   }
@@ -36,7 +41,16 @@ export async function GET(req: NextRequest) {
 
     // 3. Find distinct active assets held by users in transactions
     const distinctAssets = await prisma.transaction.findMany({
-      select: { assetId: true },
+      select: {
+        assetId: true,
+        asset: {
+          select: {
+            ticker: true,
+            market: true,
+            currency: true,
+          },
+        },
+      },
       distinct: ['assetId'],
       take: 20, // Limit batch size to stay within Vercel execution window
     })
@@ -50,18 +64,36 @@ export async function GET(req: NextRequest) {
         if (priceResult) {
           results.syncedAssets++
         }
-        // Small throttle delay (500ms)
-        await new Promise((resolve) => setTimeout(resolve, 500))
+        // Small throttle delay (300ms)
+        await new Promise((resolve) => setTimeout(resolve, 300))
       } catch (err: any) {
         results.errors.push(`Asset ${item.assetId} error: ${err.message}`)
       }
+    }
+
+    // 5. Refresh live market & company news and prune stale news older than 7 days
+    try {
+      const holdingsForNews = distinctAssets
+        .filter((d) => d.asset?.ticker)
+        .map((d) => ({
+          ticker: d.asset.ticker,
+          market: d.asset.market,
+          currency: d.asset.currency,
+        }))
+      const newsStats = await refreshPortfolioAndMarketNews(holdingsForNews)
+      results.prunedNews = newsStats.prunedCount
+      results.syncedMarketNews = newsStats.marketCount
+      results.syncedCompanyNews = newsStats.companyCount
+      invalidateDailyBriefCache()
+    } catch (err: any) {
+      results.errors.push(`News sync error: ${err.message}`)
     }
 
     // Invalidate caches so users immediately see updated prices
     invalidatePriceCache()
     invalidateUserHoldingsCache()
 
-    // 5. Log Cron execution to AuditLog
+    // 6. Log Cron execution to AuditLog
     await prisma.auditLog.create({
       data: {
         action: 'CRON_SYNC_PRICES',

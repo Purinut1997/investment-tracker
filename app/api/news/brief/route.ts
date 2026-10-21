@@ -3,9 +3,10 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
+import { refreshPortfolioAndMarketNews } from '@/lib/news/fetch-news'
 import { generateDailyBrief, invalidateDailyBriefCache } from '@/lib/news/news-analyzer'
 
-export const maxDuration = 45
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -32,6 +33,11 @@ export async function POST(req: NextRequest) {
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
     const activeHoldings = holdingsResult.holdings.filter((h) => h.quantity > 0)
+
+    // 1. Fetch fresh live news for market & all active holdings and prune stale news > 7 days
+    await refreshPortfolioAndMarketNews(activeHoldings)
+
+    // 2. Build technical context for holdings
     const userHoldingContexts = await Promise.all(
       activeHoldings.map(async (h) => {
         const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
@@ -64,14 +70,25 @@ export async function POST(req: NextRequest) {
       })
     )
 
-    // Fetch recent news
+    // 3. Query only recent news within last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const recentNews = await prisma.newsItem.findMany({
+      where: {
+        publishedAt: { gte: sevenDaysAgo },
+      },
       orderBy: { publishedAt: 'desc' },
-      take: 25,
+      take: 45,
     })
 
     const hasGeminiKey = Boolean(userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY)
-    const brief = await generateDailyBrief(userId, userHoldingContexts, recentNews, hasGeminiKey, true, targetDate)
+    const brief = await generateDailyBrief(
+      userId,
+      userHoldingContexts,
+      recentNews,
+      hasGeminiKey,
+      true,
+      targetDate
+    )
 
     return NextResponse.json({ brief, date: targetDate })
   } catch (error: any) {
