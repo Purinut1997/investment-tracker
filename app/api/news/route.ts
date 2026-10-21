@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
       take: 50,
     })
 
-    // Check if news in DB is stale or missing coverage for user's holdings
+    // Check if news in DB is stale or missing coverage for ANY of the user's holdings
     const nowMs = Date.now()
     const latestFetchedAtMs =
       rawItems.length > 0
@@ -120,30 +120,34 @@ export async function GET(req: NextRequest) {
         : 0
     const isNewsStale = nowMs - latestFetchedAtMs > NEWS_STALE_THRESHOLD_MS
 
-    const coveredTickersCount = userTickers.filter((sym) =>
-      rawItems.some(
-        (n) => n.symbol === sym || isHeadlineRelevantToTicker(n.headline, sym, n.summary)
-      )
-    ).length
-    const isMissingHoldingsCoverage =
-      userTickers.length > 0 && coveredTickersCount < Math.min(userTickers.length, 3)
+    // Find any active holdings that currently have 0 news items in DB (e.g., newly bought stock)
+    const existingSymbolsResult = await prisma.newsItem.groupBy({
+      by: ['symbol'],
+      where: {
+        publishedAt: { gte: sevenDaysAgo },
+        symbol: { in: userTickers },
+      },
+    })
+    const coveredSymbolSet = new Set(
+      existingSymbolsResult.map((r) => (r.symbol || '').toUpperCase())
+    )
+    const uncoveredHoldings = activeHoldings.filter(
+      (h) => !coveredSymbolSet.has(h.ticker.toUpperCase())
+    )
 
     const lastSyncMs = lastUserNewsSyncMap.get(userId) ?? 0
-    const cooldownPassed = nowMs - lastSyncMs > 5 * 60 * 1000
+    const cooldownPassed = nowMs - lastSyncMs > 3 * 60 * 1000
 
     let didFetchFreshNews = false
 
-    if (
-      forceRefreshParam ||
-      rawItems.length < 6 ||
-      isNewsStale ||
-      (isMissingHoldingsCoverage && cooldownPassed)
-    ) {
+    if (forceRefreshParam || rawItems.length < 6 || isNewsStale) {
       lastUserNewsSyncMap.set(userId, nowMs)
       didFetchFreshNews = true
 
       if (symbol) {
-        const holdingMatch = activeHoldings.find((h) => h.ticker.toUpperCase() === symbol.toUpperCase())
+        const holdingMatch = activeHoldings.find(
+          (h) => h.ticker.toUpperCase() === symbol.toUpperCase()
+        )
         const marketHint = holdingMatch
           ? holdingMatch.market || (holdingMatch.currency === 'THB' ? 'TH' : 'US')
           : undefined
@@ -157,7 +161,23 @@ export async function GET(req: NextRequest) {
       rawItems = await prisma.newsItem.findMany({
         where: buildWhereClause(),
         orderBy: { publishedAt: 'desc' },
-        take: 50,
+        take: 60,
+      })
+    } else if (uncoveredHoldings.length > 0 && cooldownPassed) {
+      // Immediately fetch news for any newly added stock in the user's portfolio
+      lastUserNewsSyncMap.set(userId, nowMs)
+      didFetchFreshNews = true
+
+      await Promise.allSettled(
+        uncoveredHoldings.map((h) =>
+          fetchCompanyNews(h.ticker, h.market || (h.currency === 'THB' ? 'TH' : 'US'))
+        )
+      )
+
+      rawItems = await prisma.newsItem.findMany({
+        where: buildWhereClause(),
+        orderBy: { publishedAt: 'desc' },
+        take: 60,
       })
     }
 
@@ -263,7 +283,7 @@ export async function GET(req: NextRequest) {
 
       // If we just fetched fresh news because the DB previously only had stale news,
       // invalidate any cached brief for today so the brief reflects the fresh news immediately.
-      const shouldForceBriefRefresh = forceRefreshParam || (didFetchFreshNews && isNewsStale)
+      const shouldForceBriefRefresh = forceRefreshParam || didFetchFreshNews
       if (shouldForceBriefRefresh) {
         invalidateDailyBriefCache(userId, todayDate)
       }

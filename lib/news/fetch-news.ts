@@ -336,7 +336,7 @@ export async function refreshPortfolioAndMarketNews(
         },
       ])
     ).values()
-  ).slice(0, 12)
+  ).slice(0, 30)
 
   const [marketRes, ...companyResults] = await Promise.allSettled([
     fetchMarketNews(),
