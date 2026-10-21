@@ -8,8 +8,8 @@ import { PageHeader } from '@/components/PageHeader'
 import type { MarketQuote } from '@/lib/market-data/types'
 import { AddWatchlistModal } from '@/components/market-watch/AddWatchlistModal'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
+import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockLogo } from '@/components/StockLogo'
-import { Sparkline } from '@/components/Sparkline'
 import {
   Coins,
   Building2,
@@ -196,6 +196,12 @@ export default function MarketWatchPage() {
     symbol: string
     name?: string
     market?: string
+  } | null>(null)
+  const [quickTradeData, setQuickTradeData] = useState<{
+    ticker: string
+    action: 'BUY' | 'SELL'
+    market?: 'US' | 'TH'
+    price?: number
   } | null>(null)
 
   const watchlistItems: WatchlistWithQuote[] = watchlistData?.items ?? []
@@ -681,12 +687,20 @@ export default function MarketWatchPage() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       {sectionEntries.map(({ item }) => (
                         <WatchlistCard
                           key={item.id}
                           item={item}
                           onDelete={() => handleDeleteWatchlistItem(item.id)}
+                          onQuickBuy={() =>
+                            setQuickTradeData({
+                              ticker: item.symbol,
+                              action: 'BUY',
+                              market: item.market === 'TH' ? 'TH' : 'US',
+                              price: item.quote?.price ? Number(item.quote.price) : undefined,
+                            })
+                          }
                           onSelect={() =>
                             setSelectedStock({
                               symbol: item.symbol,
@@ -703,12 +717,20 @@ export default function MarketWatchPage() {
             </div>
           ) : (
             /* Filtered Flat Grid */
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {filteredWatchlistItems.map(({ item }) => (
                 <WatchlistCard
                   key={item.id}
                   item={item}
                   onDelete={() => handleDeleteWatchlistItem(item.id)}
+                  onQuickBuy={() =>
+                    setQuickTradeData({
+                      ticker: item.symbol,
+                      action: 'BUY',
+                      market: item.market === 'TH' ? 'TH' : 'US',
+                      price: item.quote?.price ? Number(item.quote.price) : undefined,
+                    })
+                  }
                   onSelect={() =>
                     setSelectedStock({
                       symbol: item.symbol,
@@ -894,6 +916,14 @@ export default function MarketWatchPage() {
                               market: section.market,
                             })
                           }
+                          onQuickBuy={() =>
+                            setQuickTradeData({
+                              ticker: q.symbol,
+                              action: 'BUY',
+                              market: section.market === 'TH' ? 'TH' : 'US',
+                              price: q.price ? Number(q.price) : undefined,
+                            })
+                          }
                         />
                       )
                     })}
@@ -921,8 +951,38 @@ export default function MarketWatchPage() {
         initialName={selectedStock?.name}
         market={selectedStock?.market}
       />
+
+      {/* Quick 1-Click Buy Modal from Market Watch */}
+      {quickTradeData && (
+        <QuickAddModal
+          onClose={() => setQuickTradeData(null)}
+          onSuccess={() => setQuickTradeData(null)}
+          initialTab="manual"
+          initialData={quickTradeData}
+        />
+      )}
     </AppShell>
   )
+}
+
+/**
+ * Helper to compute real Intraday Range Position (0% to 100%)
+ */
+function getIntradayRangePosition(
+  price?: number,
+  low?: number,
+  high?: number,
+  changePercent = 0
+): number {
+  if (
+    price !== undefined &&
+    low !== undefined &&
+    high !== undefined &&
+    high > low
+  ) {
+    return Math.min(100, Math.max(0, ((price - low) / (high - low)) * 100))
+  }
+  return changePercent >= 0 ? 72 : 28
 }
 
 /**
@@ -932,23 +992,32 @@ function WatchlistCard({
   item,
   onDelete,
   onSelect,
+  onQuickBuy,
 }: {
   item: WatchlistWithQuote
   onDelete: () => void
   onSelect?: () => void
+  onQuickBuy?: () => void
 }) {
   const quote = item.quote
   const price = quote?.price
   const changePercent = quote?.changePercent ?? 0
   const isPositive = changePercent >= 0
   const isZero = changePercent === 0
+  const rangePos = getIntradayRangePosition(
+    price,
+    quote?.low,
+    quote?.high,
+    changePercent
+  )
+  const currencyPrefix = quote?.currency === 'THB' ? '฿' : '$'
 
   return (
     <div
       onClick={onSelect}
-      className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-amber-500/20 hover:border-amber-500/50 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[148px] relative cursor-pointer active:scale-[0.99]"
+      className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-amber-500/20 hover:border-amber-500/50 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[164px] relative cursor-pointer active:scale-[0.99]"
     >
-      {/* Top Header: Badge & Delete Button */}
+      {/* Top Header: Badge, Quick Buy & Delete Button */}
       <div>
         <div className="flex items-center justify-between gap-2 mb-2.5">
           <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold tracking-wider">
@@ -961,18 +1030,33 @@ function WatchlistCard({
               : 'US'}
           </span>
 
-          {/* Unstar / Delete Button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
-            }}
-            title="ถอนออกจากรายการจับตา"
-            className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 flex items-center justify-center transition-all cursor-pointer opacity-70 hover:opacity-100 shrink-0"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {onQuickBuy && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onQuickBuy()
+                }}
+                title={`บันทึกซื้อ ${item.symbol} เข้าพอร์ต`}
+                className="px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 text-[10px] font-bold transition-all cursor-pointer"
+              >
+                +ซื้อ
+              </button>
+            )}
+            {/* Unstar / Delete Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete()
+              }}
+              title="ถอนออกจากรายการจับตา"
+              className="w-7 h-7 rounded-lg bg-white/[0.04] hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 flex items-center justify-center transition-all cursor-pointer opacity-70 hover:opacity-100 shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Ticker Symbol & Company Name with Logo */}
@@ -997,64 +1081,81 @@ function WatchlistCard({
         </div>
       </div>
 
-      {/* Bottom Row: Price, Compact Intraday Sparkline, and % Change */}
-      <div className="mt-3 pt-2.5 border-t border-white/[0.05] flex items-center justify-between gap-1.5">
-        <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums tracking-tight shrink-0">
-          {price !== undefined ? (
-            <>
-              {quote?.currency === 'THB' ? '฿' : '$'}
-              {Number(price).toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: price < 1 ? 4 : 2,
-              })}
-            </>
-          ) : (
-            <span className="text-slate-500 text-xs font-normal">กำลังดึงราคา...</span>
-          )}
-        </span>
+      {/* Bottom Section: Price, % Change & Real Intraday Range Bar */}
+      <div className="mt-3 pt-2.5 border-t border-white/[0.05] space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums tracking-tight shrink-0">
+            {price !== undefined ? (
+              <>
+                {currencyPrefix}
+                {Number(price).toLocaleString('en-US', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: price < 1 ? 4 : 2,
+                })}
+              </>
+            ) : (
+              <span className="text-slate-500 text-xs font-normal">กำลังดึงราคา...</span>
+            )}
+          </span>
 
-        {/* Compact Intraday Sparkline */}
-        <div
-          className="flex-1 max-w-[76px] h-6 flex items-center justify-center px-1"
-          title={
-            quote?.high && quote?.low
-              ? `ทิศทางราคาวันนี้ • กรอบราคา: L ${quote.currency === 'THB' ? '฿' : '$'}${Number(quote.low).toLocaleString('en-US', { minimumFractionDigits: 2 })} - H ${quote.currency === 'THB' ? '฿' : '$'}${Number(quote.high).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-              : `ทิศทางราคาในวันนี้ (${isPositive ? 'ปรับตัวขึ้น' : 'ปรับตัวลง'})`
-          }
-        >
-          <Sparkline
-            seed={item.symbol}
-            trend={isZero ? 'neutral' : isPositive ? 'up' : 'down'}
-            width={72}
-            height={22}
-            className="transition-transform group-hover:scale-105"
-          />
+          <span
+            className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border shrink-0 ${
+              isZero
+                ? 'bg-slate-800 text-slate-400 border-slate-700'
+                : isPositive
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+            }`}
+          >
+            {isPositive ? (
+              <ArrowUpRight className="w-3 h-3" />
+            ) : (
+              <ArrowDownRight className="w-3 h-3" />
+            )}
+            {isPositive ? '+' : ''}
+            {changePercent.toFixed(2)}%
+          </span>
         </div>
 
-        <span
-          className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold border shrink-0 ${
-            isZero
-              ? 'bg-slate-800 text-slate-400 border-slate-700'
-              : isPositive
-              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-              : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-          }`}
-        >
-          {isPositive ? (
-            <ArrowUpRight className="w-3 h-3" />
-          ) : (
-            <ArrowDownRight className="w-3 h-3" />
-          )}
-          {isPositive ? '+' : ''}
-          {changePercent.toFixed(2)}%
-        </span>
+        {/* Real Intraday Low-High Range Bar */}
+        {quote?.low && quote?.high && quote.high > quote.low ? (
+          <div className="space-y-1">
+            <div className="h-1.5 w-full rounded-full bg-slate-800/90 relative overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  isPositive ? 'bg-emerald-500/70' : 'bg-rose-500/70'
+                }`}
+                style={{ width: `${rangePos}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
+              <span>
+                L {currencyPrefix}
+                {Number(quote.low).toLocaleString('en-US', {
+                  maximumFractionDigits: quote.low < 1 ? 3 : 2,
+                })}
+              </span>
+              <span>
+                H {currencyPrefix}
+                {Number(quote.high).toLocaleString('en-US', {
+                  maximumFractionDigits: quote.high < 1 ? 3 : 2,
+                })}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+            <span>คลิกดูกราฟ & วิเคราะห์ AI</span>
+            <span>{quote?.currency ?? 'USD'}</span>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
 /**
- * Standard Market Quote Card with 1-Click Star Toggle
+ * Standard Market Quote Card with 1-Click Star Toggle & Intraday Range Bar
  */
 function QuoteCard({
   quote,
@@ -1062,20 +1163,30 @@ function QuoteCard({
   isStarring,
   onToggleStar,
   onSelect,
+  onQuickBuy,
 }: {
   quote: MarketQuote
   isStarred?: boolean
   isStarring?: boolean
   onToggleStar?: () => void
   onSelect?: () => void
+  onQuickBuy?: () => void
 }) {
-  const isPositive = (quote.changePercent ?? 0) >= 0
-  const isZero = (quote.changePercent ?? 0) === 0
+  const changePercent = quote.changePercent ?? 0
+  const isPositive = changePercent >= 0
+  const isZero = changePercent === 0
+  const rangePos = getIntradayRangePosition(
+    quote.price,
+    quote.low,
+    quote.high,
+    changePercent
+  )
+  const currencyPrefix = quote.currency === 'THB' ? '฿' : '$'
 
   return (
     <div
       onClick={onSelect}
-      className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-white/[0.08] hover:border-indigo-500/40 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[120px] relative cursor-pointer active:scale-[0.99]"
+      className="p-4 sm:p-5 rounded-2xl bg-[#12151C] border border-white/[0.08] hover:border-indigo-500/40 hover:bg-[#151922] transition-all duration-200 group flex flex-col justify-between shadow-xl shadow-black/30 min-h-[146px] relative cursor-pointer active:scale-[0.99]"
     >
       <div>
         <div className="flex items-start justify-between mb-3">
@@ -1088,7 +1199,7 @@ function QuoteCard({
             />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-white text-sm sm:text-base group-hover:text-indigo-300 transition-colors truncate block">
+                <span className="font-bold text-white text-sm sm:text-base group-hover:text-indigo-300 transition-colors truncate block font-mono">
                   {quote.symbol}
                 </span>
                 {/* Star toggle button */}
@@ -1138,41 +1249,72 @@ function QuoteCard({
               <ArrowDownRight className="w-3 h-3" />
             )}
             {isPositive ? '+' : ''}
-            {(quote.changePercent ?? 0).toFixed(2)}%
+            {changePercent.toFixed(2)}%
           </span>
         </div>
       </div>
 
-      <div className="mt-2 pt-2.5 border-t border-white/[0.04] flex items-center justify-between gap-2">
-        <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums">
-          {quote.currency === 'THB' ? '฿' : '$'}
-          {Number(quote.price).toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: quote.price < 1 ? 4 : 2,
-          })}
-        </span>
+      <div className="mt-2 pt-2.5 border-t border-white/[0.04] space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-base sm:text-lg font-bold text-white font-mono tabular-nums">
+            {currencyPrefix}
+            {Number(quote.price).toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: quote.price < 1 ? 4 : 2,
+            })}
+          </span>
 
-        {/* Compact Intraday Sparkline */}
-        <div
-          className="flex-1 max-w-[68px] h-5 flex items-center justify-center px-1"
-          title={
-            quote.high && quote.low
-              ? `ทิศทางราคาวันนี้ • กรอบราคา: L ${quote.currency === 'THB' ? '฿' : '$'}${Number(quote.low).toLocaleString('en-US', { minimumFractionDigits: 2 })} - H ${quote.currency === 'THB' ? '฿' : '$'}${Number(quote.high).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-              : `ทิศทางราคาระหว่างวัน`
-          }
-        >
-          <Sparkline
-            seed={quote.symbol}
-            trend={isZero ? 'neutral' : isPositive ? 'up' : 'down'}
-            width={64}
-            height={20}
-            className="transition-transform group-hover:scale-105"
-          />
+          {onQuickBuy ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onQuickBuy()
+              }}
+              title={`บันทึกซื้อ ${quote.symbol} เข้าพอร์ต`}
+              className="px-2 py-0.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 text-[10px] font-bold transition-all cursor-pointer"
+            >
+              +ซื้อ
+            </button>
+          ) : (
+            <span className="text-[10px] text-slate-500 font-mono uppercase">
+              {quote.currency ?? 'USD'}
+            </span>
+          )}
         </div>
 
-        <span className="text-[10px] text-slate-500 font-mono uppercase">
-          {quote.currency ?? 'USD'}
-        </span>
+        {/* Real Intraday Low-High Range Bar */}
+        {quote.low && quote.high && quote.high > quote.low ? (
+          <div className="space-y-1">
+            <div className="h-1.5 w-full rounded-full bg-slate-800/90 relative overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  isPositive ? 'bg-emerald-500/70' : 'bg-rose-500/70'
+                }`}
+                style={{ width: `${rangePos}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[9px] font-mono text-slate-500">
+              <span>
+                L {currencyPrefix}
+                {Number(quote.low).toLocaleString('en-US', {
+                  maximumFractionDigits: quote.low < 1 ? 3 : 2,
+                })}
+              </span>
+              <span>
+                H {currencyPrefix}
+                {Number(quote.high).toLocaleString('en-US', {
+                  maximumFractionDigits: quote.high < 1 ? 3 : 2,
+                })}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+            <span>คลิกดูกราฟ & วิเคราะห์ AI</span>
+            <span>{quote.currency ?? 'USD'}</span>
+          </div>
+        )}
       </div>
     </div>
   )

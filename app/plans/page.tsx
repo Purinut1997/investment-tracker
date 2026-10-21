@@ -200,6 +200,7 @@ export default function PlansPage() {
     name?: string
     market?: string
   } | null>(null)
+  const [plansViewTab, setPlansViewTab] = useState<'buckets' | 'rebalance'>('buckets')
 
   async function handleSaveBuckets(newBuckets: StrategyBucket[]) {
     try {
@@ -681,29 +682,70 @@ export default function PlansPage() {
           </div>
         </div>
 
-        {/* ─── DIME!-STYLE CUSTOM STRATEGY BUCKETS & PER-BUCKET AI ─────────── */}
-        <StrategyBucketsSection
-          buckets={strategyBuckets}
-          holdings={holdings}
-          totalCashBase={totalCash}
-          totalPortfolioValue={totalValue}
-          baseCurrency={baseCurrency}
-          dcaBudget={cashInflow}
-          onSaveBuckets={handleSaveBuckets}
-          onSelectStock={(stock) => setSelectedStockDetail(stock)}
-          onQuickTrade={(tradeData) => {
-            setQuickAddInitialData({
-              symbol: tradeData.symbol,
-              assetType: tradeData.assetType || 'stock',
-              market: tradeData.market || 'US',
-            })
-            setQuickAddOpen(true)
-          }}
-        />
+        {/* ─── VIEW MODE SWITCHER (2 CLEAN TABS) ───────────────────────────── */}
+        <div className="p-1.5 rounded-2xl bg-[#121620] border border-white/[0.08] flex flex-wrap items-center justify-between gap-2 shadow-lg">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setPlansViewTab('buckets')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                plansViewTab === 'buckets'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/25'
+                  : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>1. ตะกร้าพอร์ตสไตล์ Dime! &amp; ถาม AI รายส่วน</span>
+            </button>
 
-        {/* ─── ACTIVE PRESET SELECTOR & REBALANCE SIMULATOR ────────────────── */}
-        {activePreset && (
-          <div className="p-6 sm:p-8 rounded-3xl bg-[#12151C] border border-white/[0.08] space-y-6 shadow-2xl shadow-black/50">
+            <button
+              type="button"
+              onClick={() => setPlansViewTab('rebalance')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                plansViewTab === 'rebalance'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/25'
+                  : 'text-slate-300 hover:text-white hover:bg-white/[0.04]'
+              }`}
+            >
+              <Scale className="w-4 h-4" />
+              <span>2. คำนวณกระจายเงินเติมพอร์ต (Smart Cash Rebalance)</span>
+            </button>
+          </div>
+
+          <span className="text-xs text-slate-400 px-3 hidden lg:inline">
+            {plansViewTab === 'buckets'
+              ? 'แบ่งพอร์ตตามเป้าหมาย (ถือยาว • ปันผล • เก็งสั้น) พร้อมถาม AI รายตะกร้า'
+              : 'คำนวณยอดซื้อรายหมวดหมู่เมื่อมีเงินก้อนใหม่เข้ามาเติมพอร์ต'}
+          </span>
+        </div>
+
+        {/* ─── TAB 1: DIME!-STYLE CUSTOM STRATEGY BUCKETS & PER-BUCKET AI ──── */}
+        {plansViewTab === 'buckets' && (
+          <StrategyBucketsSection
+            buckets={strategyBuckets}
+            holdings={holdings}
+            totalCashBase={totalCash}
+            totalPortfolioValue={totalValue}
+            baseCurrency={baseCurrency}
+            dcaBudget={cashInflow}
+            onSaveBuckets={handleSaveBuckets}
+            onSelectStock={(stock) => setSelectedStockDetail(stock)}
+            onQuickTrade={(tradeData) => {
+              setQuickAddInitialData({
+                symbol: tradeData.symbol,
+                assetType: tradeData.assetType || 'stock',
+                market: tradeData.market || 'US',
+              })
+              setQuickAddOpen(true)
+            }}
+          />
+        )}
+
+        {/* ─── TAB 2: ACTIVE PRESET SELECTOR & REBALANCE SIMULATOR ─────────── */}
+        {plansViewTab === 'rebalance' && (
+          <div className="space-y-6 animate-fade-in">
+            {activePreset && (
+              <div className="p-6 sm:p-8 rounded-3xl bg-[#12151C] border border-white/[0.08] space-y-6 shadow-2xl shadow-black/50">
             {/* Header of Active Preset */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-white/[0.08]">
               <div>
@@ -1496,6 +1538,8 @@ export default function PlansPage() {
             </div>
           )}
         </div>
+          </div>
+        )}
       </div>
 
       {/* ─── PRESET CREATE / EDIT MODAL ────────────────────────────────────── */}
