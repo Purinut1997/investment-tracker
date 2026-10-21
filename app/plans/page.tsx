@@ -40,13 +40,17 @@ import {
   PauseCircle,
 } from 'lucide-react'
 import CountUp from 'react-countup'
-import { SubAllocationDrillDown } from '@/components/plans/SubAllocationDrillDown'
 import { AiAdvisorDisplay } from '@/components/plans/AiAdvisorDisplay'
 import { StrategyBucketsSection } from '@/components/plans/StrategyBucketsSection'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
   extractStrategyBuckets,
   StrategyBucket,
+  computeBucketsWithHoldings,
+  calculateBucketRebalancePlan,
+  BucketRebalancePlan,
+  BucketRebalanceItem,
+  STRATEGY_TYPE_META,
 } from '@/lib/analytics/strategy-buckets'
 import {
   calculatePortfolioRebalance,
@@ -194,6 +198,28 @@ export default function PlansPage() {
     () => extractStrategyBuckets(activePreset?.rawTargetAllocation, holdings),
     [activePreset?.rawTargetAllocation, holdings]
   )
+
+  const { computedBuckets, unassignedHoldings } = useMemo(
+    () => computeBucketsWithHoldings(strategyBuckets, holdings, totalCash, totalValue),
+    [strategyBuckets, holdings, totalCash, totalValue]
+  )
+
+  const bucketRebalancePlan = useMemo(
+    () =>
+      calculateBucketRebalancePlan(
+        computedBuckets,
+        totalValue,
+        cashInflow,
+        rebalanceMode,
+        toleranceBand
+      ),
+    [computedBuckets, totalValue, cashInflow, rebalanceMode, toleranceBand]
+  )
+
+  const overallDriftScore = useMemo(() => {
+    const totalDev = computedBuckets.reduce((sum, b) => sum + Math.abs(b.deviationPercent), 0)
+    return Math.min(100, Math.round(totalDev * 5))
+  }, [computedBuckets])
 
   const [selectedStockDetail, setSelectedStockDetail] = useState<{
     symbol: string
@@ -455,30 +481,28 @@ export default function PlansPage() {
     }
   }
 
-  function handleQuickBuy(item: { ticker?: string; key: string; recommendedAmountBase: number }) {
+  function handleQuickBuyTicker(ticker: string, amount: number) {
     setQuickAddInitialData({
-      symbol: item.ticker || item.key,
-      assetType: item.key === 'CASH' ? 'cash' : 'stock',
-      amount: item.recommendedAmountBase,
+      symbol: ticker === 'CASH' ? 'CASH' : ticker,
+      assetType: ticker === 'CASH' ? 'cash' : 'stock',
+      amount,
       market: 'US',
     })
     setQuickAddOpen(true)
   }
 
   function handleCopyExecutionPlan() {
-    if (!rebalancePlan) return
+    if (!bucketRebalancePlan) return
     const lines = [
-      `📋 แผนปรับสมดุลพอร์ต: ${activePreset?.presetName}`,
+      `📋 แผนปรับสมดุลพอร์ตสไตล์ Dime!`,
       `โหมด: ${rebalanceMode === 'CASH_FLOW' ? 'เงินเติมใหม่ Smart DCA' : 'Full Rebalance'}`,
-      `งบเงินเติม: ฿${cashInflow.toLocaleString()}`,
+      `งบเงินเติมงวดนี้: ฿${cashInflow.toLocaleString()}`,
       `---------------------------------`,
-      ...rebalancePlan.items
-        .filter((i) => i.action !== 'HOLD')
+      ...bucketRebalancePlan.items
+        .filter((i) => i.action !== 'HOLD' || i.recommendedAmountBase > 0)
         .map(
           (i) =>
-            `• ${i.action === 'BUY' ? '🛒 ซื้อ' : '✂️ ขาย'} ${i.key}: ฿${i.recommendedAmountBase.toLocaleString()} ${
-              i.estimatedShares ? `(~${i.estimatedShares} หุ้น)` : ''
-            }`
+            `• ${i.emoji} ${i.action === 'BUY' ? '🛒 ซื้อเติม' : '✂️ ขายลดน้ำหนัก'} [${i.name}]: ฿${i.recommendedAmountBase.toLocaleString()} (สัดส่วนใหม่ ${i.postRebalancePercent}%)`
         ),
       `---------------------------------`,
       `*สร้างโดย Investment Tracker Intelligence`,
@@ -543,16 +567,16 @@ export default function PlansPage() {
               >
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    (rebalancePlan?.overallDriftScore ?? 0) > 40
+                    overallDriftScore > 40
                       ? 'bg-rose-500'
-                      : (rebalancePlan?.overallDriftScore ?? 0) > 15
+                      : overallDriftScore > 15
                       ? 'bg-amber-500'
                       : 'bg-emerald-500'
                   }`}
                 />
-                {(rebalancePlan?.overallDriftScore ?? 0) > 40
+                {overallDriftScore > 40
                   ? 'ต้องปรับสมดุล'
-                  : (rebalancePlan?.overallDriftScore ?? 0) > 15
+                  : overallDriftScore > 15
                   ? 'เริ่มเบี่ยงเบน'
                   : 'สมดุลดีเยี่ยม'}
               </span>
@@ -561,7 +585,7 @@ export default function PlansPage() {
             <div className="my-4">
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tight font-mono">
-                  {rebalancePlan?.overallDriftScore ?? 0}
+                  {overallDriftScore}
                 </span>
                 <span className="text-xs text-slate-500 font-mono">/ 100 คะแนนเบี่ยงเบน</span>
               </div>
@@ -571,9 +595,9 @@ export default function PlansPage() {
             </div>
 
             <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-              <span>รายการที่หลุดกรอบ:</span>
+              <span>ตะกร้าที่หลุดกรอบ:</span>
               <span className="font-semibold text-white">
-                {rebalancePlan?.items.filter((i) => i.status !== 'BALANCED').length ?? 0} รายการ
+                {computedBuckets.filter((b) => Math.abs(b.deviationPercent) > toleranceBand).length} ตะกร้า
               </span>
             </div>
           </div>
@@ -629,7 +653,7 @@ export default function PlansPage() {
               <p className="text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tight leading-none font-mono">
                 ฿
                 <CountUp
-                  end={rebalancePlan?.summaryNotes.totalBuyAmount ?? 0}
+                  end={bucketRebalancePlan?.totalBuyAmount ?? 0}
                   decimals={0}
                   separator=","
                   duration={1.2}
@@ -638,7 +662,7 @@ export default function PlansPage() {
               <p className="text-xs text-slate-400 mt-2">
                 {rebalanceMode === 'CASH_FLOW'
                   ? 'กระจายซื้อด้วยเงินเติมใหม่ (ไม่ต้องขาย)'
-                  : `ขายส่วนเกิน ฿${rebalancePlan?.summaryNotes.totalTrimAmount.toLocaleString()} ไปซื้อตัวขาด`}
+                  : `ขายส่วนเกิน ฿${(bucketRebalancePlan?.totalTrimAmount ?? 0).toLocaleString()} ไปซื้อตัวขาด`}
               </p>
             </div>
 
@@ -905,23 +929,28 @@ export default function PlansPage() {
                 </div>
               </div>
 
-              {/* ── ACTIONABLE REBALANCE EXECUTION SHEET ── */}
-              {rebalancePlan && rebalancePlan.items.length > 0 && (
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                      <span>ใบสรุปคำสั่งจัดสรรเพื่อปรับสมดุล (Actionable Order Sheet)</span>
-                      {rebalancePlan.hasTriggeredAlert && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                          มีสินทรัพย์หลุดกรอบเป้าหมาย
-                        </span>
-                      )}
-                    </span>
+              {/* ── ACTIONABLE REBALANCE EXECUTION SHEET FOR DIME! BUCKETS ── */}
+              {bucketRebalancePlan && (
+                <div className="space-y-4 pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                        <span>ใบสรุปคำสั่งจัดสรรเพื่อปรับสมดุลพอร์ตสไตล์ Dime! (Bucket Execution Sheet)</span>
+                        {bucketRebalancePlan.items.some((i) => i.status !== 'BALANCED') && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            มีตะกร้าหลุดกรอบเป้าหมาย
+                          </span>
+                        )}
+                      </span>
+                      <p className="text-xs text-slate-400">
+                        คำนวณกระจายเงินเติมตามเป้าหมายของแต่ละตะกร้ากลยุทธ์ เพื่อดึงพอร์ตกลับสู่สมดุล
+                      </p>
+                    </div>
 
                     <button
                       type="button"
                       onClick={handleCopyExecutionPlan}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-300 text-xs font-semibold transition-all cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-300 text-xs font-semibold transition-all cursor-pointer self-start sm:self-auto"
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                       <span>{copied ? 'คัดลอกแล้ว!' : 'คัดลอกรายการคำสั่ง'}</span>
@@ -932,71 +961,81 @@ export default function PlansPage() {
                     <table className="w-full text-left text-sm border-collapse">
                       <thead>
                         <tr className="border-b-2 border-white/[0.08] text-slate-200 font-bold uppercase text-xs tracking-wider bg-white/[0.03]">
-                          <th className="py-3.5 px-4 min-w-[170px]">สินทรัพย์ (Ticker / กลุ่ม)</th>
-                          <th className="py-3.5 px-3.5 text-right min-w-[120px]">สัดส่วนปัจจุบัน</th>
+                          <th className="py-3.5 px-4 min-w-[200px]">ตะกร้ากลยุทธ์ (Dime! Bucket)</th>
+                          <th className="py-3.5 px-3.5 text-right min-w-[120px]">สัดส่วนจริง</th>
                           <th className="py-3.5 px-3.5 text-right min-w-[100px]">เป้าหมาย</th>
                           <th className="py-3.5 px-3.5 text-center min-w-[120px]">สถานะ</th>
                           <th className="py-3.5 px-3.5 text-center min-w-[140px]">คำแนะนำ</th>
-                          <th className="py-3.5 px-3.5 text-right min-w-[130px]">จำนวนเงิน (฿)</th>
-                          <th className="py-3.5 px-3.5 text-right min-w-[120px]">ประมาณการหุ้น</th>
+                          <th className="py-3.5 px-3.5 text-right min-w-[140px]">จำนวนเงินจัดสรร (฿)</th>
+                          <th className="py-3.5 px-3.5 min-w-[200px]">หุ้นแนะนำในตะกร้า</th>
                           <th className="py-3.5 px-3.5 text-right min-w-[110px]">สัดส่วนใหม่</th>
                           <th className="py-3.5 px-4 text-center min-w-[110px]">ดำเนินการ</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.05] font-mono">
-                        {rebalancePlan.items.map((item) => {
+                        {bucketRebalancePlan.items.map((item) => {
                           const isBuy = item.action === 'BUY'
                           const isTrim = item.action === 'TRIM'
+                          const isHold = item.action === 'HOLD'
+
                           return (
                             <tr
-                              key={item.id}
+                              key={item.bucketId}
                               className={`transition-colors ${
-                                isBuy
-                                  ? 'bg-emerald-500/[0.03] hover:bg-emerald-500/[0.06]'
+                                isBuy && item.recommendedAmountBase > 0
+                                  ? 'bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]'
                                   : isTrim
-                                  ? 'bg-amber-500/[0.03] hover:bg-amber-500/[0.06]'
+                                  ? 'bg-amber-500/[0.04] hover:bg-amber-500/[0.07]'
                                   : 'hover:bg-white/[0.03]'
                               }`}
                             >
-                              <td className="py-3.5 px-4 font-sans">
+                              {/* Bucket info */}
+                              <td className="py-4 px-4 font-sans">
                                 <div className="flex items-center gap-2.5">
-                                  <span className="font-black text-white font-mono text-sm px-2.5 py-1 rounded-lg bg-white/[0.08] border border-white/[0.12]">
-                                    {item.key}
-                                  </span>
-                                  <span className="text-slate-200 text-sm font-semibold truncate max-w-[150px] font-sans">
-                                    {item.label}
-                                  </span>
+                                  <span className="text-xl shrink-0">{item.emoji}</span>
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-white text-sm truncate">
+                                      {item.name}
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                                      ฿{item.actualValueBase.toLocaleString()} (เป้า: ฿{item.targetValueBase.toLocaleString()})
+                                    </div>
+                                  </div>
                                 </div>
                               </td>
 
-                              <td className="py-3.5 px-3.5 text-right text-slate-200 font-bold text-sm">
-                                {item.currentWeight.toFixed(1)}%
+                              {/* Actual Weight */}
+                              <td className="py-4 px-3.5 text-right text-slate-200 font-bold text-sm">
+                                {item.actualPercent.toFixed(1)}%
                               </td>
 
-                              <td className="py-3.5 px-3.5 text-right font-black text-white text-sm">
-                                {item.targetWeight}%
+                              {/* Target Weight */}
+                              <td className="py-4 px-3.5 text-right font-black text-white text-sm">
+                                {item.targetPercent}%
                               </td>
 
-                              <td className="py-3.5 px-3.5 text-center font-sans">
-                                {item.status === 'TRIGGERED' ? (
-                                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                                    <AlertTriangle className="w-3 h-3" /> หลุดกรอบ
+                              {/* Status Badge */}
+                              <td className="py-4 px-3.5 text-center font-sans">
+                                {item.status === 'UNDERWEIGHT' ? (
+                                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                    <ArrowDownRight className="w-3 h-3" /> ขาดเป้า ({item.driftPercent}%)
                                   </span>
-                                ) : item.status === 'DRIFT' ? (
+                                ) : item.status === 'OVERWEIGHT' ? (
                                   <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-amber-500/15 text-amber-300 border border-amber-500/25">
-                                    เริ่มเบี่ยงเบน
+                                    <ArrowUpRight className="w-3 h-3" /> เกินเป้า (+{item.driftPercent}%)
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                                    <CheckCircle2 className="w-3 h-3" /> สมดุล
+                                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/25">
+                                    <CheckCircle2 className="w-3 h-3" /> สมดุลดี
                                   </span>
                                 )}
                               </td>
 
-                              <td className="py-3.5 px-3.5 text-center font-sans">
-                                {isBuy ? (
+                              {/* Action Badge */}
+                              <td className="py-4 px-3.5 text-center font-sans">
+                                {isBuy && item.recommendedAmountBase > 0 ? (
                                   <span className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 text-xs inline-flex items-center gap-1.5 shadow-xs">
-                                    <ArrowUpRight className="w-3.5 h-3.5" /> ซื้อเพิ่ม
+                                    <ArrowUpRight className="w-3.5 h-3.5" /> ซื้อเติม
                                   </span>
                                 ) : isTrim ? (
                                   <span className="px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30 text-xs inline-flex items-center gap-1.5 shadow-xs">
@@ -1004,43 +1043,75 @@ export default function PlansPage() {
                                   </span>
                                 ) : (
                                   <span className="px-2.5 py-1 rounded-lg bg-white/[0.05] text-slate-300 font-semibold text-xs">
-                                    คงสัดส่วน (Hold)
+                                    {cashInflow > 0 && item.status === 'OVERWEIGHT'
+                                      ? 'ชะลอเติม (สัดส่วนเกิน)'
+                                      : 'คงสัดส่วน (Hold)'}
                                   </span>
                                 )}
                               </td>
 
-                              <td className="py-3.5 px-3.5 text-right">
+                              {/* Recommended Amount */}
+                              <td className="py-4 px-3.5 text-right">
                                 {item.recommendedAmountBase > 0 ? (
                                   <span
-                                    className={`font-black text-sm sm:text-base ${
+                                    className={`font-black text-base ${
                                       isBuy ? 'text-emerald-400' : 'text-amber-400'
                                     }`}
                                   >
                                     ฿{item.recommendedAmountBase.toLocaleString()}
                                   </span>
                                 ) : (
-                                  <span className="text-slate-500">—</span>
+                                  <span className="text-slate-500 text-xs">—</span>
                                 )}
                               </td>
 
-                              <td className="py-3.5 px-3.5 text-right text-slate-200 font-bold text-sm">
-                                {item.estimatedShares ? `~${item.estimatedShares} หุ้น` : '—'}
+                              {/* Recommended Tickers to buy */}
+                              <td className="py-4 px-3.5 font-sans">
+                                {item.recommendedTickers.length > 0 ? (
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {item.recommendedTickers.map((rt) => (
+                                      <button
+                                        key={rt.ticker}
+                                        type="button"
+                                        onClick={() => handleQuickBuyTicker(rt.ticker, rt.suggestedAmount)}
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#181C26] hover:bg-emerald-500/20 border border-white/[0.08] hover:border-emerald-500/30 text-slate-200 hover:text-emerald-300 text-xs font-mono transition-all cursor-pointer"
+                                        title={`กดเพื่อบันทึกซื้อ ${rt.ticker} จำนวน ~฿${rt.suggestedAmount.toLocaleString()}`}
+                                      >
+                                        <span className="font-bold">{rt.ticker}</span>
+                                        <span className="text-emerald-400 text-[10px]">
+                                          ~฿{rt.suggestedAmount.toLocaleString()}
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-slate-500 font-mono">
+                                    {isHold ? 'สัดส่วนคงที่แล้ว' : '—'}
+                                  </span>
+                                )}
                               </td>
 
-                              <td className="py-3.5 px-3.5 text-right">
+                              {/* Post Rebalance Percent */}
+                              <td className="py-4 px-3.5 text-right">
                                 <span className="text-indigo-300 font-black text-sm">
-                                  {item.postRebalanceWeight.toFixed(1)}%
+                                  {item.postRebalancePercent.toFixed(1)}%
                                 </span>
                               </td>
 
-                              <td className="py-3.5 px-4 text-center font-sans">
-                                {isBuy && item.type === 'TICKER' ? (
+                              {/* Action Button */}
+                              <td className="py-4 px-4 text-center font-sans">
+                                {isBuy && item.recommendedAmountBase > 0 && item.recommendedTickers.length > 0 ? (
                                   <button
                                     type="button"
-                                    onClick={() => handleQuickBuy(item)}
+                                    onClick={() =>
+                                      handleQuickBuyTicker(
+                                        item.recommendedTickers[0].ticker,
+                                        item.recommendedAmountBase
+                                      )
+                                    }
                                     className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all cursor-pointer shadow-md active:scale-95"
                                   >
-                                    + บันทึกซื้อ
+                                    + ซื้อ {item.recommendedTickers[0].ticker}
                                   </button>
                                 ) : (
                                   <span className="text-xs text-slate-500">—</span>
@@ -1053,282 +1124,16 @@ export default function PlansPage() {
                     </table>
                   </div>
 
-                  {rebalancePlan.summaryNotes.taxSavingsNote && (
-                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
+                  {rebalanceMode === 'CASH_FLOW' && (
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>{rebalancePlan.summaryNotes.taxSavingsNote}</span>
+                      <span>
+                        โหมด Smart DCA ใช้เงินเติมใหม่กระจายซื้อเฉพาะตะกร้าที่ขาดเป้าหมายโดยไม่ต้องขายสินทรัพย์เดิม ช่วยประหยัดภาษีและค่าคอมมิชชัน
+                      </span>
                     </div>
                   )}
                 </div>
               )}
-            </div>
-
-            {/* ══════════════════════════════════════════════════════════════
-                EXECUTIVE REBALANCE MATRIX (INSTITUTIONAL TABLE)
-            ══════════════════════════════════════════════════════════════ */}
-            <div className="space-y-4 pt-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
-                    การเปรียบเทียบสัดส่วนเป้าหมายกับพอร์ตปัจจุบัน (Allocation Drift Matrix)
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-normal">
-                      Institutional View
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    ตารางเมทริกซ์วิเคราะห์สัดส่วนจริงเทียบเป้าหมาย พร้อมคำแนะนำปรับสมดุลและระบบเจาะลึกสินทรัพย์รายตัว
-                  </p>
-                </div>
-              </div>
-
-              {/* Matrix Table Container */}
-              <div className="rounded-2xl bg-[#141822] border border-white/[0.08] shadow-2xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b-2 border-white/[0.08] bg-white/[0.03] text-slate-200 font-bold text-xs uppercase tracking-wider">
-                        <th className="py-4 px-4 min-w-[200px]">กลุ่มสินทรัพย์</th>
-                        <th className="py-4 px-4 min-w-[240px]">จริง vs เป้าหมาย (%)</th>
-                        <th className="py-4 px-4 text-right min-w-[130px]">มูลค่าปัจจุบัน</th>
-                        <th className="py-4 px-4 text-center min-w-[120px]">ส่วนต่าง (Drift)</th>
-                        <th className="py-4 px-4 min-w-[240px]">สถานะ & คำแนะนำ</th>
-                        <th className="py-4 px-4 text-center min-w-[120px]">เจาะลึกสินทรัพย์</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.06]">
-                      {Object.entries(activePreset.targetAllocation)
-                        .filter(([key]) => !key.startsWith('_'))
-                        .map(([key, targetPct]) => {
-                          const upperKey = key.toUpperCase()
-                          const cfg =
-                            CATEGORY_CONFIG[upperKey] ?? {
-                              label: key,
-                              emoji: '📊',
-                              color: 'text-indigo-400',
-                              barColor: 'bg-indigo-500',
-                              bg: 'bg-indigo-500/10 border-indigo-500/20',
-                            }
-
-                          // Find actual percent either from ticker or category
-                          let actualPct = actualAllocation[upperKey] ?? 0
-                          if (data?.actualByTicker && data.actualByTicker[upperKey] !== undefined) {
-                            actualPct = data.actualByTicker[upperKey]
-                          }
-
-                          const diff = actualPct - targetPct
-                          const isOver = diff > 0
-                          const isUnder = diff < 0
-                          const absDiff = Math.abs(diff)
-                          const diffAmount = (absDiff / 100) * totalValue
-                          const isOnTarget = absDiff <= toleranceBand
-
-                          // Holdings matching this category
-                          const matchingHoldings = holdings.filter((h: any) => {
-                            const hMarket = (h.market || '').toUpperCase()
-                            const hType = (h.assetType || '').toUpperCase()
-                            if (upperKey === 'US') return hMarket === 'US' || (!hMarket && hType !== 'CRYPTO' && hType !== 'GOLD')
-                            if (upperKey === 'TH') return hMarket === 'TH' || h.ticker.endsWith('.BK')
-                            if (upperKey === 'CRYPTO') return hType === 'CRYPTO'
-                            if (upperKey === 'GOLD') return hType === 'GOLD'
-                            if (upperKey === 'CASH') return false
-                            return hMarket === upperKey || hType === upperKey
-                          })
-
-                          const categoryValue =
-                            upperKey === 'CASH'
-                              ? totalCash
-                              : matchingHoldings.reduce((sum: number, h: any) => sum + (h.currentValueBase || 0), 0)
-
-                          const isExpanded = !!expandedCategories[key] || !!expandedCategories[upperKey]
-
-                          return (
-                            <React.Fragment key={key}>
-                              <tr
-                                className={`transition-all hover:bg-white/[0.03] ${
-                                  isExpanded ? 'bg-indigo-950/30' : ''
-                                }`}
-                              >
-                                {/* Asset Class */}
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-2xl shrink-0">{cfg.emoji}</span>
-                                    <div>
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-black text-white text-base tracking-wide">{key}</span>
-                                        <span className="text-xs sm:text-sm text-slate-300 font-semibold font-sans">
-                                          {cfg.label}
-                                        </span>
-                                      </div>
-                                      <div className="mt-1">
-                                        {absDiff > toleranceBand * 1.7 ? (
-                                          <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                                            หลุดกรอบเป้าหมาย
-                                          </span>
-                                        ) : !isOnTarget ? (
-                                          <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-300 border border-amber-500/25">
-                                            เริ่มเบี่ยงเบน
-                                          </span>
-                                        ) : (
-                                          <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                                            สมดุลดี
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </td>
-
-                                {/* Actual vs Target with Visual Target Marker Pin */}
-                                <td className="py-4 px-4 min-w-[240px]">
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-xs sm:text-sm font-mono">
-                                      <div>
-                                        <span className="text-slate-300 text-xs font-semibold mr-1.5">จริง:</span>
-                                        <span className={`font-black text-sm sm:text-base ${cfg.color}`}>
-                                          {actualPct.toFixed(1)}%
-                                        </span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-300 text-xs font-semibold mr-1.5">เป้า:</span>
-                                        <span className="text-white font-bold text-sm sm:text-base">
-                                          {targetPct}%
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    {/* Unified Progress Bar with Glowing Target Pin */}
-                                    <div className="relative h-3 w-full bg-slate-800 rounded-full overflow-hidden shadow-inner">
-                                      {/* Actual Fill */}
-                                      <div
-                                        className={`h-full ${cfg.barColor} rounded-full transition-all duration-500`}
-                                        style={{ width: `${Math.min(100, actualPct)}%` }}
-                                      />
-                                      {/* Target Pin Marker */}
-                                      {targetPct > 0 && targetPct < 100 && (
-                                        <div
-                                          className="absolute top-0 bottom-0 w-1.5 bg-white shadow-[0_0_10px_rgba(255,255,255,1)] z-10 pointer-events-none"
-                                          style={{ left: `calc(${targetPct}% - 3px)` }}
-                                          title={`เป้าหมาย: ${targetPct}%`}
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-
-                                {/* Portfolio Value */}
-                                <td className="py-4 px-4 text-right font-mono">
-                                  <div className="font-black text-white text-base">
-                                    ฿{Math.round(categoryValue).toLocaleString()}
-                                  </div>
-                                  <div className="text-xs text-slate-300 font-medium font-sans mt-0.5">
-                                    {matchingHoldings.length} รายการ
-                                  </div>
-                                </td>
-
-                                {/* Variance (Drift) */}
-                                <td className="py-4 px-4 text-center">
-                                  <span
-                                    className={`inline-block px-3 py-1 rounded-xl text-sm font-mono font-black ${
-                                      isOnTarget
-                                        ? 'text-slate-200 bg-white/[0.05] border border-white/[0.1]'
-                                        : isOver
-                                        ? 'text-amber-300 bg-amber-500/20 border border-amber-500/35'
-                                        : 'text-blue-300 bg-blue-500/20 border border-blue-500/35'
-                                    }`}
-                                  >
-                                    {diff > 0 ? '+' : ''}
-                                    {diff.toFixed(1)}%
-                                  </span>
-                                </td>
-
-                                {/* Action Recommendation */}
-                                <td className="py-4 px-4">
-                                  {absDiff > toleranceBand && totalValue > 0 ? (
-                                    isOver ? (
-                                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 text-xs sm:text-sm font-semibold">
-                                        <PauseCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                                        <span>
-                                          เกินเป้า ~฿{Math.round(diffAmount).toLocaleString()} (ชะลอเติม)
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-xs sm:text-sm font-semibold">
-                                        <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
-                                        <span>
-                                          ขาดเป้า ~฿{Math.round(diffAmount).toLocaleString()} (เน้นเติม)
-                                        </span>
-                                      </div>
-                                    )
-                                  ) : (
-                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-xs sm:text-sm font-semibold">
-                                      <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                                      <span>สัดส่วนสมดุลดี (DCA ตามปกติ)</span>
-                                    </div>
-                                  )}
-                                </td>
-
-                                {/* Drill-Down Action Button */}
-                                <td className="py-4 px-4 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleExpandCategory(key)}
-                                    className={`px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 mx-auto ${
-                                      isExpanded
-                                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
-                                        : 'bg-white/[0.06] hover:bg-indigo-600/25 text-indigo-300 hover:text-white border border-indigo-500/30'
-                                    }`}
-                                  >
-                                    <span>
-                                      {isExpanded ? 'ปิด' : `ดูย่อย (${matchingHoldings.length})`}
-                                    </span>
-                                    {isExpanded ? (
-                                      <ChevronUp className="w-4 h-4" />
-                                    ) : (
-                                      <ChevronDown className="w-4 h-4" />
-                                    )}
-                                  </button>
-                                </td>
-                              </tr>
-
-                              {/* Expandable Sub-Allocation Drill-Down Row */}
-                              {isExpanded && (
-                                <tr className="bg-[#0e111a] border-b border-indigo-500/30">
-                                  <td
-                                    colSpan={6}
-                                    className="p-3 sm:p-5 bg-gradient-to-b from-[#131726]/90 via-[#0e121e] to-[#0a0d16]"
-                                  >
-                                    <div className="rounded-2xl border border-indigo-500/25 p-2 sm:p-4 bg-black/40 shadow-inner">
-                                      <SubAllocationDrillDown
-                                        categoryKey={key}
-                                        categoryLabel={cfg.label}
-                                        categoryEmoji={cfg.emoji}
-                                        holdings={holdings}
-                                        categoryTotalValue={categoryValue}
-                                        portfolioTotalValue={totalValue}
-                                        baseCurrency={baseCurrency}
-                                        targetCategoryPct={targetPct}
-                                        actualCategoryPct={actualPct}
-                                        defaultDcaBudget={
-                                          Number(activePreset.monthlyContribution) || 5000
-                                        }
-                                        savedSubTargets={
-                                          activePreset.subTargets?.[upperKey] || {}
-                                        }
-                                        onSaveSubTargets={(newSub) =>
-                                          handleSaveSubTargets(key, newSub)
-                                        }
-                                      />
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          )
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
             </div>
           </div>
         )}

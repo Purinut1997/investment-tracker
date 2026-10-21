@@ -365,3 +365,180 @@ export function computeBucketsWithHoldings(
     tickerToBucketMap,
   }
 }
+
+export interface BucketRebalanceItem {
+  bucketId: string
+  name: string
+  emoji: string
+  strategyType: BucketStrategyType
+  targetPercent: number
+  actualPercent: number
+  actualValueBase: number
+  targetValueBase: number
+  driftPercent: number
+  status: 'BALANCED' | 'UNDERWEIGHT' | 'OVERWEIGHT'
+  action: 'BUY' | 'TRIM' | 'HOLD'
+  recommendedAmountBase: number
+  postRebalanceValueBase: number
+  postRebalancePercent: number
+  recommendedTickers: Array<{ ticker: string; name?: string; suggestedAmount: number }>
+}
+
+export interface BucketRebalancePlan {
+  mode: 'CASH_FLOW' | 'FULL_REBALANCE'
+  totalCurrentValue: number
+  cashInflow: number
+  totalPostValue: number
+  totalBuyAmount: number
+  totalTrimAmount: number
+  items: BucketRebalanceItem[]
+}
+
+export function calculateBucketRebalancePlan(
+  computedBuckets: ComputedBucketItem[],
+  totalPortfolioValue: number,
+  cashInflow = 0,
+  mode: 'CASH_FLOW' | 'FULL_REBALANCE' = 'CASH_FLOW',
+  toleranceBand = 2.0
+): BucketRebalancePlan {
+  const effectiveInflow = Math.max(0, cashInflow)
+  const totalPostValue =
+    mode === 'CASH_FLOW'
+      ? totalPortfolioValue + effectiveInflow
+      : Math.max(1, totalPortfolioValue + effectiveInflow)
+
+  // 1. Calculate target values and initial deficits
+  const deficits: Record<string, number> = {}
+  let totalDeficit = 0
+
+  for (const b of computedBuckets) {
+    const targetValue = (b.targetPercent / 100) * totalPostValue
+    const diff = targetValue - b.actualValueBase
+    if (diff > 0) {
+      deficits[b.id] = diff
+      totalDeficit += diff
+    } else {
+      deficits[b.id] = 0
+    }
+  }
+
+  let totalBuyAmount = 0
+  let totalTrimAmount = 0
+
+  const items: BucketRebalanceItem[] = computedBuckets.map((b) => {
+    const targetValue = (b.targetPercent / 100) * totalPostValue
+    const drift = Number((b.actualPercent - b.targetPercent).toFixed(1))
+
+    let status: 'BALANCED' | 'UNDERWEIGHT' | 'OVERWEIGHT' = 'BALANCED'
+    if (drift < -toleranceBand) {
+      status = 'UNDERWEIGHT'
+    } else if (drift > toleranceBand) {
+      status = 'OVERWEIGHT'
+    }
+
+    let action: 'BUY' | 'TRIM' | 'HOLD' = 'HOLD'
+    let recommendedAmountBase = 0
+
+    if (mode === 'CASH_FLOW') {
+      if (effectiveInflow > 0) {
+        if (totalDeficit > 0) {
+          const deficit = deficits[b.id] || 0
+          if (deficit > 0) {
+            // Allocate cash proportional to deficit
+            recommendedAmountBase = Math.round(effectiveInflow * (deficit / totalDeficit))
+            if (recommendedAmountBase > 0) {
+              action = 'BUY'
+              totalBuyAmount += recommendedAmountBase
+            }
+          }
+        } else {
+          // If all buckets balanced, allocate cash according to target weight
+          recommendedAmountBase = Math.round(effectiveInflow * (b.targetPercent / 100))
+          if (recommendedAmountBase > 0) {
+            action = 'BUY'
+            totalBuyAmount += recommendedAmountBase
+          }
+        }
+      }
+    } else {
+      // FULL_REBALANCE mode
+      if (b.actualValueBase < targetValue) {
+        action = 'BUY'
+        recommendedAmountBase = Math.round(targetValue - b.actualValueBase)
+        totalBuyAmount += recommendedAmountBase
+      } else if (b.actualValueBase > targetValue && status === 'OVERWEIGHT') {
+        action = 'TRIM'
+        recommendedAmountBase = Math.round(b.actualValueBase - targetValue)
+        totalTrimAmount += recommendedAmountBase
+      }
+    }
+
+    const postValue =
+      action === 'BUY'
+        ? b.actualValueBase + recommendedAmountBase
+        : action === 'TRIM'
+        ? Math.max(0, b.actualValueBase - recommendedAmountBase)
+        : b.actualValueBase
+
+    const postPercent =
+      totalPostValue > 0 ? Number(((postValue / totalPostValue) * 100).toFixed(1)) : 0
+
+    // Suggest which tickers to buy in this bucket
+    const recommendedTickers: Array<{ ticker: string; name?: string; suggestedAmount: number }> = []
+    if (action === 'BUY' && recommendedAmountBase > 0) {
+      if (b.strategyType === 'CASH') {
+        recommendedTickers.push({
+          ticker: 'CASH',
+          name: 'พักเงินสดสำรองในบัญชี',
+          suggestedAmount: recommendedAmountBase,
+        })
+      } else {
+        const tickersToFund =
+          b.holdings.length > 0
+            ? b.holdings.map((h) => ({ ticker: h.ticker, name: h.assetName }))
+            : b.tickers
+                .filter((t) => t.toUpperCase() !== 'CASH')
+                .map((t) => ({ ticker: t, name: t }))
+
+        if (tickersToFund.length > 0) {
+          const perTicker = Math.round(recommendedAmountBase / tickersToFund.length)
+          tickersToFund.forEach((tf) => {
+            recommendedTickers.push({
+              ticker: tf.ticker,
+              name: tf.name,
+              suggestedAmount: perTicker,
+            })
+          })
+        }
+      }
+    }
+
+    return {
+      bucketId: b.id,
+      name: b.name,
+      emoji: b.emoji,
+      strategyType: b.strategyType,
+      targetPercent: b.targetPercent,
+      actualPercent: b.actualPercent,
+      actualValueBase: b.actualValueBase,
+      targetValueBase: Math.round(targetValue),
+      driftPercent: drift,
+      status,
+      action,
+      recommendedAmountBase,
+      postRebalanceValueBase: postValue,
+      postRebalancePercent: postPercent,
+      recommendedTickers,
+    }
+  })
+
+  return {
+    mode,
+    totalCurrentValue: totalPortfolioValue,
+    cashInflow: effectiveInflow,
+    totalPostValue,
+    totalBuyAmount,
+    totalTrimAmount,
+    items,
+  }
+}

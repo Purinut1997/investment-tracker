@@ -56,7 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         label: 'ภาพรวม & แอ็กชันวันนี้',
         href: '/dashboard',
-        matchPrefixes: ['/dashboard', '/performance', '/dividends', '/daily-plan'],
+        matchPrefixes: ['/dashboard', '/performance', '/dividends'],
         icon: LayoutDashboard,
       },
       {
@@ -93,7 +93,7 @@ const HUB_SUB_TABS: Array<{
   tabs: Array<{ label: string; href: string; icon: React.ComponentType<{ className?: string }>; badge?: string }>
 }> = [
   {
-    hubPrefixes: ['/dashboard', '/performance', '/dividends', '/daily-plan'],
+    hubPrefixes: ['/dashboard', '/performance', '/dividends'],
     tabs: [
       { label: 'ภาพรวม & สัญญาณวันนี้', href: '/dashboard', icon: LayoutDashboard },
       { label: 'กำไรรายตัว (รวมขายแล้ว)', href: '/performance', icon: BarChart3 },
@@ -603,7 +603,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {[
           {
             href: '/dashboard',
-            match: ['/dashboard', '/performance', '/dividends', '/daily-plan'],
+            match: ['/dashboard', '/performance', '/dividends'],
             icon: LayoutDashboard,
             label: 'ภาพรวม',
           },

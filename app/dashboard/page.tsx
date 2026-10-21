@@ -657,10 +657,10 @@ export default function DashboardPage() {
                 <ArrowRight className="w-3 h-3" />
               </Link>
               <Link
-                href="/daily-plan"
+                href="/plans"
                 className="text-slate-400 hover:text-slate-200 font-medium flex items-center gap-1 transition-colors"
               >
-                <span>แผนลงทุนรายวัน</span>
+                <span>จัดพอร์ต &amp; ปรับสมดุล</span>
                 <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
@@ -1206,224 +1206,119 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Right: Interactive Asset Allocation & Rebalance Monitor (5 Columns) */}
+          {/* Right: Cash Flow Stream & Upcoming Catalysts (5 Columns) */}
           <div className="lg:col-span-5 rounded-3xl bg-[#121620] border border-white/[0.08] p-6 flex flex-col justify-between shadow-xl shadow-black/25">
-            <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-start justify-between gap-2 mb-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base sm:text-lg font-bold text-white">สัดส่วนสินทรัพย์</h2>
-                  {activePreset && allocationView === 'assets' && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                      จริง vs เป้าหมาย
-                    </span>
-                  )}
+                  <h2 className="text-base sm:text-lg font-bold text-white">กระแสเงินสด &amp; กำหนดการสำคัญ</h2>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    Cash Flow &amp; Catalysts
+                  </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  ชี้หรือคลิกที่รายการเพื่อดูรายละเอียดรายตัว
+                  ติดตามเงินปันผลรับ, กำไรขายล็อก และรอบปันผล XD สำคัญ
                 </p>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                <div className="flex bg-[#171C28] p-0.5 rounded-xl border border-white/[0.08] text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAllocationView('assets')
-                      setActivePieIndex(null)
-                    }}
-                    className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                      allocationView === 'assets'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    รายหุ้น
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAllocationView('classes')
-                      setActivePieIndex(null)
-                    }}
-                    className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                      allocationView === 'classes'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    หมวดสินทรัพย์
-                  </button>
+              <Link
+                href="/dividends"
+                className="px-2.5 py-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-semibold text-slate-300 hover:text-white transition-all flex items-center gap-1 shrink-0"
+              >
+                <span>ปฏิทิน XD</span>
+                <ArrowRight className="w-3 h-3 text-slate-400" />
+              </Link>
+            </div>
+
+            {/* Middle: 2 Cash Flow Metric Cards + Upcoming Catalyst Chips */}
+            <div className="space-y-3 my-auto py-2">
+              <div className="grid grid-cols-2 gap-3">
+                {/* Dividends Card */}
+                <div className="p-3.5 rounded-2xl bg-[#161B28] border border-white/[0.06] space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-sans">
+                    <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>ปันผลรับสะสม</span>
+                  </div>
+                  <div className="text-lg sm:text-xl font-black text-white font-mono">
+                    ฿{Number(totalDividends).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-[10px] text-emerald-400 font-medium">
+                    {totalDividendsUSD > 0 ? `~$${totalDividendsUSD.toFixed(2)} USD` : 'กระแสเงินสดสุทธิ'}
+                  </div>
                 </div>
+
+                {/* Realized Sales Card */}
+                <div className="p-3.5 rounded-2xl bg-[#161B28] border border-white/[0.06] space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-sans">
+                    <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>กำไรขายล็อกแล้ว</span>
+                  </div>
+                  <div className="text-lg sm:text-xl font-black text-white font-mono">
+                    {totalRealizedGainUSD > 0
+                      ? `$${totalRealizedGainUSD.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+                      : `฿${Math.round(totalRealizedGain).toLocaleString()}`}
+                  </div>
+                  <div className="text-[10px] text-cyan-400 font-medium">
+                    Realized Gains ปิดรอบ
+                  </div>
+                </div>
+              </div>
+
+              {/* Upcoming Catalysts Section */}
+              <div className="p-3.5 rounded-2xl bg-[#141824] border border-white/[0.06] space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    รอบสำคัญของหุ้นในพอร์ต (Catalysts)
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono">30 วันข้างหน้า</span>
+                </div>
+
+                {upcomingCatalysts.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {upcomingCatalysts.map((cat: any, i: number) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/25 shrink-0">
+                            {cat.badge || 'ปันผล'}
+                          </span>
+                          <span className="text-white font-medium truncate font-sans text-xs">
+                            {cat.title}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 shrink-0 font-mono">
+                          {cat.subtitle ? cat.subtitle.slice(0, 16) : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-2.5 text-center text-xs text-slate-400">
+                    ไม่มีรอบ XD หรือรายงานงบด่วนในสัปดาห์นี้ พอร์ตดำเนินตามกลยุทธ์ปกติ
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Side-by-Side Donut + Scrollable Asset Bars */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center my-auto pt-2">
-              {/* Donut Chart (5 cols) */}
-              <div className="sm:col-span-5 h-44 w-full flex items-center justify-center relative">
-                {(allocationView === 'classes' ? assetClassAllocation : allocationData).length >
-                0 ? (
-                  <>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={
-                            allocationView === 'classes' ? assetClassAllocation : allocationData
-                          }
-                          innerRadius={52}
-                          outerRadius={72}
-                          paddingAngle={3}
-                          cornerRadius={4}
-                          dataKey="value"
-                          stroke="none"
-                          onMouseEnter={(_, index) => setActivePieIndex(index)}
-                          onMouseLeave={() => setActivePieIndex(null)}
-                        >
-                          {(allocationView === 'classes'
-                            ? assetClassAllocation
-                            : allocationData
-                          ).map((entry: any, index: number) => {
-                            const isSelected = activePieIndex === index
-                            return (
-                              <Cell
-                                key={`cell-${index}`}
-                                fill={entry.color}
-                                stroke={isSelected ? '#ffffff' : 'rgba(15, 23, 42, 0.8)'}
-                                strokeWidth={isSelected ? 2 : 1}
-                                style={{
-                                  outline: 'none',
-                                  cursor: 'pointer',
-                                  transition: 'all 200ms ease',
-                                  opacity: activePieIndex === null || isSelected ? 1 : 0.35,
-                                }}
-                              />
-                            )
-                          })}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
-                      {activePieIndex !== null &&
-                      (allocationView === 'classes' ? assetClassAllocation : allocationData)[
-                        activePieIndex
-                      ] ? (
-                        <div className="flex flex-col items-center">
-                          <span className="text-[11px] font-bold uppercase text-slate-300 truncate max-w-[95px]">
-                            {
-                              (allocationView === 'classes'
-                                ? assetClassAllocation
-                                : allocationData)[activePieIndex].name
-                            }
-                          </span>
-                          <span className="text-xl font-black font-mono text-white leading-none mt-0.5">
-                            {
-                              (allocationView === 'classes'
-                                ? assetClassAllocation
-                                : allocationData)[activePieIndex].percent
-                            }
-                            %
-                          </span>
-                          <span className="text-[10px] font-mono text-indigo-300 mt-0.5">
-                            ฿
-                            {(allocationView === 'classes'
-                              ? assetClassAllocation
-                              : allocationData)[activePieIndex].value.toLocaleString()}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center">
-                          <span className="text-[10px] uppercase font-semibold text-slate-400">
-                            {allocationView === 'classes' ? 'พอร์ตรวม' : 'หุ้นรวม'}
-                          </span>
-                          <span className="text-base font-extrabold text-white font-mono mt-0.5">
-                            ฿
-                            {Math.round(
-                              allocationView === 'classes' ? netWorth : totalValue
-                            ).toLocaleString()}
-                          </span>
-                          <span className="text-[10px] text-indigo-300 font-mono">
-                            {
-                              (allocationView === 'classes'
-                                ? assetClassAllocation
-                                : allocationData
-                              ).length
-                            }{' '}
-                            รายการ
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-xs text-slate-500">ไม่มีข้อมูล</div>
-                )}
-              </div>
-
-              {/* Scrollable List (7 cols) */}
-              <div className="sm:col-span-7 space-y-1.5 max-h-[250px] overflow-y-auto pr-1">
-                {(allocationView === 'classes' ? assetClassAllocation : allocationData).map(
-                  (item: any, i: number) => {
-                    const isActive = activePieIndex === i
-                    return (
-                      <div
-                        key={item.name}
-                        onMouseEnter={() => setActivePieIndex(i)}
-                        onMouseLeave={() => setActivePieIndex(null)}
-                        onClick={() =>
-                          allocationView === 'assets' &&
-                          setSelectedStock({
-                            symbol: item.name,
-                            name: item.fullName,
-                            market: item.market,
-                          })
-                        }
-                        className={`p-2.5 rounded-xl transition-all border ${
-                          allocationView === 'assets' ? 'cursor-pointer' : ''
-                        } ${
-                          isActive
-                            ? 'bg-[#1D2333] border-indigo-500/40 shadow-md'
-                            : 'bg-[#171C28]/70 hover:bg-[#1B2130] border-white/[0.05]'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: item.color }}
-                            />
-                            <span className="font-bold text-white truncate">{item.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0 font-mono">
-                            <span className="text-slate-300 text-xs">
-                              ฿{item.value.toLocaleString()}
-                            </span>
-                            <span
-                              className="text-xs font-bold px-1.5 py-0.5 rounded"
-                              style={{
-                                backgroundColor: `${item.color}22`,
-                                color: item.color,
-                              }}
-                            >
-                              {item.percent}%
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="w-full h-1.5 bg-[#0D1017] rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-300"
-                            style={{
-                              width: `${Math.min(item.percent, 100)}%`,
-                              backgroundColor: item.color,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  }
-                )}
-              </div>
+            {/* Bottom Actions */}
+            <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs">
+              <Link
+                href="/performance"
+                className="text-indigo-300 hover:text-white font-medium flex items-center gap-1 transition-colors"
+              >
+                <span>ดูผลงานรายตัว (Performance)</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+              <Link
+                href="/transactions"
+                className="text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
+              >
+                <span>ประวัติธุรกรรม</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
           </div>
         </div>
