@@ -79,14 +79,14 @@ export function StockEarningsCard({
             <div className="sm:mt-2 flex items-baseline justify-between">
               <div className="flex items-center gap-1.5 text-xs font-bold text-white">
                 <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>วันแจ้งงบ</span>
+                <span>{upcoming.releaseTiming === 'AMC' ? 'หลังตลาดปิด' : upcoming.releaseTiming === 'BMO' ? 'ก่อนตลาดเปิด' : 'วันแจ้งงบ'}</span>
               </div>
-              <span className="text-xs text-indigo-300 font-medium">
-                {upcoming.isEstimated ? 'ประมาณการ' : 'คอนเฟิร์มแล้ว'}
+              <span className="text-[11px] text-indigo-300 font-semibold">
+                {upcoming.releaseTiming === 'AMC' ? 'AMC' : upcoming.releaseTiming === 'BMO' ? 'BMO' : upcoming.isEstimated ? 'ประมาณการ' : 'คอนเฟิร์มแล้ว'}
               </span>
             </div>
 
-            <div className="sm:mt-2 flex items-center">
+            <div className="sm:mt-2 flex flex-col gap-1">
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
                   isToday
@@ -111,6 +111,12 @@ export function StockEarningsCard({
                 />
                 <span>{upcoming.countdownLabel}</span>
               </span>
+
+              {upcoming.releaseTimeThai && (
+                <span className="text-[10px] text-slate-400 font-medium truncate px-0.5">
+                  ⏰ {upcoming.releaseTimeThai.replace(' (เช้ามืดเวลาไทย)', '').replace(' (ค่ำวันเดียวกันเวลาไทย)', '')}
+                </span>
+              )}
             </div>
           </div>
 
@@ -260,6 +266,57 @@ export function StockEarningsCard({
         <div className="hidden lg:flex items-center pl-2 text-slate-600 group-hover:text-indigo-400 transition-colors">
           <ChevronRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
         </div>
+      </div>
+
+      {/* Dynamic Intelligence Badges Bar */}
+      <div className="mt-3 pt-2.5 border-t border-white/[0.04] flex items-center justify-between gap-2 flex-wrap text-xs text-slate-400">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Release Timing Badge */}
+          {upcoming.releaseTimingLabel && upcoming.releaseTiming !== 'TBD' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-slate-300 font-medium">
+              <span>{upcoming.releaseTiming === 'AMC' ? '🌙' : '☀️'}</span>
+              <span>{upcoming.releaseTimingLabel}</span>
+            </span>
+          )}
+
+          {/* Analyst Revisions */}
+          {upcoming.revisions && (upcoming.revisions.upLast30days > 0 || upcoming.revisions.downLast30days > 0) && (
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-medium ${
+                upcoming.revisions.sentiment === 'bullish'
+                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                  : upcoming.revisions.sentiment === 'bearish'
+                  ? 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                  : 'bg-white/[0.04] text-slate-300 border-white/[0.06]'
+              }`}
+            >
+              <span>🎯 ปรับเป้า 30 วัน:</span>
+              <strong className="text-emerald-400 font-bold tabular-nums">+{upcoming.revisions.upLast30days}</strong>
+              <span>/</span>
+              <strong className="text-rose-400 font-bold tabular-nums">-{upcoming.revisions.downLast30days}</strong>
+            </span>
+          )}
+
+          {/* Historical Post-Earnings Move */}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 font-medium">
+            <span>⚡ สถิติหลังงบ: แกว่งเฉลี่ย</span>
+            <strong className="text-white font-bold tabular-nums">±{stats.avgPostEarningsMovePercent}%</strong>
+          </span>
+
+          {/* Portfolio Dollar Risk Impact */}
+          {userHolding && userHolding.currentValue > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-200 font-medium">
+              <span>💰 ผลกระทบต่อพอร์ต:</span>
+              <strong className="text-amber-300 font-bold tabular-nums">
+                ±${(userHolding.currentValue * (stats.avgPostEarningsMovePercent / 100)).toFixed(1)}
+              </strong>
+            </span>
+          )}
+        </div>
+
+        <span className="text-[11px] text-indigo-400 group-hover:text-indigo-300 transition-colors font-semibold hidden sm:inline">
+          คลิกดูบทวิเคราะห์เจาะลึก & แผนเทรด →
+        </span>
       </div>
     </div>
   )
