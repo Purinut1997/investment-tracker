@@ -77,18 +77,18 @@ export function StockEarningsCard({
             </div>
 
             <div className="sm:mt-2 flex items-baseline justify-between">
-              <div className="flex items-center gap-1.5 font-mono text-xs font-extrabold text-white">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
                 <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>วันแจ้งงบ</span>
               </div>
-              <span className="text-[10px] text-indigo-300 font-mono">
+              <span className="text-xs text-indigo-300 font-medium">
                 {upcoming.isEstimated ? 'ประมาณการ' : 'คอนเฟิร์มแล้ว'}
               </span>
             </div>
 
             <div className="sm:mt-2 flex items-center">
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
                   isToday
                     ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse'
                     : isUrgent
@@ -131,12 +131,12 @@ export function StockEarningsCard({
               </span>
 
               {userHolding && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                   <Wallet className="w-3 h-3" />
                   <span>ในพอร์ต: {userHolding.quantity} หุ้น</span>
                   {userHolding.unrealizedPnLPercent !== undefined && (
                     <span
-                      className={`text-[10px] ${
+                      className={`text-xs tabular-nums font-semibold ${
                         userHolding.unrealizedPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                       }`}
                     >
@@ -153,12 +153,12 @@ export function StockEarningsCard({
             </p>
 
             <div className="flex items-center gap-2 mt-1.5 text-xs">
-              <span className="font-mono font-bold text-slate-200">
+              <span className="tabular-nums font-bold text-slate-100 text-sm">
                 {currency === 'THB' ? '฿' : '$'}
                 {currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               {priceChangePercent !== undefined && (
-                <span className={`font-mono text-[11px] font-semibold flex items-center ${priceColor}`}>
+                <span className={`tabular-nums text-xs font-semibold flex items-center ${priceColor}`}>
                   {priceChangePercent >= 0 ? '+' : ''}
                   {priceChangePercent.toFixed(2)}%
                 </span>
@@ -171,17 +171,17 @@ export function StockEarningsCard({
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4 shrink-0 border-t lg:border-t-0 border-white/[0.06] pt-3 lg:pt-0">
           {/* A. Market Consensus EPS */}
           <div className="bg-[#0C0F15] border border-white/[0.05] rounded-xl p-2.5 flex flex-col justify-center">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
+            <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
               <span>ตลาดคาดหวัง EPS</span>
             </span>
             <div className="mt-1 flex items-baseline gap-1.5">
-              <span className="text-sm font-black font-mono text-white">
+              <span className="text-sm font-bold tabular-nums text-white">
                 {upcoming.consensusEps !== null ? `$${upcoming.consensusEps.toFixed(2)}` : '-'}
               </span>
             </div>
             {upcoming.epsExpectedYoyGrowthPercent != null && (
               <span
-                className={`text-[10px] font-mono font-bold mt-0.5 flex items-center gap-0.5 ${
+                className={`text-xs tabular-nums font-semibold mt-0.5 flex items-center gap-0.5 ${
                   upcoming.epsExpectedYoyGrowthPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
@@ -200,15 +200,15 @@ export function StockEarningsCard({
 
           {/* B. Market Consensus Revenue */}
           <div className="bg-[#0C0F15] border border-white/[0.05] rounded-xl p-2.5 flex flex-col justify-center">
-            <span className="text-[10px] text-slate-400">ตลาดคาดหวังรายได้</span>
+            <span className="text-xs text-slate-400 font-medium">ตลาดคาดหวังรายได้</span>
             <div className="mt-1 flex items-baseline gap-1.5">
-              <span className="text-sm font-black font-mono text-white">
+              <span className="text-sm font-bold tabular-nums text-white">
                 {upcoming.consensusRevenueFormatted || '-'}
               </span>
             </div>
             {upcoming.revenueExpectedYoyGrowthPercent != null && (
               <span
-                className={`text-[10px] font-mono font-bold mt-0.5 flex items-center gap-0.5 ${
+                className={`text-xs tabular-nums font-semibold mt-0.5 flex items-center gap-0.5 ${
                   upcoming.revenueExpectedYoyGrowthPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
@@ -227,13 +227,13 @@ export function StockEarningsCard({
 
           {/* C. Historical Beat Track Record */}
           <div className="col-span-2 sm:col-span-1 bg-[#0C0F15] border border-white/[0.05] rounded-xl p-2.5 flex sm:flex-col justify-between sm:justify-center items-center sm:items-start">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
+            <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
               <BarChart3 className="w-3 h-3 text-indigo-400" />
               <span>ชนะคาดการณ์ย้อนหลัง</span>
             </span>
             <div className="mt-0.5 sm:mt-1 flex items-center gap-1.5">
               <span
-                className={`text-xs font-black px-2 py-0.5 rounded ${
+                className={`text-xs font-bold px-2 py-0.5 rounded ${
                   stats.beatRatePercent >= 75
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     : stats.beatRatePercent >= 50
@@ -243,12 +243,12 @@ export function StockEarningsCard({
               >
                 {stats.beatRatePercent}% Beat
               </span>
-              <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
+              <span className="text-xs text-slate-400 tabular-nums hidden sm:inline">
                 ({stats.beatsCount}/{stats.totalQuartersAnalyzed} รอบ)
               </span>
             </div>
             {stats.latestSurprisePercent !== null && (
-              <span className="text-[10px] text-slate-400 mt-0.5 hidden sm:inline">
+              <span className="text-xs text-slate-400 tabular-nums mt-0.5 hidden sm:inline">
                 รอบล่าสุด: {stats.latestSurprisePercent > 0 ? '+' : ''}
                 {stats.latestSurprisePercent}%
               </span>

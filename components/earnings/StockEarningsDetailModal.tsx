@@ -114,13 +114,13 @@ export function StockEarningsDetailModal({
                 >
                   {isThai ? '🇹🇭 SET' : '🇺🇸 US'}
                 </span>
-                <span className="font-mono text-xs font-bold text-slate-300">
+                <span className="tabular-nums text-xs font-bold text-slate-200">
                   {currency === 'THB' ? '฿' : '$'}
                   {currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 {priceChangePercent !== undefined && (
                   <span
-                    className={`font-mono text-xs font-semibold ${
+                    className={`tabular-nums text-xs font-semibold ${
                       priceChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                     }`}
                   >
@@ -150,10 +150,10 @@ export function StockEarningsDetailModal({
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-500/30">
+                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-500/30">
                     รอบถัดไป • {upcoming.fiscalQuarterLabel}
                   </span>
-                  <span className="text-xs text-slate-400 font-mono">
+                  <span className="text-xs text-slate-400 font-medium">
                     {upcoming.isEstimated ? 'วันที่คาดการณ์' : 'คอนเฟิร์มวันทางการ'}
                   </span>
                 </div>
@@ -183,7 +183,7 @@ export function StockEarningsDetailModal({
                     <p className="font-bold text-white">
                       คุณถืออยู่ {userHolding.quantity} หุ้น
                     </p>
-                    <p className="text-slate-300 text-[11px] font-mono">
+                    <p className="text-slate-300 text-xs tabular-nums">
                       มูลค่า ~{currency === 'THB' ? '฿' : '$'}
                       {userHolding.currentValue.toLocaleString()}
                       {userHolding.unrealizedPnLPercent !== undefined && (
@@ -206,12 +206,12 @@ export function StockEarningsDetailModal({
             <div className="mt-4 pt-4 border-t border-white/[0.08] grid grid-cols-2 sm:grid-cols-4 gap-3">
               {/* EPS Expectation */}
               <div className="p-3 rounded-xl bg-[#0A0D14] border border-white/[0.06]">
-                <span className="text-[10px] text-slate-400 font-semibold">ตลาดคาดหวัง EPS</span>
-                <p className="text-base sm:text-lg font-black font-mono text-white mt-0.5">
+                <span className="text-xs text-slate-400 font-semibold">ตลาดคาดหวัง EPS</span>
+                <p className="text-base sm:text-lg font-bold tabular-nums text-white mt-0.5">
                   {upcoming.consensusEps !== null ? `$${upcoming.consensusEps.toFixed(2)}` : '-'}
                 </p>
                 {upcoming.epsRange?.low != null && upcoming.epsRange?.high != null && (
-                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                  <p className="text-xs text-slate-400 tabular-nums mt-0.5">
                     กรอบ: ${upcoming.epsRange.low} - ${upcoming.epsRange.high}
                   </p>
                 )}
@@ -219,9 +219,9 @@ export function StockEarningsDetailModal({
 
               {/* EPS YoY Comparison */}
               <div className="p-3 rounded-xl bg-[#0A0D14] border border-white/[0.06]">
-                <span className="text-[10px] text-slate-400 font-semibold">EPS เทียบปีก่อน (YoY)</span>
+                <span className="text-xs text-slate-400 font-semibold">EPS เทียบปีก่อน (YoY)</span>
                 <p
-                  className={`text-base sm:text-lg font-black font-mono mt-0.5 flex items-center gap-1 ${
+                  className={`text-base sm:text-lg font-bold tabular-nums mt-0.5 flex items-center gap-1 ${
                     upcoming.epsExpectedYoyGrowthPercent != null && upcoming.epsExpectedYoyGrowthPercent >= 0
                       ? 'text-emerald-400'
                       : 'text-rose-400'
@@ -244,7 +244,7 @@ export function StockEarningsDetailModal({
                   )}
                 </p>
                 {upcoming.yearAgoEps !== null && (
-                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                  <p className="text-xs text-slate-400 tabular-nums mt-0.5">
                     ช่วงเดียวกันปีก่อน: ${upcoming.yearAgoEps}
                   </p>
                 )}
@@ -252,12 +252,12 @@ export function StockEarningsDetailModal({
 
               {/* Revenue Expectation */}
               <div className="p-3 rounded-xl bg-[#0A0D14] border border-white/[0.06]">
-                <span className="text-[10px] text-slate-400 font-semibold">ตลาดคาดหวังรายได้</span>
-                <p className="text-base sm:text-lg font-black font-mono text-white mt-0.5">
+                <span className="text-xs text-slate-400 font-semibold">ตลาดคาดหวังรายได้</span>
+                <p className="text-base sm:text-lg font-bold tabular-nums text-white mt-0.5">
                   {upcoming.consensusRevenueFormatted || '-'}
                 </p>
                 {upcoming.revenueRange?.lowFormatted && upcoming.revenueRange?.highFormatted && (
-                  <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                  <p className="text-xs text-slate-400 tabular-nums mt-0.5 truncate">
                     กรอบ: {upcoming.revenueRange.lowFormatted} - {upcoming.revenueRange.highFormatted}
                   </p>
                 )}
@@ -265,9 +265,9 @@ export function StockEarningsDetailModal({
 
               {/* Revenue YoY Comparison */}
               <div className="p-3 rounded-xl bg-[#0A0D14] border border-white/[0.06]">
-                <span className="text-[10px] text-slate-400 font-semibold">รายได้เทียบปีก่อน (YoY)</span>
+                <span className="text-xs text-slate-400 font-semibold">รายได้เทียบปีก่อน (YoY)</span>
                 <p
-                  className={`text-base sm:text-lg font-black font-mono mt-0.5 flex items-center gap-1 ${
+                  className={`text-base sm:text-lg font-bold tabular-nums mt-0.5 flex items-center gap-1 ${
                     upcoming.revenueExpectedYoyGrowthPercent != null &&
                     upcoming.revenueExpectedYoyGrowthPercent >= 0
                       ? 'text-emerald-400'
@@ -291,7 +291,7 @@ export function StockEarningsDetailModal({
                   )}
                 </p>
                 {upcoming.yearAgoRevenueFormatted && (
-                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                  <p className="text-xs text-slate-400 tabular-nums mt-0.5">
                     ช่วงเดียวกันปีก่อน: {upcoming.yearAgoRevenueFormatted}
                   </p>
                 )}
@@ -426,7 +426,7 @@ export function StockEarningsDetailModal({
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                         <div className="flex items-center gap-2.5">
-                          <span className="font-mono text-sm font-black text-white bg-white/[0.06] px-2.5 py-1 rounded-md">
+                          <span className="text-sm font-bold tracking-tight text-white bg-white/[0.06] px-2.5 py-1 rounded-md">
                             {q.quarter}
                           </span>
                           <span className="text-xs text-slate-400">
@@ -462,7 +462,7 @@ export function StockEarningsDetailModal({
                           </span>
 
                           {q.epsDifference !== null && (
-                            <span className="text-[11px] font-mono text-slate-400">
+                            <span className="text-xs tabular-nums text-slate-400">
                               (ส่วนต่าง: {q.epsDifference > 0 ? '+' : ''}
                               {q.epsDifference})
                             </span>
@@ -473,7 +473,7 @@ export function StockEarningsDetailModal({
                       {/* Visual Bar Comparison */}
                       <div className="mt-3 space-y-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-400 w-16 shrink-0 font-medium">
+                          <span className="text-xs text-slate-400 w-20 shrink-0 font-medium">
                             ทำได้จริง:
                           </span>
                           <div className="flex-1 bg-white/[0.04] rounded-full h-2.5 overflow-hidden">
@@ -482,13 +482,13 @@ export function StockEarningsDetailModal({
                               style={{ width: `${Math.max(5, actualPct)}%` }}
                             />
                           </div>
-                          <span className="text-xs font-mono font-bold text-emerald-300 w-16 text-right">
+                          <span className="text-xs tabular-nums font-bold text-emerald-300 w-16 text-right">
                             {q.actualEps !== null ? `$${q.actualEps.toFixed(2)}` : '-'}
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-400 w-16 shrink-0 font-medium">
+                          <span className="text-xs text-slate-400 w-20 shrink-0 font-medium">
                             ตลาดคาด:
                           </span>
                           <div className="flex-1 bg-white/[0.04] rounded-full h-2.5 overflow-hidden">
@@ -497,7 +497,7 @@ export function StockEarningsDetailModal({
                               style={{ width: `${Math.max(5, estPct)}%` }}
                             />
                           </div>
-                          <span className="text-xs font-mono font-bold text-indigo-300 w-16 text-right">
+                          <span className="text-xs tabular-nums font-bold text-indigo-300 w-16 text-right">
                             {q.estimateEps !== null ? `$${q.estimateEps.toFixed(2)}` : '-'}
                           </span>
                         </div>
@@ -505,15 +505,15 @@ export function StockEarningsDetailModal({
 
                       {/* Financial Detail footer (Revenue & Net Income) */}
                       {(q.revenueFormatted || q.netIncomeFormatted) && (
-                        <div className="mt-2.5 pt-2 border-t border-white/[0.04] flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                        <div className="mt-2.5 pt-2 border-t border-white/[0.04] flex items-center justify-between text-xs text-slate-300 tabular-nums">
                           {q.revenueFormatted && (
-                            <span>รายได้: <strong className="text-slate-200">{q.revenueFormatted}</strong></span>
+                            <span>รายได้: <strong className="text-slate-100">{q.revenueFormatted}</strong></span>
                           )}
                           {q.netIncomeFormatted && (
-                            <span>กำไรสุทธิ: <strong className="text-slate-200">{q.netIncomeFormatted}</strong></span>
+                            <span>กำไรสุทธิ: <strong className="text-slate-100">{q.netIncomeFormatted}</strong></span>
                           )}
                           {q.profitMarginPercent !== null && (
-                            <span>Margin: <strong className="text-slate-200">{q.profitMarginPercent.toFixed(1)}%</strong></span>
+                            <span>Margin: <strong className="text-slate-100">{q.profitMarginPercent.toFixed(1)}%</strong></span>
                           )}
                         </div>
                       )}
@@ -541,7 +541,7 @@ export function StockEarningsDetailModal({
                   <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">
                     เป้าหมายรอบถัดไป เทียบช่วงเดียวกันปีก่อนหน้า (Expected YoY)
                   </span>
-                  <span className="text-xs font-mono text-slate-400">{upcoming.fiscalQuarterLabel}</span>
+                  <span className="text-xs tabular-nums font-semibold text-slate-400">{upcoming.fiscalQuarterLabel}</span>
                 </div>
 
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -549,7 +549,7 @@ export function StockEarningsDetailModal({
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-400">กำไรต่อหุ้น (EPS)</span>
                       <span
-                        className={`text-sm font-bold font-mono flex items-center gap-1 ${
+                        className={`text-sm font-bold tabular-nums flex items-center gap-1 ${
                           upcoming.epsExpectedYoyGrowthPercent != null &&
                           upcoming.epsExpectedYoyGrowthPercent >= 0
                             ? 'text-emerald-400'
@@ -566,7 +566,7 @@ export function StockEarningsDetailModal({
                         )}
                       </span>
                     </div>
-                    <div className="mt-2 text-xs font-mono text-slate-300 flex items-center justify-between">
+                    <div className="mt-2 text-xs tabular-nums text-slate-300 flex items-center justify-between">
                       <span>คาดหวัง: ${upcoming.consensusEps?.toFixed(2) || '-'}</span>
                       <span className="text-slate-400">ปีก่อน: ${upcoming.yearAgoEps?.toFixed(2) || '-'}</span>
                     </div>
@@ -576,7 +576,7 @@ export function StockEarningsDetailModal({
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-400">รายได้รวม (Revenue)</span>
                       <span
-                        className={`text-sm font-bold font-mono flex items-center gap-1 ${
+                        className={`text-sm font-bold tabular-nums flex items-center gap-1 ${
                           upcoming.revenueExpectedYoyGrowthPercent != null &&
                           upcoming.revenueExpectedYoyGrowthPercent >= 0
                             ? 'text-emerald-400'
@@ -593,7 +593,7 @@ export function StockEarningsDetailModal({
                         )}
                       </span>
                     </div>
-                    <div className="mt-2 text-xs font-mono text-slate-300 flex items-center justify-between">
+                    <div className="mt-2 text-xs tabular-nums text-slate-300 flex items-center justify-between">
                       <span>คาดหวัง: {upcoming.consensusRevenueFormatted || '-'}</span>
                       <span className="text-slate-400">ปีก่อน: {upcoming.yearAgoRevenueFormatted || '-'}</span>
                     </div>
@@ -614,14 +614,14 @@ export function StockEarningsDetailModal({
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-black text-white">{q.quarter}</span>
+                        <span className="tabular-nums text-sm font-bold text-white">{q.quarter}</span>
                         {q.prevQuarter && (
-                          <span className="text-xs text-slate-400 font-mono">
+                          <span className="text-xs text-slate-400 tabular-nums">
                             (เทียบกับ {q.prevQuarter})
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-3">
+                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-3 tabular-nums">
                         <span>EPS: ${q.actualEps?.toFixed(2) || '-'}</span>
                         <span>รายได้: {q.revenueFormatted || '-'}</span>
                         <span>กำไรสุทธิ: {q.netIncomeFormatted || '-'}</span>
@@ -633,7 +633,7 @@ export function StockEarningsDetailModal({
                         <div className="text-right">
                           <span className="text-[10px] text-slate-400 block">EPS QoQ</span>
                           <span
-                            className={`font-mono text-xs font-bold ${
+                            className={`tabular-nums text-xs font-bold ${
                               q.epsQoqGrowthPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                             }`}
                           >
@@ -647,7 +647,7 @@ export function StockEarningsDetailModal({
                         <div className="text-right">
                           <span className="text-[10px] text-slate-400 block">รายได้ QoQ</span>
                           <span
-                            className={`font-mono text-xs font-bold ${
+                            className={`tabular-nums text-xs font-bold ${
                               q.revenueQoqGrowthPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
                             }`}
                           >
@@ -669,7 +669,7 @@ export function StockEarningsDetailModal({
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-white/[0.08] text-slate-400 font-mono">
+                    <tr className="border-b border-white/[0.08] text-slate-400 font-medium">
                       <th className="py-2.5 px-3">ปี (Year)</th>
                       <th className="py-2.5 px-3">รายได้รวม</th>
                       <th className="py-2.5 px-3">รายได้ YoY</th>
@@ -678,7 +678,7 @@ export function StockEarningsDetailModal({
                       <th className="py-2.5 px-3 text-right">Profit Margin</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/[0.04] font-mono">
+                  <tbody className="divide-y divide-white/[0.04] tabular-nums">
                     {yearlyFinancials.map((y) => (
                       <tr key={y.year} className="hover:bg-white/[0.02]">
                         <td className="py-3 px-3 font-bold text-white text-sm">

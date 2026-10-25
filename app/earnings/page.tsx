@@ -215,7 +215,7 @@ export default function EarningsCalendarPage() {
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-white font-mono">
+              <span className="text-2xl sm:text-3xl font-black text-white tabular-nums">
                 {summary?.upcoming30DaysCount ?? 0}
               </span>
               <span className="text-xs text-slate-400 font-medium">บริษัท</span>
@@ -237,7 +237,7 @@ export default function EarningsCalendarPage() {
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-amber-300 font-mono">
+              <span className="text-2xl sm:text-3xl font-black text-amber-300 tabular-nums">
                 {summary?.upcoming7DaysCount ?? 0}
               </span>
               <span className="text-xs text-slate-400 font-medium">บริษัท</span>
@@ -259,11 +259,11 @@ export default function EarningsCalendarPage() {
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-xl sm:text-2xl font-black text-white font-mono">
+              <span className="text-xl sm:text-2xl font-black text-white">
                 {summary?.closestHolding?.ticker || 'ไม่มีคิวเร็วๆ นี้'}
               </span>
               {summary?.closestHolding && (
-                <span className="text-xs font-bold text-indigo-300 font-mono">
+                <span className="text-xs font-bold text-indigo-300 tabular-nums">
                   (อีก {summary.closestHolding.daysRemaining} วัน)
                 </span>
               )}
@@ -287,7 +287,7 @@ export default function EarningsCalendarPage() {
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-indigo-300 font-mono">
+              <span className="text-2xl sm:text-3xl font-black text-indigo-300 tabular-nums">
                 {portfolioItems.length + marketItems.length}
               </span>
               <span className="text-xs text-slate-400 font-medium">หุ้นที่ครอบคลุม</span>
@@ -450,8 +450,8 @@ export default function EarningsCalendarPage() {
             </button>
           </div>
 
-          <span className="text-xs text-slate-400 font-mono">
-            แสดง {displayedItems.length} หุ้น • คลิกที่การ์ดเพื่อดูชาร์ต & งบย้อนหลัง
+          <span className="text-xs text-slate-400 font-medium">
+            แสดง <strong className="text-slate-200 tabular-nums">{displayedItems.length}</strong> หุ้น • คลิกที่การ์ดเพื่อดูชาร์ต & งบย้อนหลัง
           </span>
         </div>
 
