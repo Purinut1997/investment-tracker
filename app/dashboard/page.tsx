@@ -29,6 +29,7 @@ import {
   Sunrise,
 } from 'lucide-react'
 import { MorningBriefBanner } from '@/components/dashboard/MorningBriefBanner'
+import { AssetAllocationVisualizer } from '@/components/dashboard/AssetAllocationVisualizer'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import { QuickAddModal } from '@/components/QuickAddModal'
 import {
@@ -153,6 +154,7 @@ export default function DashboardPage() {
   const [selectedBucketFilter, setSelectedBucketFilter] = useState<string>('ALL')
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
   const [allocationView, setAllocationView] = useState<'assets' | 'classes'>('assets')
+  const [rightPanelTab, setRightPanelTab] = useState<'allocation' | 'cashflow'>('allocation')
 
   const [cachedSummary, setCachedSummary] = useState<any>(() => {
     if (typeof window !== 'undefined') {
@@ -429,11 +431,27 @@ export default function DashboardPage() {
       market: h.market || 'US',
       value: Math.round(h.currentValueBase),
       percent: actualPercent,
-      targetPercent,
-      deviation,
+      targetPercent: targetPercent as number | null,
+      deviation: deviation as number | null,
       color: PIE_COLORS[i % PIE_COLORS.length],
     }
   })
+
+  // Append cash reserve to allocation data if positive
+  if (totalCash > 0 && netWorth > 0) {
+    const cashPct = Number(((totalCash / netWorth) * 100).toFixed(1))
+    allocationData.push({
+      name: 'CASH',
+      fullName: 'เงินสดสำรองสภาพคล่อง',
+      assetType: 'CASH',
+      market: 'TH',
+      value: Math.round(totalCash),
+      percent: cashPct,
+      targetPercent: null,
+      deviation: null,
+      color: '#06b6d4',
+    })
+  }
 
   const allPerformanceData: { month: string; value: number; benchmark: number }[] =
     Array.isArray(summary?.performanceData) ? summary.performanceData : []
@@ -1219,119 +1237,179 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Right: Cash Flow Stream & Upcoming Catalysts (5 Columns) */}
+          {/* Right: Asset Allocation Donut Visualizer & Cash Flow Stream (5 Columns) */}
           <div className="lg:col-span-5 rounded-3xl bg-[#121620] border border-white/[0.08] p-6 flex flex-col justify-between shadow-xl shadow-black/25">
             <div className="flex items-start justify-between gap-2 mb-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base sm:text-lg font-bold text-white">กระแสเงินสด &amp; กำหนดการสำคัญ</h2>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                    Cash Flow &amp; Catalysts
+                  <h2 className="text-base sm:text-lg font-bold text-white">
+                    {rightPanelTab === 'allocation' ? 'สัดส่วนสินทรัพย์ในพอร์ต' : 'กระแสเงินสด & กำหนดการ'}
+                  </h2>
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                      rightPanelTab === 'allocation'
+                        ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                        : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                    }`}
+                  >
+                    {rightPanelTab === 'allocation' ? '% Asset Allocation' : 'Cash Flow & Catalysts'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  ติดตามเงินปันผลรับ, กำไรขายล็อก และรอบปันผล XD สำคัญ
+                  {rightPanelTab === 'allocation'
+                    ? 'กราฟวงแหวน & สัดส่วน % หุ้นรายตัวแบบอินเทอร์แอคทีฟ'
+                    : 'ติดตามเงินปันผลรับ, กำไรขายล็อก และรอบปันผล XD สำคัญ'}
                 </p>
               </div>
 
-              <Link
-                href="/dividends"
-                className="px-2.5 py-1 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-semibold text-slate-300 hover:text-white transition-all flex items-center gap-1 shrink-0"
-              >
-                <span>ปฏิทิน XD</span>
-                <ArrowRight className="w-3 h-3 text-slate-400" />
-              </Link>
+              {/* Panel Switcher Tabs */}
+              <div className="flex bg-[#161B28] p-0.5 rounded-xl border border-white/[0.08] text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('allocation')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    rightPanelTab === 'allocation'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  🍩 สัดส่วน %
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('cashflow')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    rightPanelTab === 'cashflow'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  💰 ปันผล & XD
+                </button>
+              </div>
             </div>
 
-            {/* Middle: 2 Cash Flow Metric Cards + Upcoming Catalyst Chips */}
-            <div className="space-y-3 my-auto py-2">
-              <div className="grid grid-cols-2 gap-3">
-                {/* Dividends Card */}
-                <div className="p-3.5 rounded-2xl bg-[#161B28] border border-white/[0.06] space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-sans">
-                    <Coins className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>ปันผลรับสะสม</span>
-                  </div>
-                  <div className="text-lg sm:text-xl font-black text-white font-mono">
-                    ฿{Number(totalDividends).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-[10px] text-emerald-400 font-medium">
-                    {totalDividendsUSD > 0 ? `~$${totalDividendsUSD.toFixed(2)} USD` : 'กระแสเงินสดสุทธิ'}
-                  </div>
-                </div>
-
-                {/* Realized Sales Card */}
-                <div className="p-3.5 rounded-2xl bg-[#161B28] border border-white/[0.06] space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 font-sans">
-                    <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>กำไรขายล็อกแล้ว</span>
-                  </div>
-                  <div className="text-lg sm:text-xl font-black text-white font-mono">
-                    {totalRealizedGainUSD > 0
-                      ? `$${totalRealizedGainUSD.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-                      : `฿${Math.round(totalRealizedGain).toLocaleString()}`}
-                  </div>
-                  <div className="text-[10px] text-cyan-400 font-medium">
-                    Realized Gains ปิดรอบ
-                  </div>
-                </div>
+            {/* Middle: Interactive Allocation Donut OR Cash Flow Metrics */}
+            {rightPanelTab === 'allocation' ? (
+              <div className="my-auto py-1">
+                <AssetAllocationVisualizer
+                  items={allocationData}
+                  assetClasses={assetClassAllocation}
+                  totalValue={netWorth}
+                  onSelectStock={(st) => setSelectedStock(st)}
+                />
               </div>
+            ) : (
+              <div className="space-y-3 my-auto py-2">
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Dividends Card */}
+                  <div className="p-3.5 rounded-2xl bg-[#161B28] border border-white/[0.06] space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 font-sans">
+                      <Coins className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>ปันผลรับสะสม</span>
+                    </div>
+                    <div className="text-lg sm:text-xl font-black text-white font-mono">
+                      ฿{Number(totalDividends).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-medium">
+                      {totalDividendsUSD > 0 ? `~$${totalDividendsUSD.toFixed(2)} USD` : 'กระแสเงินสดสุทธิ'}
+                    </div>
+                  </div>
 
-              {/* Upcoming Catalysts Section */}
-              <div className="p-3.5 rounded-2xl bg-[#141824] border border-white/[0.06] space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                    รอบสำคัญของหุ้นในพอร์ต (Catalysts)
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-mono">30 วันข้างหน้า</span>
+                  {/* Realized Sales Card */}
+                  <div className="p-3.5 rounded-2xl bg-[#161B28] border border-white/[0.06] space-y-1">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 font-sans">
+                      <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>กำไรขายล็อกแล้ว</span>
+                    </div>
+                    <div className="text-lg sm:text-xl font-black text-white font-mono">
+                      {totalRealizedGainUSD > 0
+                        ? `$${totalRealizedGainUSD.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+                        : `฿${Math.round(totalRealizedGain).toLocaleString()}`}
+                    </div>
+                    <div className="text-[10px] text-cyan-400 font-medium">
+                      Realized Gains ปิดรอบ
+                    </div>
+                  </div>
                 </div>
 
-                {upcomingCatalysts.length > 0 ? (
-                  <div className="space-y-1.5">
-                    {upcomingCatalysts.map((cat: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-xs"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/25 shrink-0">
-                            {cat.badge || 'ปันผล'}
-                          </span>
-                          <span className="text-white font-medium truncate font-sans text-xs">
-                            {cat.title}
+                {/* Upcoming Catalysts Section */}
+                <div className="p-3.5 rounded-2xl bg-[#141824] border border-white/[0.06] space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      รอบสำคัญของหุ้นในพอร์ต (Catalysts)
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">30 วันข้างหน้า</span>
+                  </div>
+
+                  {upcomingCatalysts.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {upcomingCatalysts.map((cat: any, i: number) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/[0.02] border border-white/[0.04] text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 font-mono font-bold text-[10px] border border-emerald-500/25 shrink-0">
+                              {cat.badge || 'ปันผล'}
+                            </span>
+                            <span className="text-white font-medium truncate font-sans text-xs">
+                              {cat.title}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 shrink-0 font-mono">
+                            {cat.subtitle ? cat.subtitle.slice(0, 16) : ''}
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-400 shrink-0 font-mono">
-                          {cat.subtitle ? cat.subtitle.slice(0, 16) : ''}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-2.5 text-center text-xs text-slate-400">
-                    ไม่มีรอบ XD หรือรายงานงบด่วนในสัปดาห์นี้ พอร์ตดำเนินตามกลยุทธ์ปกติ
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-2.5 text-center text-xs text-slate-400">
+                      ไม่มีรอบ XD หรือรายงานงบด่วนในสัปดาห์นี้ พอร์ตดำเนินตามกลยุทธ์ปกติ
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Bottom Actions */}
             <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs">
-              <Link
-                href="/performance"
-                className="text-indigo-300 hover:text-white font-medium flex items-center gap-1 transition-colors"
-              >
-                <span>ดูผลงานรายตัว (Performance)</span>
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-              <Link
-                href="/transactions"
-                className="text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
-              >
-                <span>ประวัติธุรกรรม</span>
-                <ArrowRight className="w-3 h-3" />
-              </Link>
+              {rightPanelTab === 'allocation' ? (
+                <>
+                  <Link
+                    href="/plans"
+                    className="text-indigo-300 hover:text-white font-medium flex items-center gap-1 transition-colors"
+                  >
+                    <span>คำนวณกระจายเงิน DCA ต่อเดือน</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                  <Link
+                    href="/performance"
+                    className="text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
+                  >
+                    <span>กำไรรายตัว</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/performance"
+                    className="text-indigo-300 hover:text-white font-medium flex items-center gap-1 transition-colors"
+                  >
+                    <span>ดูผลงานรายตัว (Performance)</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                  <Link
+                    href="/dividends"
+                    className="text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
+                  >
+                    <span>ปฏิทินปันผล XD</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -309,3 +309,245 @@ export function calculatePortfolioRebalance({
     },
   }
 }
+
+export interface StockDcaAllocationItem {
+  id: string
+  ticker: string
+  assetName: string
+  market: string
+  currency: string
+  bucketName?: string
+  bucketEmoji?: string
+  currentPrice: number
+  currentPriceBase: number
+  quantity: number
+  currentValueBase: number
+  currentWeight: number
+  targetWeight: number
+  driftPercent: number
+  status: 'UNDERWEIGHT' | 'BALANCED' | 'OVERWEIGHT'
+  allocatedAmountBase: number
+  estimatedShares: number
+  postValueBase: number
+  postWeight: number
+  explanation: string
+}
+
+export interface StockDcaBreakdownResult {
+  totalInflow: number
+  totalAllocated: number
+  unallocatedCash: number
+  allocatedCount: number
+  items: StockDcaAllocationItem[]
+}
+
+export interface CalculateStockDcaOptions {
+  holdings: HoldingItem[]
+  totalCashBase: number
+  cashInflow: number
+  targetAllocation?: Record<string, number>
+  subTargets?: Record<string, Record<string, number>>
+  strategyBuckets?: Array<{
+    id: string
+    name: string
+    emoji?: string
+    targetPercent: number
+    tickers: string[]
+    holdings: HoldingItem[]
+  }>
+  tolerancePercent?: number
+}
+
+/**
+ * Calculates exact per-stock monthly DCA allocation in Baht and estimated shares.
+ * Answers: "เงินเติมงวดนี้ (เช่น ฿20,000) จะแบ่งเป็นหุ้น A กี่บาท หุ้น B กี่บาท?"
+ */
+export function calculateStockDcaBreakdown({
+  holdings,
+  totalCashBase,
+  cashInflow,
+  targetAllocation = {},
+  subTargets = {},
+  strategyBuckets = [],
+  tolerancePercent = 3.0,
+}: CalculateStockDcaOptions): StockDcaBreakdownResult {
+  const investedValue = holdings.reduce((sum, h) => sum + h.currentValueBase, 0)
+  const totalCurrentValue = Math.max(1, investedValue + totalCashBase)
+  const effectiveInflow = Math.max(0, cashInflow)
+  const totalPostValue = totalCurrentValue + effectiveInflow
+
+  // Map ticker to strategy bucket info
+  const tickerToBucket = new Map<string, { name: string; emoji: string; bucketTarget: number }>()
+  for (const b of strategyBuckets) {
+    for (const t of b.tickers) {
+      tickerToBucket.set(t.toUpperCase(), {
+        name: b.name,
+        emoji: b.emoji || '📦',
+        bucketTarget: b.targetPercent,
+      })
+    }
+  }
+
+  // Determine target weight for each holding
+  const items: StockDcaAllocationItem[] = holdings.map((h) => {
+    const sym = h.ticker.toUpperCase()
+    const curVal = h.currentValueBase
+    const curWeight = totalCurrentValue > 0 ? (curVal / totalCurrentValue) * 100 : 0
+    const bucketInfo = tickerToBucket.get(sym)
+
+    // Target Weight Resolution Priority:
+    // 1. Direct ticker target in targetAllocation (e.g. { VOO: 30, NVDA: 20 })
+    // 2. Sub-target within category (e.g. US.VOO = 50% of US (60%) = 30%)
+    // 3. Bucket proportional share
+    // 4. Fallback: equal weight of current assets
+    let targetWeight = 0
+
+    if (targetAllocation[sym] !== undefined && Number(targetAllocation[sym]) > 0) {
+      targetWeight = Number(targetAllocation[sym])
+    } else {
+      let foundSubTarget = false
+      for (const [cat, subMap] of Object.entries(subTargets)) {
+        if (subMap[sym] !== undefined && Number(subMap[sym]) > 0) {
+          const catWeight = Number(targetAllocation[cat]) || (100 / Math.max(1, Object.keys(subTargets).length))
+          targetWeight = (catWeight * Number(subMap[sym])) / 100
+          foundSubTarget = true
+          break
+        }
+      }
+
+      if (!foundSubTarget) {
+        if (bucketInfo && bucketInfo.bucketTarget > 0) {
+          const bucket = strategyBuckets.find((b) => b.name === bucketInfo.name)
+          const bucketHoldingsCount = Math.max(1, bucket?.holdings?.length || bucket?.tickers?.length || 1)
+          targetWeight = Number((bucketInfo.bucketTarget / bucketHoldingsCount).toFixed(1))
+        } else {
+          targetWeight = Number((100 / Math.max(1, holdings.length)).toFixed(1))
+        }
+      }
+    }
+
+    const drift = curWeight - targetWeight
+    let status: 'UNDERWEIGHT' | 'BALANCED' | 'OVERWEIGHT' = 'BALANCED'
+    if (drift < -tolerancePercent) {
+      status = 'UNDERWEIGHT'
+    } else if (drift > tolerancePercent) {
+      status = 'OVERWEIGHT'
+    }
+
+    const currentPriceBase =
+      h.quantity > 0 && h.currentValueBase > 0
+        ? h.currentValueBase / h.quantity
+        : h.currentPrice
+
+    return {
+      id: h.assetId,
+      ticker: h.ticker,
+      assetName: h.assetName || h.ticker,
+      market: h.market || 'US',
+      currency: h.currency || (h.market === 'TH' ? 'THB' : 'USD'),
+      bucketName: bucketInfo?.name,
+      bucketEmoji: bucketInfo?.emoji,
+      currentPrice: h.currentPrice,
+      currentPriceBase,
+      quantity: h.quantity,
+      currentValueBase: curVal,
+      currentWeight: Number(curWeight.toFixed(1)),
+      targetWeight: Number(targetWeight.toFixed(1)),
+      driftPercent: Number(drift.toFixed(1)),
+      status,
+      allocatedAmountBase: 0,
+      estimatedShares: 0,
+      postValueBase: curVal,
+      postWeight: Number(curWeight.toFixed(1)),
+      explanation: '',
+    }
+  })
+
+  // Calculate deficits
+  const deficits: { item: StockDcaAllocationItem; deficit: number }[] = []
+  let sumDeficits = 0
+
+  for (const item of items) {
+    const idealPostValue = (item.targetWeight / 100) * totalPostValue
+    const deficit = Math.max(0, idealPostValue - item.currentValueBase)
+    if (deficit > 10) {
+      deficits.push({ item, deficit })
+      sumDeficits += deficit
+    }
+  }
+
+  let totalAllocated = 0
+
+  if (effectiveInflow > 0) {
+    if (sumDeficits > 0 && effectiveInflow <= sumDeficits) {
+      // Inflow covers part or all of deficits: allocate proportional to deficits
+      for (const { item, deficit } of deficits) {
+        const allocated = Math.round(effectiveInflow * (deficit / sumDeficits))
+        item.allocatedAmountBase = allocated
+        item.postValueBase = item.currentValueBase + allocated
+        item.postWeight = Number(((item.postValueBase / totalPostValue) * 100).toFixed(1))
+        if (item.currentPriceBase > 0) {
+          item.estimatedShares = Number((allocated / item.currentPriceBase).toFixed(2))
+        }
+        item.explanation = `จัดสรรเงินเติม ฿${allocated.toLocaleString()} เพื่อดึงสัดส่วนจาก ${item.currentWeight}% เข้าใกล้เป้า ${item.targetWeight}%`
+        totalAllocated += allocated
+      }
+
+      for (const item of items) {
+        if (!deficits.some((d) => d.item.id === item.id)) {
+          item.allocatedAmountBase = 0
+          item.postValueBase = item.currentValueBase
+          item.postWeight = Number(((item.currentValueBase / totalPostValue) * 100).toFixed(1))
+          item.explanation = 'งดเติมเงินในงวดนี้ เนื่องจากสัดส่วนถึงเป้าหมายหรือเกินกรอบแล้ว'
+        }
+      }
+    } else if (sumDeficits > 0 && effectiveInflow > sumDeficits) {
+      // Inflow exceeds deficits: fund 100% of deficits, remaining cash spread according to target weights
+      const remainingCash = effectiveInflow - sumDeficits
+
+      for (const item of items) {
+        const dObj = deficits.find((d) => d.item.id === item.id)
+        const baseDeficit = dObj ? dObj.deficit : 0
+        const extra = Math.round(remainingCash * (item.targetWeight / 100))
+        const totalAlloc = Math.round(baseDeficit + extra)
+
+        item.allocatedAmountBase = totalAlloc
+        item.postValueBase = item.currentValueBase + totalAlloc
+        item.postWeight = Number(((item.postValueBase / totalPostValue) * 100).toFixed(1))
+        if (item.currentPriceBase > 0) {
+          item.estimatedShares = Number((totalAlloc / item.currentPriceBase).toFixed(2))
+        }
+        item.explanation = `จัดสรรเติมเต็มส่วนที่ขาดเป้า ฿${Math.round(baseDeficit).toLocaleString()} + เงินส่วนเกินตามน้ำหนักแผน ฿${extra.toLocaleString()}`
+        totalAllocated += totalAlloc
+      }
+    } else {
+      // All items balanced or no deficits: allocate inflow strictly by target weight
+      for (const item of items) {
+        const allocated = Math.round(effectiveInflow * (item.targetWeight / 100))
+        item.allocatedAmountBase = allocated
+        item.postValueBase = item.currentValueBase + allocated
+        item.postWeight = Number(((item.postValueBase / totalPostValue) * 100).toFixed(1))
+        if (item.currentPriceBase > 0) {
+          item.estimatedShares = Number((allocated / item.currentPriceBase).toFixed(2))
+        }
+        item.explanation = `สัดส่วนพอร์ตสมดุลอยู่แล้ว เติมเงินเพิ่มตามน้ำหนักเป้าหมาย ${item.targetWeight}%`
+        totalAllocated += allocated
+      }
+    }
+  }
+
+  // Sort: Underweight & Allocated first, then by allocated amount desc
+  items.sort((a, b) => {
+    if (a.allocatedAmountBase > 0 && b.allocatedAmountBase === 0) return -1
+    if (b.allocatedAmountBase > 0 && a.allocatedAmountBase === 0) return 1
+    return b.allocatedAmountBase - a.allocatedAmountBase
+  })
+
+  return {
+    totalInflow: effectiveInflow,
+    totalAllocated,
+    unallocatedCash: Math.max(0, effectiveInflow - totalAllocated),
+    allocatedCount: items.filter((i) => i.allocatedAmountBase > 0).length,
+    items,
+  }
+}

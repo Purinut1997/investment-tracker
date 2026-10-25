@@ -54,9 +54,11 @@ import {
 } from '@/lib/analytics/strategy-buckets'
 import {
   calculatePortfolioRebalance,
+  calculateStockDcaBreakdown,
   RebalanceMode,
   RebalancePlanResult,
 } from '@/lib/analytics/rebalancing'
+import { StockDcaBreakdownTable } from '@/components/plans/StockDcaBreakdownTable'
 import {
   STRATEGY_TEMPLATES,
   StrategyTemplate,
@@ -152,6 +154,7 @@ export default function PlansPage() {
   // Rebalancing Simulator States
   const [cashInflow, setCashInflow] = useState<number>(20000)
   const [rebalanceMode, setRebalanceMode] = useState<RebalanceMode>('CASH_FLOW')
+  const [rebalanceViewMode, setRebalanceViewMode] = useState<'stocks' | 'buckets'>('stocks')
   const [toleranceBand, setToleranceBand] = useState<number>(3.0)
   const [copied, setCopied] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({ US: true })
@@ -220,6 +223,27 @@ export default function PlansPage() {
     const totalDev = computedBuckets.reduce((sum, b) => sum + Math.abs(b.deviationPercent), 0)
     return Math.min(100, Math.round(totalDev * 5))
   }, [computedBuckets])
+
+  // Individual Stock Monthly DCA Allocation Plan (Answers: Stock A กี่บาท, Stock B กี่บาท)
+  const stockDcaPlan = useMemo(() => {
+    return calculateStockDcaBreakdown({
+      holdings,
+      totalCashBase: totalCash,
+      cashInflow,
+      targetAllocation: activePreset?.targetAllocation || {},
+      subTargets: activePreset?.subTargets || {},
+      strategyBuckets: computedBuckets,
+      tolerancePercent: toleranceBand,
+    })
+  }, [
+    holdings,
+    totalCash,
+    cashInflow,
+    activePreset?.targetAllocation,
+    activePreset?.subTargets,
+    computedBuckets,
+    toleranceBand,
+  ])
 
   const [selectedStockDetail, setSelectedStockDetail] = useState<{
     symbol: string
@@ -481,17 +505,40 @@ export default function PlansPage() {
     }
   }
 
-  function handleQuickBuyTicker(ticker: string, amount: number) {
+  function handleQuickBuyTicker(ticker: string, amount: number, market?: string) {
     setQuickAddInitialData({
       symbol: ticker === 'CASH' ? 'CASH' : ticker,
       assetType: ticker === 'CASH' ? 'cash' : 'stock',
       amount,
-      market: 'US',
+      market: (market as 'US' | 'TH' | 'CRYPTO') || 'US',
     })
     setQuickAddOpen(true)
   }
 
   function handleCopyExecutionPlan() {
+    if (rebalanceViewMode === 'stocks') {
+      const fundedStocks = stockDcaPlan.items.filter((i) => i.allocatedAmountBase > 0)
+      const lines = [
+        `📋 แผนจัดสรรเงินเติม DCA รายหุ้นประจำงวด`,
+        `งบเงินเติมรวม: ฿${stockDcaPlan.totalInflow.toLocaleString()}`,
+        `จัดสรรซื้อแล้ว: ฿${stockDcaPlan.totalAllocated.toLocaleString()} (${fundedStocks.length} สินทรัพย์)`,
+        stockDcaPlan.unallocatedCash > 0 ? `เงินสดพักไว้: ฿${stockDcaPlan.unallocatedCash.toLocaleString()}` : '',
+        `---------------------------------`,
+        ...fundedStocks.map(
+          (i, idx) =>
+            `${idx + 1}. ${i.ticker} (${i.assetName}): ฿${i.allocatedAmountBase.toLocaleString()}${
+              i.estimatedShares > 0 ? ` (~${i.estimatedShares} หุ้น)` : ''
+            } | ดึงสัดส่วนจาก ${i.currentWeight}% ➔ ${i.postWeight}%`
+        ),
+        `---------------------------------`,
+        `*คำนวณอัตโนมัติโดย ClassCare 360 Investment Tracker`,
+      ].filter(Boolean)
+      navigator.clipboard.writeText(lines.join('\n'))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+      return
+    }
+
     if (!bucketRebalancePlan) return
     const lines = [
       `📋 แผนปรับสมดุลพอร์ตสไตล์ Dime!`,
@@ -929,34 +976,73 @@ export default function PlansPage() {
                 </div>
               </div>
 
-              {/* ── ACTIONABLE REBALANCE EXECUTION SHEET FOR DIME! BUCKETS ── */}
-              {bucketRebalancePlan && (
-                <div className="space-y-4 pt-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                        <span>ใบสรุปคำสั่งจัดสรรเพื่อปรับสมดุลพอร์ตสไตล์ Dime! (Bucket Execution Sheet)</span>
-                        {bucketRebalancePlan.items.some((i) => i.status !== 'BALANCED') && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            มีตะกร้าหลุดกรอบเป้าหมาย
-                          </span>
-                        )}
+              {/* ── ACTIONABLE REBALANCE EXECUTION SHEET ── */}
+              <div className="space-y-4 pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                      <span>ใบสรุปคำสั่งจัดสรรเงินเติม DCA & ปรับสมดุลพอร์ต</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        {rebalanceViewMode === 'stocks' ? 'แจกแจงรายหุ้น' : 'แจกแจงตามตะกร้า'}
                       </span>
-                      <p className="text-xs text-slate-400">
-                        คำนวณกระจายเงินเติมตามเป้าหมายของแต่ละตะกร้ากลยุทธ์ เพื่อดึงพอร์ตกลับสู่สมดุล
-                      </p>
+                    </span>
+                    <p className="text-xs text-slate-400">
+                      {rebalanceViewMode === 'stocks'
+                        ? 'คำนวณเงินเติม DCA ว่างวดนี้ควรแบ่งซื้อหุ้นตัวไหนกี่บาท และได้ประมาณกี่หุ้นเพื่อดึงพอร์ตเข้าเป้า'
+                        : 'คำนวณกระจายเงินเติมตามเป้าหมายของแต่ละตะกร้ากลยุทธ์ เพื่อดึงพอร์ตกลับสู่สมดุล'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* View Switcher Toggle */}
+                    <div className="flex bg-[#0D1017] p-1 rounded-xl border border-white/[0.1] text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setRebalanceViewMode('stocks')}
+                        className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          rebalanceViewMode === 'stocks'
+                            ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Coins className="w-3.5 h-3.5" />
+                        <span>🏢 แบ่งเงินรายหุ้น (Stock A กี่บาท)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setRebalanceViewMode('buckets')}
+                        className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          rebalanceViewMode === 'buckets'
+                            ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <PieChart className="w-3.5 h-3.5" />
+                        <span>🧺 สรุปตามตะกร้า (Dime!)</span>
+                      </button>
                     </div>
 
                     <button
                       type="button"
                       onClick={handleCopyExecutionPlan}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-300 text-xs font-semibold transition-all cursor-pointer self-start sm:self-auto"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-300 text-xs font-semibold transition-all cursor-pointer"
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                       <span>{copied ? 'คัดลอกแล้ว!' : 'คัดลอกรายการคำสั่ง'}</span>
                     </button>
                   </div>
+                </div>
 
+                {/* Conditional Rendering: Stock View vs Bucket View */}
+                {rebalanceViewMode === 'stocks' ? (
+                  <StockDcaBreakdownTable
+                    planResult={stockDcaPlan}
+                    onQuickBuy={(ticker, amount, market) => handleQuickBuyTicker(ticker, amount, market)}
+                    baseCurrency={baseCurrency}
+                  />
+                ) : bucketRebalancePlan ? (
+                  <div className="space-y-4">
                   <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#0C0F14] shadow-xl">
                     <table className="w-full text-left text-sm border-collapse">
                       <thead>
@@ -1132,8 +1218,9 @@ export default function PlansPage() {
                       </span>
                     </div>
                   )}
-                </div>
-              )}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         )}
