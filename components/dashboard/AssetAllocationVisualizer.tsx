@@ -8,10 +8,18 @@ import {
   Cell,
 } from 'recharts'
 import { StockLogo } from '@/components/StockLogo'
-import { ArrowRight, Layers, Sparkles, PieChart as PieIcon } from 'lucide-react'
+import {
+  ArrowRight,
+  Layers,
+  Sparkles,
+  ChevronDown,
+  ArrowUpRight,
+  Wallet,
+  Eye,
+} from 'lucide-react'
 import Link from 'next/link'
 
-interface AllocationItem {
+export interface AllocationItem {
   name: string
   fullName: string
   assetType: string
@@ -21,6 +29,16 @@ interface AllocationItem {
   targetPercent: number | null
   deviation: number | null
   color: string
+}
+
+export interface ClassCategoryItem {
+  key: string
+  name: string
+  fullName: string
+  value: number
+  percent: number
+  color: string
+  holdings: AllocationItem[]
 }
 
 interface AssetAllocationVisualizerProps {
@@ -63,6 +81,54 @@ const CLASS_COLORS: Record<string, string> = {
   OTHER: '#8b5cf6',  // Violet
 }
 
+/**
+ * Filter and sort holdings belonging to a specific asset category
+ */
+function getCategoryHoldings(catKey: string, allItems: AllocationItem[]): AllocationItem[] {
+  const normKey = (catKey || '').toLowerCase()
+
+  let matches: AllocationItem[] = []
+
+  if (normKey === 'cash') {
+    matches = allItems.filter(
+      (it) => it.assetType?.toLowerCase() === 'cash' || it.name.toUpperCase() === 'CASH'
+    )
+  } else if (normKey === 'fund' || normKey === 'etf') {
+    matches = allItems.filter((it) => {
+      const t = (it.assetType || '').toLowerCase()
+      return t === 'fund' || t === 'etf'
+    })
+  } else if (normKey === 'crypto') {
+    matches = allItems.filter(
+      (it) => it.assetType?.toLowerCase() === 'crypto' || it.market?.toUpperCase() === 'CRYPTO'
+    )
+  } else if (normKey === 'bond') {
+    matches = allItems.filter((it) => (it.assetType || '').toLowerCase() === 'bond')
+  } else if (normKey === 'gold') {
+    matches = allItems.filter((it) => (it.assetType || '').toLowerCase() === 'gold')
+  } else if (normKey === 'stock') {
+    matches = allItems.filter((it) => {
+      const isCash = it.assetType?.toLowerCase() === 'cash' || it.name.toUpperCase() === 'CASH'
+      if (isCash) return false
+      const t = (it.assetType || '').toLowerCase()
+      if (['fund', 'etf', 'crypto', 'bond', 'gold'].includes(t)) return false
+      if (it.market?.toUpperCase() === 'CRYPTO') return false
+      return true
+    })
+  } else {
+    // Fallback: match by market or explicit assetType
+    const byMarket = allItems.filter((it) => it.market?.toUpperCase() === catKey.toUpperCase())
+    if (byMarket.length > 0) {
+      matches = byMarket
+    } else {
+      matches = allItems.filter((it) => it.assetType?.toUpperCase() === catKey.toUpperCase())
+    }
+  }
+
+  // Sort descending by value
+  return [...matches].sort((a, b) => b.value - a.value)
+}
+
 export function AssetAllocationVisualizer({
   items,
   assetClasses = [],
@@ -71,34 +137,57 @@ export function AssetAllocationVisualizer({
 }: AssetAllocationVisualizerProps) {
   const [viewMode, setViewMode] = useState<'assets' | 'classes'>('assets')
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
 
-  // Robust computation of Asset Classes
-  const classDataList = useMemo(() => {
+  const toggleCategory = (key: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
+  // Robust computation of Asset Classes with child holdings
+  const classDataList: ClassCategoryItem[] = useMemo(() => {
     // 1. If backend summary provided valid asset classes with positive values
     if (Array.isArray(assetClasses) && assetClasses.length > 0) {
       const valid = assetClasses
         .filter((ac) => Number(ac?.value || 0) > 0)
         .map((ac, idx) => {
-          const rawKey = String(ac.key || ac.classKey || 'OTHER').toUpperCase()
+          const rawKey = String(ac.key || ac.classKey || 'OTHER')
           const label = ac.name || ac.label || rawKey
+          const categoryHoldings = getCategoryHoldings(rawKey, items)
+
           return {
+            key: rawKey,
             name: label,
             fullName: label,
             value: Math.round(Number(ac.value) || 0),
             percent: Number(ac.percent) || 0,
-            color: ac.color || CLASS_COLORS[rawKey] || MODERN_PALETTE[idx % MODERN_PALETTE.length],
+            color:
+              ac.color ||
+              CLASS_COLORS[rawKey.toUpperCase()] ||
+              MODERN_PALETTE[idx % MODERN_PALETTE.length],
+            holdings: categoryHoldings,
           }
         })
       if (valid.length > 0) return valid
     }
 
     // 2. Fallback: Aggregate by Market / Asset Type directly from items
-    const marketMap: Record<string, { name: string; value: number; color: string }> = {
-      US: { name: '🇺🇸 หุ้นสหรัฐฯ (US Stocks & ETFs)', value: 0, color: '#3b82f6' },
-      TH: { name: '🇹🇭 หุ้นไทย (Thai Stocks)', value: 0, color: '#10b981' },
-      CRYPTO: { name: '🪙 สินทรัพย์ดิจิทัล (Crypto)', value: 0, color: '#f59e0b' },
-      GOLD: { name: '🏆 ทองคำและสินค้าโภคภัณฑ์', value: 0, color: '#eab308' },
-      CASH: { name: '💵 เงินสดสำรองสภาพคล่อง', value: 0, color: '#06b6d4' },
+    const marketMap: Record<
+      string,
+      { key: string; name: string; value: number; color: string; holdings: AllocationItem[] }
+    > = {
+      US: { key: 'US', name: '🇺🇸 หุ้นสหรัฐฯ (US Stocks & ETFs)', value: 0, color: '#3b82f6', holdings: [] },
+      TH: { key: 'TH', name: '🇹🇭 หุ้นไทย (Thai Stocks)', value: 0, color: '#10b981', holdings: [] },
+      CRYPTO: { key: 'CRYPTO', name: '🪙 สินทรัพย์ดิจิทัล (Crypto)', value: 0, color: '#f59e0b', holdings: [] },
+      GOLD: { key: 'GOLD', name: '🏆 ทองคำและสินค้าโภคภัณฑ์', value: 0, color: '#eab308', holdings: [] },
+      CASH: { key: 'CASH', name: '💵 เงินสดสำรองสภาพคล่อง', value: 0, color: '#06b6d4', holdings: [] },
     }
 
     for (const it of items) {
@@ -107,22 +196,32 @@ export function AssetAllocationVisualizer({
 
       if (marketMap[m]) {
         marketMap[m].value += it.value
+        marketMap[m].holdings.push(it)
       } else {
         if (!marketMap['OTHER']) {
-          marketMap['OTHER'] = { name: '🌐 สินทรัพย์อื่น ๆ', value: 0, color: '#8b5cf6' }
+          marketMap['OTHER'] = {
+            key: 'OTHER',
+            name: '🌐 สินทรัพย์อื่น ๆ',
+            value: 0,
+            color: '#8b5cf6',
+            holdings: [],
+          }
         }
         marketMap['OTHER'].value += it.value
+        marketMap['OTHER'].holdings.push(it)
       }
     }
 
-    return Object.entries(marketMap)
-      .filter(([_, v]) => v.value > 0)
-      .map(([_, v]) => ({
+    return Object.values(marketMap)
+      .filter((v) => v.value > 0)
+      .map((v) => ({
+        key: v.key,
         name: v.name,
         fullName: v.name,
         value: v.value,
         percent: totalValue > 0 ? Number(((v.value / totalValue) * 100).toFixed(1)) : 0,
         color: v.color,
+        holdings: v.holdings.sort((a, b) => b.value - a.value),
       }))
   }, [items, assetClasses, totalValue])
 
@@ -132,12 +231,14 @@ export function AssetAllocationVisualizer({
       return classDataList
     }
     return items.map((it, idx) => ({
+      key: it.name,
       name: it.name,
       fullName: it.fullName,
       value: it.value,
       percent: it.percent,
       color: it.color || MODERN_PALETTE[idx % MODERN_PALETTE.length],
       origStock: it,
+      holdings: [it],
     }))
   }, [viewMode, items, classDataList])
 
@@ -214,6 +315,19 @@ export function AssetAllocationVisualizer({
               dataKey="value"
               onMouseEnter={(_, index) => setActiveIndex(index)}
               onMouseLeave={() => setActiveIndex(null)}
+              onClick={(entry) => {
+                if (viewMode === 'classes') {
+                  const targetName = entry?.name
+                  if (targetName) toggleCategory(targetName)
+                } else if ((entry as any)?.origStock && onSelectStock) {
+                  const s = (entry as any).origStock as AllocationItem
+                  onSelectStock({
+                    symbol: s.name,
+                    name: s.fullName,
+                    market: s.market,
+                  })
+                }
+              }}
               cursor="pointer"
               stroke="#0D1017"
               strokeWidth={1.5}
@@ -241,7 +355,7 @@ export function AssetAllocationVisualizer({
 
         {/* Center Frosted Glass Capsule (Interactive readout) */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-[114px] h-[114px] rounded-full bg-gradient-to-b from-[#181D2A]/95 via-[#121622]/98 to-[#0C0F17] border border-white/[0.12] shadow-2xl shadow-black/90 flex flex-col items-center justify-center text-center p-2.5 backdrop-blur-xl transition-all duration-300 ring-1 ring-white/5">
+          <div className="w-[118px] h-[118px] rounded-full bg-gradient-to-b from-[#181D2A]/95 via-[#121622]/98 to-[#0C0F17] border border-white/[0.12] shadow-2xl shadow-black/90 flex flex-col items-center justify-center text-center p-2.5 backdrop-blur-xl transition-all duration-300 ring-1 ring-white/5">
             {activeItem ? (
               <div className="animate-in fade-in zoom-in-95 duration-150 flex flex-col items-center max-w-full">
                 <span
@@ -259,6 +373,9 @@ export function AssetAllocationVisualizer({
                 </span>
                 <span className="text-[10px] font-bold text-slate-300 font-mono tabular-nums">
                   ฿{activeItem.value.toLocaleString()}
+                </span>
+                <span className="text-[9px] text-indigo-300/80 font-sans mt-0.5">
+                  {viewMode === 'classes' ? 'แตะเพื่อดูหุ้น' : 'แตะดูรายละเอียด'}
                 </span>
               </div>
             ) : (
@@ -279,11 +396,14 @@ export function AssetAllocationVisualizer({
         </div>
       </div>
 
-      {/* ── RANKED VISUAL PROPORTION PROGRESS LIST (SLEEK GLASS TOKENS) ── */}
-      <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
+      {/* ── RANKED VISUAL PROPORTION PROGRESS LIST (EXPANDABLE GLASS TOKENS) ── */}
+      <div className="space-y-2 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
         {chartData.map((item, idx) => {
           const isHovered = activeIndex === idx
+          const isExpanded = expandedCategories.has(item.name)
           const origStock = (item as any).origStock as AllocationItem | undefined
+          const categoryHoldings = (item as any).holdings as AllocationItem[] | undefined
+          const hasHoldings = Array.isArray(categoryHoldings) && categoryHoldings.length > 0
 
           return (
             <div
@@ -291,7 +411,9 @@ export function AssetAllocationVisualizer({
               onMouseEnter={() => setActiveIndex(idx)}
               onMouseLeave={() => setActiveIndex(null)}
               onClick={() => {
-                if (origStock && onSelectStock) {
+                if (viewMode === 'classes') {
+                  toggleCategory(item.name)
+                } else if (origStock && onSelectStock) {
                   onSelectStock({
                     symbol: origStock.name,
                     name: origStock.fullName,
@@ -299,27 +421,33 @@ export function AssetAllocationVisualizer({
                   })
                 }
               }}
-              className={`p-2.5 rounded-2xl transition-all duration-200 border ${
-                origStock ? 'cursor-pointer' : ''
-              } ${
+              className={`p-2.5 rounded-2xl transition-all duration-200 border cursor-pointer ${
                 isHovered
-                  ? 'bg-white/[0.08] border-indigo-500/50 shadow-lg shadow-black/40 translate-x-1'
+                  ? 'bg-white/[0.08] border-indigo-500/50 shadow-lg shadow-black/40'
+                  : isExpanded
+                  ? 'bg-white/[0.05] border-indigo-500/40 shadow-md'
                   : 'bg-white/[0.02] hover:bg-white/[0.05] border-white/[0.05]'
               }`}
             >
+              {/* Category/Stock Top Bar */}
               <div className="flex items-center justify-between text-xs mb-1.5">
-                <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                   <span
                     className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm transition-transform duration-200"
                     style={{
                       backgroundColor: item.color,
-                      transform: isHovered ? 'scale(1.25)' : 'scale(1)',
+                      transform: isHovered || isExpanded ? 'scale(1.25)' : 'scale(1)',
                     }}
                   />
                   <span className="font-extrabold text-white truncate font-mono text-xs">
                     {item.name}
                   </span>
-                  {item.fullName && item.fullName !== item.name && (
+                  {viewMode === 'classes' && hasHoldings && (
+                    <span className="text-[10px] font-semibold text-slate-400 bg-white/[0.06] px-1.5 py-0.2 rounded-full font-mono shrink-0">
+                      {categoryHoldings.length} รายการ
+                    </span>
+                  )}
+                  {viewMode === 'assets' && item.fullName && item.fullName !== item.name && (
                     <span className="text-[10px] text-slate-400 truncate hidden sm:inline max-w-[130px]">
                       {item.fullName}
                     </span>
@@ -340,6 +468,16 @@ export function AssetAllocationVisualizer({
                   >
                     {item.percent}%
                   </span>
+
+                  {viewMode === 'classes' ? (
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                        isExpanded ? 'rotate-180 text-indigo-400' : ''
+                      }`}
+                    />
+                  ) : (
+                    <ArrowUpRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-300 transition-colors" />
+                  )}
                 </div>
               </div>
 
@@ -350,10 +488,126 @@ export function AssetAllocationVisualizer({
                   style={{
                     width: `${Math.min(100, item.percent)}%`,
                     backgroundColor: item.color,
-                    boxShadow: isHovered ? `0 0 8px ${item.color}90` : 'none',
+                    boxShadow: isHovered || isExpanded ? `0 0 8px ${item.color}90` : 'none',
                   }}
                 />
               </div>
+
+              {/* ── EXPANDABLE SUB-HOLDINGS ACCORDION (FOR ASSET CLASSES) ── */}
+              {viewMode === 'classes' && isExpanded && (
+                <div className="mt-2.5 pt-2.5 border-t border-white/[0.08] space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 px-1 mb-1 font-sans">
+                    <span className="flex items-center gap-1.5 font-medium text-slate-300">
+                      <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>
+                        หุ้นและสินทรัพย์ในหมวดนี้ ({hasHoldings ? categoryHoldings.length : 0} รายการ)
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-indigo-300 flex items-center gap-0.5">
+                      <span>แตะที่หุ้นเพื่อดูชาร์ต</span>
+                      <ArrowUpRight className="w-3 h-3" />
+                    </span>
+                  </div>
+
+                  {/* Cash Category Dedicated Card */}
+                  {item.key?.toLowerCase() === 'cash' || item.name.includes('เงินสด') ? (
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        window.location.href = '/accounts'
+                      }}
+                      className="flex items-center justify-between p-2 rounded-xl bg-cyan-500/[0.07] hover:bg-cyan-500/[0.14] border border-cyan-500/25 transition-all cursor-pointer group/cash"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-300 text-xs shrink-0 font-bold">
+                          <Wallet className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white group-hover/cash:text-cyan-300 transition-colors">
+                            เงินสดสำรองสภาพคล่องในบัญชีทั้งหมด (Cash)
+                          </p>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            พร้อมใช้งานสำหรับการ DCA และจัดสรรเข้าพอร์ต
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 flex items-center gap-2">
+                        <div className="text-xs font-bold text-white font-mono tabular-nums">
+                          ฿{item.value.toLocaleString()}
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-cyan-400 group-hover/cash:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  ) : hasHoldings ? (
+                    <div className="space-y-1 max-h-52 overflow-y-auto pr-0.5 scrollbar-thin">
+                      {categoryHoldings.map((h) => {
+                        const holdingPctOfCat = item.value > 0 ? (h.value / item.value) * 100 : 0
+
+                        return (
+                          <div
+                            key={h.name}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (h.name === 'CASH') {
+                                window.location.href = '/accounts'
+                              } else if (onSelectStock) {
+                                onSelectStock({
+                                  symbol: h.name,
+                                  name: h.fullName,
+                                  market: h.market,
+                                })
+                              }
+                            }}
+                            className="flex items-center justify-between p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.04] hover:border-indigo-500/40 transition-all cursor-pointer group/stock"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <StockLogo
+                                ticker={h.name}
+                                size={28}
+                                className="rounded-lg shadow-sm shrink-0"
+                              />
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-bold text-white group-hover/stock:text-indigo-300 transition-colors font-mono">
+                                    {h.name}
+                                  </span>
+                                  {h.market && (
+                                    <span className="text-[9px] font-semibold text-slate-400 px-1 py-0.2 bg-white/[0.05] rounded border border-white/[0.05]">
+                                      {h.market}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-slate-400 truncate max-w-[130px] sm:max-w-[170px]">
+                                  {h.fullName || h.name}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="text-right font-mono shrink-0 flex items-center gap-2">
+                              <div>
+                                <div className="text-xs font-bold text-white tabular-nums">
+                                  ฿{h.value.toLocaleString()}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-sans">
+                                  <span className="text-indigo-300 font-mono font-medium">
+                                    {holdingPctOfCat.toFixed(1)}%
+                                  </span>
+                                  <span className="text-slate-500"> ของหมวด</span>
+                                </div>
+                              </div>
+                              <ArrowUpRight className="w-3.5 h-3.5 text-slate-500 group-hover/stock:text-indigo-300 group-hover/stock:translate-x-0.5 group-hover/stock:-translate-y-0.5 transition-all" />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-3 text-xs text-slate-400 bg-white/[0.02] rounded-xl border border-white/[0.04]">
+                      ไม่มีข้อมูลหุ้นย่อยในหมวดนี้
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
