@@ -105,7 +105,7 @@ export async function getYahooQuoteSummary(symbol: string): Promise<YahooQuoteSu
         },
         signal: AbortSignal.timeout(4000),
         next: { revalidate: 3600 },
-      })
+      } as any)
 
       if (!res.ok) return null
       const json = await res.json()
