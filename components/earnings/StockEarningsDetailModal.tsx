@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X,
   Calendar,
@@ -42,8 +43,25 @@ export function StockEarningsDetailModal({
   onClose,
 }: StockEarningsDetailModalProps) {
   const [activeTab, setActiveTab] = useState<'actual_vs_estimate' | 'yoy_growth' | 'annual_trend'>('actual_vs_estimate')
+  const [mounted, setMounted] = useState(false)
 
-  if (!data) return null
+  useEffect(() => {
+    setMounted(true)
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
+  if (!data || !mounted) return null
 
   const {
     ticker,
@@ -69,10 +87,13 @@ export function StockEarningsDetailModal({
     0.1
   )
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
+  const modalContent = (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md overflow-hidden"
+    >
       <div
-        className="relative w-full max-w-4xl bg-[#0F131C] border border-white/[0.12] rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-4xl bg-[#0F131C] border border-white/[0.12] rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -722,7 +743,7 @@ export function StockEarningsDetailModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-white/[0.08] flex items-center justify-end bg-[#0A0D14]">
+        <div className="p-4 border-t border-white/[0.08] flex items-center justify-end bg-[#0A0D14] shrink-0">
           <button
             onClick={onClose}
             className="px-5 py-2 rounded-xl text-xs font-bold bg-white/[0.06] hover:bg-white/[0.1] text-white transition-colors cursor-pointer"
@@ -733,4 +754,6 @@ export function StockEarningsDetailModal({
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }

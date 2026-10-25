@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X,
   Calendar,
@@ -44,6 +45,25 @@ export function StockDividendDetailModal({
   onClose,
 }: StockDividendDetailModalProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'xd_stats' | 'history'>('overview')
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
+  if (!mounted) return null
 
   const {
     ticker,
@@ -61,10 +81,13 @@ export function StockDividendDetailModal({
 
   const isThai = market === 'TH'
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+  const modalContent = (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md overflow-hidden"
+    >
       <div
-        className="relative w-full max-w-4xl max-h-[92vh] flex flex-col bg-[#12151F] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/80 overflow-hidden text-slate-200"
+        className="relative w-full max-w-4xl max-h-[90vh] flex flex-col bg-[#12151F] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/80 overflow-hidden text-slate-200 animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Top Header */}
@@ -471,4 +494,6 @@ export function StockDividendDetailModal({
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }
