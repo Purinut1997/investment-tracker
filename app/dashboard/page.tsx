@@ -26,7 +26,9 @@ import {
   Target,
   Zap,
   Plus,
+  Sunrise,
 } from 'lucide-react'
+import { MorningBriefBanner } from '@/components/dashboard/MorningBriefBanner'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import { QuickAddModal } from '@/components/QuickAddModal'
 import {
@@ -507,6 +509,14 @@ export default function DashboardPage() {
             </button>
 
             <Link
+              href="/daily-plan"
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-amber-200 hover:text-white bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              <Sunrise className="w-3.5 h-3.5 text-amber-400" />
+              <span>สรุปเช้า AI & แผนรายวัน</span>
+            </Link>
+
+            <Link
               href="/radar"
               className="px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-200 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all flex items-center gap-1.5 shadow-sm"
             >
@@ -549,6 +559,9 @@ export default function DashboardPage() {
             </Link>
           </div>
         )}
+
+        {/* ── DAILY MORNING AI BRIEFING QUICK ACCESS BANNER ─────────── */}
+        <MorningBriefBanner />
 
         {/* ── 1. HERO WEALTH KPI ROW (12-COLUMN BENTO GRID) ───────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">

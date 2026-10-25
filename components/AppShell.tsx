@@ -30,6 +30,7 @@ import {
   Calendar,
   LayoutGrid,
   Coins,
+  Sunrise,
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
@@ -56,7 +57,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         label: 'ภาพรวม & แอ็กชันวันนี้',
         href: '/dashboard',
-        matchPrefixes: ['/dashboard', '/performance', '/dividends', '/earnings'],
+        matchPrefixes: ['/dashboard', '/daily-plan', '/performance', '/dividends', '/earnings'],
         icon: LayoutDashboard,
       },
       {
@@ -93,9 +94,10 @@ const HUB_SUB_TABS: Array<{
   tabs: Array<{ label: string; href: string; icon: React.ComponentType<{ className?: string }>; badge?: string }>
 }> = [
   {
-    hubPrefixes: ['/dashboard', '/performance', '/dividends', '/earnings'],
+    hubPrefixes: ['/dashboard', '/daily-plan', '/performance', '/dividends', '/earnings'],
     tabs: [
       { label: 'ภาพรวม & สัญญาณวันนี้', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'สรุปเช้า AI & แผนรายวัน', href: '/daily-plan', icon: Sunrise, badge: '06:30' },
       { label: 'กำไรรายตัว (รวมขายแล้ว)', href: '/performance', icon: BarChart3 },
       { label: 'ปฏิทินปันผล & สถิติ XD', href: '/dividends', icon: Coins },
       { label: 'ปฏิทินผลประกอบการ & งบย้อนหลัง', href: '/earnings', icon: Calendar },
