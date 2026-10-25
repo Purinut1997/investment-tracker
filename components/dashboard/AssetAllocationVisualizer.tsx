@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   ResponsiveContainer,
   PieChart,
@@ -26,7 +26,15 @@ interface AllocationItem {
 
 interface AssetAllocationVisualizerProps {
   items: AllocationItem[]
-  assetClasses?: Array<{ classKey: string; label: string; percent: number; value: number; color?: string }>
+  assetClasses?: Array<{
+    key?: string
+    classKey?: string
+    name?: string
+    label?: string
+    percent: number
+    value: number
+    color?: string
+  }>
   totalValue: number
   onSelectStock?: (stock: { symbol: string; name?: string; market?: string }) => void
 }
@@ -37,6 +45,9 @@ const CLASS_COLORS: Record<string, string> = {
   CRYPTO: '#f59e0b', // Amber
   GOLD: '#eab308',   // Yellow
   CASH: '#06b6d4',   // Cyan
+  STOCK: '#6366f1',  // Indigo
+  FUND: '#10b981',   // Emerald
+  BOND: '#06b6d4',   // Cyan
   OTHER: '#8b5cf6',  // Violet
 }
 
@@ -49,24 +60,78 @@ export function AssetAllocationVisualizer({
   const [viewMode, setViewMode] = useState<'assets' | 'classes'>('assets')
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
-  const activeItem = activeIndex !== null ? items[activeIndex] : null
+  // Robust computation of Asset Classes
+  const classDataList = useMemo(() => {
+    // 1. If backend summary provided valid asset classes with positive values
+    if (Array.isArray(assetClasses) && assetClasses.length > 0) {
+      const valid = assetClasses
+        .filter((ac) => Number(ac?.value || 0) > 0)
+        .map((ac) => {
+          const rawKey = String(ac.key || ac.classKey || 'OTHER').toUpperCase()
+          const label = ac.name || ac.label || rawKey
+          return {
+            name: label,
+            fullName: label,
+            value: Math.round(Number(ac.value) || 0),
+            percent: Number(ac.percent) || 0,
+            color: ac.color || CLASS_COLORS[rawKey] || '#6366f1',
+          }
+        })
+      if (valid.length > 0) return valid
+    }
 
-  // Prepare chart data based on active view mode
-  const chartData = viewMode === 'assets'
-    ? items.map((it) => ({
-        name: it.name,
-        fullName: it.fullName,
-        value: it.value,
-        percent: it.percent,
-        color: it.color,
+    // 2. Fallback: Aggregate by Market / Asset Type directly from items
+    const marketMap: Record<string, { name: string; value: number; color: string }> = {
+      US: { name: '🇺🇸 หุ้นสหรัฐฯ (US Stocks & ETFs)', value: 0, color: '#3b82f6' },
+      TH: { name: '🇹🇭 หุ้นไทย (Thai Stocks)', value: 0, color: '#10b981' },
+      CRYPTO: { name: '🪙 สินทรัพย์ดิจิทัล (Crypto)', value: 0, color: '#f59e0b' },
+      GOLD: { name: '🏆 ทองคำและสินค้าโภคภัณฑ์', value: 0, color: '#eab308' },
+      CASH: { name: '💵 เงินสดสำรองสภาพคล่อง', value: 0, color: '#06b6d4' },
+    }
+
+    for (const it of items) {
+      const isCash = it.assetType === 'CASH' || it.name.toUpperCase() === 'CASH'
+      const m = isCash ? 'CASH' : (it.market || 'US').toUpperCase()
+
+      if (marketMap[m]) {
+        marketMap[m].value += it.value
+      } else {
+        if (!marketMap['OTHER']) {
+          marketMap['OTHER'] = { name: '🌐 สินทรัพย์อื่น ๆ', value: 0, color: '#8b5cf6' }
+        }
+        marketMap['OTHER'].value += it.value
+      }
+    }
+
+    return Object.entries(marketMap)
+      .filter(([_, v]) => v.value > 0)
+      .map(([_, v]) => ({
+        name: v.name,
+        fullName: v.name,
+        value: v.value,
+        percent: totalValue > 0 ? Number(((v.value / totalValue) * 100).toFixed(1)) : 0,
+        color: v.color,
       }))
-    : assetClasses.map((ac) => ({
-        name: ac.label || ac.classKey,
-        fullName: ac.label || ac.classKey,
-        value: ac.value,
-        percent: ac.percent,
-        color: CLASS_COLORS[ac.classKey.toUpperCase()] || '#6366f1',
-      }))
+  }, [items, assetClasses, totalValue])
+
+  // Active chart data based on active view mode
+  const chartData = useMemo(() => {
+    if (viewMode === 'classes') {
+      return classDataList
+    }
+    return items.map((it) => ({
+      name: it.name,
+      fullName: it.fullName,
+      value: it.value,
+      percent: it.percent,
+      color: it.color,
+      origStock: it,
+    }))
+  }, [viewMode, items, classDataList])
+
+  const activeItem = activeIndex !== null && activeIndex < chartData.length
+    ? chartData[activeIndex]
+    : null
 
   return (
     <div className="space-y-4">
@@ -101,7 +166,7 @@ export function AssetAllocationVisualizer({
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              หมวดสินทรัพย์
+              หมวดสินทรัพย์ ({classDataList.length})
             </button>
           </div>
         </div>
@@ -153,7 +218,7 @@ export function AssetAllocationVisualizer({
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
           {activeItem ? (
             <div className="animate-in fade-in duration-150">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block truncate max-w-[110px] mx-auto">
                 {activeItem.name}
               </span>
               <span className="text-xl font-black text-white font-mono leading-none block my-0.5">
@@ -183,7 +248,7 @@ export function AssetAllocationVisualizer({
       <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1 scrollbar-thin">
         {chartData.map((item, idx) => {
           const isHovered = activeIndex === idx
-          const origStock = viewMode === 'assets' ? items[idx] : null
+          const origStock = (item as any).origStock as AllocationItem | undefined
 
           return (
             <div
@@ -217,7 +282,7 @@ export function AssetAllocationVisualizer({
                     {item.name}
                   </span>
                   {item.fullName && item.fullName !== item.name && (
-                    <span className="text-[10px] text-slate-400 truncate hidden sm:inline max-w-[120px]">
+                    <span className="text-[10px] text-slate-400 truncate hidden sm:inline max-w-[140px]">
                       {item.fullName}
                     </span>
                   )}
