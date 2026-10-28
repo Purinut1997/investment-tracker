@@ -16,6 +16,18 @@ export interface MarketRegimeData {
     vixPrice: number
     btcChange: number
   }
+  fearGreed?: {
+    score: number
+    rating: string
+    ratingLabelTh: string
+    previousClose: number
+    previous1Week?: number
+    source: string
+  }
+  playbook?: {
+    donts: string[]
+    dos: string[]
+  }
 }
 
 interface MarketBenchmark {
@@ -217,7 +229,7 @@ export function MarketRegimeGauge({
             </div>
             <div>
               <span className="text-[11px] font-bold text-blue-400 tracking-wider uppercase block">
-                Market Regime Compass
+                Market Sentiment Compass
               </span>
               <h3 className="text-xl font-black text-white flex items-center gap-2">
                 <span>สภาวะตลาดวันนี้</span>
@@ -237,6 +249,19 @@ export function MarketRegimeGauge({
             />
             <span>{regime?.title || 'กำลังประมวลผล...'}</span>
           </div>
+        </div>
+
+        {/* Real Human Sentiment Source Live Badge */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/25 text-[11px] font-semibold text-blue-300">
+            <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+            <span>ดัชนีอารมณ์มนุษย์จริง: CNN Fear & Greed Index</span>
+          </span>
+          {regime?.fearGreed && (
+            <span className="text-[11px] font-medium text-slate-400">
+              (เมื่อวาน: {regime.fearGreed.previousClose} • สัปดาห์ก่อน: {regime.fearGreed.previous1Week ?? '-'})
+            </span>
+          )}
         </div>
 
         {/* ================= GAUGE METER SPEEDOMETER ================= */}
@@ -423,8 +448,8 @@ export function MarketRegimeGauge({
 
             {/* Glowing Digital Score Readout Right Under Pivot */}
             <div className="text-center -mt-3">
-              <div className="inline-flex items-baseline gap-1 bg-slate-950/80 px-4 py-1 rounded-full border border-white/[0.08] shadow-inner">
-                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Score:</span>
+              <div className="inline-flex items-baseline gap-1 bg-slate-950/80 px-4 py-1.5 rounded-full border border-white/[0.08] shadow-inner">
+                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Human Sentiment:</span>
                 <span
                   className="text-2xl font-black font-mono tracking-tight"
                   style={{ color: activeZone.color }}
@@ -433,7 +458,7 @@ export function MarketRegimeGauge({
                 </span>
                 <span className="text-xs text-slate-500 font-bold">/ 100</span>
                 <span className="text-[11px] font-bold text-slate-300 ml-1">
-                  ({activeZone.label} • {activeZone.sub})
+                  ({activeZone.label} • {regime?.fearGreed?.ratingLabelTh || activeZone.sub})
                 </span>
               </div>
             </div>
@@ -499,9 +524,44 @@ export function MarketRegimeGauge({
           <span className="text-blue-400 font-bold shrink-0 mt-0.5">🧭 กลยุทธ์:</span>
           <span>
             {regime?.description ||
-              'ตลาดมีโมเมนตัมบวกนำโดยกลุ่มเทคโนโลยี แนะนำถือรันเทรนด์ ไม่ควรไล่ราคาที่แนวต้าน'}
+              'ตลาดอยู่ในโหมดกังวลและระมัดระวัง แนะนำเกาะวินัยการลงทุนและสำรองเงินสด'}
           </span>
         </div>
+
+        {/* Action Playbook (วันนี้ควรเดินยังไง: สิ่งที่ห้ามทำ vs สิ่งที่ควรทำ) */}
+        {regime?.playbook && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+            {/* Don'ts */}
+            <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-2.5">
+              <div className="flex items-center gap-1.5 text-rose-400 font-bold text-[11px] mb-1">
+                <span>🛑 สิ่งที่ห้ามทำเด็ดขาด (Don&apos;ts)</span>
+              </div>
+              <ul className="space-y-1 text-slate-300 text-[11px]">
+                {regime.playbook.donts.map((item, idx) => (
+                  <li key={idx} className="flex items-start gap-1">
+                    <span className="text-rose-400 leading-tight shrink-0">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Dos */}
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5">
+              <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px] mb-1">
+                <span>🎯 สิ่งที่ควรทำวันนี้ (Dos)</span>
+              </div>
+              <ul className="space-y-1 text-slate-300 text-[11px]">
+                {regime.playbook.dos.map((item, idx) => (
+                  <li key={idx} className="flex items-start gap-1">
+                    <span className="text-emerald-400 leading-tight shrink-0">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Dry Powder & Currency Info (Bottom Row) */}

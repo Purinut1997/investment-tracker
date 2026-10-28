@@ -5,6 +5,7 @@ import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-si
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 import { callGemini } from '@/lib/ai/gemini-client'
 
 export const maxDuration = 60
@@ -39,8 +40,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 2. Fetch benchmarks once for all users to save bandwidth
-    const [spxRes, ndxRes, vixRes, setRes, btcRes, goldRes, fxRes] = await Promise.allSettled([
+    // 2. Fetch benchmarks and real human sentiment once for all users to save bandwidth
+    const [spxRes, ndxRes, vixRes, setRes, btcRes, goldRes, fxRes, fearGreedRes] = await Promise.allSettled([
       yahooFinanceProvider.getQuote('^GSPC'),
       yahooFinanceProvider.getQuote('^IXIC'),
       yahooFinanceProvider.getQuote('^VIX'),
@@ -48,7 +49,22 @@ export async function GET(req: NextRequest) {
       coinGeckoProvider.getQuote('BTC'),
       yahooFinanceProvider.getQuote('GC=F'),
       getExchangeRate('USD', 'THB'),
+      fetchRealHumanSentiment(),
     ])
+
+    const fearGreed =
+      fearGreedRes.status === 'fulfilled' && fearGreedRes.value
+        ? fearGreedRes.value
+        : {
+            score: 35,
+            rating: 'fear' as const,
+            ratingLabelTh: 'ตลาดกังวล / ระมัดระวัง (Fear)',
+            previousClose: 34,
+            previous1Week: 31,
+            previous1Month: 32,
+            timestamp: new Date().toISOString(),
+            source: 'CALCULATED_FALLBACK' as const,
+          }
 
     const benchmarks: Array<{ symbol: string; name: string; price: number; changePercent: number }> = []
 
@@ -72,31 +88,16 @@ export async function GET(req: NextRequest) {
       benchmarks.push({ symbol: 'GOLD (XAU)', name: 'ทองคำสปอต', price: goldRes.value.price, changePercent: goldRes.value.changePercent })
     }
 
-    const spxChg = benchmarks.find((b) => b.symbol === 'S&P 500')?.changePercent || 0
-    const ndxChg = benchmarks.find((b) => b.symbol === 'NASDAQ')?.changePercent || 0
-    const btcChg = benchmarks.find((b) => b.symbol === 'BTC')?.changePercent || 0
-    const avgEquities = (spxChg + ndxChg) / 2
-
-    const equityScore = Math.max(0, Math.min(40, 20 + avgEquities * 7.5))
-    const vixScore = Math.max(0, Math.min(40, 20 - (vixPrice - 16.5) * 2.5))
-    const btcScore = Math.max(0, Math.min(20, 10 + btcChg * 1.5))
-    let regimeScore = Math.round(equityScore + vixScore + btcScore)
-    if (vixPrice >= 18.0 && regimeScore > 54) regimeScore = 54
-    else if (vixPrice >= 17.0 && regimeScore > 58) regimeScore = 58
-
+    const regimeScore = fearGreed.score
     let regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
     if (regimeScore <= 25) {
-      regimeTitle = 'ตลาดกลัวจัด / ระมัดระวังสูงสุด (Extreme Risk-Off)'
+      regimeTitle = 'ตลาดกลัวจัด / ระมัดระวังสูงสุด (Extreme Fear)'
     } else if (regimeScore <= 45) {
-      regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Risk-Off / Caution)'
-    } else if (regimeScore <= 58) {
-      if (vixPrice >= 17.0 || avgEquities > 0.2) {
-        regimeTitle = 'รีบาวด์เปราะบาง / เฝ้าระวัง (Fragile Rebound)'
-      } else {
-        regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
-      }
-    } else if (regimeScore <= 78) {
-      regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Risk-On / Bullish)'
+      regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Human Fear)'
+    } else if (regimeScore <= 55) {
+      regimeTitle = 'ตลาดสมดุล / ลังเลรอดูทิศทาง (Human Neutral)'
+    } else if (regimeScore <= 75) {
+      regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Human Greed)'
     } else {
       regimeTitle = 'ตลาดร้อนแรงเกินพิกัด (Extreme Greed / Overbought)'
     }
@@ -165,6 +166,7 @@ export async function GET(req: NextRequest) {
 
 [ข้อมูลสภาวะตลาดวันนี้]
 - สถานะตลาด (Market Regime): ${regimeTitle}
+- ดัชนีอารมณ์มนุษย์ในตลาดจริง (CNN Fear & Greed Index): ${fearGreed.score}/100 (${fearGreed.ratingLabelTh})
 - ดัชนีหลักชี้นำ: ${benchmarksSummary}
 
 [ภาพรวมพอร์ตโฟลิโอ]
@@ -174,7 +176,7 @@ export async function GET(req: NextRequest) {
 ${triggerLines.join('\n')}
 
 [กฎเหล็กการประเมินความเสี่ยงตามความเป็นจริง]:
-- หากสภาวะตลาดเป็น "รีบาวด์เปราะบาง (Fragile Rebound)" หรือ "ระมัดระวัง (Caution)" หรือ VIX สูง: ห้ามมองบวกเกินจริงเด็ดขาด ให้เตือนระวังการเด้งเพื่อลงต่อ (Dead-Cat Bounce) และเน้นวินัยการถือเงินสดสำรอง (Dry Powder)
+- หากดัชนีอารมณ์มนุษย์ (CNN Fear & Greed Index) หรือสภาวะตลาดอยู่ในระดับกังวล/กลัว (Fear/Caution ต่ำกว่า 45): ห้ามมองบวกเกินจริงเด็ดขาด ให้ยึดแนวทาง 'ไม่ Panic Sell ตามฝูงชน และไม่ไล่ราคาตอนเด้งเขียว (Dead-Cat Bounce)' ควรถือเงินสดสำรองและรอรับเฉพาะแนวรับสำคัญ S1 ที่ได้เปรียบเท่านั้น
 
 [กฎเหล็กและข้อห้ามเด็ดขาดเพื่อความกระชับสูงสุด]:
 1. ห้ามใส่คำทักทายเด็ดขาด (ห้ามเขียน "เรียน ท่าน...", "สวัสดีครับ", "ยินดีต้อนรับ") ให้เริ่มต้นที่เนื้อหาส่วนที่ 1 ทันที

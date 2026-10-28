@@ -6,6 +6,7 @@ import { fetchSingleTickerTechnicalSignal, TechnicalSignal } from '@/lib/market-
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 
 export const maxDuration = 45
 
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
       totalCash += Number(acc.cashBalance) || 0
     }
 
-    // 2. Fetch key market benchmarks in parallel
+    // 2. Fetch key market benchmarks and real human sentiment in parallel
     const [
       spxRes,
       nasdaqRes,
@@ -88,6 +89,7 @@ export async function GET(req: NextRequest) {
       goldRes,
       vixRes,
       usdThbRate,
+      fearGreedRes,
     ] = await Promise.allSettled([
       yahooFinanceProvider.getQuote('S&P 500'),
       yahooFinanceProvider.getQuote('NASDAQ'),
@@ -96,6 +98,7 @@ export async function GET(req: NextRequest) {
       yahooFinanceProvider.getQuote('GOLD'),
       yahooFinanceProvider.getQuote('VIX'),
       getExchangeRate('USD', 'THB'),
+      fetchRealHumanSentiment(),
     ])
 
     const benchmarks: MarketBenchmark[] = []
@@ -178,7 +181,21 @@ export async function GET(req: NextRequest) {
       benchmarks.push({ symbol: 'VIX', name: 'ความกลัวตลาด', price: 17.5, changePercent: -1.15, currency: 'PTS', category: 'index' })
     }
 
-    // 3. Compute Quantitative Market Regime Score & Sentiment
+    // 3. Compute Real Market Sentiment & Quantitative Signals
+    const fearGreed =
+      fearGreedRes.status === 'fulfilled' && fearGreedRes.value
+        ? fearGreedRes.value
+        : {
+            score: 35,
+            rating: 'fear' as const,
+            ratingLabelTh: 'ตลาดกังวล / ระมัดระวัง (Fear)',
+            previousClose: 34,
+            previous1Week: 31,
+            previous1Month: 32,
+            timestamp: new Date().toISOString(),
+            source: 'CALCULATED_FALLBACK' as const,
+          }
+
     const spxChg = benchmarks.find((b) => b.symbol === 'S&P 500')?.changePercent || 0
     const ndxChg = benchmarks.find((b) => b.symbol === 'NASDAQ')?.changePercent || 0
     const btcChg = benchmarks.find((b) => b.symbol === 'BTC')?.changePercent || 0
@@ -186,23 +203,8 @@ export async function GET(req: NextRequest) {
     const vixPrice = vixBenchmark?.price || 17.5
     const avgEquities = (spxChg + ndxChg) / 2
 
-    // 1. Equities Momentum (Weight 40%): baseline 20 pts at 0%
-    const equityScore = Math.max(0, Math.min(40, 20 + avgEquities * 7.5))
-    // 2. VIX Volatility / Fear Factor (Weight 40%, Inverted): baseline 20 pts at VIX 16.5
-    const vixScore = Math.max(0, Math.min(40, 20 - (vixPrice - 16.5) * 2.5))
-    // 3. Alternative / Crypto Appetite (Weight 20%): baseline 10 pts at 0%
-    const btcScore = Math.max(0, Math.min(20, 10 + btcChg * 1.5))
-
-    const compositeScore = Math.round(equityScore + vixScore + btcScore)
-    let regimeScore = Math.max(5, Math.min(95, compositeScore))
-
-    // Institutional VIX Fear Filter & Safety Cap:
-    // If VIX is elevated (>= 17.0), the market CANNOT be classified as full Bullish/Risk-On!
-    if (vixPrice >= 18.0 && regimeScore > 54) {
-      regimeScore = 54
-    } else if (vixPrice >= 17.0 && regimeScore > 58) {
-      regimeScore = 58
-    }
+    // Real Human Sentiment Score directly from CNN Fear & Greed Index
+    const regimeScore = fearGreed.score
 
     let regimeType: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'VOLATILE' = 'NEUTRAL'
     let regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
@@ -211,50 +213,100 @@ export async function GET(req: NextRequest) {
     let regimeBg = 'bg-yellow-500/15 border-yellow-500/30'
     let tierLabel = 'สมดุล (Neutral)'
 
+    let playbook = {
+      donts: [
+        'ห้าม Panic Sell ตามอารมณ์กลัวของคนส่วนใหญ่ในตลาด',
+        'ห้ามไล่ราคาตอนตลาดเด้งเขียวระยะสั้น (Dead-Cat Bounce)',
+      ],
+      dos: [
+        'ถือเงินสดสำรอง (Dry Powder) 15-20% เพื่อรักษาความได้เปรียบ',
+        'ตั้ง Limit Order รอรับเฉพาะสินทรัพย์พื้นฐานแข็งแกร่งที่แตะแนวรับสำคัญ S1',
+      ],
+    }
+
     if (regimeScore <= 25) {
       regimeType = 'BEARISH'
-      regimeTitle = 'ตลาดกลัวจัด / ระมัดระวังสูงสุด (Extreme Risk-Off)'
-      regimeDesc = 'แรงขายกดดันรุนแรง ดัชนีความกลัวพุ่งสูง แนะนำสำรองเงินสดและตั้งรับเฉพาะแนวรับลึก'
+      regimeTitle = 'ตลาดกลัวจัด / ระมัดระวังสูงสุด (Extreme Fear)'
+      regimeDesc = `ดัชนีอารมณ์มนุษย์ (CNN Fear & Greed: ${regimeScore}) ตกสู่ระดับกลัวจัด ผู้เล่นในตลาดตื่นตระหนก ไม่ควร Panic Sell ตามมวลชน และห้ามรีบรับมีด เน้นถือเงินสดสำรอง 20-30% รอตั้งรับเฉพาะสินทรัพย์พื้นฐานแกร่งที่ Oversold แตะแนวรับสำคัญ S1`
       regimeColor = 'text-rose-400'
       regimeBg = 'bg-rose-500/15 border-rose-500/40'
       tierLabel = 'กลัวจัด (Extreme Fear)'
+      playbook = {
+        donts: [
+          'ห้าม Panic Sell เทขายที่ก้นเหวตามอารมณ์ตื่นตระหนกของตลาด',
+          'ห้ามรีบ All-in รับมีดที่กำลังร่วงแรงโดยไม่มีจุด Stop Loss',
+        ],
+        dos: [
+          'ถือเงินสดสำรอง 20-30% ไว้ช้อนซื้อสินทรัพย์คุณภาพในราคาลดกระหน่ำ',
+          'แบ่งไม้ซื้อเฉพาะหุ้นที่มี RSI < 30 และลงมาทดสอบแนวรับประวัติศาสตร์ S1',
+        ],
+      }
     } else if (regimeScore <= 45) {
       regimeType = 'BEARISH'
-      regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Risk-Off / Caution)'
-      regimeDesc = 'แรงขายกดดันดัชนีหลัก เป็นจังหวะดีในการคัดกรองหุ้นแข็งแกร่งและเตรียมเงินสดช้อนซื้อที่แนวรับลึก'
+      regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Human Fear)'
+      regimeDesc = `ดัชนีอารมณ์มนุษย์ (CNN Fear & Greed Index: ${regimeScore}) สะท้อนว่านักลงทุนส่วนใหญ่กังวลต่อความเสี่ยงมหภาค แม้จะมีแรงรีบาวด์สลับ ห้ามไล่ราคาตอนเด้งเขียว (Dead-Cat Bounce) ควรถือเงินสดสำรอง 15-20% และตั้ง Limit Order รอรับเฉพาะแนวรับสำคัญที่ได้เปรียบ`
       regimeColor = 'text-orange-400'
       regimeBg = 'bg-orange-500/15 border-orange-500/30'
-      tierLabel = 'ระวัง (Caution)'
-    } else if (regimeScore <= 58) {
-      if (vixPrice >= 17.0 || avgEquities > 0.2) {
-        regimeType = 'NEUTRAL'
-        regimeTitle = 'รีบาวด์เปราะบาง / เฝ้าระวัง (Fragile Rebound)'
-        regimeDesc = 'ตลาดฟื้นตัวระยะสั้น แต่ดัชนีความผันผวน (VIX) ยังอยู่ในระดับเฝ้าระวัง สะท้อนว่าตลาดยังมีความกังวลแฝงอยู่ ควรระวังการเด้งเพื่อลงต่อ ไม่ควรผลีผลามไล่ราคาที่แนวต้าน เน้นถือเงินสดสำรองไว้ก่อน'
-        regimeColor = 'text-amber-400'
-        regimeBg = 'bg-amber-500/15 border-amber-500/30'
-        tierLabel = 'รีบาวด์เปราะบาง (Fragile)'
-      } else {
-        regimeType = 'NEUTRAL'
-        regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
-        regimeDesc = 'ดัชนีเคลื่อนไหวในกรอบสะสมกำลัง แนะนำเน้นเกาะแผน DCA หรือรอจังหวะซื้อตามแนวรับสำคัญ'
-        regimeColor = 'text-yellow-400'
-        regimeBg = 'bg-yellow-500/15 border-yellow-500/30'
-        tierLabel = 'สมดุล (Neutral)'
+      tierLabel = 'ระวัง / วิตกกังวล (Fear)'
+      playbook = {
+        donts: [
+          'ห้าม Panic Sell ตามอารมณ์กลัวชั่วคราว',
+          'ห้าม FOMO ไล่ซื้อตอนตลาดเด้งเขียวสลับ (เสี่ยงเจอกับดัก Dead-Cat Bounce)',
+        ],
+        dos: [
+          'สำรองเงินสด (Dry Powder) 15-20% เตรียมพร้อมรับมือความผันผวน',
+          'ตั้ง Limit Order รอรับเฉพาะสินทรัพย์ที่ย่อตัวลงมาใกล้แนวรับ S1 เท่านั้น',
+        ],
       }
-    } else if (regimeScore <= 78) {
+    } else if (regimeScore <= 55) {
+      regimeType = 'NEUTRAL'
+      regimeTitle = 'ตลาดสมดุล / ลังเลรอดูทิศทาง (Human Neutral)'
+      regimeDesc = `ดัชนีอารมณ์มนุษย์ (CNN Fear & Greed Index: ${regimeScore}) อยู่ในระดับสมดุล ตลาดไม่มีความโลภหรือความกลัวสุดโต่ง แนะนำเกาะแผน DCA ตามรอบปกติ`
+      regimeColor = 'text-yellow-400'
+      regimeBg = 'bg-yellow-500/15 border-yellow-500/30'
+      tierLabel = 'สมดุล (Neutral)'
+      playbook = {
+        donts: [
+          'ห้ามเทรดเกินขนาดพอร์ตหรือ Overtrade ในช่วงตลาดไร้ทิศทางชัดเจน',
+        ],
+        dos: [
+          'เกาะวินัยการออมและการลงทุนแบบ DCA ตามแผนประจำเดือน',
+          'รีวิวสัดส่วนพอร์ต (Rebalance) หากมีสินทรัพย์ใดเบี่ยงเบนจากเป้าหมาย',
+        ],
+      }
+    } else if (regimeScore <= 75) {
       regimeType = 'BULLISH'
-      regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Risk-On / Bullish)'
-      regimeDesc = 'ตลาดมีโมเมนตัมบวกนำโดยกลุ่มเทคโนโลยี แนะนำถือรันเทรนด์ ไม่ควรไล่ราคาที่แนวต้าน'
+      regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Human Greed)'
+      regimeDesc = `ดัชนีอารมณ์มนุษย์ (CNN Fear & Greed Index: ${regimeScore}) มีความมั่นใจและกล้าเสี่ยงสูง โมเมนตัมตลาดเป็นบวก แนะนำถือรันเทรนด์ ห้ามไล่ราคาที่แนวต้าน`
       regimeColor = 'text-emerald-400'
       regimeBg = 'bg-emerald-500/15 border-emerald-500/30'
-      tierLabel = 'เปิดรับความเสี่ยง (Risk-On)'
+      tierLabel = 'เปิดรับเสี่ยง (Greed / Risk-On)'
+      playbook = {
+        donts: [
+          'ห้ามไล่ราคาซื้อหุ้นหรือเหรียญที่วิ่งขึ้นไปใกล้แนวต้าน R1/R2',
+        ],
+        dos: [
+          'ถือรันเทรนด์ (Let Profits Run) โดยขยับ Trailing Stop ตามขึ้นไป',
+          'ทยอยล็อกกำไรบางส่วนสำหรับสินทรัพย์ที่ราคาขึ้นชนเป้าหมาย',
+        ],
+      }
     } else {
       regimeType = 'BULLISH'
-      regimeTitle = 'ตลาดร้อนแรงเกินพิกัด (Extreme Greed / Overbought)'
-      regimeDesc = 'ดัชนีวิ่งขึ้นต่อเนื่องใกล้ระดับ Overbought พิจารณาชะลอการซื้อเพิ่มและเตรียมล็อกกำไรบางส่วน'
+      regimeTitle = 'ตลาดโลภจัด / ร้อนแรงเกินพิกัด (Extreme Greed)'
+      regimeDesc = `ดัชนีอารมณ์มนุษย์ (CNN Fear & Greed Index: ${regimeScore}) พุ่งแตะระดับโลภจัด (Extreme Greed) ตลาดร้อนแรงเกินปกติ เสี่ยงต่อการปรับฐานรุนแรง แนะนำล็อกกำไรและเตรียมเงินสด`
       regimeColor = 'text-cyan-300'
       regimeBg = 'bg-cyan-500/15 border-cyan-500/40'
-      tierLabel = 'ร้อนแรงมาก (Overbought)'
+      tierLabel = 'โลภจัด (Extreme Greed)'
+      playbook = {
+        donts: [
+          'ห้ามเปิดออเดอร์ซื้อใหม่ด้วยเงินก้อนใหญ่ที่บริเวณดอย',
+          'ห้ามประมาทคิดว่าตลาดจะขึ้นไปเรื่อยๆ โดยไม่มีการย่อ',
+        ],
+        dos: [
+          'ล็อกกำไร 15-30% เข้ากระเป๋าและถือเงินสดเพิ่มขึ้น',
+          'ตั้ง Stop-loss / Trailing Stop อย่างเคร่งครัดเพื่อปกป้องกำไร',
+        ],
+      }
     }
 
     // 4. Scan holdings for technical signals & actionable triggers
@@ -395,6 +447,15 @@ export async function GET(req: NextRequest) {
           bg: regimeBg,
           score: regimeScore,
           tierLabel,
+          fearGreed: {
+            score: fearGreed.score,
+            rating: fearGreed.rating,
+            ratingLabelTh: fearGreed.ratingLabelTh,
+            previousClose: fearGreed.previousClose,
+            previous1Week: fearGreed.previous1Week,
+            source: fearGreed.source,
+          },
+          playbook,
           drivers: {
             equityMomentum: avgEquities,
             vixPrice,

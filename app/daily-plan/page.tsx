@@ -115,6 +115,18 @@ interface DailyPlanApiResponse {
         vixPrice: number
         btcChange: number
       }
+      fearGreed?: {
+        score: number
+        rating: string
+        ratingLabelTh: string
+        previousClose: number
+        previous1Week?: number
+        source: string
+      }
+      playbook?: {
+        donts: string[]
+        dos: string[]
+      }
     }
     benchmarks: MarketBenchmark[]
     usdThbRate: number

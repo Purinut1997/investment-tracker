@@ -31,6 +31,11 @@ export async function POST(req: NextRequest) {
     }
 
     const regimeTitle = marketOverview?.regime?.title || 'Consolidation'
+    const fearGreed = marketOverview?.regime?.fearGreed
+    const fearGreedSummary = fearGreed
+      ? `${fearGreed.score}/100 (${fearGreed.ratingLabelTh} — CNN Fear & Greed Index ดัชนีอารมณ์มนุษย์ในตลาดจริง)`
+      : 'N/A'
+
     const benchmarksSummary = marketOverview?.benchmarks
       ? marketOverview.benchmarks
           .map((b: any) => `${b.symbol}: ${b.price?.toLocaleString()} (${b.changePercent >= 0 ? '+' : ''}${b.changePercent?.toFixed(2)}%)`)
@@ -66,6 +71,7 @@ export async function POST(req: NextRequest) {
 
 [ข้อมูลสภาวะตลาดวันนี้]
 - สถานะตลาด (Market Regime): ${regimeTitle}
+- ดัชนีอารมณ์มนุษย์ในตลาดจริง (CNN Fear & Greed Index): ${fearGreedSummary}
 - ดัชนีหลักชี้นำ: ${benchmarksSummary}
 - ดัชนีความกังวลและความกลัว (VIX Volatility Index): ${vixSummary}
 
@@ -77,7 +83,7 @@ export async function POST(req: NextRequest) {
 ${triggerSummary}
 
 [กฎเหล็กการประเมินความเสี่ยงตามความเป็นจริง]:
-- หากสภาวะตลาดเป็น "รีบาวด์เปราะบาง (Fragile Rebound)" หรือ "ระมัดระวัง (Caution)" หรือ VIX สูง: ห้ามมองบวกเกินจริงเด็ดขาด ให้เตือนระวังการเด้งเพื่อลงต่อ (Dead-Cat Bounce) และเน้นวินัยการถือเงินสดสำรอง (Dry Powder)
+- หากดัชนีอารมณ์มนุษย์ (CNN Fear & Greed Index) หรือสภาวะตลาดอยู่ในระดับกังวล/กลัว (Fear/Caution ต่ำกว่า 45) หรือ VIX สูง: ห้ามมองบวกเกินจริงเด็ดขาด ให้ยึดแนวทาง 'ไม่ Panic Sell ตามฝูงชน และไม่ไล่ราคาตอนเด้งเขียว (Dead-Cat Bounce)' ควรถือเงินสดสำรอง (Dry Powder) 15-20% และตั้ง Limit Order รอรับเฉพาะแนวรับสำคัญ S1 ที่ได้เปรียบเท่านั้น
 
 [กฎเหล็กและข้อห้ามเด็ดขาดเพื่อความกระชับสูงสุด]:
 1. ห้ามใส่คำทักทายเด็ดขาด (ห้ามเขียน "เรียน ท่าน...", "สวัสดีครับ", "ยินดีต้อนรับ") ให้เริ่มต้นที่เนื้อหาส่วนที่ 1 ทันที
