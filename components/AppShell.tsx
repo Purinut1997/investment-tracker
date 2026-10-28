@@ -55,26 +55,26 @@ const NAV_GROUPS: NavGroup[] = [
     groupName: 'ศูนย์บัญชาการหลัก (4 เมนูครบจบ)',
     items: [
       {
-        label: 'ภาพรวม & แอ็กชันวันนี้',
+        label: 'พอร์ต & ผลงานวันนี้',
         href: '/dashboard',
-        matchPrefixes: ['/dashboard', '/daily-plan', '/performance', '/dividends', '/earnings'],
+        matchPrefixes: ['/dashboard', '/daily-plan', '/performance', '/dividends'],
         icon: LayoutDashboard,
       },
       {
-        label: 'จัดพอร์ต & ถาม AI รายส่วน',
+        label: 'กลยุทธ์ & บริหารความเสี่ยง',
         href: '/plans',
         matchPrefixes: ['/plans', '/radar', '/forecast'],
         icon: PieChart,
         badge: 'AI',
       },
       {
-        label: 'ตลาด & ข่าวพอร์ต',
+        label: 'สภาวะตลาด ข่าว & ปฏิทิน',
         href: '/market-watch',
-        matchPrefixes: ['/market-watch', '/news', '/market-map', '/economic-calendar'],
+        matchPrefixes: ['/market-watch', '/news', '/market-map', '/economic-calendar', '/earnings'],
         icon: TrendingUp,
       },
       {
-        label: 'ธุรกรรม & บัญชี',
+        label: 'ธุรกรรม & บัญชีเงินสด',
         href: '/transactions',
         matchPrefixes: ['/transactions', '/accounts', '/tax-report'],
         icon: ArrowLeftRight,
@@ -94,30 +94,30 @@ const HUB_SUB_TABS: Array<{
   tabs: Array<{ label: string; href: string; icon: React.ComponentType<{ className?: string }>; badge?: string }>
 }> = [
   {
-    hubPrefixes: ['/dashboard', '/daily-plan', '/performance', '/dividends', '/earnings'],
+    hubPrefixes: ['/dashboard', '/daily-plan', '/performance', '/dividends'],
     tabs: [
-      { label: 'ภาพรวม & สัญญาณวันนี้', href: '/dashboard', icon: LayoutDashboard },
-      { label: 'สรุปเช้า AI & แผนรายวัน', href: '/daily-plan', icon: Sunrise, badge: '06:30' },
+      { label: 'ภาพรวมพอร์ต & สัญญาณ', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'สรุปเช้า AI & แผนปฏิบัติการ', href: '/daily-plan', icon: Sunrise, badge: '06:30' },
       { label: 'กำไรรายตัว (รวมขายแล้ว)', href: '/performance', icon: BarChart3 },
-      { label: 'ปฏิทินปันผล & สถิติ XD', href: '/dividends', icon: Coins },
-      { label: 'ปฏิทินผลประกอบการ & งบย้อนหลัง', href: '/earnings', icon: Calendar },
+      { label: 'กระแสเงินสดปันผล & สถิติ XD', href: '/dividends', icon: Coins },
     ],
   },
   {
     hubPrefixes: ['/plans', '/radar', '/forecast'],
     tabs: [
-      { label: 'ตะกร้ากลยุทธ์ & ถาม AI รายส่วน', href: '/plans', icon: PieChart, badge: 'Dime! Style' },
-      { label: 'เรดาร์ความเสี่ยง & โอกาส', href: '/radar', icon: Radar },
+      { label: 'สัดส่วนเป้าหมาย & ปรับพอร์ต DCA', href: '/plans', icon: PieChart, badge: 'Dime! Style' },
+      { label: 'เรดาร์ความเสี่ยง & โอกาสช้อนซื้อ', href: '/radar', icon: Radar },
       { label: 'จำลองพอร์ต 10 ปี (Monte Carlo)', href: '/forecast', icon: Sparkles },
     ],
   },
   {
-    hubPrefixes: ['/market-watch', '/news', '/market-map', '/economic-calendar'],
+    hubPrefixes: ['/market-watch', '/news', '/market-map', '/economic-calendar', '/earnings'],
     tabs: [
       { label: 'กระดานจับตาตลาด (Watchlist)', href: '/market-watch', icon: TrendingUp },
       { label: 'สรุปข่าวกระทบพอร์ต AI', href: '/news', icon: Newspaper },
       { label: 'แผนผังตลาด (Heatmap)', href: '/market-map', icon: LayoutGrid },
       { label: 'ปฏิทินเศรษฐกิจโลก', href: '/economic-calendar', icon: Calendar },
+      { label: 'ปฏิทินงบ & ผลประกอบการ', href: '/earnings', icon: CalendarCheck },
     ],
   },
   {
@@ -606,15 +606,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {[
           {
             href: '/dashboard',
-            match: ['/dashboard', '/performance', '/dividends'],
+            match: ['/dashboard', '/daily-plan', '/performance', '/dividends'],
             icon: LayoutDashboard,
-            label: 'ภาพรวม',
+            label: 'พอร์ต/ผลงาน',
           },
           {
             href: '/plans',
             match: ['/plans', '/radar', '/forecast'],
             icon: PieChart,
-            label: 'จัดพอร์ต/AI',
+            label: 'กลยุทธ์/เสี่ยง',
           },
         ].map(({ href, match, icon: Icon, label }) => {
           const active = match.some((p) => pathname === p || pathname.startsWith(`${p}/`))
@@ -651,9 +651,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {[
           {
             href: '/market-watch',
-            match: ['/market-watch', '/news', '/market-map', '/economic-calendar'],
+            match: ['/market-watch', '/news', '/market-map', '/economic-calendar', '/earnings'],
             icon: TrendingUp,
-            label: 'ตลาด/ข่าว',
+            label: 'ตลาด/ปฏิทิน',
           },
           {
             href: '/transactions',
