@@ -36,7 +36,11 @@ interface MarketBenchmark {
   price: number
   changePercent: number
   currency: string
-  category: string
+  category?: string
+  change?: number
+  high?: number
+  low?: number
+  previousClose?: number
 }
 
 interface MarketRegimeGaugeProps {

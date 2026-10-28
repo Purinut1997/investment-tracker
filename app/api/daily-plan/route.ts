@@ -15,6 +15,10 @@ interface MarketBenchmark {
   name: string
   price: number
   changePercent: number
+  change?: number
+  high?: number
+  low?: number
+  previousClose?: number
   currency: 'USD' | 'THB' | 'PTS'
   category: 'index' | 'crypto' | 'commodity' | 'rates'
 }
@@ -90,6 +94,8 @@ export async function GET(req: NextRequest) {
       vixRes,
       usdThbRate,
       fearGreedRes,
+      dxyRes,
+      tnxRes,
     ] = await Promise.allSettled([
       yahooFinanceProvider.getQuote('S&P 500'),
       yahooFinanceProvider.getQuote('NASDAQ'),
@@ -99,6 +105,8 @@ export async function GET(req: NextRequest) {
       yahooFinanceProvider.getQuote('VIX'),
       getExchangeRate('USD', 'THB'),
       fetchRealHumanSentiment(),
+      yahooFinanceProvider.getQuote('DXY'),
+      yahooFinanceProvider.getQuote('US10Y'),
     ])
 
     const benchmarks: MarketBenchmark[] = []
@@ -109,11 +117,26 @@ export async function GET(req: NextRequest) {
         name: 'ดัชนีตลาดสหรัฐฯ',
         price: spxRes.value.price,
         changePercent: spxRes.value.changePercent,
+        change: spxRes.value.change,
+        high: spxRes.value.high,
+        low: spxRes.value.low,
+        previousClose: spxRes.value.previousClose,
         currency: 'USD',
         category: 'index',
       })
     } else {
-      benchmarks.push({ symbol: 'S&P 500', name: 'ดัชนีตลาดสหรัฐฯ', price: 5800, changePercent: 0.35, currency: 'USD', category: 'index' })
+      benchmarks.push({
+        symbol: 'S&P 500',
+        name: 'ดัชนีตลาดสหรัฐฯ',
+        price: 5800,
+        changePercent: 0.35,
+        change: 20.3,
+        high: 5825,
+        low: 5790,
+        previousClose: 5779.7,
+        currency: 'USD',
+        category: 'index',
+      })
     }
 
     if (nasdaqRes.status === 'fulfilled' && nasdaqRes.value) {
@@ -122,11 +145,26 @@ export async function GET(req: NextRequest) {
         name: 'หุ้นเทคโนโลยี',
         price: nasdaqRes.value.price,
         changePercent: nasdaqRes.value.changePercent,
+        change: nasdaqRes.value.change,
+        high: nasdaqRes.value.high,
+        low: nasdaqRes.value.low,
+        previousClose: nasdaqRes.value.previousClose,
         currency: 'USD',
         category: 'index',
       })
     } else {
-      benchmarks.push({ symbol: 'NASDAQ', name: 'หุ้นเทคโนโลยี', price: 18200, changePercent: 0.65, currency: 'USD', category: 'index' })
+      benchmarks.push({
+        symbol: 'NASDAQ',
+        name: 'หุ้นเทคโนโลยี',
+        price: 18200,
+        changePercent: 0.65,
+        change: 118.3,
+        high: 18280,
+        low: 18140,
+        previousClose: 18081.7,
+        currency: 'USD',
+        category: 'index',
+      })
     }
 
     if (setRes.status === 'fulfilled' && setRes.value) {
@@ -135,11 +173,26 @@ export async function GET(req: NextRequest) {
         name: 'ตลาดหุ้นไทย',
         price: setRes.value.price,
         changePercent: setRes.value.changePercent,
+        change: setRes.value.change,
+        high: setRes.value.high,
+        low: setRes.value.low,
+        previousClose: setRes.value.previousClose,
         currency: 'PTS',
         category: 'index',
       })
     } else {
-      benchmarks.push({ symbol: 'SET INDEX', name: 'ตลาดหุ้นไทย', price: 1450, changePercent: 0.12, currency: 'PTS', category: 'index' })
+      benchmarks.push({
+        symbol: 'SET INDEX',
+        name: 'ตลาดหุ้นไทย',
+        price: 1450,
+        changePercent: 0.12,
+        change: 1.74,
+        high: 1456,
+        low: 1445,
+        previousClose: 1448.26,
+        currency: 'PTS',
+        category: 'index',
+      })
     }
 
     if (btcRes.status === 'fulfilled' && btcRes.value) {
@@ -148,11 +201,26 @@ export async function GET(req: NextRequest) {
         name: 'Bitcoin',
         price: btcRes.value.price,
         changePercent: btcRes.value.changePercent,
+        change: btcRes.value.change,
+        high: btcRes.value.high,
+        low: btcRes.value.low,
+        previousClose: btcRes.value.previousClose,
         currency: 'USD',
         category: 'crypto',
       })
     } else {
-      benchmarks.push({ symbol: 'BTC', name: 'Bitcoin', price: 76500, changePercent: 1.2, currency: 'USD', category: 'crypto' })
+      benchmarks.push({
+        symbol: 'BTC',
+        name: 'Bitcoin',
+        price: 76500,
+        changePercent: 1.2,
+        change: 918,
+        high: 77200,
+        low: 75400,
+        previousClose: 75582,
+        currency: 'USD',
+        category: 'crypto',
+      })
     }
 
     if (goldRes.status === 'fulfilled' && goldRes.value) {
@@ -161,11 +229,26 @@ export async function GET(req: NextRequest) {
         name: 'ทองคำสปอต',
         price: goldRes.value.price,
         changePercent: goldRes.value.changePercent,
+        change: goldRes.value.change,
+        high: goldRes.value.high,
+        low: goldRes.value.low,
+        previousClose: goldRes.value.previousClose,
         currency: 'USD',
         category: 'commodity',
       })
     } else {
-      benchmarks.push({ symbol: 'GOLD (XAU)', name: 'ทองคำสปอต', price: 2650, changePercent: -0.25, currency: 'USD', category: 'commodity' })
+      benchmarks.push({
+        symbol: 'GOLD (XAU)',
+        name: 'ทองคำสปอต',
+        price: 2650,
+        changePercent: -0.25,
+        change: -6.62,
+        high: 2665,
+        low: 2642,
+        previousClose: 2656.62,
+        currency: 'USD',
+        category: 'commodity',
+      })
     }
 
     if (vixRes.status === 'fulfilled' && vixRes.value) {
@@ -174,11 +257,26 @@ export async function GET(req: NextRequest) {
         name: 'ความกลัวตลาด',
         price: vixRes.value.price,
         changePercent: vixRes.value.changePercent,
+        change: vixRes.value.change,
+        high: vixRes.value.high,
+        low: vixRes.value.low,
+        previousClose: vixRes.value.previousClose,
         currency: 'PTS',
         category: 'index',
       })
     } else {
-      benchmarks.push({ symbol: 'VIX', name: 'ความกลัวตลาด', price: 17.5, changePercent: -1.15, currency: 'PTS', category: 'index' })
+      benchmarks.push({
+        symbol: 'VIX',
+        name: 'ความกลัวตลาด',
+        price: 17.5,
+        changePercent: -1.15,
+        change: -0.2,
+        high: 18.2,
+        low: 17.1,
+        previousClose: 17.7,
+        currency: 'PTS',
+        category: 'index',
+      })
     }
 
     // 3. Compute Real Market Sentiment & Quantitative Signals
@@ -464,6 +562,16 @@ export async function GET(req: NextRequest) {
         },
         benchmarks,
         usdThbRate: typeof usdThbRate === 'number' ? usdThbRate : 33.5,
+        macro: {
+          dxy: {
+            price: dxyRes.status === 'fulfilled' && dxyRes.value ? dxyRes.value.price : 104.18,
+            changePercent: dxyRes.status === 'fulfilled' && dxyRes.value ? dxyRes.value.changePercent : 0.12,
+          },
+          tnx: {
+            price: tnxRes.status === 'fulfilled' && tnxRes.value ? tnxRes.value.price : 4.24,
+            changePercent: tnxRes.status === 'fulfilled' && tnxRes.value ? tnxRes.value.changePercent : -0.05,
+          },
+        },
       },
       portfolioTriggers: actionItems,
       plan: {

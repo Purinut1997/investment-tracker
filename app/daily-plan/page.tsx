@@ -8,6 +8,8 @@ import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockLogo } from '@/components/StockLogo'
 import { AiBriefViewer } from '@/components/daily-plan/AiBriefViewer'
 import { MarketRegimeGauge } from '@/components/daily-plan/MarketRegimeGauge'
+import { BenchmarkCard } from '@/components/daily-plan/BenchmarkCard'
+import { MarketRadarPanel } from '@/components/daily-plan/MarketRadarPanel'
 import { ChecklistDetailModal } from '@/components/daily-plan/ChecklistDetailModal'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
@@ -65,8 +67,12 @@ interface MarketBenchmark {
   name: string
   price: number
   changePercent: number
-  currency: 'USD' | 'THB' | 'PTS'
-  category: 'index' | 'crypto' | 'commodity' | 'rates'
+  change?: number
+  high?: number
+  low?: number
+  previousClose?: number
+  currency: string
+  category?: string
 }
 
 interface PortfolioTriggerItem {
@@ -130,6 +136,10 @@ interface DailyPlanApiResponse {
     }
     benchmarks: MarketBenchmark[]
     usdThbRate: number
+    macro?: {
+      dxy?: { price: number; changePercent: number }
+      tnx?: { price: number; changePercent: number }
+    }
   }
   portfolioTriggers: PortfolioTriggerItem[]
   plan: {
@@ -523,33 +533,14 @@ export default function DailyPlanPage() {
             />
           </div>
 
-          {/* Benchmark Ticker Tiles (Balanced 3x2 Grid) */}
-          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {(data?.marketOverview?.benchmarks || []).map((bm) => {
-              const isVix = bm.symbol === 'VIX'
-              const isUp = bm.changePercent >= 0
-
-              let vixSentiment = ''
-              let vixBadgeClass = ''
-              if (isVix) {
-                if (bm.price < 15) {
-                  vixSentiment = 'สงบ / ผ่อนคลาย'
-                  vixBadgeClass = 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30'
-                } else if (bm.price < 20) {
-                  vixSentiment = 'ปกติ / สมดุล'
-                  vixBadgeClass = 'text-cyan-300 bg-cyan-500/15 border-cyan-500/30'
-                } else if (bm.price < 28) {
-                  vixSentiment = 'กังวล / ผันผวน'
-                  vixBadgeClass = 'text-amber-300 bg-amber-500/15 border-amber-500/30'
-                } else {
-                  vixSentiment = 'กลัวจัด / จุดช้อน'
-                  vixBadgeClass = 'text-rose-300 bg-rose-500/20 border-rose-500/40'
-                }
-              }
-
-              return (
-                <div
+          {/* Benchmark Ticker Tiles & Market Radar (Balanced Layout) */}
+          <div className="lg:col-span-7 flex flex-col justify-between gap-3.5">
+            {/* Top: 6 Balanced Benchmark Cards (3 cols on sm+, 2 cols on mobile) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {(data?.marketOverview?.benchmarks || []).map((bm) => (
+                <BenchmarkCard
                   key={bm.symbol}
+                  benchmark={bm}
                   onClick={() => {
                     const cleanSymbol = bm.symbol.replace('^', '').replace('=X', '')
                     setSelectedStock({
@@ -558,53 +549,15 @@ export default function DailyPlanPage() {
                       market: bm.currency === 'THB' ? 'TH' : 'US',
                     })
                   }}
-                  className={`bg-slate-900/80 border-2 ${
-                    isVix ? 'border-amber-500/25 hover:border-amber-500/50' : 'border-white/[0.08] hover:border-blue-500/40'
-                  } rounded-3xl p-4 md:p-5 backdrop-blur-xl transition-all flex flex-col justify-between shadow-lg cursor-pointer group hover:scale-[1.02]`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-black text-white tracking-tight group-hover:text-blue-400 transition-colors">
-                      {bm.symbol}
-                    </span>
-                    <span
-                      className={`flex items-center text-xs font-black px-2 py-0.5 rounded-lg border ${
-                        isVix
-                          ? isUp
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                            : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                          : isUp
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                          : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                      }`}
-                    >
-                      {isUp ? <ArrowUpRight className="w-3.5 h-3.5 mr-0.5" /> : <ArrowDownRight className="w-3.5 h-3.5 mr-0.5" />}
-                      {isUp ? '+' : ''}
-                      {bm.changePercent.toFixed(2)}%
-                    </span>
-                  </div>
+                />
+              ))}
+            </div>
 
-                  <div className="flex items-center justify-between gap-1 mb-2 min-w-0">
-                    <span className="text-xs font-semibold text-slate-300 truncate">{bm.name}</span>
-                    {isVix && vixSentiment && (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${vixBadgeClass}`}>
-                        {vixSentiment}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="text-lg md:text-xl font-black text-white font-mono flex items-baseline gap-1">
-                    <span>
-                      {bm.currency === 'USD' ? '$' : bm.currency === 'THB' ? '฿' : ''}
-                      {bm.price.toLocaleString(undefined, {
-                        minimumFractionDigits: bm.price < 10 ? 3 : 2,
-                        maximumFractionDigits: bm.price < 10 ? 3 : 2,
-                      })}
-                    </span>
-                    {bm.currency === 'PTS' && <span className="text-xs text-slate-400 font-normal">pts</span>}
-                  </div>
-                </div>
-              )
-            })}
+            {/* Bottom: Global Market Trading Sessions & Macro Pulse Radar */}
+            <MarketRadarPanel
+              macro={data?.marketOverview?.macro}
+              usdThbRate={data?.marketOverview?.usdThbRate}
+            />
           </div>
         </div>
 
