@@ -296,6 +296,23 @@ Last updated: 2026-09-17
 - **Robust Multi-format & Single-line AI Parsing**:
   - แก้ปัญหา AI ตอบกลับแบบข้อความบรรทัดเดียว (Single-line Dash Separators) ให้ระบบตัดคำและจัดหมวดหมู่อัตโนมัติได้อย่างแม่นยำ
 
+### 23. Phase 22: Market Regime Speedometer Precision Gauge & Real Drivers Dial ✅
+- **พัฒนาหน้าปัดเกจวัดความเสี่ยงตลาดสไตล์ Cockpit / Supercar (`MarketRegimeGauge.tsx`)**:
+  - **เข็มหน้าปัดไดนามิก (Precision Physics Needle)**: เข็มชี้หน้าปัดกวาดตามระดับคะแนนจริง (0 ถึง 100) พร้อมแอนิเมชัน Spring Physics และดุมแกนกลางแบบ Titanium Bevel ประดับ Jeweled LED กะพริบตามระดับสี
+  - **แถบ 5 โซนความรู้สึกตลาดแบบ Laser-Cut Neon Segments**:
+    - `0-25`: 🔴 **กลัวจัด (Extreme Fear / Risk-Off)**
+    - `26-45`: 🟠 **ระวัง (Caution)**
+    - `46-55`: 🟡 **สมดุล (Neutral / Consolidation)**
+    - `56-75`: 🟢 **เปิดรับเสี่ยง (Risk-On / Bullish)**
+    - `76-100`: 🚀 **ร้อนแรงมาก (Overbought / Greed)**
+  - **อ่านค่าได้จริงตามหลักคณิตศาสตร์การเงิน (Real Quantitative Scoring Engine)**:
+    - รวม 3 ปัจจัยตลาดจริง: แรงส่งหุ้นโลก (SPX/NDX Weight 40%), ดัชนีความกลัว VIX (Inverted Fear Weight 40%), และความกล้าเสี่ยงคริปโต (BTC Weight 20%)
+    - แสดงป้าย Digital Score เด่นชัดกลางหน้าปัด (เช่น `66 / 100`) พร้อมมินิการ์ด 3 ตัวขับเคลื่อนจริง
+  - **คงความครบถ้วนของข้อมูลสำคัญครบครัน**:
+    - สรุปกลยุทธ์การลงทุน 1 ประโยคฟันธง
+    - กล่องเงินสดสำรอง Dry Powder และอัตราแลกเปลี่ยน USD/THB
+- **Build Status**: `npm run build` ผ่าน 100% ครบ 75 routes ไร้ข้อผิดพลาด
+
 ## วิธีการรันและทดสอบระบบ
 1. **รัน Development Server**:
    ```powershell

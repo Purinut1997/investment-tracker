@@ -178,36 +178,66 @@ export async function GET(req: NextRequest) {
       benchmarks.push({ symbol: 'VIX', name: 'ความกลัวตลาด', price: 17.5, changePercent: -1.15, currency: 'PTS', category: 'index' })
     }
 
-    // 3. Compute Market Regime & Sentiment
+    // 3. Compute Quantitative Market Regime Score & Sentiment
     const spxChg = benchmarks.find((b) => b.symbol === 'S&P 500')?.changePercent || 0
     const ndxChg = benchmarks.find((b) => b.symbol === 'NASDAQ')?.changePercent || 0
     const btcChg = benchmarks.find((b) => b.symbol === 'BTC')?.changePercent || 0
+    const vixBenchmark = benchmarks.find((b) => b.symbol === 'VIX')
+    const vixPrice = vixBenchmark?.price || 17.5
     const avgEquities = (spxChg + ndxChg) / 2
+
+    // 1. Equities Momentum (Weight 40%): maps avgEquities (-2.5% to +2.5%) -> (0 to 40)
+    const equityScore = Math.max(0, Math.min(40, ((avgEquities + 2.5) / 5.0) * 40))
+    // 2. VIX Volatility / Fear Factor (Weight 40%, Inverted): maps VIX (32 to 12) -> (0 to 40)
+    const vixScore = Math.max(0, Math.min(40, ((32 - vixPrice) / 20.0) * 40))
+    // 3. Alternative / Crypto Appetite (Weight 20%): maps btcChg (-4.0% to +4.0%) -> (0 to 20)
+    const btcScore = Math.max(0, Math.min(20, ((btcChg + 4.0) / 8.0) * 20))
+
+    const compositeScore = Math.round(equityScore + vixScore + btcScore)
+    const regimeScore = Math.max(5, Math.min(95, compositeScore))
 
     let regimeType: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'VOLATILE' = 'NEUTRAL'
     let regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
     let regimeDesc = 'ดัชนีเคลื่อนไหวในกรอบสะสมกำลัง แนะนำเน้นเกาะแผน DCA หรือรอจังหวะซื้อตามแนวรับสำคัญ'
-    let regimeColor = 'text-cyan-400'
-    let regimeBg = 'bg-cyan-500/10 border-cyan-500/20'
+    let regimeColor = 'text-yellow-400'
+    let regimeBg = 'bg-yellow-500/15 border-yellow-500/30'
+    let tierLabel = 'สมดุล (Neutral)'
 
-    if (avgEquities > 0.6) {
+    if (regimeScore <= 25) {
+      regimeType = 'BEARISH'
+      regimeTitle = 'ตลาดกลัวจัด / ระมัดระวังสูงสุด (Extreme Risk-Off)'
+      regimeDesc = 'แรงขายกดดันรุนแรง ดัชนีความกลัวพุ่งสูง แนะนำสำรองเงินสดและตั้งรับเฉพาะแนวรับลึก'
+      regimeColor = 'text-rose-400'
+      regimeBg = 'bg-rose-500/15 border-rose-500/40'
+      tierLabel = 'กลัวจัด (Extreme Fear)'
+    } else if (regimeScore <= 45) {
+      regimeType = 'BEARISH'
+      regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Risk-Off / Caution)'
+      regimeDesc = 'แรงขายกดดันดัชนีหลัก เป็นจังหวะดีในการคัดกรองหุ้นแข็งแกร่งและเตรียมเงินสดช้อนซื้อที่แนวรับลึก'
+      regimeColor = 'text-amber-400'
+      regimeBg = 'bg-amber-500/15 border-amber-500/30'
+      tierLabel = 'ระวัง (Caution)'
+    } else if (regimeScore <= 55) {
+      regimeType = 'NEUTRAL'
+      regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
+      regimeDesc = 'ดัชนีเคลื่อนไหวในกรอบสะสมกำลัง แนะนำเน้นเกาะแผน DCA หรือรอจังหวะซื้อตามแนวรับสำคัญ'
+      regimeColor = 'text-yellow-400'
+      regimeBg = 'bg-yellow-500/15 border-yellow-500/30'
+      tierLabel = 'สมดุล (Neutral)'
+    } else if (regimeScore <= 75) {
       regimeType = 'BULLISH'
       regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Risk-On / Bullish)'
       regimeDesc = 'ตลาดมีโมเมนตัมบวกนำโดยกลุ่มเทคโนโลยี แนะนำถือรันเทรนด์ ไม่ควรไล่ราคาที่แนวต้าน'
       regimeColor = 'text-emerald-400'
-      regimeBg = 'bg-emerald-500/10 border-emerald-500/30'
-    } else if (avgEquities < -0.6) {
-      regimeType = 'BEARISH'
-      regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Risk-Off / Caution)'
-      regimeDesc = 'แรงขายกดดันดัชนีหลัก เป็นจังหวะดีในการคัดกรองหุ้นแข็งแกร่งและเตรียมเงินสดช้อนซื้อที่แนวรับลึก'
-      regimeColor = 'text-rose-400'
-      regimeBg = 'bg-rose-500/10 border-rose-500/30'
-    } else if (Math.abs(spxChg) > 1.5 || Math.abs(btcChg) > 4) {
-      regimeType = 'VOLATILE'
-      regimeTitle = 'ความผันผวนสูง (High Volatility)'
-      regimeDesc = 'มีความผันผวนสูงกว่าปกติ ควรบริหารความเสี่ยงอย่างเข้มงวดและแบ่งไม้ซื้อ'
-      regimeColor = 'text-amber-400'
-      regimeBg = 'bg-amber-500/10 border-amber-500/30'
+      regimeBg = 'bg-emerald-500/15 border-emerald-500/30'
+      tierLabel = 'เปิดรับความเสี่ยง (Risk-On)'
+    } else {
+      regimeType = 'BULLISH'
+      regimeTitle = 'ตลาดร้อนแรงเกินพิกัด (Extreme Greed / Overbought)'
+      regimeDesc = 'ดัชนีวิ่งขึ้นต่อเนื่องใกล้ระดับ Overbought พิจารณาชะลอการซื้อเพิ่มและเตรียมล็อกกำไรบางส่วน'
+      regimeColor = 'text-cyan-300'
+      regimeBg = 'bg-cyan-500/15 border-cyan-500/40'
+      tierLabel = 'ร้อนแรงมาก (Overbought)'
     }
 
     // 4. Scan holdings for technical signals & actionable triggers
@@ -346,6 +376,13 @@ export async function GET(req: NextRequest) {
           description: regimeDesc,
           color: regimeColor,
           bg: regimeBg,
+          score: regimeScore,
+          tierLabel,
+          drivers: {
+            equityMomentum: avgEquities,
+            vixPrice,
+            btcChange: btcChg,
+          },
         },
         benchmarks,
         usdThbRate: typeof usdThbRate === 'number' ? usdThbRate : 33.5,

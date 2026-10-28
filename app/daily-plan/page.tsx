@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockLogo } from '@/components/StockLogo'
 import { AiBriefViewer } from '@/components/daily-plan/AiBriefViewer'
+import { MarketRegimeGauge } from '@/components/daily-plan/MarketRegimeGauge'
 import { ChecklistDetailModal } from '@/components/daily-plan/ChecklistDetailModal'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import {
@@ -107,6 +108,13 @@ interface DailyPlanApiResponse {
       description: string
       color: string
       bg: string
+      score?: number
+      tierLabel?: string
+      drivers?: {
+        equityMomentum: number
+        vixPrice: number
+        btcChange: number
+      }
     }
     benchmarks: MarketBenchmark[]
     usdThbRate: number
@@ -492,62 +500,15 @@ export default function DailyPlanPage() {
 
         {/* SECTION 1: MARKET REGIME & SENTIMENT COMPASS */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Regime Badge Card */}
-          <div className="lg:col-span-5 bg-gradient-to-br from-slate-900/95 via-slate-900/80 to-slate-950/95 border-2 border-white/[0.1] rounded-3xl p-6 shadow-2xl relative overflow-hidden backdrop-blur-2xl flex flex-col justify-between">
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-52 h-52 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
-
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
-                    <Compass className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-blue-400 tracking-wider uppercase block">
-                      Market Regime Compass
-                    </span>
-                    <h3 className="text-xl font-black text-white">สภาวะตลาดวันนี้</h3>
-                  </div>
-                </div>
-
-                <div
-                  className={`px-4 py-1.5 rounded-full text-sm font-extrabold border tracking-wide uppercase shadow-sm ${
-                    data?.marketOverview?.regime?.bg || 'bg-cyan-500/15 border-cyan-500/40'
-                  } ${data?.marketOverview?.regime?.color || 'text-cyan-300'}`}
-                >
-                  {data?.marketOverview?.regime?.title || 'กำลังวิเคราะห์...'}
-                </div>
-              </div>
-
-              <div className="text-sm md:text-base text-slate-200 leading-relaxed mt-3 bg-white/[0.03] border border-white/[0.06] p-4 rounded-2xl">
-                {data?.marketOverview?.regime?.description ||
-                  'กำลังประมวลผลดัชนีตลาดหลักเพื่อวิเคราะห์โมเมนตัมและความเสี่ยง...'}
-              </div>
-            </div>
-
-            {/* Dry Powder & Currency Info */}
-            <div className="pt-5 mt-5 border-t border-white/[0.08] grid grid-cols-2 gap-4">
-              <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-white/[0.06]">
-                <span className="text-xs font-semibold text-slate-400 block mb-1">
-                  เงินสดสำรอง (Dry Powder)
-                </span>
-                <span className="text-lg md:text-xl font-black text-emerald-400 font-mono">
-                  ฿{(data?.totalCash ?? 0).toLocaleString()}
-                </span>
-                <span className="text-xs font-bold text-slate-400 ml-1.5">
-                  ({data?.totalPortfolioValue ? ((data.totalCash / data.totalPortfolioValue) * 100).toFixed(1) : 0}%)
-                </span>
-              </div>
-              <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-white/[0.06]">
-                <span className="text-xs font-semibold text-slate-400 block mb-1">
-                  อัตราแลกเปลี่ยน USD/THB
-                </span>
-                <span className="text-lg md:text-xl font-black text-cyan-300 font-mono">
-                  ฿{data?.marketOverview?.usdThbRate ? data.marketOverview.usdThbRate.toFixed(2) : '33.30'}
-                </span>
-                <span className="text-xs text-slate-400 ml-1.5">บาท/ดอลลาร์</span>
-              </div>
-            </div>
+          {/* Regime Gauge Speedometer Card */}
+          <div className="lg:col-span-5 flex flex-col">
+            <MarketRegimeGauge
+              regime={data?.marketOverview?.regime}
+              benchmarks={data?.marketOverview?.benchmarks}
+              totalCash={data?.totalCash ?? 0}
+              totalPortfolioValue={data?.totalPortfolioValue ?? 0}
+              usdThbRate={data?.marketOverview?.usdThbRate}
+            />
           </div>
 
           {/* Benchmark Ticker Tiles (Balanced 3x2 Grid) */}
