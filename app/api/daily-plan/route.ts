@@ -186,15 +186,23 @@ export async function GET(req: NextRequest) {
     const vixPrice = vixBenchmark?.price || 17.5
     const avgEquities = (spxChg + ndxChg) / 2
 
-    // 1. Equities Momentum (Weight 40%): maps avgEquities (-2.5% to +2.5%) -> (0 to 40)
-    const equityScore = Math.max(0, Math.min(40, ((avgEquities + 2.5) / 5.0) * 40))
-    // 2. VIX Volatility / Fear Factor (Weight 40%, Inverted): maps VIX (32 to 12) -> (0 to 40)
-    const vixScore = Math.max(0, Math.min(40, ((32 - vixPrice) / 20.0) * 40))
-    // 3. Alternative / Crypto Appetite (Weight 20%): maps btcChg (-4.0% to +4.0%) -> (0 to 20)
-    const btcScore = Math.max(0, Math.min(20, ((btcChg + 4.0) / 8.0) * 20))
+    // 1. Equities Momentum (Weight 40%): baseline 20 pts at 0%
+    const equityScore = Math.max(0, Math.min(40, 20 + avgEquities * 7.5))
+    // 2. VIX Volatility / Fear Factor (Weight 40%, Inverted): baseline 20 pts at VIX 16.5
+    const vixScore = Math.max(0, Math.min(40, 20 - (vixPrice - 16.5) * 2.5))
+    // 3. Alternative / Crypto Appetite (Weight 20%): baseline 10 pts at 0%
+    const btcScore = Math.max(0, Math.min(20, 10 + btcChg * 1.5))
 
     const compositeScore = Math.round(equityScore + vixScore + btcScore)
-    const regimeScore = Math.max(5, Math.min(95, compositeScore))
+    let regimeScore = Math.max(5, Math.min(95, compositeScore))
+
+    // Institutional VIX Fear Filter & Safety Cap:
+    // If VIX is elevated (>= 17.0), the market CANNOT be classified as full Bullish/Risk-On!
+    if (vixPrice >= 18.0 && regimeScore > 54) {
+      regimeScore = 54
+    } else if (vixPrice >= 17.0 && regimeScore > 58) {
+      regimeScore = 58
+    }
 
     let regimeType: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'VOLATILE' = 'NEUTRAL'
     let regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
@@ -214,17 +222,26 @@ export async function GET(req: NextRequest) {
       regimeType = 'BEARISH'
       regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Risk-Off / Caution)'
       regimeDesc = 'แรงขายกดดันดัชนีหลัก เป็นจังหวะดีในการคัดกรองหุ้นแข็งแกร่งและเตรียมเงินสดช้อนซื้อที่แนวรับลึก'
-      regimeColor = 'text-amber-400'
-      regimeBg = 'bg-amber-500/15 border-amber-500/30'
+      regimeColor = 'text-orange-400'
+      regimeBg = 'bg-orange-500/15 border-orange-500/30'
       tierLabel = 'ระวัง (Caution)'
-    } else if (regimeScore <= 55) {
-      regimeType = 'NEUTRAL'
-      regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
-      regimeDesc = 'ดัชนีเคลื่อนไหวในกรอบสะสมกำลัง แนะนำเน้นเกาะแผน DCA หรือรอจังหวะซื้อตามแนวรับสำคัญ'
-      regimeColor = 'text-yellow-400'
-      regimeBg = 'bg-yellow-500/15 border-yellow-500/30'
-      tierLabel = 'สมดุล (Neutral)'
-    } else if (regimeScore <= 75) {
+    } else if (regimeScore <= 58) {
+      if (vixPrice >= 17.0 || avgEquities > 0.2) {
+        regimeType = 'NEUTRAL'
+        regimeTitle = 'รีบาวด์เปราะบาง / เฝ้าระวัง (Fragile Rebound)'
+        regimeDesc = 'ตลาดฟื้นตัวระยะสั้น แต่ดัชนีความผันผวน (VIX) ยังอยู่ในระดับเฝ้าระวัง สะท้อนว่าตลาดยังมีความกังวลแฝงอยู่ ควรระวังการเด้งเพื่อลงต่อ ไม่ควรผลีผลามไล่ราคาที่แนวต้าน เน้นถือเงินสดสำรองไว้ก่อน'
+        regimeColor = 'text-amber-400'
+        regimeBg = 'bg-amber-500/15 border-amber-500/30'
+        tierLabel = 'รีบาวด์เปราะบาง (Fragile)'
+      } else {
+        regimeType = 'NEUTRAL'
+        regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
+        regimeDesc = 'ดัชนีเคลื่อนไหวในกรอบสะสมกำลัง แนะนำเน้นเกาะแผน DCA หรือรอจังหวะซื้อตามแนวรับสำคัญ'
+        regimeColor = 'text-yellow-400'
+        regimeBg = 'bg-yellow-500/15 border-yellow-500/30'
+        tierLabel = 'สมดุล (Neutral)'
+      }
+    } else if (regimeScore <= 78) {
       regimeType = 'BULLISH'
       regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Risk-On / Bullish)'
       regimeDesc = 'ตลาดมีโมเมนตัมบวกนำโดยกลุ่มเทคโนโลยี แนะนำถือรันเทรนด์ ไม่ควรไล่ราคาที่แนวต้าน'

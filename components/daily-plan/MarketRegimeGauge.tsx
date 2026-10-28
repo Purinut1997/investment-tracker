@@ -129,13 +129,17 @@ export function MarketRegimeGauge({
 
     if (calculatedScore === undefined || calculatedScore === null) {
       // Fallback calculation:
-      // 1. Equities Momentum (40% weight): -2.5% to +2.5%
-      const equityScore = Math.max(0, Math.min(40, ((avgEquities + 2.5) / 5.0) * 40))
-      // 2. VIX Volatility (40% weight, inverted): 32 to 12
-      const vixScore = Math.max(0, Math.min(40, ((32 - vixPrice) / 20.0) * 40))
-      // 3. BTC / Risk Appetite (20% weight): -4% to +4%
-      const btcScore = Math.max(0, Math.min(20, ((btcChg + 4.0) / 8.0) * 20))
+      // 1. Equities Momentum (40% weight): baseline 20 pts
+      const equityScore = Math.max(0, Math.min(40, 20 + avgEquities * 7.5))
+      // 2. VIX Volatility (40% weight, inverted): baseline 20 pts at VIX 16.5
+      const vixScore = Math.max(0, Math.min(40, 20 - (vixPrice - 16.5) * 2.5))
+      // 3. BTC / Risk Appetite (20% weight): baseline 10 pts
+      const btcScore = Math.max(0, Math.min(20, 10 + btcChg * 1.5))
       calculatedScore = Math.round(equityScore + vixScore + btcScore)
+
+      // VIX safety cap
+      if (vixPrice >= 18.0 && calculatedScore > 54) calculatedScore = 54
+      else if (vixPrice >= 17.0 && calculatedScore > 58) calculatedScore = 58
     }
 
     const safeScore = Math.max(5, Math.min(95, calculatedScore))
@@ -144,8 +148,8 @@ export function MarketRegimeGauge({
     let foundZone = GAUGE_ZONES[2] // default neutral
     if (safeScore <= 25) foundZone = GAUGE_ZONES[0]
     else if (safeScore <= 45) foundZone = GAUGE_ZONES[1]
-    else if (safeScore <= 55) foundZone = GAUGE_ZONES[2]
-    else if (safeScore <= 75) foundZone = GAUGE_ZONES[3]
+    else if (safeScore <= 58) foundZone = GAUGE_ZONES[2]
+    else if (safeScore <= 78) foundZone = GAUGE_ZONES[3]
     else foundZone = GAUGE_ZONES[4]
 
     return {

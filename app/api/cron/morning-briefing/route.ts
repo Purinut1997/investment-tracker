@@ -40,9 +40,10 @@ export async function GET(req: NextRequest) {
 
   try {
     // 2. Fetch benchmarks once for all users to save bandwidth
-    const [spxRes, ndxRes, setRes, btcRes, goldRes, fxRes] = await Promise.allSettled([
+    const [spxRes, ndxRes, vixRes, setRes, btcRes, goldRes, fxRes] = await Promise.allSettled([
       yahooFinanceProvider.getQuote('^GSPC'),
       yahooFinanceProvider.getQuote('^IXIC'),
+      yahooFinanceProvider.getQuote('^VIX'),
       yahooFinanceProvider.getQuote('^SET.BK'),
       coinGeckoProvider.getQuote('BTC'),
       yahooFinanceProvider.getQuote('GC=F'),
@@ -57,6 +58,10 @@ export async function GET(req: NextRequest) {
     if (ndxRes.status === 'fulfilled' && ndxRes.value) {
       benchmarks.push({ symbol: 'NASDAQ', name: 'ดัชนีแนสแด็ก', price: ndxRes.value.price, changePercent: ndxRes.value.changePercent })
     }
+    const vixPrice = vixRes.status === 'fulfilled' && vixRes.value ? vixRes.value.price : 17.5
+    if (vixRes.status === 'fulfilled' && vixRes.value) {
+      benchmarks.push({ symbol: 'VIX', name: 'ดัชนีความกลัวตลาด', price: vixRes.value.price, changePercent: vixRes.value.changePercent })
+    }
     if (setRes.status === 'fulfilled' && setRes.value) {
       benchmarks.push({ symbol: 'SET Index', name: 'ตลาดหุ้นไทย', price: setRes.value.price, changePercent: setRes.value.changePercent })
     }
@@ -69,11 +74,32 @@ export async function GET(req: NextRequest) {
 
     const spxChg = benchmarks.find((b) => b.symbol === 'S&P 500')?.changePercent || 0
     const ndxChg = benchmarks.find((b) => b.symbol === 'NASDAQ')?.changePercent || 0
+    const btcChg = benchmarks.find((b) => b.symbol === 'BTC')?.changePercent || 0
     const avgEquities = (spxChg + ndxChg) / 2
 
+    const equityScore = Math.max(0, Math.min(40, 20 + avgEquities * 7.5))
+    const vixScore = Math.max(0, Math.min(40, 20 - (vixPrice - 16.5) * 2.5))
+    const btcScore = Math.max(0, Math.min(20, 10 + btcChg * 1.5))
+    let regimeScore = Math.round(equityScore + vixScore + btcScore)
+    if (vixPrice >= 18.0 && regimeScore > 54) regimeScore = 54
+    else if (vixPrice >= 17.0 && regimeScore > 58) regimeScore = 58
+
     let regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
-    if (avgEquities > 0.6) regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Risk-On / Bullish)'
-    else if (avgEquities < -0.6) regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Risk-Off / Caution)'
+    if (regimeScore <= 25) {
+      regimeTitle = 'ตลาดกลัวจัด / ระมัดระวังสูงสุด (Extreme Risk-Off)'
+    } else if (regimeScore <= 45) {
+      regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Risk-Off / Caution)'
+    } else if (regimeScore <= 58) {
+      if (vixPrice >= 17.0 || avgEquities > 0.2) {
+        regimeTitle = 'รีบาวด์เปราะบาง / เฝ้าระวัง (Fragile Rebound)'
+      } else {
+        regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
+      }
+    } else if (regimeScore <= 78) {
+      regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Risk-On / Bullish)'
+    } else {
+      regimeTitle = 'ตลาดร้อนแรงเกินพิกัด (Extreme Greed / Overbought)'
+    }
 
     const benchmarksSummary = benchmarks
       .map((b) => `${b.symbol}: ${b.price?.toLocaleString()} (${b.changePercent >= 0 ? '+' : ''}${b.changePercent?.toFixed(2)}%)`)
@@ -146,6 +172,9 @@ export async function GET(req: NextRequest) {
 
 [สินทรัพย์ในพอร์ตที่ส่งสัญญาณเทคนิคัลวันนี้ (Holdings with Technical Signals)]
 ${triggerLines.join('\n')}
+
+[กฎเหล็กการประเมินความเสี่ยงตามความเป็นจริง]:
+- หากสภาวะตลาดเป็น "รีบาวด์เปราะบาง (Fragile Rebound)" หรือ "ระมัดระวัง (Caution)" หรือ VIX สูง: ห้ามมองบวกเกินจริงเด็ดขาด ให้เตือนระวังการเด้งเพื่อลงต่อ (Dead-Cat Bounce) และเน้นวินัยการถือเงินสดสำรอง (Dry Powder)
 
 [กฎเหล็กและข้อห้ามเด็ดขาดเพื่อความกระชับสูงสุด]:
 1. ห้ามใส่คำทักทายเด็ดขาด (ห้ามเขียน "เรียน ท่าน...", "สวัสดีครับ", "ยินดีต้อนรับ") ให้เริ่มต้นที่เนื้อหาส่วนที่ 1 ทันที
