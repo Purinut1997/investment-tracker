@@ -37,6 +37,11 @@ export async function POST(req: NextRequest) {
           .join(', ')
       : 'S&P 500, NASDAQ, SET Index'
 
+    const vixBenchmark = marketOverview?.benchmarks?.find((b: any) => b.symbol === 'VIX')
+    const vixSummary = vixBenchmark
+      ? `${vixBenchmark.price} pts (${vixBenchmark.price < 15 ? 'สงบ/Low Volatility' : vixBenchmark.price < 20 ? 'ปกติ/Balanced' : vixBenchmark.price < 28 ? 'กังวลสูง/Elevated Fear' : 'ตื่นตระหนก/Extreme Fear — จุดช้อนซื้อ'})`
+      : 'N/A'
+
     const topTriggers = (portfolioTriggers as any[]).slice(0, 6)
     const triggerSummary = topTriggers
       .map((t) => {
@@ -62,6 +67,7 @@ export async function POST(req: NextRequest) {
 [ข้อมูลสภาวะตลาดวันนี้]
 - สถานะตลาด (Market Regime): ${regimeTitle}
 - ดัชนีหลักชี้นำ: ${benchmarksSummary}
+- ดัชนีความกังวลและความกลัว (VIX Volatility Index): ${vixSummary}
 
 [ภาพรวมพอร์ตโฟลิโอ]
 - มูลค่าพอร์ตรวม: ${Number(totalPortfolioValue).toLocaleString()} ${baseCurrency}

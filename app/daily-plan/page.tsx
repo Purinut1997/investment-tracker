@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
 import useSWR from 'swr'
@@ -550,10 +550,30 @@ export default function DailyPlanPage() {
             </div>
           </div>
 
-          {/* Benchmark Ticker Tiles */}
+          {/* Benchmark Ticker Tiles (Balanced 3x2 Grid) */}
           <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-4">
             {(data?.marketOverview?.benchmarks || []).map((bm) => {
+              const isVix = bm.symbol === 'VIX'
               const isUp = bm.changePercent >= 0
+
+              let vixSentiment = ''
+              let vixBadgeClass = ''
+              if (isVix) {
+                if (bm.price < 15) {
+                  vixSentiment = 'สงบ / ผ่อนคลาย'
+                  vixBadgeClass = 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30'
+                } else if (bm.price < 20) {
+                  vixSentiment = 'ปกติ / สมดุล'
+                  vixBadgeClass = 'text-cyan-300 bg-cyan-500/15 border-cyan-500/30'
+                } else if (bm.price < 28) {
+                  vixSentiment = 'กังวล / ผันผวน'
+                  vixBadgeClass = 'text-amber-300 bg-amber-500/15 border-amber-500/30'
+                } else {
+                  vixSentiment = 'กลัวจัด / จุดช้อน'
+                  vixBadgeClass = 'text-rose-300 bg-rose-500/20 border-rose-500/40'
+                }
+              }
+
               return (
                 <div
                   key={bm.symbol}
@@ -565,13 +585,21 @@ export default function DailyPlanPage() {
                       market: bm.currency === 'THB' ? 'TH' : 'US',
                     })
                   }}
-                  className="bg-slate-900/80 border-2 border-white/[0.08] hover:border-blue-500/40 rounded-3xl p-4 md:p-5 backdrop-blur-xl transition-all flex flex-col justify-between shadow-lg cursor-pointer group hover:scale-[1.02]"
+                  className={`bg-slate-900/80 border-2 ${
+                    isVix ? 'border-amber-500/25 hover:border-amber-500/50' : 'border-white/[0.08] hover:border-blue-500/40'
+                  } rounded-3xl p-4 md:p-5 backdrop-blur-xl transition-all flex flex-col justify-between shadow-lg cursor-pointer group hover:scale-[1.02]`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-black text-white tracking-tight group-hover:text-blue-400 transition-colors">{bm.symbol}</span>
+                    <span className="text-sm font-black text-white tracking-tight group-hover:text-blue-400 transition-colors">
+                      {bm.symbol}
+                    </span>
                     <span
                       className={`flex items-center text-xs font-black px-2 py-0.5 rounded-lg border ${
-                        isUp
+                        isVix
+                          ? isUp
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                            : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : isUp
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                           : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
                       }`}
@@ -582,15 +610,24 @@ export default function DailyPlanPage() {
                     </span>
                   </div>
 
-                  <span className="text-xs font-semibold text-slate-300 truncate mb-2">{bm.name}</span>
+                  <div className="flex items-center justify-between gap-1 mb-2 min-w-0">
+                    <span className="text-xs font-semibold text-slate-300 truncate">{bm.name}</span>
+                    {isVix && vixSentiment && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${vixBadgeClass}`}>
+                        {vixSentiment}
+                      </span>
+                    )}
+                  </div>
 
-                  <div className="text-lg md:text-xl font-black text-white font-mono">
-                    {bm.currency === 'USD' ? '$' : bm.currency === 'THB' ? '฿' : ''}
-                    {bm.price.toLocaleString(undefined, {
-                      minimumFractionDigits: bm.price < 10 ? 3 : 2,
-                      maximumFractionDigits: bm.price < 10 ? 3 : 2,
-                    })}
-                    {bm.currency === 'PTS' ? ' pts' : ''}
+                  <div className="text-lg md:text-xl font-black text-white font-mono flex items-baseline gap-1">
+                    <span>
+                      {bm.currency === 'USD' ? '$' : bm.currency === 'THB' ? '฿' : ''}
+                      {bm.price.toLocaleString(undefined, {
+                        minimumFractionDigits: bm.price < 10 ? 3 : 2,
+                        maximumFractionDigits: bm.price < 10 ? 3 : 2,
+                      })}
+                    </span>
+                    {bm.currency === 'PTS' && <span className="text-xs text-slate-400 font-normal">pts</span>}
                   </div>
                 </div>
               )

@@ -86,6 +86,7 @@ export async function GET(req: NextRequest) {
       setRes,
       btcRes,
       goldRes,
+      vixRes,
       usdThbRate,
     ] = await Promise.allSettled([
       yahooFinanceProvider.getQuote('S&P 500'),
@@ -93,6 +94,7 @@ export async function GET(req: NextRequest) {
       yahooFinanceProvider.getQuote('SET INDEX', 'TH'),
       coinGeckoProvider.getQuote('BTC'),
       yahooFinanceProvider.getQuote('GOLD'),
+      yahooFinanceProvider.getQuote('VIX'),
       getExchangeRate('USD', 'THB'),
     ])
 
@@ -161,6 +163,19 @@ export async function GET(req: NextRequest) {
       })
     } else {
       benchmarks.push({ symbol: 'GOLD (XAU)', name: 'ทองคำสปอต', price: 2650, changePercent: -0.25, currency: 'USD', category: 'commodity' })
+    }
+
+    if (vixRes.status === 'fulfilled' && vixRes.value) {
+      benchmarks.push({
+        symbol: 'VIX',
+        name: 'ความกลัวตลาด',
+        price: vixRes.value.price,
+        changePercent: vixRes.value.changePercent,
+        currency: 'PTS',
+        category: 'index',
+      })
+    } else {
+      benchmarks.push({ symbol: 'VIX', name: 'ความกลัวตลาด', price: 17.5, changePercent: -1.15, currency: 'PTS', category: 'index' })
     }
 
     // 3. Compute Market Regime & Sentiment
