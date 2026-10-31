@@ -34,6 +34,7 @@
     "resend": "^6.28.1",
     "swr": "^2.5.1",
     "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

@@ -19,6 +19,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { exportTaxReportToExcel } from '@/lib/export/tax-excel-export'
+import { TaxExportModal } from '@/components/export/TaxExportModal'
 
 // Helper: format a number with the correct currency symbol
 function fmt(value: number, currency: 'USD' | 'THB', opts?: { prefix?: boolean }) {
@@ -174,24 +175,7 @@ export default function TaxReportPage() {
 
   const usdThbRate: number = report?.usdThbRate ?? 35.5
 
-  const [isExporting, setIsExporting] = useState(false)
-
-  async function handleExportExcel() {
-    if (!report) return
-    setIsExporting(true)
-    try {
-      await exportTaxReportToExcel(report, {
-        selectedYear,
-        usdThbRate,
-        repatriated,
-        aiExplanation: currentExplanation,
-      })
-    } catch (err) {
-      console.error('Failed to export Excel report:', err)
-    } finally {
-      setIsExporting(false)
-    }
-  }
+  const [exportModalOpen, setExportModalOpen] = useState(false)
 
   async function handleExplainAI() {
     if (!report) return
@@ -280,22 +264,13 @@ export default function TaxReportPage() {
                 {showTHB ? 'แสดง: เงินบาท (฿ THB)' : 'แสดง: สกุลเงินเดิม'}
               </button>
               <button
-                onClick={handleExportExcel}
-                disabled={!report || isExporting}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-600/25 active:scale-[0.98] cursor-pointer"
-                title="ส่งออกรายงานภาษีฉบับสมบูรณ์ 5 ชีต พร้อมสรุปภาพรวมและสิทธิประโยชน์"
+                onClick={() => setExportModalOpen(true)}
+                disabled={!report}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/25 active:scale-[0.98] cursor-pointer"
+                title="เปิดฟอร์มส่งออกรายงานภาษี จัดแบบฟอร์มสวยงาม พร้อมเส้นตารางและสรุปยอด"
               >
-                {isExporting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin text-indigo-200" />
-                    <span>กำลังสร้าง Excel...</span>
-                  </>
-                ) : (
-                  <>
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                    <span>ส่งออกรายงานภาษีฉบับสมบูรณ์ (.xlsx)</span>
-                  </>
-                )}
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>จัดฟอร์มส่งออก Excel (.xlsx)</span>
               </button>
             </div>
           }
@@ -725,6 +700,18 @@ export default function TaxReportPage() {
               )}
             </div>
           </div>
+        )}
+        {/* Export Configuration Modal */}
+        {exportModalOpen && report && (
+          <TaxExportModal
+            isOpen={exportModalOpen}
+            onClose={() => setExportModalOpen(false)}
+            report={report}
+            selectedYear={selectedYear}
+            usdThbRate={usdThbRate}
+            repatriated={repatriated}
+            aiExplanation={currentExplanation}
+          />
         )}
       </div>
     </AppShell>
