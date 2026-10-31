@@ -12,3 +12,5 @@ dist/
 *.csv
 dime_transactions.csv
 *-DESKTOP-*
+*-MacBook*
+*.xlsx

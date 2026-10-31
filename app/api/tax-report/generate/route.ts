@@ -27,6 +27,12 @@ export async function GET(req: NextRequest) {
             currency: true,
           },
         },
+        account: {
+          select: {
+            accountName: true,
+            accountType: true,
+          },
+        },
       },
       orderBy: { txnDate: 'asc' },
     })
@@ -49,6 +55,7 @@ export async function GET(req: NextRequest) {
       fee: Number(t.fee || 0),
       taxWithheld: Number(t.taxWithheld || 0),
       totalAmount: Number(t.totalAmount),
+      accountName: t.account?.accountName || 'บัญชีหลัก',
     }))
 
     const report = calculateTaxReportFIFO(formattedTxns, year, usdThbRate)

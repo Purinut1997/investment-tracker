@@ -18,6 +18,7 @@ import {
   Clock,
   RefreshCw,
 } from 'lucide-react'
+import { exportTaxReportToExcel } from '@/lib/export/tax-excel-export'
 
 // Helper: format a number with the correct currency symbol
 function fmt(value: number, currency: 'USD' | 'THB', opts?: { prefix?: boolean }) {
@@ -173,63 +174,23 @@ export default function TaxReportPage() {
 
   const usdThbRate: number = report?.usdThbRate ?? 35.5
 
+  const [isExporting, setIsExporting] = useState(false)
+
   async function handleExportExcel() {
     if (!report) return
-
-    const XLSX = await import('xlsx')
-    const wb = XLSX.utils.book_new()
-
-    // 1. Dividends Sheet — include both USD and THB columns
-    const divRows = report.dividends.items.map((item: any) => ({
-      'วันที่รับ': new Date(item.date).toLocaleDateString('th-TH'),
-      'สัญลักษณ์ (Ticker)': item.ticker,
-      'สกุลเงิน': item.currency || 'USD',
-      'เงินปันผลรวม (Gross) - สกุลเดิม': item.amount,
-      'ภาษีหัก ณ ที่จ่าย - สกุลเดิม': item.taxWithheld,
-      'เงินปันผลสุทธิ - สกุลเดิม': item.amount - item.taxWithheld,
-      'เงินปันผลรวม (Gross) - THB (฿)': item.amountTHB ?? item.amount,
-      'ภาษีหัก ณ ที่จ่าย - THB (฿)': item.taxWithheldTHB ?? item.taxWithheld,
-      'เงินปันผลสุทธิ - THB (฿)': (item.amountTHB ?? item.amount) - (item.taxWithheldTHB ?? item.taxWithheld),
-      'อัตราแลกเปลี่ยนอ้างอิง (1 USD = THB)': usdThbRate,
-    }))
-    const wsDiv = XLSX.utils.json_to_sheet(divRows)
-    XLSX.utils.book_append_sheet(wb, wsDiv, 'เงินปันผล (Dividends)')
-
-    // 2. Thai SET Capital Gains Sheet (always THB)
-    const thaiRows = report.thaiSetCapitalGains.trades.map((t: any) => ({
-      'วันที่ขาย': new Date(t.sellDate).toLocaleDateString('th-TH'),
-      'Ticker': t.ticker,
-      'จำนวนที่ขาย': t.quantity,
-      'ราคาขาย (THB)': t.sellPrice,
-      'ยอดขายรวม (THB)': t.sellProceeds,
-      'ต้นทุน FIFO (THB)': t.costBasis,
-      'กำไร/ขาดทุน (THB)': t.realizedGain,
-      'ค่าธรรมเนียม (THB)': t.fee,
-      'สถานะภาษี': 'ยกเว้นภาษี (Exempt)',
-    }))
-    const wsThai = XLSX.utils.json_to_sheet(thaiRows)
-    XLSX.utils.book_append_sheet(wb, wsThai, 'กำไรหุ้นไทย (SET)')
-
-    // 3. Foreign & Crypto Sheet — include both USD and THB
-    const foreignRows = report.foreignAndCryptoGains.trades.map((t: any) => ({
-      'วันที่ขาย': new Date(t.sellDate).toLocaleDateString('th-TH'),
-      'Ticker / ตลาด': `${t.ticker} (${t.market})`,
-      'สกุลเงิน': t.currency || 'USD',
-      'จำนวนที่ขาย': t.quantity,
-      'ราคาขาย - สกุลเดิม': t.sellPrice,
-      'ยอดขายรวม - สกุลเดิม': t.sellProceeds,
-      'ต้นทุน FIFO - สกุลเดิม': t.costBasis,
-      'กำไร/ขาดทุน - สกุลเดิม': t.realizedGain,
-      'ยอดขายรวม - THB (฿)': t.sellProceedsTHB ?? t.sellProceeds,
-      'ต้นทุน FIFO - THB (฿)': t.costBasisTHB ?? t.costBasis,
-      'กำไร/ขาดทุน - THB (฿)': t.realizedGainTHB ?? t.realizedGain,
-      'อัตราแลกเปลี่ยนอ้างอิง': usdThbRate,
-      'ค่าธรรมเนียม - สกุลเดิม': t.fee,
-    }))
-    const wsForeign = XLSX.utils.json_to_sheet(foreignRows)
-    XLSX.utils.book_append_sheet(wb, wsForeign, 'หุ้นนอก & คริปโต')
-
-    XLSX.writeFile(wb, `Tax_Report_${selectedYear}_InvestmentPro.xlsx`)
+    setIsExporting(true)
+    try {
+      await exportTaxReportToExcel(report, {
+        selectedYear,
+        usdThbRate,
+        repatriated,
+        aiExplanation: currentExplanation,
+      })
+    } catch (err) {
+      console.error('Failed to export Excel report:', err)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   async function handleExplainAI() {
@@ -320,11 +281,21 @@ export default function TaxReportPage() {
               </button>
               <button
                 onClick={handleExportExcel}
-                disabled={!report}
+                disabled={!report || isExporting}
                 className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-600/25 active:scale-[0.98] cursor-pointer"
+                title="ส่งออกรายงานภาษีฉบับสมบูรณ์ 5 ชีต พร้อมสรุปภาพรวมและสิทธิประโยชน์"
               >
-                <FileSpreadsheet className="w-4 h-4" />
-                <span>ส่งออกไฟล์ Excel (.xlsx)</span>
+                {isExporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-200" />
+                    <span>กำลังสร้าง Excel...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                    <span>ส่งออกรายงานภาษีฉบับสมบูรณ์ (.xlsx)</span>
+                  </>
+                )}
               </button>
             </div>
           }

@@ -32,6 +32,7 @@ import {
 import Papa from 'papaparse'
 import { parseAccountsPayload } from '@/lib/accounts'
 import { StatusModal, type StatusDetailItem } from '@/components/ui/StatusModal'
+import { exportTransactionsToExcel } from '@/lib/export/transactions-excel-export'
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   BUY: { label: 'BUY', color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' },
@@ -63,6 +64,27 @@ export default function TransactionsPage() {
   // Multi-select state
   const [selectedTxnIds, setSelectedTxnIds] = useState<string[]>([])
   const [deletingBatch, setDeletingBatch] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+
+  async function handleExportTransactions() {
+    setIsExporting(true)
+    try {
+      // Fetch all transactions to export comprehensive ledger
+      const res = await fetch('/api/transactions?limit=2000')
+      const json = await res.json()
+      const allTxns = json.transactions || json.data || []
+      if (allTxns.length === 0) {
+        alert('ยังไม่มีรายการธุรกรรมให้ส่งออก')
+        return
+      }
+      await exportTransactionsToExcel(allTxns)
+    } catch (err: any) {
+      console.error('Failed to export transactions:', err)
+      alert('เกิดข้อผิดพลาดในการส่งออกไฟล์ Excel')
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   // Status popup
   const [statusModal, setStatusModal] = useState<{
@@ -248,6 +270,21 @@ export default function TransactionsPage() {
                 <Upload className="w-3.5 h-3.5 text-indigo-400" />
                 <span>นำเข้า CSV</span>
               </button>
+              {hasAnyTransactions && (
+                <button
+                  onClick={handleExportTransactions}
+                  disabled={isExporting}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-emerald-300 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                  title="ส่งออกรายการธุรกรรมและสรุปภาพรวมเป็นไฟล์ Excel (.xlsx)"
+                >
+                  {isExporting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                  ) : (
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  )}
+                  <span>{isExporting ? 'กำลังส่งออก...' : 'ส่งออก Excel'}</span>
+                </button>
+              )}
               <button
                 onClick={() => setQuickAddOpen(true)}
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/25 active:scale-[0.98] cursor-pointer"
