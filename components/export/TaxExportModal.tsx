@@ -93,14 +93,17 @@ export function TaxExportModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="glass-panel bg-slate-950/95 border border-slate-700/80 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col my-8">
+      <div
+        className="glass-panel bg-slate-950/95 border border-slate-700/80 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/70">
+        <div className="px-6 py-4.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/80 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10">
               <FileSpreadsheet className="w-5 h-5" />
@@ -126,7 +129,7 @@ export function TaxExportModal({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Pre-export KPI Preview Strip */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
@@ -392,7 +395,7 @@ export function TaxExportModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4.5 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between">
+        <div className="px-6 py-4.5 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between shrink-0">
           <button
             type="button"
             onClick={onClose}
