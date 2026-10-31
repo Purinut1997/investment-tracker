@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   FileSpreadsheet,
   X,
@@ -48,8 +49,27 @@ export function TaxExportModal({
   const [currencyMode, setCurrencyMode] = useState<'dual' | 'thb_only'>('dual')
   const [isExporting, setIsExporting] = useState(false)
   const [exportSuccess, setExportSuccess] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  if (!isOpen) return null
+  useEffect(() => {
+    setMounted(true)
+    if (!isOpen) return
+
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.body.style.overflow = originalOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onClose])
+
+  if (!mounted || !isOpen) return null
 
   const isNewRuleYear = selectedYear >= 2024
   const isTaxableInThailand = isNewRuleYear || repatriated
@@ -91,9 +111,9 @@ export function TaxExportModal({
     includeAiAdvice,
   ].filter(Boolean).length
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -429,6 +449,7 @@ export function TaxExportModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
