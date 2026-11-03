@@ -59,6 +59,8 @@ export default function AssetPerformancePage() {
   const [expandedAssetId, setExpandedAssetId] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [chartScope, setChartScope] = useState<'ALL' | 'HOLDING' | 'TOP10'>('ALL')
+  const [chartSort, setChartSort] = useState<'PNL_DESC' | 'IMPACT_DESC' | 'TICKER_ASC'>('PNL_DESC')
 
   const [selectedStock, setSelectedStock] = useState<{
     symbol: string
@@ -143,22 +145,53 @@ export default function AssetPerformancePage() {
     return list
   }, [summary, filterStatus, filterMarket, searchQuery, sortField])
 
-  // Chart data: Top 10 by absolute or net P&L
+  // Asset counts for chart controls
+  const totalAssetsCount = summary?.assets?.length ?? 0
+  const activeHoldingCount = useMemo(() => {
+    return summary?.assets?.filter((a) => a.status !== 'CLOSED').length ?? 0
+  }, [summary])
+
+  // Chart data: Displays all assets, active holdings, or Top 10 with flexible sorting
   const chartData = useMemo(() => {
     if (!summary?.assets || summary.assets.length === 0) return []
-    // Take up to 10 assets with most significant returns
-    const sorted = [...summary.assets]
-      .sort((a, b) => Math.abs(b.totalNetPnLBase) - Math.abs(a.totalNetPnLBase))
-      .slice(0, 10)
 
-    return sorted.map((item) => ({
+    let list = [...summary.assets]
+
+    // Scope filter: HOLDING only shows assets that are currently active in the portfolio
+    if (chartScope === 'HOLDING') {
+      list = list.filter((item) => item.status !== 'CLOSED')
+    }
+
+    // Sort order
+    list.sort((a, b) => {
+      if (chartSort === 'PNL_DESC') {
+        return b.totalNetPnLBase - a.totalNetPnLBase
+      }
+      if (chartSort === 'IMPACT_DESC') {
+        return Math.abs(b.totalNetPnLBase) - Math.abs(a.totalNetPnLBase)
+      }
+      if (chartSort === 'TICKER_ASC') {
+        return a.ticker.localeCompare(b.ticker)
+      }
+      return 0
+    })
+
+    // Slice only if user explicitly selects TOP 10
+    if (chartScope === 'TOP10') {
+      list = list.slice(0, 10)
+    }
+
+    return list.map((item) => ({
       ticker: item.ticker,
+      assetName: item.assetName,
+      status: item.status,
       realized: Math.round(item.realizedGainBase),
       unrealized: Math.round(item.unrealizedPnLBase),
+      dividends: Math.round(item.totalDividendsBase || 0),
       totalNet: Math.round(item.totalNetPnLBase),
       isProfit: item.totalNetPnLBase >= 0,
     }))
-  }, [summary])
+  }, [summary, chartScope, chartSort])
 
   const totalNet = summary?.totalNetPnLBase ?? 0
   const isTotalNetProfit = totalNet >= 0
@@ -395,85 +428,199 @@ export default function AssetPerformancePage() {
 
         {/* ── VISUAL BAR CHART: COMPARISON ACROSS ASSETS ─────────────── */}
         {chartData.length > 0 && (
-          <div className="glass-panel p-6 rounded-3xl relative overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div className="glass-panel p-5 sm:p-6 rounded-3xl relative overflow-hidden">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
               <div>
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-indigo-400" />
-                  เปรียบเทียบกำไร/ขาดทุนสุทธิรายสินทรัพย์ (Top Impact Assets)
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  แสดงผลตอบแทนสุทธิ (บาท) ของสินทรัพย์ที่มีอิทธิพลสูงสุดต่อพอร์ต
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-indigo-400" />
+                    เปรียบเทียบกำไร/ขาดทุนสุทธิรายสินทรัพย์
+                  </h3>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold">
+                    แสดง {chartData.length} สินทรัพย์
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  {chartScope === 'HOLDING'
+                    ? 'แสดงผลตอบแทนสุทธิ (บาท) ของหุ้นที่มีอยู่ในพอร์ตปัจจุบันทั้งหมด'
+                    : chartScope === 'TOP10'
+                    ? 'แสดงผลตอบแทนสุทธิ (บาท) ของ 10 สินทรัพย์ที่มีอิทธิพลต่อพอร์ตสูงสุด'
+                    : 'แสดงผลตอบแทนสุทธิ (บาท) ครบทุกสินทรัพย์ที่มีในระบบ (ทั้งที่กำลังถือและปิดสถานะแล้ว)'}
                 </p>
               </div>
-              <div className="flex items-center gap-4 text-xs font-medium">
-                <span className="flex items-center gap-1.5 text-emerald-400">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 shadow-sm" />
-                  กำไรสุทธิ (Net Gain)
-                </span>
-                <span className="flex items-center gap-1.5 text-rose-400">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 shadow-sm" />
-                  ขาดทุนสุทธิ (Net Loss)
-                </span>
+
+              {/* Controls: Scope pills, sort selector, and legend */}
+              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+                {/* Scope Filter Pills */}
+                <div className="flex items-center p-1 rounded-xl bg-slate-900/80 border border-slate-800 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setChartScope('ALL')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      chartScope === 'ALL'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    หุ้นทั้งหมด ({totalAssetsCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartScope('HOLDING')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      chartScope === 'HOLDING'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    เฉพาะที่ถืออยู่ ({activeHoldingCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartScope('TOP10')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      chartScope === 'TOP10'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Top 10
+                  </button>
+                </div>
+
+                {/* Sort Selector */}
+                <select
+                  value={chartSort}
+                  onChange={(e) => setChartSort(e.target.value as any)}
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700/60 text-xs text-slate-300 font-medium focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="PNL_DESC">เรียง: กำไรมากสุด ➔ ขาดทุน</option>
+                  <option value="IMPACT_DESC">เรียง: อิทธิพลสูงสุด (|P&L|)</option>
+                  <option value="TICKER_ASC">เรียง: ชื่อ Ticker (A-Z)</option>
+                </select>
+
+                {/* Legend */}
+                <div className="flex items-center gap-3 text-xs font-medium pl-1">
+                  <span className="flex items-center gap-1.5 text-emerald-400">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 shadow-sm" />
+                    กำไรสุทธิ
+                  </span>
+                  <span className="flex items-center gap-1.5 text-rose-400">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 shadow-sm" />
+                    ขาดทุนสุทธิ
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="h-64 sm:h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.35} />
-                  <XAxis
-                    dataKey="ticker"
-                    stroke="#94a3b8"
-                    tick={{ fontSize: 12, fill: '#cbd5e1', fontWeight: 600 }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    stroke="#94a3b8"
-                    tick={{ fontSize: 11, fill: '#64748b' }}
-                    tickFormatter={(v) => `฿${Number(v).toLocaleString()}`}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload || !payload.length) return null
-                      const d = payload[0].payload
-                      return (
-                        <div className="p-3.5 rounded-2xl glass-panel border border-slate-700/80 shadow-2xl text-xs space-y-1.5 min-w-[180px]">
-                          <p className="font-bold text-white text-sm">{d.ticker}</p>
-                          <div className="flex items-center justify-between text-slate-300 pt-1 border-t border-slate-800">
-                            <span>กำไรที่ขายแล้ว (Realized):</span>
-                            <span className={`font-mono font-semibold ${d.realized >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {d.realized >= 0 ? '+' : ''}฿{d.realized.toLocaleString()}
-                            </span>
+            {/* Scrollable BarChart Container */}
+            <div className="w-full overflow-x-auto pb-2 custom-scrollbar">
+              <div
+                className="h-64 sm:h-72"
+                style={{
+                  minWidth: `${Math.max(640, chartData.length * 48)}px`,
+                  width: '100%',
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 25 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.35} />
+                    <XAxis
+                      dataKey="ticker"
+                      stroke="#94a3b8"
+                      tick={{ fontSize: 11, fill: '#cbd5e1', fontWeight: 600 }}
+                      interval={0}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      stroke="#94a3b8"
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                      tickFormatter={(v) => `฿${Number(v).toLocaleString()}`}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload || !payload.length) return null
+                        const d = payload[0].payload
+                        return (
+                          <div className="p-3.5 rounded-2xl glass-panel border border-slate-700/80 shadow-2xl text-xs space-y-1.5 min-w-[200px]">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-bold text-white text-sm">{d.ticker}</p>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                  d.status === 'HOLDING'
+                                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                    : d.status === 'PARTIALLY_SOLD'
+                                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                    : 'bg-slate-700/50 text-slate-400 border border-slate-600/40'
+                                }`}
+                              >
+                                {d.status === 'HOLDING'
+                                  ? 'กำลังถืออยู่'
+                                  : d.status === 'PARTIALLY_SOLD'
+                                  ? 'ขายบางส่วน'
+                                  : 'ปิดสถานะแล้ว'}
+                              </span>
+                            </div>
+                            {d.assetName && (
+                              <p className="text-[11px] text-slate-400 truncate max-w-[200px]">
+                                {d.assetName}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-between text-slate-300 pt-1.5 border-t border-slate-800">
+                              <span>กำไรที่ขายแล้ว (Realized):</span>
+                              <span
+                                className={`font-mono font-semibold ${
+                                  d.realized >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {d.realized >= 0 ? '+' : ''}฿{d.realized.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span>กำไรทางบัญชี (Unrealized):</span>
+                              <span
+                                className={`font-mono font-semibold ${
+                                  d.unrealized >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {d.unrealized >= 0 ? '+' : ''}฿{d.unrealized.toLocaleString()}
+                              </span>
+                            </div>
+                            {d.dividends > 0 && (
+                              <div className="flex items-center justify-between text-slate-300">
+                                <span>เงินปันผลสะสม:</span>
+                                <span className="font-mono font-semibold text-emerald-400">
+                                  +฿{d.dividends.toLocaleString()}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between text-white font-bold pt-1.5 border-t border-slate-700/60">
+                              <span>กำไรสุทธิรวม:</span>
+                              <span
+                                className={`font-mono ${
+                                  d.totalNet >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {d.totalNet >= 0 ? '+' : ''}฿{d.totalNet.toLocaleString()}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between text-slate-300">
-                            <span>กำไรทางบัญชี (Unrealized):</span>
-                            <span className={`font-mono font-semibold ${d.unrealized >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {d.unrealized >= 0 ? '+' : ''}฿{d.unrealized.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between text-white font-bold pt-1.5 border-t border-slate-700/60">
-                            <span>กำไรสุทธิรวม:</span>
-                            <span className={`font-mono ${d.totalNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {d.totalNet >= 0 ? '+' : ''}฿{d.totalNet.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                      )
-                    }}
-                  />
-                  <Bar dataKey="totalNet" radius={[6, 6, 0, 0]}>
-                    {chartData.map((entry, idx) => (
-                      <Cell
-                        key={`cell-${idx}`}
-                        fill={entry.isProfit ? '#10b981' : '#f43f5e'}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                        )
+                      }}
+                    />
+                    <Bar dataKey="totalNet" maxBarSize={48} radius={[6, 6, 0, 0]}>
+                      {chartData.map((entry, idx) => (
+                        <Cell
+                          key={`cell-${idx}`}
+                          fill={entry.isProfit ? '#10b981' : '#f43f5e'}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
