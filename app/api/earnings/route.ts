@@ -29,20 +29,26 @@ export interface MarketEarningsItem {
   earningsData: AnalyzedEarningsData
 }
 
-// Default benchmark/watch ideas for quick exploration
+// Set maximum duration for Vercel serverless function (up to 60s)
+export const maxDuration = 30
+
+// Default benchmark/watch ideas for quick exploration (compact high-impact selection)
 const DEFAULT_BENCHMARKS = [
   { ticker: 'NVDA', market: 'US' as const },
   { ticker: 'AAPL', market: 'US' as const },
   { ticker: 'MSFT', market: 'US' as const },
-  { ticker: 'GOOGL', market: 'US' as const },
-  { ticker: 'AMZN', market: 'US' as const },
-  { ticker: 'META', market: 'US' as const },
   { ticker: 'TSLA', market: 'US' as const },
   { ticker: 'PTT', market: 'TH' as const },
-  { ticker: 'SCB', market: 'TH' as const },
-  { ticker: 'CPALL', market: 'TH' as const },
   { ticker: 'DELTA', market: 'TH' as const },
 ]
+
+// In-memory cache for fast navigation and preventing Vercel function timeouts
+interface EarningsCacheEntry {
+  payload: any
+  timestamp: number
+}
+const earningsRouteCache = new Map<string, EarningsCacheEntry>()
+const ROUTE_CACHE_TTL = 15 * 60 * 1000 // 15 minutes
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -94,6 +100,15 @@ export async function GET(req: NextRequest) {
         data: analyzed,
         userHolding,
       })
+    }
+
+    // Check in-memory route cache for Case 2
+    const cacheKey = `${session.user.id}_${baseCurrency}`
+    if (!forceRefresh) {
+      const cached = earningsRouteCache.get(cacheKey)
+      if (cached && Date.now() - cached.timestamp < ROUTE_CACHE_TTL) {
+        return NextResponse.json(cached.payload)
+      }
     }
 
     // Case 2: Fetch portfolio earnings & curated benchmarks
@@ -156,17 +171,17 @@ export async function GET(req: NextRequest) {
     const portfolioItems: PortfolioEarningsItem[] = portfolioSettled
       .filter((r): r is PromiseFulfilledResult<PortfolioEarningsItem | null> => r.status === 'fulfilled')
       .map((r) => r.value)
-      .filter((v): v is PortfolioEarningsItem => v !== null)
+      .filter((v): v is PortfolioEarningsItem => Boolean(v && v.earningsData && v.earningsData.ticker))
 
     const marketItems: MarketEarningsItem[] = benchmarkSettled
       .filter((r): r is PromiseFulfilledResult<MarketEarningsItem | null> => r.status === 'fulfilled')
       .map((r) => r.value)
-      .filter((v): v is MarketEarningsItem => v !== null)
+      .filter((v): v is MarketEarningsItem => Boolean(v && v.earningsData && v.earningsData.ticker))
 
     // Sort items by upcoming earnings date ascending (closest date first)
     const sortByDate = (a: { earningsData: AnalyzedEarningsData }, b: { earningsData: AnalyzedEarningsData }) => {
-      const aDays = a.earningsData.upcoming.daysRemaining
-      const bDays = b.earningsData.upcoming.daysRemaining
+      const aDays = a.earningsData?.upcoming?.daysRemaining ?? 999
+      const bDays = b.earningsData?.upcoming?.daysRemaining ?? 999
       // Positive days first sorted ascending, then past dates, then 999 (tbd)
       const aWeight = aDays >= 0 ? aDays : 1000 + Math.abs(aDays)
       const bWeight = bDays >= 0 ? bDays : 1000 + Math.abs(bDays)
@@ -178,14 +193,20 @@ export async function GET(req: NextRequest) {
 
     // Summary calculations
     const upcoming30Days = portfolioItems.filter(
-      (i) => i.earningsData.upcoming.daysRemaining >= 0 && i.earningsData.upcoming.daysRemaining <= 30
+      (i) =>
+        i.earningsData?.upcoming?.daysRemaining !== undefined &&
+        i.earningsData.upcoming.daysRemaining >= 0 &&
+        i.earningsData.upcoming.daysRemaining <= 30
     )
     const upcoming7Days = portfolioItems.filter(
-      (i) => i.earningsData.upcoming.daysRemaining >= 0 && i.earningsData.upcoming.daysRemaining <= 7
+      (i) =>
+        i.earningsData?.upcoming?.daysRemaining !== undefined &&
+        i.earningsData.upcoming.daysRemaining >= 0 &&
+        i.earningsData.upcoming.daysRemaining <= 7
     )
     const closestHolding = upcoming30Days[0] || null
 
-    return NextResponse.json({
+    const responsePayload = {
       portfolioItems,
       marketItems,
       summary: {
@@ -201,7 +222,15 @@ export async function GET(req: NextRequest) {
             }
           : null,
       },
+    }
+
+    // Save to route cache
+    earningsRouteCache.set(cacheKey, {
+      payload: responsePayload,
+      timestamp: Date.now(),
     })
+
+    return NextResponse.json(responsePayload)
   } catch (error) {
     console.error('[API /api/earnings] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -213,9 +213,11 @@ export function StockEarningsDetailModal({
                 </span>
                 <span className="tabular-nums text-xs font-bold text-slate-200">
                   {currency === 'THB' ? '฿' : '$'}
-                  {currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {typeof currentPrice === 'number' && !isNaN(currentPrice)
+                    ? currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : '0.00'}
                 </span>
-                {priceChangePercent !== undefined && (
+                {typeof priceChangePercent === 'number' && !isNaN(priceChangePercent) && (
                   <span
                     className={`tabular-nums text-xs font-semibold ${
                       priceChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -330,7 +332,9 @@ export function StockEarningsDetailModal({
               <div className="p-3 rounded-xl bg-[#0A0D14] border border-white/[0.06]">
                 <span className="text-xs text-slate-400 font-semibold">ตลาดคาดหวัง EPS</span>
                 <p className="text-base sm:text-lg font-bold tabular-nums text-white mt-0.5">
-                  {upcoming.consensusEps !== null ? `$${upcoming.consensusEps.toFixed(2)}` : '-'}
+                  {typeof upcoming.consensusEps === 'number' && !isNaN(upcoming.consensusEps)
+                    ? `$${upcoming.consensusEps.toFixed(2)}`
+                    : '-'}
                 </p>
                 {upcoming.epsRange?.low != null && upcoming.epsRange?.high != null && (
                   <p className="text-xs text-slate-400 tabular-nums mt-0.5">
@@ -521,37 +525,37 @@ export function StockEarningsDetailModal({
                     <span>คำนวณผลกระทบต่อพอร์ตเป็นตัวเงินจริง (Portfolio Exposure & Risk Impact)</span>
                   </span>
                   <span className="text-xs text-slate-300 tabular-nums">
-                    พอร์ตของคุณถืออยู่: <strong>{userHolding.quantity} หุ้น</strong> (~${userHolding.currentValue.toLocaleString()} / ฿{(userHolding.currentValue * 35).toLocaleString()})
+                    พอร์ตของคุณถืออยู่: <strong>{userHolding.quantity} หุ้น</strong> (~${(userHolding.currentValue ?? 0).toLocaleString()} / ฿{((userHolding.currentValue ?? 0) * 35).toLocaleString()})
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                   <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.04]">
-                    <span className="text-[11px] text-slate-400">แกว่งตัวเฉลี่ยในอดีต (±{stats.avgPostEarningsMovePercent}%)</span>
+                    <span className="text-[11px] text-slate-400">แกว่งตัวเฉลี่ยในอดีต (±{stats?.avgPostEarningsMovePercent ?? 0}%)</span>
                     <p className="text-sm font-bold text-white tabular-nums mt-0.5">
-                      ±${(userHolding.currentValue * (stats.avgPostEarningsMovePercent / 100)).toFixed(1)}
+                      ±${((userHolding.currentValue ?? 0) * ((stats?.avgPostEarningsMovePercent ?? 0) / 100)).toFixed(1)}
                       <span className="text-xs text-slate-400 font-normal ml-1">
-                        (~±฿{((userHolding.currentValue * (stats.avgPostEarningsMovePercent / 100)) * 35).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                        (~±฿{(((userHolding.currentValue ?? 0) * ((stats?.avgPostEarningsMovePercent ?? 0) / 100)) * 35).toLocaleString(undefined, { maximumFractionDigits: 0 })})
                       </span>
                     </p>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <span className="text-[11px] text-emerald-300">กรณีผลงานชนะคาด (+{stats.avgBeatPriceMovePercent}%)</span>
+                    <span className="text-[11px] text-emerald-300">กรณีผลงานชนะคาด (+{stats?.avgBeatPriceMovePercent ?? 0}%)</span>
                     <p className="text-sm font-bold text-emerald-400 tabular-nums mt-0.5">
-                      +${(userHolding.currentValue * (stats.avgBeatPriceMovePercent / 100)).toFixed(1)}
+                      +${((userHolding.currentValue ?? 0) * ((stats?.avgBeatPriceMovePercent ?? 0) / 100)).toFixed(1)}
                       <span className="text-xs text-emerald-200/70 font-normal ml-1">
-                        (+฿{((userHolding.currentValue * (stats.avgBeatPriceMovePercent / 100)) * 35).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                        (+฿{(((userHolding.currentValue ?? 0) * ((stats?.avgBeatPriceMovePercent ?? 0) / 100)) * 35).toLocaleString(undefined, { maximumFractionDigits: 0 })})
                       </span>
                     </p>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20">
-                    <span className="text-[11px] text-rose-300">กรณีผลงานต่ำกว่าคาด ({stats.avgMissPriceMovePercent}%)</span>
+                    <span className="text-[11px] text-rose-300">กรณีผลงานต่ำกว่าคาด ({stats?.avgMissPriceMovePercent ?? 0}%)</span>
                     <p className="text-sm font-bold text-rose-400 tabular-nums mt-0.5">
-                      -${(userHolding.currentValue * (Math.abs(stats.avgMissPriceMovePercent) / 100)).toFixed(1)}
+                      -${((userHolding.currentValue ?? 0) * (Math.abs(stats?.avgMissPriceMovePercent ?? 0) / 100)).toFixed(1)}
                       <span className="text-xs text-rose-200/70 font-normal ml-1">
-                        (-฿{((userHolding.currentValue * (Math.abs(stats.avgMissPriceMovePercent) / 100)) * 35).toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                        (-฿{(((userHolding.currentValue ?? 0) * (Math.abs(stats?.avgMissPriceMovePercent ?? 0) / 100)) * 35).toLocaleString(undefined, { maximumFractionDigits: 0 })})
                       </span>
                     </p>
                   </div>
@@ -792,7 +796,7 @@ export function StockEarningsDetailModal({
                             />
                           </div>
                           <span className="text-xs tabular-nums font-bold text-emerald-300 w-16 text-right">
-                            {q.actualEps !== null ? `$${q.actualEps.toFixed(2)}` : '-'}
+                            {typeof q.actualEps === 'number' && !isNaN(q.actualEps) ? `$${q.actualEps.toFixed(2)}` : '-'}
                           </span>
                         </div>
 
@@ -807,7 +811,7 @@ export function StockEarningsDetailModal({
                             />
                           </div>
                           <span className="text-xs tabular-nums font-bold text-indigo-300 w-16 text-right">
-                            {q.estimateEps !== null ? `$${q.estimateEps.toFixed(2)}` : '-'}
+                            {typeof q.estimateEps === 'number' && !isNaN(q.estimateEps) ? `$${q.estimateEps.toFixed(2)}` : '-'}
                           </span>
                         </div>
                       </div>
@@ -821,7 +825,7 @@ export function StockEarningsDetailModal({
                           {q.netIncomeFormatted && (
                             <span>กำไรสุทธิ: <strong className="text-slate-100">{q.netIncomeFormatted}</strong></span>
                           )}
-                          {q.profitMarginPercent !== null && (
+                          {typeof q.profitMarginPercent === 'number' && !isNaN(q.profitMarginPercent) && (
                             <span>Margin: <strong className="text-slate-100">{q.profitMarginPercent.toFixed(1)}%</strong></span>
                           )}
                         </div>

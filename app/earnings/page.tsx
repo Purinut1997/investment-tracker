@@ -24,13 +24,26 @@ import {
   Layers,
   Coins,
   LayoutGrid,
+  AlertCircle,
 } from 'lucide-react'
 import { StockEarningsCard } from '@/components/earnings/StockEarningsCard'
 import { StockEarningsDetailModal } from '@/components/earnings/StockEarningsDetailModal'
 import { AnalyzedEarningsData } from '@/lib/earnings/earnings-analyzer'
 import { PortfolioEarningsItem, MarketEarningsItem } from '@/app/api/earnings/route'
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const fetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) {
+    const text = await res.text()
+    try {
+      const json = JSON.parse(text)
+      throw new Error(json.error || `HTTP ${res.status}`)
+    } catch {
+      throw new Error(`โหลดข้อมูลไม่สำเร็จ (HTTP ${res.status})`)
+    }
+  }
+  return res.json()
+}
 
 // Featured ideas for 1-click discovery
 const FEATURED_IDEAS = [
@@ -77,18 +90,21 @@ export default function EarningsCalendarPage() {
     }> = []
 
     if (filterTab === 'portfolio') {
-      baseList = portfolioItems.map((p) => ({
-        earningsData: p.earningsData,
-        userHolding: p.holding,
-      }))
+      baseList = portfolioItems
+        .filter((p) => Boolean(p?.earningsData?.ticker))
+        .map((p) => ({
+          earningsData: p.earningsData,
+          userHolding: p.holding,
+        }))
     } else if (filterTab === 'urgent') {
       // All items with report <= 14 days
       const all = [
         ...portfolioItems.map((p) => ({ earningsData: p.earningsData, userHolding: p.holding })),
         ...marketItems.map((m) => ({ earningsData: m.earningsData, userHolding: null })),
-      ]
+      ].filter((item) => Boolean(item?.earningsData?.ticker))
       baseList = all.filter(
         (item) =>
+          item.earningsData?.upcoming?.daysRemaining !== undefined &&
           item.earningsData.upcoming.daysRemaining >= 0 &&
           item.earningsData.upcoming.daysRemaining <= 14
       )
@@ -96,20 +112,20 @@ export default function EarningsCalendarPage() {
       const all = [
         ...portfolioItems.map((p) => ({ earningsData: p.earningsData, userHolding: p.holding })),
         ...marketItems.map((m) => ({ earningsData: m.earningsData, userHolding: null })),
-      ]
-      baseList = all.filter((item) => item.earningsData.market === 'US')
+      ].filter((item) => Boolean(item?.earningsData?.ticker))
+      baseList = all.filter((item) => item.earningsData?.market === 'US')
     } else if (filterTab === 'th') {
       const all = [
         ...portfolioItems.map((p) => ({ earningsData: p.earningsData, userHolding: p.holding })),
         ...marketItems.map((m) => ({ earningsData: m.earningsData, userHolding: null })),
-      ]
-      baseList = all.filter((item) => item.earningsData.market === 'TH')
+      ].filter((item) => Boolean(item?.earningsData?.ticker))
+      baseList = all.filter((item) => item.earningsData?.market === 'TH')
     } else {
       // 'all'
       baseList = [
         ...portfolioItems.map((p) => ({ earningsData: p.earningsData, userHolding: p.holding })),
         ...marketItems.map((m) => ({ earningsData: m.earningsData, userHolding: null })),
-      ]
+      ].filter((item) => Boolean(item?.earningsData?.ticker))
     }
 
     // Apply text search
@@ -117,8 +133,8 @@ export default function EarningsCalendarPage() {
       const q = searchQuery.toLowerCase().trim()
       baseList = baseList.filter(
         (item) =>
-          item.earningsData.ticker.toLowerCase().includes(q) ||
-          item.earningsData.companyName.toLowerCase().includes(q)
+          (item.earningsData?.ticker || '').toLowerCase().includes(q) ||
+          (item.earningsData?.companyName || '').toLowerCase().includes(q)
       )
     }
 
@@ -454,6 +470,31 @@ export default function EarningsCalendarPage() {
             แสดง <strong className="text-slate-200 tabular-nums">{displayedItems.length}</strong> หุ้น • คลิกที่การ์ดเพื่อดูชาร์ต & งบย้อนหลัง
           </span>
         </div>
+
+        {/* Error State Banner */}
+        {error && (
+          <div className="p-5 sm:p-6 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-black/20">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">โหลดข้อมูลผลประกอบการไม่สำเร็จ</h4>
+                <p className="text-xs text-rose-300/80 mt-0.5">
+                  {error.message || 'ระบบไม่สามารถเชื่อมต่อดึงข้อมูลตลาดได้ชั่วคราว'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => mutate()}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shrink-0 active:scale-98"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>ลองใหม่อีกครั้ง</span>
+            </button>
+          </div>
+        )}
 
         {/* Loading State */}
         {isLoading && (

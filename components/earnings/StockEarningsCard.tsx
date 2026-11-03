@@ -140,7 +140,7 @@ export function StockEarningsCard({
                 <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                   <Wallet className="w-3 h-3" />
                   <span>ในพอร์ต: {userHolding.quantity} หุ้น</span>
-                  {userHolding.unrealizedPnLPercent !== undefined && (
+                  {typeof userHolding.unrealizedPnLPercent === 'number' && !isNaN(userHolding.unrealizedPnLPercent) && (
                     <span
                       className={`text-xs tabular-nums font-semibold ${
                         userHolding.unrealizedPnLPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -161,9 +161,11 @@ export function StockEarningsCard({
             <div className="flex items-center gap-2 mt-1.5 text-xs">
               <span className="tabular-nums font-bold text-slate-100 text-sm">
                 {currency === 'THB' ? '฿' : '$'}
-                {currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {typeof currentPrice === 'number' && !isNaN(currentPrice)
+                  ? currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : '0.00'}
               </span>
-              {priceChangePercent !== undefined && (
+              {typeof priceChangePercent === 'number' && !isNaN(priceChangePercent) && (
                 <span className={`tabular-nums text-xs font-semibold flex items-center ${priceColor}`}>
                   {priceChangePercent >= 0 ? '+' : ''}
                   {priceChangePercent.toFixed(2)}%
@@ -182,10 +184,12 @@ export function StockEarningsCard({
             </span>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-sm font-bold tabular-nums text-white">
-                {upcoming.consensusEps !== null ? `$${upcoming.consensusEps.toFixed(2)}` : '-'}
+                {typeof upcoming?.consensusEps === 'number' && !isNaN(upcoming.consensusEps)
+                  ? `$${upcoming.consensusEps.toFixed(2)}`
+                  : '-'}
               </span>
             </div>
-            {upcoming.epsExpectedYoyGrowthPercent != null && (
+            {typeof upcoming?.epsExpectedYoyGrowthPercent === 'number' && !isNaN(upcoming.epsExpectedYoyGrowthPercent) && (
               <span
                 className={`text-xs tabular-nums font-semibold mt-0.5 flex items-center gap-0.5 ${
                   upcoming.epsExpectedYoyGrowthPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -209,10 +213,10 @@ export function StockEarningsCard({
             <span className="text-xs text-slate-400 font-medium">ตลาดคาดหวังรายได้</span>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-sm font-bold tabular-nums text-white">
-                {upcoming.consensusRevenueFormatted || '-'}
+                {upcoming?.consensusRevenueFormatted || '-'}
               </span>
             </div>
-            {upcoming.revenueExpectedYoyGrowthPercent != null && (
+            {typeof upcoming?.revenueExpectedYoyGrowthPercent === 'number' && !isNaN(upcoming.revenueExpectedYoyGrowthPercent) && (
               <span
                 className={`text-xs tabular-nums font-semibold mt-0.5 flex items-center gap-0.5 ${
                   upcoming.revenueExpectedYoyGrowthPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -240,20 +244,20 @@ export function StockEarningsCard({
             <div className="mt-0.5 sm:mt-1 flex items-center gap-1.5">
               <span
                 className={`text-xs font-bold px-2 py-0.5 rounded ${
-                  stats.beatRatePercent >= 75
+                  (stats?.beatRatePercent ?? 0) >= 75
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : stats.beatRatePercent >= 50
+                    : (stats?.beatRatePercent ?? 0) >= 50
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                     : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                 }`}
               >
-                {stats.beatRatePercent}% Beat
+                {stats?.beatRatePercent ?? 0}% Beat
               </span>
               <span className="text-xs text-slate-400 tabular-nums hidden sm:inline">
-                ({stats.beatsCount}/{stats.totalQuartersAnalyzed} รอบ)
+                ({stats?.beatsCount ?? 0}/{stats?.totalQuartersAnalyzed ?? 0} รอบ)
               </span>
             </div>
-            {stats.latestSurprisePercent !== null && (
+            {typeof stats?.latestSurprisePercent === 'number' && !isNaN(stats.latestSurprisePercent) && (
               <span className="text-xs text-slate-400 tabular-nums mt-0.5 hidden sm:inline">
                 รอบล่าสุด: {stats.latestSurprisePercent > 0 ? '+' : ''}
                 {stats.latestSurprisePercent}%
@@ -272,7 +276,7 @@ export function StockEarningsCard({
       <div className="mt-3 pt-2.5 border-t border-white/[0.04] flex items-center justify-between gap-2 flex-wrap text-xs text-slate-400">
         <div className="flex items-center gap-2 flex-wrap">
           {/* Release Timing Badge */}
-          {upcoming.releaseTimingLabel && upcoming.releaseTiming !== 'TBD' && (
+          {upcoming?.releaseTimingLabel && upcoming.releaseTiming !== 'TBD' && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-slate-300 font-medium">
               <span>{upcoming.releaseTiming === 'AMC' ? '🌙' : '☀️'}</span>
               <span>{upcoming.releaseTimingLabel}</span>
@@ -280,7 +284,7 @@ export function StockEarningsCard({
           )}
 
           {/* Analyst Revisions */}
-          {upcoming.revisions && (upcoming.revisions.upLast30days > 0 || upcoming.revisions.downLast30days > 0) && (
+          {upcoming?.revisions && ((upcoming.revisions.upLast30days ?? 0) > 0 || (upcoming.revisions.downLast30days ?? 0) > 0) && (
             <span
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-medium ${
                 upcoming.revisions.sentiment === 'bullish'
@@ -291,20 +295,22 @@ export function StockEarningsCard({
               }`}
             >
               <span>🎯 ปรับเป้า 30 วัน:</span>
-              <strong className="text-emerald-400 font-bold tabular-nums">+{upcoming.revisions.upLast30days}</strong>
+              <strong className="text-emerald-400 font-bold tabular-nums">+{upcoming.revisions.upLast30days ?? 0}</strong>
               <span>/</span>
-              <strong className="text-rose-400 font-bold tabular-nums">-{upcoming.revisions.downLast30days}</strong>
+              <strong className="text-rose-400 font-bold tabular-nums">-{upcoming.revisions.downLast30days ?? 0}</strong>
             </span>
           )}
 
           {/* Historical Post-Earnings Move */}
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 font-medium">
-            <span>⚡ สถิติหลังงบ: แกว่งเฉลี่ย</span>
-            <strong className="text-white font-bold tabular-nums">±{stats.avgPostEarningsMovePercent}%</strong>
-          </span>
+          {typeof stats?.avgPostEarningsMovePercent === 'number' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 font-medium">
+              <span>⚡ สถิติหลังงบ: แกว่งเฉลี่ย</span>
+              <strong className="text-white font-bold tabular-nums">±{stats.avgPostEarningsMovePercent}%</strong>
+            </span>
+          )}
 
           {/* Portfolio Dollar Risk Impact */}
-          {userHolding && userHolding.currentValue > 0 && (
+          {userHolding && typeof userHolding.currentValue === 'number' && userHolding.currentValue > 0 && typeof stats?.avgPostEarningsMovePercent === 'number' && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-200 font-medium">
               <span>💰 ผลกระทบต่อพอร์ต:</span>
               <strong className="text-amber-300 font-bold tabular-nums">
