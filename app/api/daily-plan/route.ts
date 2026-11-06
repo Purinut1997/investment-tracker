@@ -67,13 +67,14 @@ export async function GET(req: NextRequest) {
   const userId = session.user.id
   const { searchParams } = new URL(req.url)
   const queryDate = searchParams.get('date') || getTodayBangkokDateString()
+  const forceRefresh = searchParams.get('refresh') === 'true'
 
   try {
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
 
     // 1. Fetch user's holdings & cash
-    const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
+    const holdingsResult = await calculateUserHoldings(userId, baseCurrency, forceRefresh)
     const accounts = await prisma.investmentAccount.findMany({
       where: { userId },
       select: { cashBalance: true, currency: true },
@@ -428,7 +429,7 @@ export async function GET(req: NextRequest) {
 
     // Actionable items: near support, oversold, or deep dip
     const actionItems = holdingsWithSignals.map(({ holding, signal }) => {
-      const currentPrice = signal?.currentPrice ?? holding.currentPrice
+      const currentPrice = holding.currentPrice > 0 ? holding.currentPrice : (signal?.currentPrice ?? 0)
       const s1 = signal?.supportS1 ?? null
       const r1 = signal?.resistanceR1 ?? null
       const sma50 = signal?.sma50 ?? null

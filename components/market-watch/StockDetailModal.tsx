@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import useSWR from 'swr'
+import useSWR, { mutate } from 'swr'
 import {
   X,
   TrendingUp,
@@ -665,6 +665,86 @@ export function StockDetailModal({
       dedupingInterval: 120000, // 2 minutes deduping to avoid excessive API requests
     }
   )
+
+  // Synchronize live price & daily change back to Watchlist & Market Watch cards so they match 100%
+  useEffect(() => {
+    if (!data?.symbol || typeof data?.currentPrice !== 'number' || data.currentPrice <= 0) return
+    const targetSym = String(data.symbol).trim().toUpperCase()
+    const livePrice = data.currentPrice
+    const liveChange = data.todayChange ?? data.change ?? 0
+    const liveChangePct = data.todayChangePercent ?? data.changePercent ?? 0
+    const liveHigh = data.dayHigh
+    const liveLow = data.dayLow
+    const livePrev = data.previousClose
+
+    mutate(
+      '/api/watchlist',
+      (current: any) => {
+        if (!current || !Array.isArray(current.items)) return current
+        return {
+          ...current,
+          items: current.items.map((item: any) => {
+            if (String(item.symbol || '').trim().toUpperCase() !== targetSym) return item
+            return {
+              ...item,
+              quote: {
+                ...(item.quote || {}),
+                symbol: targetSym,
+                price: livePrice,
+                change: liveChange,
+                changePercent: liveChangePct,
+                high: liveHigh ?? item.quote?.high,
+                low: liveLow ?? item.quote?.low,
+                previousClose: livePrev ?? item.quote?.previousClose,
+              },
+            }
+          }),
+        }
+      },
+      false
+    )
+
+    mutate(
+      '/api/market-watch',
+      (current: any) => {
+        if (!current) return current
+        const updateList = (list: any[]) =>
+          Array.isArray(list)
+            ? list.map((q: any) =>
+                String(q?.symbol || '').trim().toUpperCase() === targetSym
+                  ? {
+                      ...q,
+                      price: livePrice,
+                      change: liveChange,
+                      changePercent: liveChangePct,
+                      high: liveHigh ?? q.high,
+                      low: liveLow ?? q.low,
+                      previousClose: livePrev ?? q.previousClose,
+                    }
+                  : q
+              )
+            : list
+        return {
+          ...current,
+          crypto: updateList(current.crypto),
+          usStocks: updateList(current.usStocks),
+          thStocks: updateList(current.thStocks),
+          fxAndCommodities: updateList(current.fxAndCommodities),
+        }
+      },
+      false
+    )
+  }, [
+    data?.symbol,
+    data?.currentPrice,
+    data?.todayChange,
+    data?.todayChangePercent,
+    data?.change,
+    data?.changePercent,
+    data?.dayHigh,
+    data?.dayLow,
+    data?.previousClose,
+  ])
 
   // Price points for Recharts
   const chartPoints = data?.chartPoints ?? []

@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 import { stooqProvider } from '@/lib/market-data/stooq'
-import { invalidatePriceCache } from '@/lib/market-data/cache-layer'
+import { invalidatePriceCache, syncAssetLivePrice } from '@/lib/market-data/cache-layer'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
 export async function POST(req: NextRequest) {
@@ -60,42 +60,30 @@ export async function POST(req: NextRequest) {
       source: string
     }> = []
 
+    // Clear all provider and analyzer caches first so we fetch genuinely fresh live quotes
+    invalidatePriceCache()
+
     await Promise.all(
       activeAssets.map(async (asset) => {
         try {
           let quote: any = null
 
           if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
-            quote = await coinGeckoProvider.getQuote(asset.ticker)
+            quote = await coinGeckoProvider.getQuote(asset.ticker, 'CRYPTO', true)
           } else if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
-            quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH')
-            if (!quote) quote = await stooqProvider.getQuote(asset.ticker, 'TH')
+            quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH', true)
+            if (!quote) quote = await stooqProvider.getQuote(asset.ticker, 'TH', true)
+          } else if (asset.assetType === 'gold' || asset.ticker === 'GOLD' || asset.ticker === 'XAU') {
+            quote = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', true)
+            if (!quote) quote = await stooqProvider.getQuote('GC.F', 'COMMODITY', true)
           } else {
             // US / Global
-            quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US')
-            if (!quote) quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US')
+            quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US', true)
+            if (!quote) quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US', true)
           }
 
           if (quote && quote.price > 0) {
-            // Upsert into PriceHistory
-            await prisma.priceHistory.upsert({
-              where: {
-                assetId_priceDate: {
-                  assetId: asset.id,
-                  priceDate: dateKey,
-                },
-              },
-              update: {
-                closePrice: quote.price,
-                sourceProvider: quote.provider || 'yahoo',
-              },
-              create: {
-                assetId: asset.id,
-                priceDate: dateKey,
-                closePrice: quote.price,
-                sourceProvider: quote.provider || 'yahoo',
-              },
-            })
+            await syncAssetLivePrice(asset.id, quote.price, quote.provider || 'yahoo')
 
             // Ensure asset has correct currency and market
             if (asset.market === 'US' && asset.currency !== 'USD') {
@@ -121,9 +109,8 @@ export async function POST(req: NextRequest) {
       })
     )
 
-    // Clear caches so downstream APIs immediately reflect latest prices
-    invalidatePriceCache()
-    invalidateUserHoldingsCache(session.user.id)
+    // Clear portfolio/holdings/performance caches so downstream APIs immediately reflect latest prices
+    invalidateUserHoldingsCache()
 
     return NextResponse.json({
       success: true,

@@ -3,11 +3,14 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import {
   calculateUserHoldings,
+  reconcileHoldingPrice,
+  invalidateUserPortfolioCache,
   getUserSummaryCache,
   setUserSummaryCache,
   getInFlightSummary,
   setInFlightSummary,
 } from '@/lib/analytics/holdings'
+import { invalidatePriceCache, syncAssetLivePrice } from '@/lib/market-data/cache-layer'
 import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
 import { calculatePortfolioPerformance } from '@/lib/analytics/performance'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
@@ -31,7 +34,10 @@ export async function GET(req: NextRequest) {
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
 
     // 2. Check in-memory cache (<0.5ms)
-    if (!forceRefresh) {
+    if (forceRefresh) {
+      invalidatePriceCache()
+      invalidateUserPortfolioCache(userId)
+    } else {
       const cached = getUserSummaryCache(userId, baseCurrency)
       if (cached) {
         return NextResponse.json(cached)
@@ -124,30 +130,56 @@ export async function GET(req: NextRequest) {
       }
       const netWorth = holdingsResult.totalValueBase + totalCash
 
-      // 9. Calculate Today's P&L and individual daily price changes
+      // 9. Calculate Today's P&L and synchronize individual live prices
       let todayPnLBase = 0
       const holdingsWithDaily = await Promise.all(
         holdingsResult.holdings.map(async (h) => {
           let quote = null
           try {
             if (h.assetType === 'crypto' || h.market === 'CRYPTO') {
-              quote = await coinGeckoProvider.getQuote(h.ticker)
+              quote = await coinGeckoProvider.getQuote(h.ticker, 'CRYPTO', forceRefresh)
             } else {
-              quote = await yahooFinanceProvider.getQuote(h.ticker, h.market)
+              quote = await yahooFinanceProvider.getQuote(h.ticker, h.market, forceRefresh)
             }
           } catch {}
 
+          let reconciled = h
+          if (quote && quote.price > 0) {
+            if (Math.abs(quote.price - h.currentPrice) > 0.0001) {
+              reconciled = reconcileHoldingPrice(h, quote.price, usdThbRate)
+              syncAssetLivePrice(h.assetId, quote.price, quote.provider || 'yahoo').catch(() => {})
+            }
+          }
+
           const changePercent = quote?.changePercent ?? 0
-          const holdingTodayPnLBase = h.currentValueBase * (changePercent / 100)
+          const holdingTodayPnLBase = reconciled.currentValueBase * (changePercent / 100)
           todayPnLBase += holdingTodayPnLBase
 
           return {
-            ...h,
+            ...reconciled,
             todayChangePercent: changePercent,
             todayPnLBase: holdingTodayPnLBase,
           }
         })
       )
+
+      // Recalculate portfolio totals & allocations from reconciled holdings so everything matches 100%
+      const reconciledTotalValueBase = holdingsWithDaily.reduce(
+        (sum, h) => sum + h.currentValueBase,
+        0
+      )
+      if (reconciledTotalValueBase > 0) {
+        for (const h of holdingsWithDaily) {
+          h.allocationPercent = (h.currentValueBase / reconciledTotalValueBase) * 100
+        }
+      }
+      holdingsResult.totalValueBase = reconciledTotalValueBase
+      holdingsResult.unrealizedPnLBase = reconciledTotalValueBase - holdingsResult.totalCostBase
+      holdingsResult.unrealizedPnLPercent =
+        holdingsResult.totalCostBase > 0
+          ? (holdingsResult.unrealizedPnLBase / holdingsResult.totalCostBase) * 100
+          : 0
+      const reconciledNetWorth = reconciledTotalValueBase + totalCash
 
       const todayPnLPercent =
         holdingsResult.totalValueBase > 0
@@ -179,7 +211,7 @@ export async function GET(req: NextRequest) {
           key,
           name: item.label,
           value: Math.round(item.value),
-          percent: netWorth > 0 ? Number(((item.value / netWorth) * 100).toFixed(1)) : 0,
+          percent: reconciledNetWorth > 0 ? Number(((item.value / reconciledNetWorth) * 100).toFixed(1)) : 0,
           color: item.color,
         }))
 
@@ -261,7 +293,7 @@ export async function GET(req: NextRequest) {
         usdThbRate,
         totalValue: holdingsResult.totalValueBase,
         totalCost: holdingsResult.totalCostBase,
-        netWorth,
+        netWorth: reconciledNetWorth,
         totalCash,
         todayPnL: todayPnLBase,
         todayPnLPercent,

@@ -129,6 +129,9 @@ export async function GET(req: NextRequest) {
       )
       if (!analyzed) return null
 
+      const syncedPrice =
+        holding.currentPrice > 0 ? holding.currentPrice : analyzed.currentPrice
+
       const item: PortfolioEarningsItem = {
         holding: {
           assetId: holding.assetId,
@@ -138,11 +141,14 @@ export async function GET(req: NextRequest) {
           currency: holding.currency,
           quantity: holding.quantity,
           avgCost: holding.avgCost,
-          currentPrice: holding.currentPrice,
+          currentPrice: syncedPrice,
           currentValue: holding.currentValue,
           unrealizedPnLPercent: holding.unrealizedPnLPercent,
         },
-        earningsData: analyzed,
+        earningsData: {
+          ...analyzed,
+          currentPrice: syncedPrice,
+        },
       }
       return item
     })

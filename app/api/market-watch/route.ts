@@ -38,11 +38,11 @@ export async function GET(req: NextRequest) {
     const fetchPromise = (async () => {
       // Parallel fetch ALL 4 categories concurrently
       const [cryptoQuotes, usQuotes, thQuotes, [goldQuote, usdThb, eurThb, jpyThb]] = await Promise.all([
-        Promise.all(cryptoSymbols.map((s) => coinGeckoProvider.getQuote(s))),
-        Promise.all(usSymbols.map((s) => yahooFinanceProvider.getQuote(s, 'US'))),
-        Promise.all(thSymbols.map((s) => yahooFinanceProvider.getQuote(s, 'TH'))),
+        Promise.all(cryptoSymbols.map((s) => coinGeckoProvider.getQuote(s, 'CRYPTO', forceRefresh))),
+        Promise.all(usSymbols.map((s) => yahooFinanceProvider.getQuote(s, 'US', forceRefresh))),
+        Promise.all(thSymbols.map((s) => yahooFinanceProvider.getQuote(s, 'TH', forceRefresh))),
         Promise.all([
-          yahooFinanceProvider.getQuote('GOLD'),
+          yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', forceRefresh),
           getExchangeRate('USD', 'THB'),
           getExchangeRate('EUR', 'THB'),
           getExchangeRate('JPY', 'THB'),

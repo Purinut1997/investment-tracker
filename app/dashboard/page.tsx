@@ -246,11 +246,18 @@ export default function DashboardPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to refresh prices')
 
-      await mutate('/api/portfolio/summary')
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('port_summary_cache_v1')
+        } catch {}
+      }
+
+      // Revalidate all SWR caches across the app (summary, technical signals, plans, performance, etc.)
+      await mutate(() => true, undefined, { revalidate: true })
 
       setRefreshToast({
         title: 'อัปเดตราคาล่าสุดเรียบร้อย!',
-        desc: `ดึงราคาปิดตลาดล่าสุดของ ${data.updatedCount ?? 0} สินทรัพย์เรียบร้อยแล้ว`,
+        desc: `ดึงราคาตลาดล่าสุดและซิงก์ทุกหน้าของ ${data.updatedCount ?? 0} สินทรัพย์เรียบร้อยแล้ว`,
       })
       setTimeout(() => setRefreshToast(null), 4000)
     } catch (err: any) {

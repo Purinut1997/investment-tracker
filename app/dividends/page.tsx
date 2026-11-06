@@ -295,7 +295,19 @@ export default function DividendsPage() {
             {/* Refresh Button */}
             <button
               type="button"
-              onClick={() => mutate()}
+              onClick={async () => {
+                try {
+                  await fetch('/api/portfolio/refresh-prices', { method: 'POST' })
+                  const res = await fetch('/api/dividends?refresh=true')
+                  if (res.ok) {
+                    await mutate(await res.json(), false)
+                  } else {
+                    await mutate()
+                  }
+                } catch {
+                  mutate()
+                }
+              }}
               className="p-2 rounded-xl bg-[#181C25] hover:bg-[#202532] text-slate-400 hover:text-white border border-white/[0.08] transition-colors cursor-pointer"
               title="รีเฟรชข้อมูล"
             >

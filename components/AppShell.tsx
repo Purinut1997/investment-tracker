@@ -375,7 +375,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── MAIN CONTENT ────────────────────────────────────── */}
-      <div className="min-w-0 flex flex-col pb-20 lg:pb-6 relative z-10">
+      <div className="min-w-0 flex flex-col pb-20 lg:pb-6 relative">
         <div className="sticky top-0 z-30 w-full flex flex-col">
           {/* Real-time Market Ticker Tape */}
           <TickerTape />

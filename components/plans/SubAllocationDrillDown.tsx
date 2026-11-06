@@ -259,7 +259,7 @@ export function SubAllocationDrillDown({
         name: h.assetName || h.ticker,
         market: h.market || categoryKey,
         shares: h.quantity,
-        currentPrice: liveSig?.currentPrice || h.currentPrice,
+        currentPrice: h.currentPrice > 0 ? h.currentPrice : (liveSig?.currentPrice || 0),
         currentValueBase: h.currentValueBase,
         actualWeightInGroup,
         actualWeightInPortfolio,

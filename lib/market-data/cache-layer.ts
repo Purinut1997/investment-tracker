@@ -6,11 +6,15 @@
  * Tier 3: External providers (Yahoo, Finnhub, Stooq, CoinGecko) only if forceRefresh=true or no DB record
  */
 
-import { prisma } from '@/lib/prisma'
-import { yahooFinanceProvider } from './yahoo'
+import { prisma } from '../prisma'
+import { yahooFinanceProvider, invalidateYahooCache } from './yahoo'
 import { finnhubProvider } from './finnhub'
-import { coinGeckoProvider } from './coingecko'
+import { coinGeckoProvider, invalidateCoinGeckoCache } from './coingecko'
 import { stooqProvider } from './stooq'
+import { invalidateTechnicalCache } from './technical-signals'
+import { invalidateResolverCache } from './resolver'
+import { invalidateDividendCache } from '../dividends/dividend-analyzer'
+import { invalidateEarningsAnalyzerCache } from '../earnings/earnings-analyzer'
 import { MarketQuote } from './types'
 
 interface PriceCacheEntry {
@@ -29,6 +33,52 @@ export function invalidatePriceCache(assetId?: string) {
     priceMemoryCache.delete(assetId)
   } else {
     priceMemoryCache.clear()
+    invalidateYahooCache()
+    invalidateCoinGeckoCache()
+    invalidateTechnicalCache()
+    invalidateResolverCache()
+    invalidateDividendCache()
+    invalidateEarningsAnalyzerCache()
+  }
+}
+
+export async function syncAssetLivePrice(
+  assetId: string,
+  price: number,
+  sourceProvider = 'yahoo'
+) {
+  if (!assetId || !price || price <= 0 || isNaN(price)) return
+  const now = Date.now()
+  priceMemoryCache.set(assetId, {
+    price,
+    sourceProvider,
+    isStale: false,
+    timestamp: now,
+  })
+
+  try {
+    const dateKey = new Date()
+    dateKey.setUTCHours(0, 0, 0, 0)
+    await prisma.priceHistory.upsert({
+      where: {
+        assetId_priceDate: {
+          assetId,
+          priceDate: dateKey,
+        },
+      },
+      update: {
+        closePrice: price,
+        sourceProvider,
+      },
+      create: {
+        assetId,
+        priceDate: dateKey,
+        closePrice: price,
+        sourceProvider,
+      },
+    })
+  } catch (err) {
+    console.warn('[syncAssetLivePrice DB warning]', err)
   }
 }
 
@@ -37,7 +87,11 @@ export async function getBatchCachedOrFetchPrices(
   forceRefresh = false
 ): Promise<Map<string, { price: number; sourceProvider: string; isStale: boolean }>> {
   const now = Date.now()
+  const todayKey = new Date()
+  todayKey.setUTCHours(0, 0, 0, 0)
+
   const resultMap = new Map<string, { price: number; sourceProvider: string; isStale: boolean }>()
+  const staleFallbackMap = new Map<string, { price: number; sourceProvider: string; isStale: boolean }>()
   const missingAssetIds: string[] = []
 
   // ── Tier 1: In-Memory Fast Cache (<0.1ms) ──────────────────────
@@ -73,16 +127,25 @@ export async function getBatchCachedOrFetchPrices(
         orderBy: { priceDate: 'desc' },
       })
 
-      // Take the most recent price for each asset
+      // Only treat TODAY's DB record as fresh; keep older records as fallback so Tier 3 fetches live price
       for (const row of historicalPrices) {
-        if (!resultMap.has(row.assetId)) {
+        if (resultMap.has(row.assetId)) continue
+
+        const rowDateMs = new Date(row.priceDate).getTime()
+        if (rowDateMs >= todayKey.getTime()) {
           const entry = {
             price: Number(row.closePrice),
-            sourceProvider: `${row.sourceProvider} (cached)`,
-            isStale: true,
+            sourceProvider: row.sourceProvider,
+            isStale: false,
           }
           resultMap.set(row.assetId, entry)
           priceMemoryCache.set(row.assetId, { ...entry, timestamp: now })
+        } else if (!staleFallbackMap.has(row.assetId)) {
+          staleFallbackMap.set(row.assetId, {
+            price: Number(row.closePrice),
+            sourceProvider: `${row.sourceProvider} (cached)`,
+            isStale: true,
+          })
         }
       }
     } catch (err) {
@@ -90,7 +153,7 @@ export async function getBatchCachedOrFetchPrices(
     }
   }
 
-  // ── Tier 3: Fetch individually only for assets with NO price in DB ──
+  // ── Tier 3: Fetch live for assets with no today price (or forceRefresh) ──
   const stillMissing = missingAssetIds.filter((id) => !resultMap.has(id))
   if (stillMissing.length > 0) {
     await Promise.all(
@@ -99,8 +162,17 @@ export async function getBatchCachedOrFetchPrices(
           const fetched = await getCachedOrFetchPrice(assetId, undefined, forceRefresh)
           if (fetched) {
             resultMap.set(assetId, fetched)
+          } else if (staleFallbackMap.has(assetId)) {
+            const fallback = staleFallbackMap.get(assetId)!
+            resultMap.set(assetId, fallback)
+            priceMemoryCache.set(assetId, { ...fallback, timestamp: now })
           }
-        } catch {}
+        } catch {
+          if (staleFallbackMap.has(assetId)) {
+            const fallback = staleFallbackMap.get(assetId)!
+            resultMap.set(assetId, fallback)
+          }
+        }
       })
     )
   }
@@ -131,10 +203,8 @@ export async function getCachedOrFetchPrice(
   dateKey.setUTCHours(0, 0, 0, 0)
 
   try {
-    // ── Tier 2: Database PriceHistory Lookup ───────────────────────
-    // If not forcing refresh, check if we already have a recent valid historical price in DB
+    // ── Tier 2: Database PriceHistory Lookup (Only exact today date before Tier 3) ──
     if (!forceRefresh) {
-      // Check exact date first
       const exactCached = await prisma.priceHistory.findUnique({
         where: {
           assetId_priceDate: {
@@ -153,52 +223,33 @@ export async function getCachedOrFetchPrice(
         priceMemoryCache.set(assetId, { ...result, timestamp: now })
         return result
       }
-
-      // Check most recent historical price in DB (from last trading day)
-      const latestHistorical = await prisma.priceHistory.findFirst({
-        where: {
-          assetId,
-          closePrice: { gt: 0 },
-        },
-        orderBy: { priceDate: 'desc' },
-      })
-
-      if (latestHistorical && Number(latestHistorical.closePrice) > 0) {
-        const result = {
-          price: Number(latestHistorical.closePrice),
-          sourceProvider: `${latestHistorical.sourceProvider} (cached)`,
-          isStale: true,
-        }
-        priceMemoryCache.set(assetId, { ...result, timestamp: now })
-        return result
-      }
     }
 
-    // ── Tier 3: External Providers Fetch (Only if forceRefresh OR no DB price exists) ──
+    // ── Tier 3: External Providers Fetch (when forceRefresh OR no DB price for today) ──
     const asset = await prisma.asset.findUnique({ where: { id: assetId } })
     if (!asset) return null
 
     let quote: MarketQuote | null = null
 
     if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
-      quote = await coinGeckoProvider.getQuote(asset.ticker)
+      quote = await coinGeckoProvider.getQuote(asset.ticker, 'CRYPTO', forceRefresh)
     } else if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
-      quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH')
+      quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH', forceRefresh)
       if (!quote) {
-        quote = await stooqProvider.getQuote(asset.ticker, 'TH')
+        quote = await stooqProvider.getQuote(asset.ticker, 'TH', forceRefresh)
       }
-    } else if (asset.market === 'US' || asset.currency === 'USD') {
-      quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US')
+    } else if (asset.assetType === 'gold' || asset.ticker === 'GOLD' || asset.ticker === 'XAU') {
+      quote = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', forceRefresh)
       if (!quote) {
-        quote = await finnhubProvider.getQuote(asset.ticker)
+        quote = await stooqProvider.getQuote('GC.F', 'COMMODITY', forceRefresh)
+      }
+    } else {
+      quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US', forceRefresh)
+      if (!quote) {
+        quote = await finnhubProvider.getQuote(asset.ticker, 'US', forceRefresh)
       }
       if (!quote) {
-        quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US')
-      }
-    } else if (asset.assetType === 'gold') {
-      quote = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL')
-      if (!quote) {
-        quote = await stooqProvider.getQuote('GC.F', 'COMMODITY')
+        quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US', forceRefresh)
       }
     }
 

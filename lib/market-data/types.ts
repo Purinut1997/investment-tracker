@@ -27,5 +27,5 @@ export interface FxRate {
 
 export interface MarketDataProvider {
   name: string
-  getQuote(symbol: string, market?: string): Promise<MarketQuote | null>
+  getQuote(symbol: string, market?: string, forceRefresh?: boolean): Promise<MarketQuote | null>
 }

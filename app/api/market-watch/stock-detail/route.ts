@@ -3,6 +3,10 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { getYahooQuoteSummary } from '@/lib/market-data/yahoo-crumb'
 import { parseHistoricalStats, HistoricalStockStats } from '@/lib/market-data/historical-stats'
+import { syncAssetLivePrice } from '@/lib/market-data/cache-layer'
+import { syncYahooQuoteCache } from '@/lib/market-data/yahoo'
+import { invalidateResolverCache } from '@/lib/market-data/resolver'
+import { invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
 
 export interface ChartPoint {
   time: string
@@ -89,13 +93,14 @@ function formatTicker(rawSymbol: string, market: string): string {
 async function fetchChartData(
   rawSymbol: string,
   market: string,
-  range: string
+  range: string,
+  forceRefresh = false
 ): Promise<CachedChartResult | null> {
   const cacheKey = `${rawSymbol}_${market}_${range}`
   const now = Date.now()
 
   const cached = chartCache.get(cacheKey)
-  if (cached && now - cached.timestamp < CHART_CACHE_TTL_MS) {
+  if (!forceRefresh && cached && now - cached.timestamp < CHART_CACHE_TTL_MS) {
     return cached.data
   }
 
@@ -143,7 +148,7 @@ async function fetchChartData(
           Accept: 'application/json',
         },
         signal: AbortSignal.timeout(4000),
-        next: { revalidate: 180 },
+        cache: 'no-store',
       })
 
       if (!res.ok) return null
@@ -336,6 +341,19 @@ async function fetchChartData(
       }
 
       chartCache.set(cacheKey, { data: chartResult, timestamp: Date.now() })
+      if (currentPrice > 0) {
+        syncYahooQuoteCache(rawSymbol, market, {
+          name: chartResult.name,
+          price: currentPrice,
+          change: chartResult.todayChange,
+          changePercent: chartResult.todayChangePercent,
+          high: chartResult.dayHigh ?? undefined,
+          low: chartResult.dayLow ?? undefined,
+          previousClose: officialPrevClose,
+          currency: chartResult.currency,
+        })
+        invalidateResolverCache()
+      }
       return chartResult
     } catch (err) {
       console.error(`[fetchChartData error] ${rawSymbol}:`, err)
@@ -516,6 +534,7 @@ export async function GET(req: NextRequest) {
   const rawSymbol = searchParams.get('symbol')?.trim()?.toUpperCase()
   const market = searchParams.get('market')?.trim()?.toUpperCase() || 'US'
   const range = searchParams.get('range')?.trim()?.toLowerCase() || '1m'
+  const forceRefresh = searchParams.get('refresh') === 'true'
 
   if (!rawSymbol) {
     return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
@@ -525,7 +544,7 @@ export async function GET(req: NextRequest) {
     // 1. Fetch Chart, Fundamentals, and User Position in parallel
     // Fundamentals & Chart are both cached in-memory with long TTLs to prevent API blocking
     const [chartData, fundamentals, userTxns] = await Promise.all([
-      fetchChartData(rawSymbol, market, range),
+      fetchChartData(rawSymbol, market, range, forceRefresh),
       fetchFundamentalsData(rawSymbol, market),
       prisma.transaction.findMany({
         where: {
@@ -546,6 +565,11 @@ export async function GET(req: NextRequest) {
     }
 
     const currentPrice = chartData.currentPrice
+    if (userTxns.length > 0 && currentPrice > 0) {
+      syncAssetLivePrice(userTxns[0].assetId, currentPrice, 'yahoo')
+        .then(() => invalidateUserPortfolioCache(session.user.id))
+        .catch(() => {})
+    }
 
     // User Position Summary (Using FIFO)
     let userPosition: {

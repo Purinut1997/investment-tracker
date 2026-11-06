@@ -17,10 +17,15 @@ export interface ResolvedQuoteResult {
 const resolverCache = new Map<string, { result: ResolvedQuoteResult; timestamp: number }>()
 const RESOLVER_CACHE_TTL_MS = 60 * 1000 // 60 seconds
 
+export function invalidateResolverCache() {
+  resolverCache.clear()
+}
+
 export async function resolveMarketQuote(
   rawSymbol: string,
   hintType?: WatchlistType | string,
-  hintMarket?: string
+  hintMarket?: string,
+  forceRefresh = false
 ): Promise<ResolvedQuoteResult> {
   const symbol = rawSymbol.trim().toUpperCase()
   if (!symbol) {
@@ -30,11 +35,11 @@ export async function resolveMarketQuote(
   const cacheKey = `${symbol}_${hintType || ''}_${hintMarket || ''}`
   const now = Date.now()
   const cached = resolverCache.get(cacheKey)
-  if (cached && now - cached.timestamp < RESOLVER_CACHE_TTL_MS) {
+  if (!forceRefresh && cached && now - cached.timestamp < RESOLVER_CACHE_TTL_MS) {
     return cached.result
   }
 
-  const result = await doResolveMarketQuote(symbol, hintType, hintMarket)
+  const result = await doResolveMarketQuote(symbol, hintType, hintMarket, forceRefresh)
   if (result && result.quote) {
     resolverCache.set(cacheKey, { result, timestamp: now })
   }
@@ -44,11 +49,12 @@ export async function resolveMarketQuote(
 async function doResolveMarketQuote(
   symbol: string,
   hintType?: WatchlistType | string,
-  hintMarket?: string
+  hintMarket?: string,
+  forceRefresh = false
 ): Promise<ResolvedQuoteResult> {
   // 1. Explicit or detected Crypto
   if (hintType === 'crypto' || CRYPTO_SYMBOLS.has(symbol)) {
-    const quote = await coinGeckoProvider.getQuote(symbol)
+    const quote = await coinGeckoProvider.getQuote(symbol, 'CRYPTO', forceRefresh)
     if (quote) {
       return { quote, itemType: 'crypto', market: 'GLOBAL' }
     }
@@ -56,7 +62,7 @@ async function doResolveMarketQuote(
 
   // 2. Gold or Commodity
   if (hintType === 'gold' || symbol === 'GOLD' || symbol === 'XAU' || symbol === 'GC=F') {
-    const quote = await yahooFinanceProvider.getQuote('GOLD')
+    const quote = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', forceRefresh)
     if (quote) {
       return {
         quote: { ...quote, symbol: 'GOLD' },
@@ -69,14 +75,14 @@ async function doResolveMarketQuote(
   // 3. Explicit Thai Stock
   if (hintMarket === 'TH' || symbol.endsWith('.BK')) {
     const cleanSymbol = symbol.replace(/\.BK$/i, '')
-    const quote = await yahooFinanceProvider.getQuote(cleanSymbol, 'TH')
+    const quote = await yahooFinanceProvider.getQuote(cleanSymbol, 'TH', forceRefresh)
     if (quote) {
       return { quote, itemType: 'stock', market: 'TH' }
     }
   }
 
   // 4. Default: Try US Equities / Global Yahoo Ticker
-  let quote = await yahooFinanceProvider.getQuote(symbol, 'US')
+  let quote = await yahooFinanceProvider.getQuote(symbol, 'US', forceRefresh)
   if (quote) {
     const isIndex = symbol.startsWith('^') || symbol.includes('INDEX')
     return {
@@ -88,7 +94,7 @@ async function doResolveMarketQuote(
 
   // 5. Fallback: Try Thai stock if not explicitly set
   if (!hintMarket || hintMarket !== 'US') {
-    quote = await yahooFinanceProvider.getQuote(symbol, 'TH')
+    quote = await yahooFinanceProvider.getQuote(symbol, 'TH', forceRefresh)
     if (quote) {
       return { quote, itemType: 'stock', market: 'TH' }
     }
@@ -96,7 +102,7 @@ async function doResolveMarketQuote(
 
   // 6. Fallback: Try Crypto if not tried yet
   if (hintType !== 'stock') {
-    quote = await coinGeckoProvider.getQuote(symbol)
+    quote = await coinGeckoProvider.getQuote(symbol, 'CRYPTO', forceRefresh)
     if (quote) {
       return { quote, itemType: 'crypto', market: 'GLOBAL' }
     }

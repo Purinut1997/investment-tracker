@@ -448,9 +448,20 @@ export default function MarketWatchPage() {
               </button>
 
               <button
-                onClick={() => {
-                  revalidate()
-                  mutateWatchlist()
+                onClick={async () => {
+                  try {
+                    const [mwRes, wlRes] = await Promise.all([
+                      fetch('/api/market-watch?refresh=true'),
+                      fetch('/api/watchlist?refresh=true'),
+                    ])
+                    if (mwRes.ok) await revalidate(await mwRes.json(), false)
+                    else revalidate()
+                    if (wlRes.ok) await mutateWatchlist(await wlRes.json(), false)
+                    else mutateWatchlist()
+                  } catch {
+                    revalidate()
+                    mutateWatchlist()
+                  }
                 }}
                 disabled={isValidating}
                 className="bg-[#181C25] hover:bg-[#202532] text-slate-300 hover:text-white border border-white/[0.1] disabled:opacity-50 px-4 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm"

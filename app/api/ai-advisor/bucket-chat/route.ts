@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
           heldInPortfolio: Boolean(held),
           quantity: held ? Number(held.quantity.toFixed(4)) : 0,
           avgCost: held ? Number(held.avgCost.toFixed(2)) : null,
-          currentPrice: sig?.currentPrice ?? held?.currentPrice ?? null,
+          currentPrice: held?.currentPrice ?? sig?.currentPrice ?? null,
           currency: held?.currency ?? (ticker.endsWith('.BK') ? 'THB' : 'USD'),
           unrealizedPnLPercent: held ? `${held.unrealizedPnLPercent.toFixed(2)}%` : 'ยังไม่ได้ถือครอง',
           portfolioWeightPercent: held ? `${held.allocationPercent.toFixed(1)}%` : '0%',

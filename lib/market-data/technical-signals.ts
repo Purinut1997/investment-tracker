@@ -36,6 +36,19 @@ export interface TechnicalSignal {
 const technicalCache = new Map<string, { data: TechnicalSignal; timestamp: number }>()
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
+export function invalidateTechnicalCache(symbol?: string) {
+  if (symbol) {
+    const clean = symbol.trim().toUpperCase()
+    for (const key of technicalCache.keys()) {
+      if (key.startsWith(`${clean}_`)) {
+        technicalCache.delete(key)
+      }
+    }
+  } else {
+    technicalCache.clear()
+  }
+}
+
 export function calculateWildersRSI(closes: number[], period = 14): number | null {
   if (closes.length <= period) return null
 
@@ -76,14 +89,15 @@ export function calculateSMA(closes: number[], period: number): number | null {
 
 export async function fetchSingleTickerTechnicalSignal(
   rawSymbol: string,
-  market = 'US'
+  market = 'US',
+  forceRefresh = false
 ): Promise<TechnicalSignal> {
   const cleanSymbol = rawSymbol.trim().toUpperCase()
   const cacheKey = `${cleanSymbol}_${market}`
   const cached = technicalCache.get(cacheKey)
   const now = Date.now()
 
-  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+  if (!forceRefresh && cached && now - cached.timestamp < CACHE_TTL_MS) {
     return cached.data
   }
 
@@ -126,15 +140,21 @@ export async function fetchSingleTickerTechnicalSignal(
           cand
         )}?range=6mo&interval=1d`
 
-        const res = await fetch(url, {
+        const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
           headers: {
             'User-Agent':
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             Accept: 'application/json',
           },
           signal: AbortSignal.timeout(3500),
-          next: { revalidate: 300 },
-        })
+        }
+        if (forceRefresh) {
+          fetchOptions.cache = 'no-store'
+        } else {
+          fetchOptions.next = { revalidate: 300 }
+        }
+
+        const res = await fetch(url, fetchOptions)
 
         if (!res.ok) continue
 
@@ -348,13 +368,14 @@ export async function fetchSingleTickerTechnicalSignal(
 }
 
 export async function getBatchTechnicalSignals(
-  tickers: Array<{ ticker: string; market?: string }>
+  tickers: Array<{ ticker: string; market?: string }>,
+  forceRefresh = false
 ): Promise<Record<string, TechnicalSignal>> {
   const results: Record<string, TechnicalSignal> = {}
 
   // Parallel fetch with concurrency control
   const promises = tickers.map(async (t) => {
-    const sig = await fetchSingleTickerTechnicalSignal(t.ticker, t.market)
+    const sig = await fetchSingleTickerTechnicalSignal(t.ticker, t.market, forceRefresh)
     results[t.ticker.toUpperCase()] = sig
   })
 

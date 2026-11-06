@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate as globalMutate } from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
@@ -82,8 +82,24 @@ export default function AssetPerformancePage() {
     if (refreshing) return
     setRefreshing(true)
     try {
-      await fetch('/api/portfolio/performance-summary?refresh=true')
-      await mutate()
+      await fetch('/api/portfolio/refresh-prices', { method: 'POST' })
+      const res = await fetch('/api/portfolio/performance-summary?refresh=true')
+      if (res.ok) {
+        const freshData = await res.json()
+        await mutate(freshData, false)
+      } else {
+        await mutate()
+      }
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('port_summary_cache_v1')
+        } catch {}
+      }
+      await globalMutate(
+        (key) => typeof key === 'string' && key !== '/api/portfolio/performance-summary',
+        undefined,
+        { revalidate: true }
+      )
       setToastMessage('อัปเดตราคาตลาดและคำนวณผลตอบแทนล่าสุดเรียบร้อย')
       setTimeout(() => setToastMessage(null), 3500)
     } catch (err) {

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import useSWR, { mutate } from 'swr'
 import {
   X,
@@ -1059,20 +1060,27 @@ export function QuickAddModal({
     }
   }
 
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const inputClass =
     'w-full bg-[#181C25] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors'
   const labelClass = 'block text-[11px] font-semibold text-zinc-300 uppercase tracking-wider mb-1.5'
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in"
     >
-      <div className="bg-[#12151C] border border-white/10 rounded-2xl w-full max-w-2xl lg:max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div className="bg-[#12151C] border border-white/10 rounded-2xl w-full max-w-2xl lg:max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[calc(100dvh-1.25rem)] sm:max-h-[90dvh]">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
+        <div className="shrink-0 px-4 sm:px-6 py-3.5 sm:py-4 border-b border-white/[0.08] flex items-center justify-between bg-white/[0.02]">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
               <Plus className="w-4 h-4" />
@@ -1102,7 +1110,7 @@ export function QuickAddModal({
 
         {/* Tab Switcher (3 Tabs) - only show when not in batch review mode */}
         {!hasExtracted && (
-          <div className="flex bg-[#181C25] p-1.5 gap-1.5 mx-6 mt-4 rounded-xl border border-white/[0.06]">
+          <div className="shrink-0 flex bg-[#181C25] p-1 sm:p-1.5 gap-1 sm:gap-1.5 mx-4 sm:mx-6 mt-3 sm:mt-4 rounded-xl border border-white/[0.06]">
             <button
               type="button"
               onClick={() => setTab('photos')}
@@ -1143,7 +1151,7 @@ export function QuickAddModal({
         )}
 
         {/* Modal Body */}
-        <div className="px-6 py-5 overflow-y-auto flex-1 space-y-5">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-4 sm:space-y-5">
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-2.5 text-xs text-rose-300">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
@@ -1224,7 +1232,7 @@ export function QuickAddModal({
                     </div>
                   </div>
 
-                  <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                  <div className="space-y-2.5 sm:max-h-[380px] sm:overflow-y-auto pr-1">
                     {extractedTxns.map((txn, idx) => {
                       return (
                         <div
@@ -1500,48 +1508,6 @@ export function QuickAddModal({
                   <span>{error}</span>
                 </div>
               )}
-
-              {/* Batch Save Action Bar */}
-              <div className="pt-2 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => setHasExtracted(false)}
-                  className="text-xs text-zinc-400 hover:text-white px-3 py-2 cursor-pointer"
-                >
-                  ย้อนกลับ
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddBlankRow}
-                  className="inline-flex items-center gap-1.5 text-xs text-indigo-300 hover:text-white px-3 py-2 border border-white/10 rounded-xl hover:bg-white/[0.04] transition-all cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>เพิ่มอีกรายการ</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleBatchSave}
-                  disabled={submitting || (extractedTxns.filter((t) => t.selected).length === 0 && extractedCash.filter((c) => c.selected).length === 0)}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/25 cursor-pointer"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>กำลังบันทึกทุกรายการ...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>
-                        บันทึกทุกรายการเข้าสู่ระบบ (
-                        {extractedTxns.filter((t) => t.selected).length +
-                          extractedCash.filter((c) => c.selected).length}{' '}
-                        รายการ)
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
           ) : (
             <>
@@ -1563,7 +1529,9 @@ export function QuickAddModal({
                       }
                     }}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all ${
+                    className={`border-2 border-dashed rounded-2xl text-center cursor-pointer transition-all ${
+                      uploadedFiles.length > 0 ? 'p-3.5 sm:p-5' : 'p-6 sm:p-8'
+                    } ${
                       isDragOver
                         ? 'border-indigo-500 bg-indigo-500/10'
                         : 'border-white/10 hover:border-indigo-500/40 hover:bg-white/[0.02]'
@@ -1577,16 +1545,22 @@ export function QuickAddModal({
                       className="hidden"
                       onChange={handleFileSelect}
                     />
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-3 text-indigo-400 shadow-lg shadow-indigo-500/10">
-                      <UploadCloud className="w-6 h-6" />
+                    <div
+                      className={`rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto text-indigo-400 shadow-lg shadow-indigo-500/10 ${
+                        uploadedFiles.length > 0 ? 'w-9 h-9 mb-2' : 'w-12 h-12 mb-3'
+                      }`}
+                    >
+                      <UploadCloud className={uploadedFiles.length > 0 ? 'w-4 h-4' : 'w-6 h-6'} />
                     </div>
-                    <p className="text-sm font-bold text-white mb-1">
-                      คลิกเพื่อเลือกภาพ หรือลากรูปภาพมาวางที่นี่
+                    <p className="text-xs sm:text-sm font-bold text-white mb-0.5">
+                      {uploadedFiles.length > 0
+                        ? 'แตะเพื่อเพิ่มภาพสลิปอีก หรือลากรูปมาวางเพิ่ม'
+                        : 'คลิกเพื่อเลือกภาพ หรือลากรูปภาพมาวางที่นี่'}
                     </p>
-                    <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed">
+                    <p className="text-[11px] sm:text-xs text-zinc-400 max-w-md mx-auto leading-relaxed">
                       รองรับการส่งพร้อมกันหลายภาพ (สลิปซื้อ, สลิปขาย, ปันผล, หรือหน้ากระเป๋าเงินสด)
                     </p>
-                    <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11px] text-zinc-400">
+                    <div className="mt-2.5 hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[11px] text-zinc-400">
                       <span>💡 หรือกดปุ่ม</span>
                       <kbd className="px-1.5 py-0.5 rounded bg-black/40 border border-white/20 font-mono text-[10px] text-white">
                         Ctrl + V
@@ -1603,8 +1577,9 @@ export function QuickAddModal({
                           ภาพที่เลือก ({uploadedFiles.length} ภาพ)
                         </span>
                         <button
+                          type="button"
                           onClick={clearAllFiles}
-                          className="text-rose-400 hover:text-rose-300 transition-colors"
+                          className="text-rose-400 hover:text-rose-300 transition-colors cursor-pointer"
                         >
                           ล้างทั้งหมด
                         </button>
@@ -1628,7 +1603,7 @@ export function QuickAddModal({
                                   e.stopPropagation()
                                   removeFile(idx)
                                 }}
-                                className="absolute top-1 right-1 p-1 rounded-md bg-black/70 hover:bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="absolute top-1 right-1 p-1 rounded-md bg-black/75 hover:bg-rose-600 text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
                                 title="ลบภาพนี้"
                               >
                                 <X className="w-3.5 h-3.5" />
@@ -1640,26 +1615,6 @@ export function QuickAddModal({
                           </div>
                         ))}
                       </div>
-
-                      {/* Analyze Button */}
-                      <button
-                        type="button"
-                        onClick={handleAnalyzeMultiImages}
-                        disabled={parsing}
-                        className="w-full mt-3 bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
-                      >
-                        {parsing ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>AI กำลังวิเคราะห์สลิปทั้ง {uploadedFiles.length} ภาพ...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 text-amber-300" />
-                            <span>วิเคราะห์ข้อมูลทุกภาพด้วย AI</span>
-                          </>
-                        )}
-                      </button>
                     </div>
                   )}
                 </div>
@@ -1667,7 +1622,7 @@ export function QuickAddModal({
 
               {/* ════════════════ TAB 2: AI TEXT PROMPT ════════════════ */}
               {tab === 'ai' && (
-                <form onSubmit={handleSingleAIParse} className="space-y-4">
+                <form id="ai-parse-form" onSubmit={handleSingleAIParse} className="space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className={labelClass}>รายละเอียดธุรกรรม (ภาษาธรรมชาติ / สรุปรายงานหลายหุ้น)</label>
@@ -1694,24 +1649,6 @@ export function QuickAddModal({
                     <p className="text-[11px]">• สกัดทุกหุ้นและประเภทธุรกรรม (ซื้อ, ขาย, ปันผล, ค่าธรรมเนียม) ลงตารางให้อัตโนมัติ</p>
                     <p className="text-[11px]">• คุณสามารถตรวจสอบ ปรับเปลี่ยนราคา/จำนวน หรือเพิ่มรายการเองได้ก่อนบันทึก</p>
                   </div>
-
-                  <button
-                    type="submit"
-                    disabled={parsing || !nlText.trim()}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
-                  >
-                    {parsing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>AI กำลังวิเคราะห์ข้อความและแยกทุกรายการธุรกรรม...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 text-amber-300" />
-                        <span>วิเคราะห์ข้อความด้วย AI (ดึงทุกหุ้นพร้อมกัน)</span>
-                      </>
-                    )}
-                  </button>
                 </form>
               )}
 
@@ -2046,20 +1983,114 @@ export function QuickAddModal({
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                 />
               </div>
+            </form>
+          </div>
+        )}
+      </>
+    )}
+  </div>
 
-              <div className="pt-3 flex items-center justify-end gap-3">
+        {/* Sticky Modal Footer Action Bar (Always reachable on mobile & desktop) */}
+        {(hasExtracted || tab !== 'photos' || uploadedFiles.length > 0) && (
+          <div className="shrink-0 border-t border-white/[0.08] bg-[#12151C]/95 backdrop-blur-md px-4 sm:px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            {hasExtracted ? (
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => setHasExtracted(false)}
+                  className="text-xs text-zinc-400 hover:text-white px-3 py-2.5 rounded-xl border border-white/10 hover:bg-white/[0.04] transition-colors cursor-pointer"
+                >
+                  ย้อนกลับ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddBlankRow}
+                  className="inline-flex items-center justify-center gap-1.5 text-xs text-indigo-300 hover:text-white px-3 py-2.5 border border-white/10 rounded-xl hover:bg-white/[0.04] transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>เพิ่มอีกรายการ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchSave}
+                  disabled={
+                    submitting ||
+                    (extractedTxns.filter((t) => t.selected).length === 0 &&
+                      extractedCash.filter((c) => c.selected).length === 0)
+                  }
+                  className="w-full sm:w-auto sm:flex-1 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/25 cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>กำลังบันทึกทุกรายการ...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>
+                        บันทึกทุกรายการเข้าสู่ระบบ (
+                        {extractedTxns.filter((t) => t.selected).length +
+                          extractedCash.filter((c) => c.selected).length}{' '}
+                        รายการ)
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : tab === 'photos' && uploadedFiles.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleAnalyzeMultiImages}
+                disabled={parsing}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
+              >
+                {parsing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>AI กำลังวิเคราะห์สลิปทั้ง {uploadedFiles.length} ภาพ...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>วิเคราะห์ข้อมูลทุกภาพด้วย AI ({uploadedFiles.length} ภาพ)</span>
+                  </>
+                )}
+              </button>
+            ) : tab === 'ai' ? (
+              <button
+                type="submit"
+                form="ai-parse-form"
+                disabled={parsing || !nlText.trim()}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-600/25 cursor-pointer"
+              >
+                {parsing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>AI กำลังวิเคราะห์ข้อความและแยกทุกรายการธุรกรรม...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>วิเคราะห์ข้อความด้วย AI (ดึงทุกหุ้นพร้อมกัน)</span>
+                  </>
+                )}
+              </button>
+            ) : tab === 'manual' ? (
+              <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl text-xs text-zinc-400 hover:text-white"
+                  className="px-4 py-2.5 rounded-xl text-xs text-zinc-400 hover:text-white border border-white/10 hover:bg-white/[0.04] transition-colors cursor-pointer"
                   disabled={submitting}
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
+                  form="manual-form"
                   disabled={submitting}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 px-5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-indigo-600/25"
+                  className="flex-1 sm:flex-initial bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 px-6 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-600/25 cursor-pointer"
                 >
                   {submitting ? (
                     <>
@@ -2074,13 +2105,10 @@ export function QuickAddModal({
                   )}
                 </button>
               </div>
-            </form>
+            ) : null}
           </div>
         )}
-      </>
-    )}
-  </div>
-</div>
+      </div>
 
       {/* ── Status Modal (Loading / Success / Error Popups) ── */}
       {statusModal && (
@@ -2104,6 +2132,7 @@ export function QuickAddModal({
           autoCloseMs={statusModal.autoCloseMs}
         />
       )}
-    </div>
+    </div>,
+    document.body
   )
 }

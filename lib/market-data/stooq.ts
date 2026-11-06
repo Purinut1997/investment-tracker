@@ -8,7 +8,7 @@ import { MarketDataProvider, MarketQuote } from './types'
 export class StooqProvider implements MarketDataProvider {
   name = 'stooq'
 
-  async getQuote(symbol: string, market = 'TH'): Promise<MarketQuote | null> {
+  async getQuote(symbol: string, market = 'TH', forceRefresh = false): Promise<MarketQuote | null> {
     let cleanSymbol = symbol.trim().toUpperCase()
 
     // Add .BK suffix for Thai stocks if not present
@@ -20,7 +20,10 @@ export class StooqProvider implements MarketDataProvider {
 
     try {
       const url = `https://stooq.com/q/l/?s=${encodeURIComponent(cleanSymbol.toLowerCase())}&f=sd2t2ohlcv&h&e=csv`
-      const res = await fetch(url, { next: { revalidate: 300 } })
+      const fetchOptions: RequestInit & { next?: { revalidate?: number } } = forceRefresh
+        ? { cache: 'no-store' }
+        : { next: { revalidate: 300 } }
+      const res = await fetch(url, fetchOptions as RequestInit)
 
       if (!res.ok) {
         console.warn(`[Stooq] HTTP ${res.status} for ${cleanSymbol}`)

@@ -7,9 +7,9 @@
  * - Overall net return and win-rate statistics
  */
 
-import { prisma } from '@/lib/prisma'
-import { getCachedOrFetchPrice } from '@/lib/market-data/cache-layer'
-import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { prisma } from '../prisma'
+import { getCachedOrFetchPrice } from '../market-data/cache-layer'
+import { getExchangeRate } from '../market-data/frankfurter'
 
 export interface RealizedTradeRecord {
   tradeId: string

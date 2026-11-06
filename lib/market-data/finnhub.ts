@@ -8,7 +8,7 @@ import { MarketDataProvider, MarketQuote } from './types'
 export class FinnhubProvider implements MarketDataProvider {
   name = 'finnhub'
 
-  async getQuote(symbol: string): Promise<MarketQuote | null> {
+  async getQuote(symbol: string, _market?: string, forceRefresh = false): Promise<MarketQuote | null> {
     const apiKey = process.env.FINNHUB_API_KEY
     if (!apiKey) {
       console.warn('[Finnhub] FINNHUB_API_KEY not set. Using fallback or skipping.')
@@ -18,7 +18,10 @@ export class FinnhubProvider implements MarketDataProvider {
     try {
       const cleanSymbol = symbol.trim().toUpperCase()
       const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(cleanSymbol)}&token=${apiKey}`
-      const res = await fetch(url, { next: { revalidate: 300 } })
+      const fetchOptions: RequestInit & { next?: { revalidate?: number } } = forceRefresh
+        ? { cache: 'no-store' }
+        : { next: { revalidate: 300 } }
+      const res = await fetch(url, fetchOptions as RequestInit)
 
       if (!res.ok) {
         console.warn(`[Finnhub] HTTP ${res.status} for ${cleanSymbol}`)

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateAssetPerformance } from '@/lib/analytics/asset-performance'
+import { invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
+import { invalidatePriceCache } from '@/lib/market-data/cache-layer'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -12,6 +14,11 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const forceRefresh = searchParams.get('refresh') === 'true'
+
+    if (forceRefresh) {
+      invalidatePriceCache()
+      invalidateUserPortfolioCache(session.user.id)
+    }
 
     const userSettings = await prisma.userSettings.findUnique({
       where: { userId: session.user.id },

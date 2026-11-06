@@ -100,6 +100,19 @@ interface DividendCacheEntry {
 const dividendCache = new Map<string, DividendCacheEntry>()
 const CACHE_TTL_MS = 10 * 60 * 1000
 
+export function invalidateDividendCache(ticker?: string) {
+  if (ticker) {
+    const clean = ticker.trim().toUpperCase()
+    for (const key of dividendCache.keys()) {
+      if (key.startsWith(`${clean}_`)) {
+        dividendCache.delete(key)
+      }
+    }
+  } else {
+    dividendCache.clear()
+  }
+}
+
 /**
  * Normalizes ticker symbols for Yahoo Finance
  */
@@ -133,14 +146,19 @@ export async function getDividendIntelligence(
 
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=1d&range=5y&events=div`
-    const res = await fetch(url, {
+    const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         Accept: 'application/json',
       },
       signal: AbortSignal.timeout(6000),
-      next: { revalidate: 600 },
-    })
+    }
+    if (forceRefresh) {
+      fetchOptions.cache = 'no-store'
+    } else {
+      fetchOptions.next = { revalidate: 600 }
+    }
+    const res = await fetch(url, fetchOptions as RequestInit)
 
     if (!res.ok) {
       console.warn(`[DividendAnalyzer] Failed to fetch ${yfTicker}: HTTP ${res.status}`)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveMarketQuote } from '@/lib/market-data/resolver'
+import { syncAssetLivePrice } from '@/lib/market-data/cache-layer'
 import { WatchlistType } from '@prisma/client'
 
 export async function GET(req: NextRequest) {
@@ -9,6 +10,8 @@ export async function GET(req: NextRequest) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const forceRefresh = req.nextUrl.searchParams.get('refresh') === 'true'
 
   try {
     const items = await prisma.watchlistItem.findMany({
@@ -20,11 +23,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ items: [], timestamp: Date.now() })
     }
 
+    const symbols = items.map((i) => i.symbol.trim().toUpperCase())
+    const dbAssets = await prisma.asset.findMany({
+      where: { ticker: { in: symbols } },
+      select: { id: true, ticker: true, market: true },
+    })
+    const assetByTicker = new Map(dbAssets.map((a) => [a.ticker.toUpperCase(), a]))
+
     // Parallel fetch live quotes for all watchlist items
     const populated = await Promise.all(
       items.map(async (item) => {
         try {
-          const resolved = await resolveMarketQuote(item.symbol, item.itemType)
+          const cleanSym = item.symbol.trim().toUpperCase()
+          const matchedAsset = assetByTicker.get(cleanSym)
+          const resolved = await resolveMarketQuote(
+            item.symbol,
+            item.itemType,
+            matchedAsset?.market,
+            forceRefresh
+          )
+          if (matchedAsset && resolved.quote?.price && resolved.quote.price > 0) {
+            syncAssetLivePrice(matchedAsset.id, resolved.quote.price, resolved.quote.provider).catch(() => {})
+          }
           return {
             ...item,
             quote: resolved.quote,

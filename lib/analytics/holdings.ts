@@ -3,9 +3,9 @@
  * Computes portfolio holdings, average cost, live market value, and unrealized P&L.
  */
 
-import { prisma } from '@/lib/prisma'
-import { getCachedOrFetchPrice, getBatchCachedOrFetchPrices } from '@/lib/market-data/cache-layer'
-import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { prisma } from '../prisma'
+import { getCachedOrFetchPrice, getBatchCachedOrFetchPrices } from '../market-data/cache-layer'
+import { getExchangeRate } from '../market-data/frankfurter'
 
 export interface HoldingItem {
   assetId: string
@@ -75,7 +75,7 @@ export function setInFlightSummary(userId: string, baseCurrency: string, promise
   promise.finally(() => inFlightSummary.delete(key))
 }
 
-import { invalidateAssetPerformanceCache } from '@/lib/analytics/asset-performance'
+import { invalidateAssetPerformanceCache } from './asset-performance'
 
 export function invalidateUserPortfolioCache(userId?: string) {
   invalidateAssetPerformanceCache(userId)
@@ -97,6 +97,44 @@ export function invalidateUserPortfolioCache(userId?: string) {
 }
 
 export const invalidateUserHoldingsCache = invalidateUserPortfolioCache
+
+/**
+ * Reconciles a HoldingItem with an updated market price so that
+ * currentPrice, currentValue, currentValueBase, unrealizedPnL, unrealizedPnLBase,
+ * and unrealizedPnLPercent are always mathematically consistent across all views.
+ */
+export function reconcileHoldingPrice(
+  holding: HoldingItem,
+  newPrice: number,
+  usdThbRate = 35.5
+): HoldingItem {
+  if (!newPrice || newPrice <= 0 || isNaN(newPrice)) {
+    return holding
+  }
+
+  const quantity = Number(holding.quantity) || 0
+  const totalCost = Number(holding.totalCost) || quantity * (Number(holding.avgCost) || 0)
+  const currentValue = quantity * newPrice
+  const unrealizedPnL = currentValue - totalCost
+  const unrealizedPnLPercent = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0
+
+  const isUsd = holding.currency === 'USD' || holding.market === 'US' || holding.market === 'CRYPTO'
+  const fx = isUsd ? usdThbRate : 1.0
+  const currentValueBase = currentValue * fx
+  const costBase = totalCost * fx
+  const unrealizedPnLBase = currentValueBase - costBase
+
+  return {
+    ...holding,
+    currentPrice: newPrice,
+    currentValue,
+    currentValueBase,
+    unrealizedPnL,
+    unrealizedPnLBase,
+    unrealizedPnLPercent,
+    isStale: false,
+  }
+}
 
 export async function calculateUserHoldings(
   userId: string,

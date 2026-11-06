@@ -206,7 +206,19 @@ export default function EarningsCalendarPage() {
 
               <button
                 type="button"
-                onClick={() => mutate()}
+                onClick={async () => {
+                  try {
+                    await fetch('/api/portfolio/refresh-prices', { method: 'POST' })
+                    const res = await fetch('/api/earnings?refresh=true')
+                    if (res.ok) {
+                      await mutate(await res.json(), false)
+                    } else {
+                      await mutate()
+                    }
+                  } catch {
+                    mutate()
+                  }
+                }}
                 disabled={isLoading}
                 className="bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-200 border border-indigo-500/40 px-3.5 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98 disabled:opacity-50"
               >

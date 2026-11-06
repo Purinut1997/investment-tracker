@@ -168,6 +168,19 @@ const earningsCache = new Map<string, EarningsCacheEntry>()
 const inFlightEarnings = new Map<string, Promise<AnalyzedEarningsData | null>>()
 const CACHE_TTL_MS = 15 * 60 * 1000
 
+export function invalidateEarningsAnalyzerCache(ticker?: string) {
+  if (ticker) {
+    const clean = ticker.trim().toUpperCase()
+    for (const key of earningsCache.keys()) {
+      if (key.startsWith(`${clean}_`)) {
+        earningsCache.delete(key)
+      }
+    }
+  } else {
+    earningsCache.clear()
+  }
+}
+
 /**
  * Formats a raw number into readable financial string (e.g. 113.36B, 850M, or ฿1.2T)
  */

@@ -4,7 +4,7 @@
  */
 
 import { FxRate } from './types'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '../prisma'
 
 const fxMemoryCache = new Map<string, { rate: number; timestamp: number }>()
 const FX_CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes in-memory cache
@@ -46,7 +46,8 @@ export async function getExchangeRate(
 
     // 2. Fetch fresh from Frankfurter
     const url = `https://api.frankfurter.app/latest?from=${base}&to=${target}`
-    const res = await fetch(url, { next: { revalidate: 3600 } })
+    const fetchOptions: RequestInit & { next?: { revalidate?: number } } = { next: { revalidate: 3600 } }
+    const res = await fetch(url, fetchOptions as RequestInit)
 
     if (!res.ok) {
       console.warn(`[Frankfurter] HTTP ${res.status} for ${base}/${target}`)

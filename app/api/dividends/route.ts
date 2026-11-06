@@ -120,12 +120,20 @@ export async function GET(req: NextRequest) {
     for (const { holding, dividendData } of results) {
       if (!dividendData) continue
 
+      const syncedCurrentPrice =
+        holding.currentPrice > 0 ? holding.currentPrice : dividendData.currentPrice
+      const syncedDividendData: AnalyzedDividendData = {
+        ...dividendData,
+        currentPrice: syncedCurrentPrice,
+      }
+
       const fxRate = holding.currency === 'THB' ? 1 : usdThbRate
-      const nextPayoutPerShare = dividendData.upcomingDividend.estimatedAmount || 0
+      const nextPayoutPerShare = syncedDividendData.upcomingDividend.estimatedAmount || 0
       const estimatedNextPayout = Number((holding.quantity * nextPayoutPerShare).toFixed(2))
       const estimatedNextPayoutBase = Number((estimatedNextPayout * fxRate).toFixed(2))
 
-      const annualPerShare = (dividendData.latestDividend?.amount || 0) * dividendData.frequency.timesPerYear
+      const annualPerShare =
+        (syncedDividendData.latestDividend?.amount || 0) * syncedDividendData.frequency.timesPerYear
       const annualEstimatedIncome = Number((holding.quantity * annualPerShare).toFixed(2))
       const annualEstimatedIncomeBase = Number((annualEstimatedIncome * fxRate).toFixed(2))
 
@@ -133,12 +141,12 @@ export async function GET(req: NextRequest) {
         holding.avgCost > 0 ? Number(((annualPerShare / holding.avgCost) * 100).toFixed(2)) : 0
 
       const dividendYieldPercent =
-        holding.currentPrice > 0 ? Number(((annualPerShare / holding.currentPrice) * 100).toFixed(2)) : 0
+        syncedCurrentPrice > 0 ? Number(((annualPerShare / syncedCurrentPrice) * 100).toFixed(2)) : 0
 
       totalPortfolioAnnualIncomeBase += annualEstimatedIncomeBase
 
       // Only count next payout if it's within 60 days
-      if (dividendData.upcomingDividend.daysRemaining <= 60) {
+      if (syncedDividendData.upcomingDividend.daysRemaining <= 60) {
         totalNextExpectedPayoutBase += estimatedNextPayoutBase
       }
 
@@ -151,11 +159,11 @@ export async function GET(req: NextRequest) {
           currency: holding.currency,
           quantity: holding.quantity,
           avgCost: holding.avgCost,
-          currentPrice: holding.currentPrice,
+          currentPrice: syncedCurrentPrice,
           currentValue: holding.currentValue,
           currentValueBase: holding.currentValueBase,
         },
-        dividendData,
+        dividendData: syncedDividendData,
         userMetrics: {
           estimatedNextPayout,
           estimatedNextPayoutBase,

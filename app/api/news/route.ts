@@ -254,7 +254,7 @@ export async function GET(req: NextRequest) {
           } catch {
             // ignore error and proceed
           }
-          const price = sig?.currentPrice && sig.currentPrice > 0 ? sig.currentPrice : h.currentPrice
+          const price = h.currentPrice && h.currentPrice > 0 ? h.currentPrice : (sig?.currentPrice || 0)
 
           return {
             ticker: h.ticker.toUpperCase(),

@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, AlertTriangle, XCircle, Sparkles, ArrowRight, Loader2, X } from 'lucide-react'
 
 export interface StatusDetailItem {
@@ -41,6 +42,12 @@ export function StatusModal({
   onClose,
   autoCloseMs,
 }: StatusModalProps) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   useEffect(() => {
     if (!isOpen || !autoCloseMs || type === 'loading') return
     const timer = setTimeout(() => {
@@ -60,9 +67,9 @@ export function StatusModal({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, onClose])
 
-  if (!isOpen) return null
+  if (!isOpen || !mounted) return null
 
-  return (
+  return createPortal(
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget && onClose && type !== 'loading') {
@@ -223,6 +230,7 @@ export function StatusModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
