@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { calculateUserHoldings } from '@/lib/analytics/holdings'
-import { getDividendIntelligence, AnalyzedDividendData } from '@/lib/dividends/dividend-analyzer'
+import { calculateUserHoldings, reconcileHoldingPrice } from '@/lib/analytics/holdings'
+import {
+  getDividendIntelligence,
+  getDividendsRouteCache,
+  setDividendsRouteCache,
+  AnalyzedDividendData,
+} from '@/lib/dividends/dividend-analyzer'
+import { syncAssetLivePrice } from '@/lib/market-data/cache-layer'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
+
+export const maxDuration = 30
 
 export interface PortfolioDividendItem {
   holding: {
@@ -41,23 +49,24 @@ export async function GET(req: NextRequest) {
   const forceRefresh = searchParams.get('refresh') === 'true'
 
   try {
-    const userSettings = await prisma.userSettings.findUnique({
-      where: { userId: session.user.id },
-    })
-    const baseCurrency = userSettings?.baseCurrency ?? 'THB'
-    const usdThbRate = (await getExchangeRate('USD', baseCurrency)) ?? 35.5
-
     // Case 1: Search for an individual stock (even if not in portfolio)
     if (searchTicker && searchTicker.trim()) {
       const cleanTicker = searchTicker.trim().toUpperCase()
-      const analyzed = await getDividendIntelligence(cleanTicker, searchMarket, forceRefresh)
+      const [userSettings, analyzed] = await Promise.all([
+        prisma.userSettings.findUnique({ where: { userId: session.user.id } }),
+        getDividendIntelligence(cleanTicker, searchMarket, forceRefresh),
+      ])
 
       if (!analyzed) {
         return NextResponse.json({ error: `Not found dividend data for ${cleanTicker}` }, { status: 404 })
       }
 
-      // Check if user also owns this stock
-      const portfolioResult = await calculateUserHoldings(session.user.id, baseCurrency)
+      const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+      const [usdThbRate, portfolioResult] = await Promise.all([
+        getExchangeRate('USD', baseCurrency).then((r) => r ?? 35.5),
+        calculateUserHoldings(session.user.id, baseCurrency, false),
+      ])
+
       const existingHolding = portfolioResult.holdings.find(
         (h) => h.ticker.toUpperCase() === cleanTicker
       )
@@ -97,7 +106,25 @@ export async function GET(req: NextRequest) {
     }
 
     // Case 2: Load user's portfolio dividend calendar and XD intelligence
-    const portfolioResult = await calculateUserHoldings(session.user.id, baseCurrency, forceRefresh)
+    const userSettings = await prisma.userSettings.findUnique({
+      where: { userId: session.user.id },
+    })
+    const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+    const routeCacheKey = `${session.user.id}_${baseCurrency}`
+
+    if (!forceRefresh) {
+      const cachedPayload = getDividendsRouteCache(routeCacheKey)
+      if (cachedPayload) {
+        return NextResponse.json(cachedPayload)
+      }
+    }
+
+    // Run FX rate and DB holdings lookup in parallel (pass false so we don't hit Yahoo twice)
+    const [usdThbRate, portfolioResult] = await Promise.all([
+      getExchangeRate('USD', baseCurrency).then((r) => r ?? 35.5),
+      calculateUserHoldings(session.user.id, baseCurrency, false),
+    ])
+
     const stockHoldings = portfolioResult.holdings.filter((h) => {
       // Filter stocks or ETFs with remaining quantity > 0
       const type = (h.assetType || '').toLowerCase()
@@ -108,7 +135,7 @@ export async function GET(req: NextRequest) {
     let totalPortfolioAnnualIncomeBase = 0
     let totalNextExpectedPayoutBase = 0
 
-    // Fetch and analyze each stock holding in parallel
+    // Fetch and analyze each stock holding in parallel (single Yahoo wave)
     const analysisPromises = stockHoldings.map(async (holding) => {
       const market = holding.market === 'TH' ? 'TH' : 'US'
       const dividendData = await getDividendIntelligence(holding.ticker, market, forceRefresh)
@@ -117,11 +144,22 @@ export async function GET(req: NextRequest) {
 
     const results = await Promise.all(analysisPromises)
 
-    for (const { holding, dividendData } of results) {
+    for (const { holding: rawHolding, dividendData } of results) {
       if (!dividendData) continue
 
-      const syncedCurrentPrice =
-        holding.currentPrice > 0 ? holding.currentPrice : dividendData.currentPrice
+      const livePrice =
+        forceRefresh && dividendData.currentPrice > 0
+          ? dividendData.currentPrice
+          : rawHolding.currentPrice > 0
+          ? rawHolding.currentPrice
+          : dividendData.currentPrice
+
+      if (dividendData.currentPrice > 0 && (forceRefresh || rawHolding.isStale)) {
+        void syncAssetLivePrice(rawHolding.assetId, dividendData.currentPrice, 'yahoo')
+      }
+
+      const holding = reconcileHoldingPrice(rawHolding, livePrice, usdThbRate)
+      const syncedCurrentPrice = holding.currentPrice
       const syncedDividendData: AnalyzedDividendData = {
         ...dividendData,
         currentPrice: syncedCurrentPrice,
@@ -212,7 +250,7 @@ export async function GET(req: NextRequest) {
           )
         : -2.15
 
-    return NextResponse.json({
+    const payload = {
       summary: {
         totalPortfolioAnnualIncomeBase: Number(totalPortfolioAnnualIncomeBase.toFixed(2)),
         totalNextExpectedPayoutBase: Number(totalNextExpectedPayoutBase.toFixed(2)),
@@ -225,7 +263,10 @@ export async function GET(req: NextRequest) {
         usdThbRate,
       },
       items: dividendItems,
-    })
+    }
+
+    setDividendsRouteCache(routeCacheKey, payload)
+    return NextResponse.json(payload)
   } catch (error) {
     console.error('[Dividends API]', error)
     return NextResponse.json({ error: 'Failed to process dividend intelligence' }, { status: 500 })

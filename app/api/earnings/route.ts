@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { calculateUserHoldings } from '@/lib/analytics/holdings'
+import { calculateUserHoldings, reconcileHoldingPrice } from '@/lib/analytics/holdings'
 import {
   getEarningsIntelligence,
   AnalyzedEarningsData,
 } from '@/lib/earnings/earnings-analyzer'
+import { syncAssetLivePrice } from '@/lib/market-data/cache-layer'
 
 export interface PortfolioEarningsItem {
   holding: {
@@ -111,8 +112,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Case 2: Fetch portfolio earnings & curated benchmarks
-    const portfolioResult = await calculateUserHoldings(session.user.id, baseCurrency, forceRefresh)
+    // Case 2: Fetch portfolio earnings & curated benchmarks (pass false so we don't hit Yahoo twice)
+    const portfolioResult = await calculateUserHoldings(session.user.id, baseCurrency, false)
     const stockHoldings = portfolioResult.holdings.filter(
       (h) =>
         (h.assetType === 'stock' || h.assetType === 'fund' || !h.assetType) &&
@@ -121,16 +122,27 @@ export async function GET(req: NextRequest) {
     )
 
     // Process user holdings in parallel
-    const portfolioPromises = stockHoldings.map(async (holding) => {
+    const portfolioPromises = stockHoldings.map(async (rawHolding) => {
       const analyzed = await getEarningsIntelligence(
-        holding.ticker,
-        holding.market as 'TH' | 'US',
+        rawHolding.ticker,
+        rawHolding.market as 'TH' | 'US',
         forceRefresh
       )
       if (!analyzed) return null
 
-      const syncedPrice =
-        holding.currentPrice > 0 ? holding.currentPrice : analyzed.currentPrice
+      const livePrice =
+        forceRefresh && analyzed.currentPrice > 0
+          ? analyzed.currentPrice
+          : rawHolding.currentPrice > 0
+          ? rawHolding.currentPrice
+          : analyzed.currentPrice
+
+      if (analyzed.currentPrice > 0 && (forceRefresh || rawHolding.isStale)) {
+        void syncAssetLivePrice(rawHolding.assetId, analyzed.currentPrice, 'yahoo')
+      }
+
+      const holding = reconcileHoldingPrice(rawHolding, livePrice)
+      const syncedPrice = holding.currentPrice
 
       const item: PortfolioEarningsItem = {
         holding: {

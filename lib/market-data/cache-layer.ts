@@ -82,6 +82,57 @@ export async function syncAssetLivePrice(
   }
 }
 
+async function fetchLiveAssetQuote(
+  asset: { id: string; ticker: string; market: string; assetType: string },
+  forceRefresh = false
+): Promise<MarketQuote | null> {
+  if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
+    return coinGeckoProvider.getQuote(asset.ticker, 'CRYPTO', forceRefresh)
+  }
+  if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
+    const q = await yahooFinanceProvider.getQuote(asset.ticker, 'TH', forceRefresh)
+    return q ?? stooqProvider.getQuote(asset.ticker, 'TH', forceRefresh)
+  }
+  if (asset.assetType === 'gold' || asset.ticker === 'GOLD' || asset.ticker === 'XAU') {
+    const q = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', forceRefresh)
+    return q ?? stooqProvider.getQuote('GC.F', 'COMMODITY', forceRefresh)
+  }
+  let q = await yahooFinanceProvider.getQuote(asset.ticker, 'US', forceRefresh)
+  if (!q) {
+    q = await finnhubProvider.getQuote(asset.ticker, 'US', forceRefresh)
+  }
+  if (!q) {
+    q = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US', forceRefresh)
+  }
+  return q
+}
+
+const backgroundRefreshingAssets = new Set<string>()
+
+async function refreshStaleAssetsInBackground(assetIds: string[]) {
+  const toRefresh = assetIds.filter((id) => !backgroundRefreshingAssets.has(id))
+  if (toRefresh.length === 0) return
+  toRefresh.forEach((id) => backgroundRefreshingAssets.add(id))
+
+  try {
+    const assets = await prisma.asset.findMany({
+      where: { id: { in: toRefresh } },
+    })
+    await Promise.allSettled(
+      assets.map(async (asset) => {
+        const quote = await fetchLiveAssetQuote(asset, false)
+        if (quote && quote.price > 0) {
+          await syncAssetLivePrice(asset.id, quote.price, quote.provider)
+        }
+      })
+    )
+  } catch (err) {
+    console.warn('[refreshStaleAssetsInBackground warning]', err)
+  } finally {
+    toRefresh.forEach((id) => backgroundRefreshingAssets.delete(id))
+  }
+}
+
 export async function getBatchCachedOrFetchPrices(
   assetIds: string[],
   forceRefresh = false
@@ -116,65 +167,88 @@ export async function getBatchCachedOrFetchPrices(
     return resultMap
   }
 
-  // ── Tier 2: Single Batch Database Query to PriceHistory ────────
-  if (!forceRefresh) {
-    try {
-      const historicalPrices = await prisma.priceHistory.findMany({
-        where: {
-          assetId: { in: missingAssetIds },
-          closePrice: { gt: 0 },
-        },
-        orderBy: { priceDate: 'desc' },
-      })
+  // ── Tier 2: Single Batch Database Query to PriceHistory (<5ms) ────────
+  const staleAssetIdsForBackgroundRefresh: string[] = []
+  try {
+    const historicalPrices = await prisma.priceHistory.findMany({
+      where: {
+        assetId: { in: missingAssetIds },
+        closePrice: { gt: 0 },
+      },
+      orderBy: { priceDate: 'desc' },
+    })
 
-      // Only treat TODAY's DB record as fresh; keep older records as fallback so Tier 3 fetches live price
-      for (const row of historicalPrices) {
-        if (resultMap.has(row.assetId)) continue
+    for (const row of historicalPrices) {
+      if (resultMap.has(row.assetId) || staleFallbackMap.has(row.assetId)) continue
 
-        const rowDateMs = new Date(row.priceDate).getTime()
-        if (rowDateMs >= todayKey.getTime()) {
-          const entry = {
-            price: Number(row.closePrice),
-            sourceProvider: row.sourceProvider,
-            isStale: false,
-          }
-          resultMap.set(row.assetId, entry)
-          priceMemoryCache.set(row.assetId, { ...entry, timestamp: now })
-        } else if (!staleFallbackMap.has(row.assetId)) {
-          staleFallbackMap.set(row.assetId, {
-            price: Number(row.closePrice),
-            sourceProvider: `${row.sourceProvider} (cached)`,
-            isStale: true,
-          })
-        }
+      const rowDateMs = new Date(row.priceDate).getTime()
+      const isToday = rowDateMs >= todayKey.getTime()
+      const entry = {
+        price: Number(row.closePrice),
+        sourceProvider: isToday ? row.sourceProvider : `${row.sourceProvider} (cached)`,
+        isStale: !isToday,
       }
-    } catch (err) {
-      console.warn('[getBatchCachedOrFetchPrices DB error]', err)
+
+      if (!forceRefresh) {
+        // Return DB price immediately (<5ms) so page loads never block on 20 external API calls
+        resultMap.set(row.assetId, entry)
+        priceMemoryCache.set(row.assetId, { ...entry, timestamp: now })
+        if (!isToday) {
+          staleAssetIdsForBackgroundRefresh.push(row.assetId)
+        }
+      } else {
+        staleFallbackMap.set(row.assetId, entry)
+      }
     }
+  } catch (err) {
+    console.warn('[getBatchCachedOrFetchPrices DB error]', err)
   }
 
-  // ── Tier 3: Fetch live for assets with no today price (or forceRefresh) ──
+  if (!forceRefresh && staleAssetIdsForBackgroundRefresh.length > 0) {
+    void refreshStaleAssetsInBackground(staleAssetIdsForBackgroundRefresh)
+  }
+
+  // ── Tier 3: Batch fetch live for brand-new assets or forceRefresh ──
   const stillMissing = missingAssetIds.filter((id) => !resultMap.has(id))
   if (stillMissing.length > 0) {
-    await Promise.all(
-      stillMissing.map(async (assetId) => {
-        try {
-          const fetched = await getCachedOrFetchPrice(assetId, undefined, forceRefresh)
-          if (fetched) {
-            resultMap.set(assetId, fetched)
-          } else if (staleFallbackMap.has(assetId)) {
+    try {
+      const assets = await prisma.asset.findMany({
+        where: { id: { in: stillMissing } },
+      })
+      const assetMap = new Map(assets.map((a) => [a.id, a]))
+
+      await Promise.all(
+        stillMissing.map(async (assetId) => {
+          const asset = assetMap.get(assetId)
+          if (!asset) return
+
+          try {
+            const quote = await fetchLiveAssetQuote(asset, forceRefresh)
+            if (quote && quote.price > 0) {
+              const entry = {
+                price: quote.price,
+                sourceProvider: quote.provider,
+                isStale: false,
+              }
+              resultMap.set(assetId, entry)
+              priceMemoryCache.set(assetId, { ...entry, timestamp: now })
+              await syncAssetLivePrice(assetId, quote.price, quote.provider)
+              return
+            }
+          } catch {
+            // Fall through to staleFallbackMap
+          }
+
+          if (staleFallbackMap.has(assetId)) {
             const fallback = staleFallbackMap.get(assetId)!
             resultMap.set(assetId, fallback)
             priceMemoryCache.set(assetId, { ...fallback, timestamp: now })
           }
-        } catch {
-          if (staleFallbackMap.has(assetId)) {
-            const fallback = staleFallbackMap.get(assetId)!
-            resultMap.set(assetId, fallback)
-          }
-        }
-      })
-    )
+        })
+      )
+    } catch (err) {
+      console.warn('[getBatchCachedOrFetchPrices Tier 3 error]', err)
+    }
   }
 
   return resultMap

@@ -92,15 +92,31 @@ export interface AnalyzedDividendData {
   payouts: HistoricalPayout[]
 }
 
-// In-memory cache for dividend analysis (10 minutes TTL)
+// In-memory cache for dividend analysis (10 minutes TTL, 2 minutes negative cache)
 interface DividendCacheEntry {
-  data: AnalyzedDividendData
+  data: AnalyzedDividendData | null
   timestamp: number
 }
 const dividendCache = new Map<string, DividendCacheEntry>()
+const inFlightDividends = new Map<string, Promise<AnalyzedDividendData | null>>()
+const dividendsRouteCache = new Map<string, { payload: any; timestamp: number }>()
 const CACHE_TTL_MS = 10 * 60 * 1000
+const NEGATIVE_CACHE_TTL_MS = 2 * 60 * 1000
+
+export function getDividendsRouteCache(key: string) {
+  const entry = dividendsRouteCache.get(key)
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
+    return entry.payload
+  }
+  return null
+}
+
+export function setDividendsRouteCache(key: string, payload: any) {
+  dividendsRouteCache.set(key, { payload, timestamp: Date.now() })
+}
 
 export function invalidateDividendCache(ticker?: string) {
+  dividendsRouteCache.clear()
   if (ticker) {
     const clean = ticker.trim().toUpperCase()
     for (const key of dividendCache.keys()) {
@@ -111,6 +127,19 @@ export function invalidateDividendCache(ticker?: string) {
   } else {
     dividendCache.clear()
   }
+}
+
+function findNearestTimestampIndex(timestamps: number[], target: number): number {
+  let lo = 0
+  let hi = timestamps.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1
+    const diff = timestamps[mid] - target
+    if (Math.abs(diff) < 86400) return mid
+    if (diff < 0) lo = mid + 1
+    else hi = mid - 1
+  }
+  return -1
 }
 
 /**
@@ -134,101 +163,113 @@ export async function getDividendIntelligence(
 ): Promise<AnalyzedDividendData | null> {
   const cacheKey = `${rawTicker.toUpperCase()}_${market}`
   const now = Date.now()
+  const cached = dividendCache.get(cacheKey)
 
-  if (!forceRefresh) {
-    const cached = dividendCache.get(cacheKey)
-    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+  if (!forceRefresh && cached) {
+    const ttl = cached.data ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS
+    if (now - cached.timestamp < ttl) {
       return cached.data
     }
   }
 
+  if (!forceRefresh && inFlightDividends.has(cacheKey)) {
+    return inFlightDividends.get(cacheKey)!
+  }
+
   const yfTicker = formatYahooTicker(rawTicker, market)
 
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=1d&range=5y&events=div`
-    const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Accept: 'application/json',
-      },
-      signal: AbortSignal.timeout(6000),
-    }
-    if (forceRefresh) {
-      fetchOptions.cache = 'no-store'
-    } else {
-      fetchOptions.next = { revalidate: 600 }
-    }
-    const res = await fetch(url, fetchOptions as RequestInit)
+  const fetchPromise = (async (): Promise<AnalyzedDividendData | null> => {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=1d&range=5y&events=div`
+      const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(3500),
+      }
+      if (forceRefresh) {
+        fetchOptions.cache = 'no-store'
+      } else {
+        fetchOptions.next = { revalidate: 600 }
+      }
+      const res = await fetch(url, fetchOptions as RequestInit)
 
-    if (!res.ok) {
-      console.warn(`[DividendAnalyzer] Failed to fetch ${yfTicker}: HTTP ${res.status}`)
-      return null
-    }
+      if (!res.ok) {
+        console.warn(`[DividendAnalyzer] Failed to fetch ${yfTicker}: HTTP ${res.status}`)
+        if (cached?.data) return cached.data
+        dividendCache.set(cacheKey, { data: null, timestamp: Date.now() })
+        return null
+      }
 
-    const json = await res.json()
-    const result = json?.chart?.result?.[0]
-    if (!result) return null
+      const json = await res.json()
+      const result = json?.chart?.result?.[0]
+      if (!result) {
+        if (cached?.data) return cached.data
+        dividendCache.set(cacheKey, { data: null, timestamp: Date.now() })
+        return null
+      }
 
-    const meta = result.meta
-    const currentPrice = Number(meta?.regularMarketPrice || meta?.chartPreviousClose || 0)
-    const companyName = meta?.shortName || meta?.longName || rawTicker.toUpperCase()
-    const currency = meta?.currency || (market === 'TH' ? 'THB' : 'USD')
+      const meta = result.meta
+      const currentPrice = Number(meta?.regularMarketPrice || meta?.chartPreviousClose || 0)
+      const companyName = meta?.shortName || meta?.longName || rawTicker.toUpperCase()
+      const currency = meta?.currency || (market === 'TH' ? 'THB' : 'USD')
 
-    const rawDividends = result.events?.dividends || {}
-    const timestamps = (result.timestamp || []) as number[]
-    const quotes = result.indicators?.quote?.[0] || {}
-    const closes = (quotes.close || []) as number[]
-    const opens = (quotes.open || []) as number[]
+      const rawDividends = result.events?.dividends || {}
+      const timestamps = (result.timestamp || []) as number[]
+      const quotes = result.indicators?.quote?.[0] || {}
+      const closes = (quotes.close || []) as number[]
+      const opens = (quotes.open || []) as number[]
 
-    // 1. Process all historical dividend payouts
-    const payoutList: HistoricalPayout[] = Object.values(rawDividends)
-      .map((div: any) => {
-        const divTimestamp = Number(div.date)
-        const dateObj = new Date(divTimestamp * 1000)
-        const dateStr = dateObj.toISOString().split('T')[0]
-        const amount = Number(div.amount || 0)
+      // 1. Process all historical dividend payouts
+      const payoutList: HistoricalPayout[] = Object.values(rawDividends)
+        .map((div: any) => {
+          const divTimestamp = Number(div.date)
+          const dateObj = new Date(divTimestamp * 1000)
+          const dateStr = dateObj.toISOString().split('T')[0]
+          const amount = Number(div.amount || 0)
 
-        // Find candle around ex-dividend date
-        let prevClose: number | undefined
-        let xdOpen: number | undefined
-        let xdClose: number | undefined
-        let dropPercent: number | undefined
-        let recoveryDays: number | null = null
+          // Find candle around ex-dividend date using O(log N) binary search
+          let prevClose: number | undefined
+          let xdOpen: number | undefined
+          let xdClose: number | undefined
+          let dropPercent: number | undefined
+          let recoveryDays: number | null = null
 
-        const idx = timestamps.findIndex((t) => Math.abs(t - divTimestamp) < 86400)
-        if (idx > 0 && idx < timestamps.length) {
-          prevClose = closes[idx - 1]
-          xdOpen = opens[idx]
-          xdClose = closes[idx]
+          const idx = findNearestTimestampIndex(timestamps, divTimestamp)
+          if (idx > 0 && idx < timestamps.length) {
+            prevClose = closes[idx - 1]
+            xdOpen = opens[idx]
+            xdClose = closes[idx]
 
-          if (prevClose && xdOpen && prevClose > 0) {
-            dropPercent = ((xdOpen - prevClose) / prevClose) * 100
+            if (prevClose && xdOpen && prevClose > 0) {
+              dropPercent = ((xdOpen - prevClose) / prevClose) * 100
 
-            // Measure how many trading days until price returned to pre-XD close
-            for (let k = 1; k <= 45 && idx + k < closes.length; k++) {
-              if (closes[idx + k] && closes[idx + k] >= prevClose) {
-                recoveryDays = k
-                break
+              // Measure how many trading days until price returned to pre-XD close
+              for (let k = 1; k <= 45 && idx + k < closes.length; k++) {
+                if (closes[idx + k] && closes[idx + k] >= prevClose) {
+                  recoveryDays = k
+                  break
+                }
               }
             }
           }
-        }
 
-        const yieldAtDate = prevClose && prevClose > 0 ? (amount / prevClose) * 100 : undefined
+          const yieldAtDate = prevClose && prevClose > 0 ? (amount / prevClose) * 100 : undefined
 
-        return {
-          date: dateStr,
-          timestamp: divTimestamp,
-          amount,
-          yieldAtDate,
-          prevClose,
-          xdOpen,
-          xdClose,
-          dropPercent,
-          recoveryDays,
-        }
-      })
-      .sort((a, b) => b.timestamp - a.timestamp) // Latest first
+          return {
+            date: dateStr,
+            timestamp: divTimestamp,
+            amount,
+            yieldAtDate,
+            prevClose,
+            xdOpen,
+            xdClose,
+            dropPercent,
+            recoveryDays,
+          }
+        })
+        .sort((a, b) => b.timestamp - a.timestamp) // Latest first
 
     // 2. Latest Dividend
     const latest = payoutList.length > 0 ? payoutList[0] : null
@@ -455,15 +496,23 @@ export async function getDividendIntelligence(
       payouts: payoutList.slice(0, 25), // top 25 recent payouts
     }
 
-    // Cache the result
-    dividendCache.set(cacheKey, {
-      data: analyzedData,
-      timestamp: now,
-    })
+      // Cache the result
+      dividendCache.set(cacheKey, {
+        data: analyzedData,
+        timestamp: Date.now(),
+      })
 
-    return analyzedData
-  } catch (err) {
-    console.error(`[DividendAnalyzer] Error analyzing ${rawTicker}:`, err)
-    return null
-  }
+      return analyzedData
+    } catch (err) {
+      console.error(`[DividendAnalyzer] Error analyzing ${rawTicker}:`, err)
+      if (cached?.data) return cached.data
+      dividendCache.set(cacheKey, { data: null, timestamp: Date.now() })
+      return null
+    } finally {
+      inFlightDividends.delete(cacheKey)
+    }
+  })()
+
+  inFlightDividends.set(cacheKey, fetchPromise)
+  return fetchPromise
 }
