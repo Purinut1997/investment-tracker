@@ -243,9 +243,9 @@ export function parseHistoricalStats(
     // Average interval between consecutive recent payouts
     if (history.length >= 2) {
       const diffs: number[] = []
-      for (let i = 0; i < Math.min(history.length - 1, 6); i++) {
+      for (let i = 0; i < Math.min(history.length - 1, 8); i++) {
         const diffDays = (history[i].timestamp - history[i + 1].timestamp) / 86400
-        if (diffDays > 10 && diffDays < 400) diffs.push(diffDays)
+        if (diffDays >= 3 && diffDays < 400) diffs.push(diffDays)
       }
       if (diffs.length > 0) {
         avgDaysBetween = diffs.reduce((a, b) => a + b, 0) / diffs.length
@@ -260,7 +260,12 @@ export function parseHistoricalStats(
         : history.length / Math.max(1, sortedYears.length)
 
     // Accurate Frequency Classification
-    if (
+    if ((avgDaysBetween !== null && avgDaysBetween <= 10) || avgCount >= 35) {
+      frequency = 'Monthly'
+      frequencyTitle = 'จ่ายรายสัปดาห์'
+      frequencyBadge = '~52 ครั้ง/ปี'
+      frequencyLabel = 'จ่ายรายสัปดาห์ (~52 ครั้ง/ปี)'
+    } else if (
       monthIndexes.size >= 10 ||
       (avgDaysBetween !== null && avgDaysBetween <= 45) ||
       avgCount >= 10
@@ -322,18 +327,22 @@ export function parseHistoricalStats(
   let estimatedNextPayout: EstimatedNextPayout | null = null
   if (hasDividends && latestPayout) {
     let stepDays = 91.25 // default quarterly
-    if (frequency === 'Monthly') stepDays = 30.5
+    if (avgDaysBetween && avgDaysBetween >= 3 && avgDaysBetween <= 18) stepDays = Math.max(1, Math.round(avgDaysBetween))
+    else if (frequency === 'Monthly') stepDays = 30.5
     else if (frequency === 'Quarterly') stepDays = 91.25
     else if (frequency === 'Semi-Annual') stepDays = 182.5
     else if (frequency === 'Annual') stepDays = 365
     else if (avgDaysBetween && avgDaysBetween > 15) stepDays = avgDaysBetween
+    stepDays = Math.max(1, stepDays)
 
     const nowMs = Date.now()
     let candidateMs = latestPayout.timestamp * 1000 + stepDays * 86400 * 1000
 
     // If candidate timestamp already passed by more than 10 days, project forward
-    while (candidateMs < nowMs - 10 * 86400 * 1000) {
+    let guard = 0
+    while (candidateMs < nowMs - 10 * 86400 * 1000 && guard < 1000) {
       candidateMs += stepDays * 86400 * 1000
+      guard++
     }
 
     const nextDateObj = new Date(candidateMs)

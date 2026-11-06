@@ -14,6 +14,7 @@ import {
 import { resolveMarketQuote } from './resolver'
 import { invalidatePriceCache } from './cache-layer'
 import { reconcileHoldingPrice } from '../analytics/holdings'
+import { getDividendIntelligence } from '../dividends/dividend-analyzer'
 
 async function runTests() {
   console.log('🧪 Starting Price Sync & Cache Invalidation Unit Tests...\n')
@@ -241,6 +242,73 @@ async function runTests() {
         'invalidatePriceCache() must clear resolverCache and provider caches so resolveMarketQuote gets 312.5'
       )
       console.log('✅ Test 5 Passed: invalidatePriceCache() clears all downstream quote & resolver caches')
+    }
+
+    // ── Test 6: Weekly Dividend ETF (CHPY ~52 payouts/year) does not trigger infinite loop in analyzeStockDividends ──
+    {
+      const nowSec = Math.floor(Date.now() / 1000)
+      const dividendsMap: Record<string, { amount: number; date: number }> = {}
+      const timestamps: number[] = []
+      const closes: number[] = []
+      const opens: number[] = []
+
+      // Generate 60 weekly dividend events going back 60 weeks from 5 days ago
+      for (let w = 60; w >= 0; w--) {
+        const ts = nowSec - (w * 7 + 5) * 86400
+        dividendsMap[String(ts)] = { amount: 0.35, date: ts }
+        timestamps.push(ts)
+        closes.push(49.5)
+        opens.push(49.2)
+      }
+
+      global.fetch = (async () => {
+        return new Response(
+          JSON.stringify({
+            chart: {
+              result: [
+                {
+                  meta: {
+                    regularMarketPrice: 49.5,
+                    previousClose: 49.2,
+                    shortName: 'YieldMax Semiconductor Portfolio Option Income ETF',
+                    currency: 'USD',
+                  },
+                  timestamp: timestamps,
+                  indicators: {
+                    quote: [
+                      {
+                        close: closes,
+                        open: opens,
+                      },
+                    ],
+                  },
+                  events: {
+                    dividends: dividendsMap,
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200 }
+        )
+      }) as typeof fetch
+
+      const startMs = Date.now()
+      const chpyResult = await getDividendIntelligence('CHPY', 'US', true)
+      const elapsedMs = Date.now() - startMs
+
+      assert.ok(chpyResult !== null, 'CHPY dividend analysis should return valid data')
+      assert.ok(elapsedMs < 500, `CHPY weekly dividend analysis must complete quickly (took ${elapsedMs}ms)`)
+      assert.strictEqual(chpyResult?.frequency.timesPerYear, 52, 'Weekly dividend ETF should detect ~52 payouts/year')
+      assert.ok(
+        (chpyResult?.frequency.typicalPayouts.length ?? 0) <= 12,
+        'typicalPayouts should be capped at 12 for UI readability'
+      )
+      assert.ok(
+        (chpyResult?.upcomingDividend.daysRemaining ?? -1) >= 0,
+        'Upcoming ex-dividend date must be in the future'
+      )
+      console.log(`✅ Test 6 Passed: Weekly Dividend ETF (CHPY) analyzed in ${elapsedMs}ms without infinite loop`)
     }
 
     console.log('\n🎉 ALL PRICE SYNC UNIT TESTS PASSED!')

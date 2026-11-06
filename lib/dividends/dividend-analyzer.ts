@@ -333,21 +333,44 @@ export async function getDividendIntelligence(
 
     // 4. Frequency Analysis (ปีละกี่ครั้ง ครั้งละเท่าไหร่)
     const counts = yearSummaries.filter((y) => y.year < currentYear && y.payoutCount > 0).map((y) => y.payoutCount)
-    let avgTimesPerYear = counts.length > 0 ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : 4
-    if (avgTimesPerYear <= 0) avgTimesPerYear = market === 'TH' ? 2 : 4
+    let avgTimesPerYear = counts.length > 0 ? Math.round(counts.reduce((a, b) => a + b, 0) / counts.length) : payoutList.length > 0 ? 4 : 0
 
-    let frequencyLabel = `ปีละ ${avgTimesPerYear} ครั้ง`
-    if (avgTimesPerYear === 4) frequencyLabel = 'ปีละ 4 ครั้ง (รายไตรมาส - Quarterly)'
+    // Also inspect recent interval between payouts to accurately detect weekly/monthly ETFs (including newly listed ones)
+    if (payoutList.length >= 3) {
+      const recentDiffDays: number[] = []
+      for (let i = 0; i < Math.min(payoutList.length - 1, 8); i++) {
+        const dDays = (payoutList[i].timestamp - payoutList[i + 1].timestamp) / 86400
+        if (dDays >= 3 && dDays <= 400) recentDiffDays.push(dDays)
+      }
+      if (recentDiffDays.length >= 2) {
+        const avgDiffDays = recentDiffDays.reduce((a, b) => a + b, 0) / recentDiffDays.length
+        if (avgDiffDays <= 10) {
+          avgTimesPerYear = 52
+        } else if (avgDiffDays <= 18) {
+          avgTimesPerYear = 26
+        } else if (avgDiffDays <= 38 && avgTimesPerYear < 10) {
+          avgTimesPerYear = 12
+        }
+      }
+    }
+
+    if (payoutList.length > 0 && avgTimesPerYear <= 0) avgTimesPerYear = market === 'TH' ? 2 : 4
+
+    let frequencyLabel = avgTimesPerYear === 0 ? 'ไม่มีการจ่ายเงินปันผล' : `ปีละ ${avgTimesPerYear} ครั้ง`
+    if (avgTimesPerYear >= 40) frequencyLabel = 'ปีละ ~52 ครั้ง (รายสัปดาห์ - Weekly)'
+    else if (avgTimesPerYear >= 20) frequencyLabel = `ปีละ ~${avgTimesPerYear} ครั้ง (รายปักษ์ - Bi-Weekly)`
+    else if (avgTimesPerYear === 12 || avgTimesPerYear >= 10) frequencyLabel = 'ปีละ 12 ครั้ง (รายเดือน - Monthly)'
+    else if (avgTimesPerYear === 4) frequencyLabel = 'ปีละ 4 ครั้ง (รายไตรมาส - Quarterly)'
     else if (avgTimesPerYear === 2) frequencyLabel = 'ปีละ 2 ครั้ง (ระหว่างกาล + ปลายปี - Semi-Annual)'
-    else if (avgTimesPerYear === 12) frequencyLabel = 'ปีละ 12 ครั้ง (รายเดือน - Monthly)'
     else if (avgTimesPerYear === 1) frequencyLabel = 'ปีละ 1 ครั้ง (รายปี - Annual)'
 
-    // Typical breakdown per distribution
+    // Typical breakdown per distribution (cap at 12 most recent so weekly ETFs don't flood the UI)
     const typicalPayouts: { roundName: string; amount: number; typicalMonth: string }[] = []
     const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
     if (payoutList.length > 0) {
-      const recentPayouts = payoutList.slice(0, Math.min(avgTimesPerYear, payoutList.length))
+      const maxTypical = Math.min(avgTimesPerYear, 12, payoutList.length)
+      const recentPayouts = payoutList.slice(0, maxTypical)
       recentPayouts.forEach((p, idx) => {
         const dObj = new Date(p.timestamp * 1000)
         const roundNum = recentPayouts.length - idx
@@ -414,20 +437,34 @@ export async function getDividendIntelligence(
     let isEstimated = true
 
     if (latest) {
-      // Predict based on seasonality: add 12 / avgTimesPerYear months to latest dividend
-      const monthsToAdd = Math.round(12 / avgTimesPerYear)
       const lastDate = new Date(latest.timestamp * 1000)
       const estimatedDate = new Date(lastDate)
-      estimatedDate.setMonth(lastDate.getMonth() + monthsToAdd)
 
-      // If estimated date has already passed, push to the next period
-      while (estimatedDate.getTime() < now) {
-        estimatedDate.setMonth(estimatedDate.getMonth() + monthsToAdd)
+      if (avgTimesPerYear > 12) {
+        // High-frequency payers (e.g. weekly / bi-weekly dividend ETFs like CHPY, QDTE, XDTE)
+        const daysToAdd = Math.max(1, Math.round(365 / avgTimesPerYear))
+        estimatedDate.setDate(lastDate.getDate() + daysToAdd)
+
+        let guard = 0
+        while (estimatedDate.getTime() < now && guard < 1000) {
+          estimatedDate.setDate(estimatedDate.getDate() + daysToAdd)
+          guard++
+        }
+      } else {
+        // Predict based on seasonality: add 12 / avgTimesPerYear months to latest dividend (always >= 1 month)
+        const monthsToAdd = Math.max(1, Math.round(12 / Math.max(1, avgTimesPerYear)))
+        estimatedDate.setMonth(lastDate.getMonth() + monthsToAdd)
+
+        let guard = 0
+        while (estimatedDate.getTime() < now && guard < 240) {
+          estimatedDate.setMonth(estimatedDate.getMonth() + monthsToAdd)
+          guard++
+        }
       }
       nextExTimestamp = Math.floor(estimatedDate.getTime() / 1000)
     } else {
-      // Default to 30 days from now
-      nextExTimestamp = Math.floor((now + 30 * 86400 * 1000) / 1000)
+      // Non-dividend paying stock: push far out so it sorts last and isn't counted in 30/60-day upcoming XD
+      nextExTimestamp = Math.floor((now + 365 * 86400 * 1000) / 1000)
     }
 
     const targetDate = new Date(nextExTimestamp * 1000)
@@ -438,20 +475,24 @@ export async function getDividendIntelligence(
       'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
       'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
     ]
-    const fullThaiDate = `${thaiDays[targetDate.getDay()]}ที่ ${targetDate.getDate()} ${fullThaiMonths[targetDate.getMonth()]} ${targetDate.getFullYear()}`
+    const fullThaiDate = latest
+      ? `${thaiDays[targetDate.getDay()]}ที่ ${targetDate.getDate()} ${fullThaiMonths[targetDate.getMonth()]} ${targetDate.getFullYear()}`
+      : 'ไม่มีประวัติการจ่ายปันผล'
 
     let status: 'urgent' | 'soon' | 'upcoming' = 'upcoming'
-    let countdownLabel = `อีก ${diffDays} วัน`
+    let countdownLabel = latest ? `อีก ${diffDays} วัน` : 'ไม่มีกำหนดจ่ายปันผล'
 
-    if (diffDays <= 7) {
-      status = 'urgent'
-      countdownLabel = diffDays === 0 ? '⚡ ขึ้นเครื่องหมาย XD วันนี้!' : diffDays === 1 ? '🟡 พรุ่งนี้ขึ้นเครื่องหมาย XD' : `⚡ อีก ${diffDays} วัน (สัปดาห์นี้)`
-    } else if (diffDays <= 30) {
-      status = 'soon'
-      countdownLabel = `⏳ อีก ${diffDays} วัน (เดือนนี้)`
-    } else {
-      status = 'upcoming'
-      countdownLabel = `อีก ${diffDays} วัน`
+    if (latest) {
+      if (diffDays <= 7) {
+        status = 'urgent'
+        countdownLabel = diffDays === 0 ? '⚡ ขึ้นเครื่องหมาย XD วันนี้!' : diffDays === 1 ? '🟡 พรุ่งนี้ขึ้นเครื่องหมาย XD' : `⚡ อีก ${diffDays} วัน (สัปดาห์นี้)`
+      } else if (diffDays <= 30) {
+        status = 'soon'
+        countdownLabel = `⏳ อีก ${diffDays} วัน (เดือนนี้)`
+      } else {
+        status = 'upcoming'
+        countdownLabel = `อีก ${diffDays} วัน`
+      }
     }
 
     const upcomingDividend = {
