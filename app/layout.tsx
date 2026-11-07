@@ -20,6 +20,12 @@ export const metadata: Metadata = {
     template: '%s | Investment Pro',
   },
   description: 'แพลตฟอร์มบริหารจัดการการลงทุนแบบมืออาชีพ ติดตามพอร์ตฟอลิโอและวางแผนการเงินในที่เดียว',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    title: 'Investment Pro',
+    statusBarStyle: 'black-translucent',
+  },
   keywords: ['investment', 'portfolio', 'tracker', 'wealth management', 'เงินลงทุน'],
   authors: [{ name: 'Investment Pro Team' }],
   creator: 'Investment Pro',
@@ -60,6 +66,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   userScalable: true,
+  viewportFit: 'cover',
 }
 
 import { Providers } from '@/components/Providers'

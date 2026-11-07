@@ -375,7 +375,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* ── MAIN CONTENT ────────────────────────────────────── */}
-      <div className="min-w-0 flex flex-col pb-20 lg:pb-6 relative">
+      <div className="min-w-0 flex flex-col pb-[calc(5rem_+_env(safe-area-inset-bottom))] lg:pb-6 relative">
         <div className="sticky top-0 z-30 w-full flex flex-col">
           {/* Real-time Market Ticker Tape */}
           <TickerTape />
@@ -602,7 +602,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── MOBILE BOTTOM NAV (Pseudo-Glass: 0% GPU Blur Penalty) ── */}
-      <nav className="app-mobile-only fixed bottom-0 left-0 right-0 z-30 bg-[#0B0E14] border-t border-white/[0.08] shadow-[0_-4px_24px_rgba(0,0,0,0.6)] px-2 py-2 justify-around items-center">
+      <nav className="app-mobile-only fixed bottom-0 left-0 right-0 z-30 bg-[#0B0E14] border-t border-white/[0.08] shadow-[0_-4px_24px_rgba(0,0,0,0.6)] px-1.5 pt-2 pb-[calc(0.5rem_+_env(safe-area-inset-bottom))] gap-1 items-stretch">
         {[
           {
             href: '/dashboard',
@@ -622,7 +622,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition-colors no-underline ${
+              className={`flex min-w-0 flex-1 flex-col items-center justify-center min-h-14 px-1 rounded-xl text-[9px] leading-tight font-medium transition-colors no-underline ${
                 active ? 'text-indigo-400 font-semibold' : 'text-slate-400'
               }`}
             >
@@ -642,7 +642,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 }
               : undefined
           }
-          className="flex flex-col items-center justify-center gap-0.5 min-h-11 py-1.5 px-3 rounded-xl text-[10px] font-bold text-white bg-indigo-600 shadow-md shadow-indigo-600/30"
+          className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 min-h-14 px-1 rounded-xl text-[9px] leading-tight font-bold text-white bg-indigo-600 shadow-md shadow-indigo-600/30"
         >
           <Plus className="w-5 h-5" />
           <span>{hasAccounts ? 'บันทึกด่วน' : 'สร้างบัญชี'}</span>
@@ -667,7 +667,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition-colors no-underline ${
+              className={`flex min-w-0 flex-1 flex-col items-center justify-center min-h-14 px-1 rounded-xl text-[9px] leading-tight font-medium transition-colors no-underline ${
                 active ? 'text-indigo-400 font-semibold' : 'text-slate-400'
               }`}
             >

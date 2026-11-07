@@ -33,7 +33,7 @@ import {
 
 export type WatchlistCategory = 'ALL' | 'US_STOCK' | 'ETF' | 'TH_STOCK' | 'CRYPTO_COMMODITY'
 
-export function getWatchlistItemCategory(item: WatchlistWithQuote): WatchlistCategory {
+function getWatchlistItemCategory(item: WatchlistWithQuote): WatchlistCategory {
   const sym = (item.symbol || '').toUpperCase()
   const name = (item.displayName || item.quote?.name || '').toUpperCase()
   const itemType = (item.itemType || '').toLowerCase()
