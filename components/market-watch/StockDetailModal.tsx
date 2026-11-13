@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowRight,
   Briefcase,
   Layers,
   BarChart3,
@@ -903,6 +904,26 @@ export function StockDetailModal({
               <p className="text-xs sm:text-sm text-slate-400 truncate max-w-[280px] sm:max-w-md">
                 {data?.name || initialName || symbol}
               </p>
+              {data?.userPosition && (
+                <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-300 flex-wrap">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 font-semibold text-[11px]">
+                    <Briefcase className="w-3 h-3" />
+                    ถือในพอร์ต {data.userPosition.shares} หุ้น
+                  </span>
+                  <span className="text-slate-400 font-mono text-[11px]">
+                    ต้นทุน {currencySymbol}{data.userPosition.avgCost}
+                  </span>
+                  <span className="text-slate-600 hidden sm:inline">•</span>
+                  <span
+                    className={`font-mono font-bold text-[11px] ${
+                      data.userPosition.unrealizedGain >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    กำไร {data.userPosition.unrealizedGain >= 0 ? '+' : ''}{currencySymbol}
+                    {Math.abs(data.userPosition.unrealizedGain).toLocaleString()} ({data.userPosition.unrealizedGainPercent}%)
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -973,7 +994,7 @@ export function StockDetailModal({
             }`}
           >
             <Target className="w-4 h-4 text-amber-400" />
-            <span>🎯 วิเคราะห์ 4 ด้านก่อนลงทุน</span>
+            <span>วิเคราะห์ 4 ด้านก่อนลงทุน</span>
             <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
               4 เสาหลัก
             </span>
@@ -992,7 +1013,7 @@ export function StockDetailModal({
             }`}
           >
             <Calendar className="w-4 h-4 text-emerald-400" />
-            <span>สถิติ & ปันผลย้อนหลัง</span>
+            <span>สถิติ & ปันผล</span>
             {data?.historicalStats?.dividends?.hasDividends && (
               <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
                 {data.historicalStats.dividends.frequency === 'Quarterly'
@@ -1184,13 +1205,6 @@ export function StockDetailModal({
                       <span>Volume</span>
                     </button>
                   </div>
-
-                  {data?.technicalLevels && (
-                    <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 hidden sm:flex">
-                      <span className="text-rose-400">R1: {currencySymbol}{data.technicalLevels.r1}</span>
-                      <span className="text-emerald-400">S1: {currencySymbol}{data.technicalLevels.s1}</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Chart Viewport: Candlestick or Area */}
@@ -1209,15 +1223,7 @@ export function StockDetailModal({
                       />
                     ) : (
                       <>
-                        <div className="w-full h-56 sm:h-64 relative group/areachart">
-                        <button
-                          type="button"
-                          onClick={() => setIsFullscreenChartOpen(true)}
-                          className="absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-black/60 hover:bg-indigo-600 text-slate-400 hover:text-white border border-white/10 transition-all opacity-70 group-hover/areachart:opacity-100 cursor-pointer shadow-md"
-                          title="ขยายกราฟเส้นเต็มจอ (Pro Fullscreen)"
-                        >
-                          <Maximize2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="w-full h-56 sm:h-64 relative">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={chartPoints}>
                             <defs>
@@ -1473,87 +1479,84 @@ export function StockDetailModal({
                 </div>
               ) : null}
 
-              {/* 3. KEY METRICS & VALUATION */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* P/E */}
-                <div className="p-3.5 sm:p-4 rounded-xl bg-[#141822] border border-white/[0.08] flex flex-col justify-between">
-                  <div>
-                    <span className="text-xs text-slate-300 block font-semibold">
-                      อัตราส่วน P/E
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-white font-mono mt-1 block">
-                      {data?.pe ? `${data.pe}x` : 'N/A'}
-                    </span>
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1 block">
-                    {data?.pe
-                      ? data.pe < 20
-                        ? 'ราคาไม่แพง'
-                        : 'สะท้อนการเติบโต'
-                      : 'สินทรัพย์ไม่มี P/E'}
-                  </span>
-                </div>
+              {/* 3. PRICE RANGE & VALUATION SUMMARY (52-Week & Day Low/High & Cap) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 52-Week Range Card */}
+                {data?.fiftyTwoWeekLow && data?.fiftyTwoWeekHigh ? (
+                  <div className="p-4 rounded-2xl bg-[#141822] border border-white/[0.08] space-y-2 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        <Activity className="w-3.5 h-3.5 text-amber-400" />
+                        กรอบราคา 52 สัปดาห์ (52W Range)
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {fiftyTwoWeekPct !== null
+                          ? fiftyTwoWeekPct > 80
+                            ? '🔥 ใกล้จุดสูงสุดของปี'
+                            : fiftyTwoWeekPct < 20
+                            ? '💎 ใกล้จุดต่ำสุดของปี'
+                            : 'ระดับกลางของปี'
+                          : ''}
+                      </span>
+                    </div>
 
-                {/* Dividend Yield */}
-                <div className="p-3.5 sm:p-4 rounded-xl bg-[#141822] border border-white/[0.08] flex flex-col justify-between">
-                  <div>
-                    <span className="text-xs text-slate-300 block font-semibold">
-                      เงินปันผล (Dividend)
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-emerald-400 font-mono mt-1 block">
-                      {data?.dividendYield !== null && data?.dividendYield !== undefined
-                        ? `${data.dividendYield.toFixed(2)}%`
-                        : '0.00%'}
-                    </span>
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1 block">อัตราผลตอบแทนต่อปี</span>
-                </div>
+                    <div className="relative pt-2 pb-1">
+                      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden flex">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 rounded-full"
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      {fiftyTwoWeekPct !== null && (
+                        <div
+                          className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
+                          style={{ left: `${fiftyTwoWeekPct}%` }}
+                        >
+                          <div className="w-3.5 h-3.5 rounded-full bg-white border-2 border-indigo-600 shadow-md" />
+                        </div>
+                      )}
+                    </div>
 
-                {/* Market Cap */}
-                <div className="p-3.5 sm:p-4 rounded-xl bg-[#141822] border border-white/[0.08] flex flex-col justify-between">
-                  <div>
-                    <span className="text-xs text-slate-300 block font-semibold">
-                      มูลค่าตลาด (Cap)
-                    </span>
-                    <span className="text-base sm:text-lg font-bold text-white font-mono mt-1 block">
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                      <span>ต่ำสุด: {currencySymbol}{data.fiftyTwoWeekLow.toFixed(2)}</span>
+                      <span>สูงสุด: {currencySymbol}{data.fiftyTwoWeekHigh.toFixed(2)}</span>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Day Range & Market Cap Card */}
+                <div className="p-4 rounded-2xl bg-[#141822] border border-white/[0.08] flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <span className="text-xs text-slate-400 block font-medium">กรอบราคาวันนี้ (Day Range)</span>
+                    <p className="text-sm sm:text-base font-bold text-white font-mono">
+                      {data?.dayLow && data?.dayHigh
+                        ? `${currencySymbol}${data.dayLow.toFixed(2)} - ${currencySymbol}${data.dayHigh.toFixed(2)}`
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="text-right space-y-1 border-l border-white/[0.06] pl-4">
+                    <span className="text-xs text-slate-400 block font-medium">มูลค่าตลาด (Market Cap)</span>
+                    <p className="text-sm sm:text-base font-bold text-white font-mono">
                       {data?.marketCap
                         ? data.marketCap >= 1e12
                           ? `${currencySymbol}${(data.marketCap / 1e12).toFixed(2)}T`
                           : data.marketCap >= 1e9
                           ? `${currencySymbol}${(data.marketCap / 1e9).toFixed(2)}B`
-                          : data.marketCap >= 1e6
-                          ? `${currencySymbol}${(data.marketCap / 1e6).toFixed(1)}M`
-                          : `${currencySymbol}${Number(data.marketCap).toLocaleString()}`
+                          : `${currencySymbol}${(data.marketCap / 1e6).toFixed(1)}M`
                         : 'N/A'}
-                    </span>
+                    </p>
                   </div>
-                  <span className="text-xs text-slate-400 mt-1 block">Market Cap</span>
-                </div>
-
-                {/* Day Range */}
-                <div className="p-3.5 sm:p-4 rounded-xl bg-[#141822] border border-white/[0.08] flex flex-col justify-between">
-                  <div>
-                    <span className="text-xs text-slate-300 block font-semibold">
-                      กรอบราคาวันนี้
-                    </span>
-                    <span className="text-xs sm:text-sm font-bold text-white font-mono mt-1 block">
-                      {data?.dayLow && data?.dayHigh
-                        ? `${currencySymbol}${data.dayLow.toFixed(1)} - ${currencySymbol}${data.dayHigh.toFixed(1)}`
-                        : 'N/A'}
-                    </span>
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1 block">Day Low - High</span>
                 </div>
               </div>
 
               {/* 4. ANALYST CONSENSUS & TARGET PRICE */}
               {data?.analystTarget && (
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-[#141822] to-[#171C28] border border-indigo-500/20 space-y-3">
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-[#141822] to-[#171C28] border border-indigo-500/20 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Award className="w-4 h-4 text-indigo-400" />
                       <span className="text-xs font-bold text-white">
-                        มุมมองนักวิเคราะห์ (Wall St. Consensus)
+                        มุมมองนักวิเคราะห์ Wall Street (Analyst Consensus)
                       </span>
                     </div>
 
@@ -1564,23 +1567,22 @@ export function StockDetailModal({
                     )}
                   </div>
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-white/[0.04]">
+                  <div className="flex items-center justify-between gap-3 pt-1 border-t border-white/[0.04]">
                     <div>
                       <span className="text-[10px] text-slate-400 font-medium">
                         ราคาเป้าหมายเฉลี่ย (Mean Target)
                       </span>
-                      <p className="text-lg font-bold text-white font-mono">
-                        {currencySymbol}
-                        {data.analystTarget.targetMean?.toFixed(2)}
+                      <p className="text-base sm:text-lg font-bold text-white font-mono">
+                        {currencySymbol}{data.analystTarget.targetMean?.toFixed(2)}
                       </p>
                     </div>
 
-                    <div className="text-left sm:text-right">
+                    <div className="text-right">
                       <span className="text-[10px] text-slate-400 font-medium">
                         โอกาสสร้างผลตอบแทน (Potential Upside)
                       </span>
                       <p
-                        className={`text-lg font-bold font-mono ${
+                        className={`text-base sm:text-lg font-bold font-mono ${
                           (data.analystTarget.upsidePercent ?? 0) >= 0
                             ? 'text-emerald-400'
                             : 'text-rose-400'
@@ -1594,45 +1596,8 @@ export function StockDetailModal({
                 </div>
               )}
 
-              {/* 5. USER'S HOLDINGS IN PORTFOLIO (IF OWNED) */}
-              {data?.userPosition && (
-                <div className="p-4 rounded-2xl bg-emerald-500/[0.06] border border-emerald-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                      <Briefcase className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                        คุณถือสินทรัพย์นี้ในพอร์ตโฟลิโอ
-                      </span>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        จำนวน {data.userPosition.shares} หน่วย • ต้นทุนเฉลี่ย{' '}
-                        {currencySymbol}
-                        {data.userPosition.avgCost}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-left sm:text-right">
-                    <span className="text-[10px] text-slate-400">กำไร/ขาดทุนสะสม</span>
-                    <p
-                      className={`text-sm font-bold font-mono ${
-                        data.userPosition.unrealizedGain >= 0
-                          ? 'text-emerald-400'
-                          : 'text-rose-400'
-                      }`}
-                    >
-                      {data.userPosition.unrealizedGain >= 0 ? '+' : ''}
-                      {currencySymbol}
-                      {data.userPosition.unrealizedGain.toLocaleString()} (
-                      {data.userPosition.unrealizedGainPercent}%)
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* 6. GEMINI AI STOCK INSIGHTS */}
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-[#12151C] to-[#191D28] border border-amber-500/25 shadow-xl space-y-4">
+              {/* 5. AI EXECUTIVE SUMMARY CARD (เข้าถึงง่าย กระชับ ทันที) */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#12151C] to-[#191D28] border border-amber-500/25 shadow-xl space-y-3.5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
@@ -1640,7 +1605,7 @@ export function StockDetailModal({
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-white tracking-wide flex items-center gap-2">
-                        <span>วิเคราะห์หุ้นเชิงลึกด้วย AI (Gemini Insights)</span>
+                        <span>สรุปภาพรวมด่วนด้วย AI (Executive Takeaways)</span>
                         {activeModelUsed && (
                           <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 font-normal">
                             {activeModelUsed}
@@ -1648,16 +1613,16 @@ export function StockDetailModal({
                         )}
                       </h4>
                       <p className="text-[11px] text-slate-400">
-                        สังเคราะห์จุดแข็ง ความเสี่ยง และคำแนะนำการลงทุนเป็นภาษาไทย
+                        สังเคราะห์ใจความสำคัญ 1 นาที พร้อมปัจจัยขับเคลื่อนตลาด
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2.5 self-start sm:self-auto">
                     {activeUpdatedAt && (
-                      <span className="text-[10px] text-slate-400 flex items-center gap-1 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.06] font-mono">
+                      <span className="text-[10px] text-slate-400 hidden sm:flex items-center gap-1 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.06] font-mono">
                         <Clock className="w-3 h-3 text-slate-500" />
-                        {new Date(activeUpdatedAt).toLocaleDateString('th-TH')} {new Date(activeUpdatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                        {new Date(activeUpdatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
                       </span>
                     )}
 
@@ -1680,7 +1645,7 @@ export function StockDetailModal({
                       ) : (
                         <>
                           <Sparkles className="w-3.5 h-3.5" />
-                          <span>วิเคราะห์ทันที</span>
+                          <span>วิเคราะห์ด้วย AI</span>
                         </>
                       )}
                     </button>
@@ -1692,17 +1657,15 @@ export function StockDetailModal({
                   <div className="py-6 px-4 rounded-xl bg-white/[0.02] border border-white/[0.06] flex flex-col items-center justify-center text-center space-y-2">
                     <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
                     <p className="text-xs text-slate-300 font-medium">
-                      Gemini กำลังวิเคราะห์งบการเงิน ตัวเลข P/E และความเสี่ยงของ {symbol}...
+                      Gemini กำลังสังเคราะห์ข้อมูลปัจจัยพื้นฐานและเทคนิคอลของ {symbol}...
                     </p>
-                    <span className="text-[10px] text-slate-500">
-                      ใช้เวลาประมาณ 3-5 วินาที
-                    </span>
+                    <span className="text-[10px] text-slate-500">ใช้เวลาประมาณ 2-3 วินาที</span>
                   </div>
                 )}
 
                 {/* AI Error */}
                 {aiError && (
-                  <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-center justify-between">
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-center justify-between">
                     <span>{aiError}</span>
                     <button
                       onClick={handleGenerateAiInsight}
@@ -1713,46 +1676,55 @@ export function StockDetailModal({
                   </div>
                 )}
 
-                {/* AI Result View */}
-                {activeInsight && (
+                {/* AI Result Content */}
+                {activeStructured?.summary ? (
+                  <div className="space-y-3 pt-1">
+                    <div className="p-3.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/20 text-xs sm:text-sm text-slate-200 leading-relaxed">
+                      {activeStructured.summary}
+                    </div>
+
+                    {activeStructured.latestNewsCatalyst && (
+                      <div className="text-xs text-slate-300 flex items-start gap-2 bg-[#0F1218] p-3 rounded-xl border border-white/[0.06]">
+                        <span className="text-amber-400 shrink-0 font-bold">⚡ ปัจจัยเร่ง:</span>
+                        <span>{activeStructured.latestNewsCatalyst}</span>
+                      </div>
+                    )}
+
+                    {/* Button to drill down to 4 Pillars tab */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('four_pillars')}
+                      className="w-full py-2.5 px-4 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer group"
+                    >
+                      <Target className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>เปิดดูบทวิเคราะห์ 4 ด้านฉบับเต็ม (Business, Valuation, Health, Scenarios)</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-indigo-400 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  </div>
+                ) : activeInsight ? (
                   <div className="space-y-3">
-                    <div className="max-h-[65vh] overflow-y-auto rounded-xl border border-white/[0.06] bg-[#0F1218] p-4 sm:p-5 pr-3 text-slate-200">
-                      <AiStructuredDashboardView
-                        data={activeStructured}
-                        stock={data}
-                        rawFallback={activeInsight}
-                      />
+                    <div className="p-3.5 rounded-xl bg-[#0F1218] border border-white/[0.06] text-xs text-slate-200 max-h-48 overflow-y-auto">
+                      <AiInsightContent content={activeInsight} />
                     </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                      <span>*ข้อมูลการวิเคราะห์ใช้เพื่อประกอบการตัดสินใจเบื้องต้นเท่านั้น</span>
-                      <button
-                        type="button"
-                        onClick={handleGenerateAiInsight}
-                        disabled={isAiLoading}
-                        className="text-amber-400 hover:underline flex items-center gap-1 font-medium cursor-pointer"
-                      >
-                        <Sparkles className="w-2.5 h-2.5" />
-                        วิเคราะห์ซ้ำ
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('four_pillars')}
+                      className="w-full py-2 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <span>ดูรายละเอียดในแท็บ 4 เสาหลัก</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : !isAiLoading && !aiError ? (
+                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className="text-xs text-slate-300">
+                        กดปุ่มวิเคราะห์เพื่อรับบทสรุปยุทธศาสตร์และ Scenarios จาก AI ในไม่กี่วินาที
+                      </span>
                     </div>
                   </div>
-                )}
-
-                {/* AI Empty State (when no insight yet or invalidated non-Thai) */}
-                {!activeInsight && !isAiLoading && !aiError && (
-                  <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/[0.06] text-center space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
-                      <Sparkles className="w-5 h-5" />
-                    </div>
-                    <div className="max-w-md mx-auto space-y-1">
-                      <h5 className="text-xs font-bold text-white">พร้อมวิเคราะห์เชิงลึกด้วย AI (ภาษาไทย 100%)</h5>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        คลิกปุ่ม <span className="text-amber-400 font-semibold">"วิเคราะห์ทันที"</span> ด้านบน เพื่อสังเคราะห์โมเดลธุรกิจ, ผลประกอบการ, จุดแข็ง, ความเสี่ยง และ Bull/Bear Scenarios ฉบับภาษาไทย
-                      </p>
-                    </div>
-                  </div>
-                )}
+                ) : null}
               </div>
             </>
           )}
