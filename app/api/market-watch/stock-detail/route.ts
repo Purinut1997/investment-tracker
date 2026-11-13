@@ -7,6 +7,7 @@ import { syncAssetLivePrice } from '@/lib/market-data/cache-layer'
 import { syncYahooQuoteCache } from '@/lib/market-data/yahoo'
 import { invalidateResolverCache } from '@/lib/market-data/resolver'
 import { invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
+import { getEarningsIntelligence } from '@/lib/earnings/earnings-analyzer'
 
 export interface ChartPoint {
   time: string
@@ -19,6 +20,8 @@ export interface ChartPoint {
   timestamp: number
   sma20?: number | null
   sma50?: number | null
+  ema200?: number | null
+  rsi?: number | null
 }
 
 export interface TechnicalLevels {
@@ -30,6 +33,10 @@ export interface TechnicalLevels {
   periodHigh: number
   periodLow: number
   currentPrice: number
+  rsi?: number | null
+  rsiStatus?: 'oversold' | 'overbought' | 'neutral' | null
+  ema200?: number | null
+  trendVsEma200?: 'bullish' | 'bearish' | null
 }
 
 interface CachedChartResult {
@@ -123,15 +130,15 @@ async function fetchChartData(
         break
       case '1m':
       case '1mo':
-        fetchRange = '3mo'
+        fetchRange = '1y' // 1-year buffer for accurate 200 EMA & 14 RSI
         yfInterval = '1d'
         break
       case '1y':
         fetchRange = '2y'
-        yfInterval = '1wk'
+        yfInterval = '1d'
         break
       default:
-        fetchRange = '3mo'
+        fetchRange = '1y'
         yfInterval = '1d'
     }
 
@@ -230,6 +237,50 @@ async function fetchChartData(
         }
       }
 
+      // Calculate EMA 200 (Long-term Bull/Bear Trend Line)
+      const emaPeriod = 200
+      const k = 2 / (emaPeriod + 1)
+      if (allPoints.length >= 20) {
+        const seedLen = Math.min(emaPeriod, allPoints.length)
+        let ema = allPoints.slice(0, seedLen).reduce((acc, p) => acc + p.close, 0) / seedLen
+        allPoints[seedLen - 1].ema200 = Number(ema.toFixed(2))
+
+        for (let i = seedLen; i < allPoints.length; i++) {
+          ema = allPoints[i].close * k + ema * (1 - k)
+          allPoints[i].ema200 = Number(ema.toFixed(2))
+        }
+      }
+
+      // Calculate Wilder's 14-period RSI (Relative Strength Index)
+      const rsiPeriod = 14
+      if (allPoints.length > rsiPeriod) {
+        let gains = 0
+        let losses = 0
+        for (let i = 1; i <= rsiPeriod; i++) {
+          const diff = allPoints[i].close - allPoints[i - 1].close
+          if (diff >= 0) gains += diff
+          else losses += Math.abs(diff)
+        }
+
+        let avgGain = gains / rsiPeriod
+        let avgLoss = losses / rsiPeriod
+
+        allPoints[rsiPeriod].rsi =
+          avgLoss === 0 ? 100 : Number((100 - 100 / (1 + avgGain / avgLoss)).toFixed(1))
+
+        for (let i = rsiPeriod + 1; i < allPoints.length; i++) {
+          const diff = allPoints[i].close - allPoints[i - 1].close
+          const gain = diff > 0 ? diff : 0
+          const loss = diff < 0 ? Math.abs(diff) : 0
+
+          avgGain = (avgGain * (rsiPeriod - 1) + gain) / rsiPeriod
+          avgLoss = (avgLoss * (rsiPeriod - 1) + loss) / rsiPeriod
+
+          allPoints[i].rsi =
+            avgLoss === 0 ? 100 : Number((100 - 100 / (1 + avgGain / avgLoss)).toFixed(1))
+        }
+      }
+
       // Slice down to requested timeframe for display
       let chartPoints: ChartPoint[] = allPoints
       if (allPoints.length > 0) {
@@ -309,6 +360,21 @@ async function fetchChartData(
         const r2 = pivot + (periodHigh - periodLow)
         const s2 = pivot - (periodHigh - periodLow)
 
+        const lastPt = chartPoints[chartPoints.length - 1]
+        const latestRsi = lastPt?.rsi ?? allPoints[allPoints.length - 1]?.rsi ?? null
+        let rsiStatus: 'oversold' | 'overbought' | 'neutral' | null = null
+        if (latestRsi !== null) {
+          if (latestRsi <= 30) rsiStatus = 'oversold'
+          else if (latestRsi >= 70) rsiStatus = 'overbought'
+          else rsiStatus = 'neutral'
+        }
+
+        const latestEma200 = lastPt?.ema200 ?? allPoints[allPoints.length - 1]?.ema200 ?? null
+        let trendVsEma200: 'bullish' | 'bearish' | null = null
+        if (latestEma200 !== null && currentPrice > 0) {
+          trendVsEma200 = currentPrice >= latestEma200 ? 'bullish' : 'bearish'
+        }
+
         technicalLevels = {
           pivot: Number(pivot.toFixed(2)),
           r1: Number(r1.toFixed(2)),
@@ -318,6 +384,10 @@ async function fetchChartData(
           periodHigh: Number(periodHigh.toFixed(2)),
           periodLow: Number(periodLow.toFixed(2)),
           currentPrice: Number(currentPrice.toFixed(2)),
+          rsi: latestRsi,
+          rsiStatus,
+          ema200: latestEma200,
+          trendVsEma200,
         }
       }
 
@@ -541,9 +611,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 1. Fetch Chart, Fundamentals, and User Position in parallel
+    // 1. Fetch Chart, Fundamentals, User Position, and Earnings Intelligence in parallel
     // Fundamentals & Chart are both cached in-memory with long TTLs to prevent API blocking
-    const [chartData, fundamentals, userTxns] = await Promise.all([
+    const [chartData, fundamentals, userTxns, earningsIntel] = await Promise.all([
       fetchChartData(rawSymbol, market, range, forceRefresh),
       fetchFundamentalsData(rawSymbol, market),
       prisma.transaction.findMany({
@@ -555,6 +625,7 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { txnDate: 'asc' },
       }),
+      getEarningsIntelligence(rawSymbol, (market === 'TH' ? 'TH' : 'US')).catch(() => null),
     ])
 
     if (!chartData) {
@@ -685,6 +756,7 @@ export async function GET(req: NextRequest) {
       debtToEquity: fundamentals.debtToEquity,
       analystTarget,
       userPosition,
+      upcomingEarnings: earningsIntel?.upcoming ?? null,
       chartPoints: chartData.chartPoints,
       technicalLevels: chartData.technicalLevels,
       range,

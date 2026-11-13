@@ -14,6 +14,8 @@ export interface CandlePoint {
   timestamp: number
   sma20?: number | null
   sma50?: number | null
+  ema200?: number | null
+  rsi?: number | null
 }
 
 export interface TechnicalLevels {
@@ -25,6 +27,10 @@ export interface TechnicalLevels {
   periodHigh: number
   periodLow: number
   currentPrice: number
+  rsi?: number | null
+  rsiStatus?: 'oversold' | 'overbought' | 'neutral' | null
+  ema200?: number | null
+  trendVsEma200?: 'bullish' | 'bearish' | null
 }
 
 interface CandlestickChartProps {
@@ -32,6 +38,7 @@ interface CandlestickChartProps {
   currencySymbol?: string
   showSR?: boolean
   showSMA?: boolean
+  showEMA200?: boolean
   showVolume?: boolean
   technicalLevels?: TechnicalLevels | null
   height?: number
@@ -63,6 +70,7 @@ function CandlestickChartViewport({
   currencySymbol = '$',
   showSR = true,
   showSMA = true,
+  showEMA200 = false,
   showVolume = false,
   technicalLevels,
   height = 280,
@@ -313,6 +321,21 @@ function CandlestickChartViewport({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, showSMA, firstVisible, lastVisible, minPrice, maxPrice, viewStart, safeSpan])
 
+  const ema200Path = useMemo(() => {
+    if (!showEMA200) return ''
+    let p = ''
+    for (let i = firstVisible; i <= lastVisible; i++) {
+      const d = data[i]
+      if (d && d.ema200 !== null && d.ema200 !== undefined) {
+        const x = scaleX(i)
+        const y = scaleY(d.ema200)
+        p += p === '' ? `M ${x} ${y}` : ` L ${x} ${y}`
+      }
+    }
+    return p
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, showEMA200, firstVisible, lastVisible, minPrice, maxPrice, viewStart, safeSpan])
+
   // Horizontal price grid lines (4 steps)
   const priceGrid = useMemo(() => {
     const steps = 4
@@ -393,6 +416,16 @@ function CandlestickChartViewport({
           <span>
             C: <strong className={isUp ? 'text-emerald-400' : 'text-rose-400'}>{currencySymbol}{activePoint?.close.toFixed(2)}</strong>
           </span>
+          {showEMA200 && activePoint?.ema200 && (
+            <span className="text-purple-400 hidden md:inline">
+              EMA 200: <strong className="text-purple-300">{currencySymbol}{activePoint.ema200.toFixed(2)}</strong>
+            </span>
+          )}
+          {activePoint?.rsi !== undefined && activePoint?.rsi !== null && (
+            <span className="text-sky-400 hidden sm:inline">
+              RSI(14): <strong className="text-sky-300">{activePoint.rsi}</strong>
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className={`font-bold ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -512,6 +545,11 @@ function CandlestickChartViewport({
           )}
           {showSMA && sma50Path && (
             <path d={sma50Path} fill="none" stroke="#06B6D4" strokeWidth={1.6} opacity={0.9} />
+          )}
+
+          {/* Exponential Moving Average EMA 200 */}
+          {showEMA200 && ema200Path && (
+            <path d={ema200Path} fill="none" stroke="#A855F7" strokeWidth={1.8} strokeDasharray="4 3" opacity={0.95} />
           )}
 
           {/* Candlestick Glyphs (visible window only) */}

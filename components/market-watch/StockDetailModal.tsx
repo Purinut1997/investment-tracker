@@ -596,6 +596,7 @@ export function StockDetailModal({
   const [chartType, setChartType] = useState<'area' | 'candle'>('area')
   const [showSR, setShowSR] = useState(true)
   const [showSMA, setShowSMA] = useState(true)
+  const [showEMA200, setShowEMA200] = useState(false)
   const [showVolume, setShowVolume] = useState(false)
   const [isFullscreenChartOpen, setIsFullscreenChartOpen] = useState(false)
   const [isAiLoading, setIsAiLoading] = useState(false)
@@ -787,6 +788,10 @@ export function StockDetailModal({
         if (p.sma50 && p.sma50 < min) min = p.sma50
         if (p.sma50 && p.sma50 > max) max = p.sma50
       }
+      if (showEMA200) {
+        if (p.ema200 && p.ema200 < min) min = p.ema200
+        if (p.ema200 && p.ema200 > max) max = p.ema200
+      }
     }
 
     // Auto-fit Support and Resistance levels when enabled so R1, R2, S1, S2 are NEVER clipped off!
@@ -904,26 +909,37 @@ export function StockDetailModal({
               <p className="text-xs sm:text-sm text-slate-400 truncate max-w-[280px] sm:max-w-md">
                 {data?.name || initialName || symbol}
               </p>
-              {data?.userPosition && (
-                <div className="flex items-center gap-2 mt-1.5 text-xs text-slate-300 flex-wrap">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 font-semibold text-[11px]">
-                    <Briefcase className="w-3 h-3" />
-                    ถือในพอร์ต {data.userPosition.shares} หุ้น
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {data?.userPosition && (
+                  <div className="flex items-center gap-2 text-xs text-slate-300 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/25 text-emerald-300 font-semibold text-[11px]">
+                      <Briefcase className="w-3 h-3" />
+                      ถือในพอร์ต {data.userPosition.shares} หุ้น
+                    </span>
+                    <span className="text-slate-400 font-mono text-[11px]">
+                      ต้นทุน {currencySymbol}{data.userPosition.avgCost}
+                    </span>
+                    <span className="text-slate-600 hidden sm:inline">•</span>
+                    <span
+                      className={`font-mono font-bold text-[11px] ${
+                        data.userPosition.unrealizedGain >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      กำไร {data.userPosition.unrealizedGain >= 0 ? '+' : ''}{currencySymbol}
+                      {Math.abs(data.userPosition.unrealizedGain).toLocaleString()} ({data.userPosition.unrealizedGainPercent}%)
+                    </span>
+                  </div>
+                )}
+                {data?.upcomingEarnings?.hasUpcomingDate && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-medium text-[11px]">
+                    <Calendar className="w-3 h-3 text-amber-400" />
+                    <span>งบออก {data.upcomingEarnings.countdownLabel}</span>
+                    <span className="text-slate-400 text-[10px] hidden sm:inline">
+                      ({data.upcomingEarnings.earningsDateThai} • {data.upcomingEarnings.releaseTimingLabel})
+                    </span>
                   </span>
-                  <span className="text-slate-400 font-mono text-[11px]">
-                    ต้นทุน {currencySymbol}{data.userPosition.avgCost}
-                  </span>
-                  <span className="text-slate-600 hidden sm:inline">•</span>
-                  <span
-                    className={`font-mono font-bold text-[11px] ${
-                      data.userPosition.unrealizedGain >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    กำไร {data.userPosition.unrealizedGain >= 0 ? '+' : ''}{currencySymbol}
-                    {Math.abs(data.userPosition.unrealizedGain).toLocaleString()} ({data.userPosition.unrealizedGainPercent}%)
-                  </span>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
@@ -1194,6 +1210,19 @@ export function StockDetailModal({
                     </button>
                     <button
                       type="button"
+                      onClick={() => setShowEMA200(!showEMA200)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all flex items-center gap-1.5 ${
+                        showEMA200
+                          ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                          : 'bg-white/[0.03] text-slate-500 border-white/[0.06] hover:text-slate-300'
+                      }`}
+                      title="แสดง/ซ่อน เส้นค่าเฉลี่ย EMA 200 วัน (Trend Line หลัก แบ่งกระทิง/หมี)"
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${showEMA200 ? 'bg-purple-400' : 'bg-slate-600'}`} />
+                      <span>EMA 200</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setShowVolume(!showVolume)}
                       className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all flex items-center gap-1.5 ${
                         showVolume
@@ -1205,6 +1234,36 @@ export function StockDetailModal({
                       <span>Volume</span>
                     </button>
                   </div>
+
+                  {/* RSI (14) Live Meter Badge */}
+                  {data?.technicalLevels?.rsi !== undefined && data.technicalLevels.rsi !== null && (
+                    <div
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium border flex items-center gap-1.5 ${
+                        data.technicalLevels.rsiStatus === 'oversold'
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          : data.technicalLevels.rsiStatus === 'overbought'
+                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                          : 'bg-white/[0.04] text-slate-300 border-white/[0.08]'
+                      }`}
+                      title={`RSI (14-Period): ${data.technicalLevels.rsi} (${
+                        data.technicalLevels.rsiStatus === 'oversold'
+                          ? 'ขายมากเกินไป < 30 มีโอกาสเด้งกลับทางเทคนิค'
+                          : data.technicalLevels.rsiStatus === 'overbought'
+                          ? 'ซื้อมากเกินไป > 70 ระวังแรงขายทำกำไร'
+                          : 'อยู่ในกรอบปกติ 30-70'
+                      })`}
+                    >
+                      <Activity className="w-3.5 h-3.5 text-sky-400" />
+                      <span>RSI: <strong>{data.technicalLevels.rsi}</strong></span>
+                      <span className="text-[10px] font-sans opacity-90 hidden sm:inline">
+                        {data.technicalLevels.rsiStatus === 'oversold'
+                          ? '• Oversold 🟢'
+                          : data.technicalLevels.rsiStatus === 'overbought'
+                          ? '• Overbought 🔴'
+                          : '• ปกติ ⚪'}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Chart Viewport: Candlestick or Area */}
@@ -1216,6 +1275,7 @@ export function StockDetailModal({
                         currencySymbol={currencySymbol}
                         showSR={showSR}
                         showSMA={showSMA}
+                        showEMA200={showEMA200}
                         showVolume={showVolume}
                         technicalLevels={data?.technicalLevels}
                         height={260}
@@ -1286,6 +1346,18 @@ export function StockDetailModal({
                                           <span>{currencySymbol}{Number(p.sma50).toFixed(2)}</span>
                                         </div>
                                       )}
+                                      {p.ema200 && (
+                                        <div className="flex items-center justify-between gap-4 text-purple-400 text-[11px]">
+                                          <span>EMA 200:</span>
+                                          <span>{currencySymbol}{Number(p.ema200).toFixed(2)}</span>
+                                        </div>
+                                      )}
+                                      {p.rsi !== undefined && p.rsi !== null && (
+                                        <div className="flex items-center justify-between gap-4 text-sky-400 text-[11px]">
+                                          <span>RSI (14):</span>
+                                          <span>{p.rsi}</span>
+                                        </div>
+                                      )}
                                     </div>
                                   )
                                 }
@@ -1326,6 +1398,19 @@ export function StockDetailModal({
                                   isAnimationActive={false}
                                 />
                               </>
+                            )}
+                            {showEMA200 && (
+                              <Line
+                                type="monotone"
+                                dataKey="ema200"
+                                name="EMA 200"
+                                stroke="#A855F7"
+                                strokeWidth={1.75}
+                                strokeDasharray="4 3"
+                                dot={false}
+                                connectNulls={true}
+                                isAnimationActive={false}
+                              />
                             )}
                             <Area
                               type="monotone"
@@ -1422,6 +1507,61 @@ export function StockDetailModal({
                       <span className="text-[9px] text-emerald-300/70 block mt-0.5">แนวรับหลัก / จุดคัด</span>
                     </div>
                   </div>
+
+                  {/* Momentum & Trend Summary (RSI 14 & EMA 200) */}
+                  {((data.technicalLevels.rsi !== undefined && data.technicalLevels.rsi !== null) || data.technicalLevels.ema200) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-white/[0.06]">
+                      {/* RSI (14) Status Card */}
+                      {data.technicalLevels.rsi !== undefined && data.technicalLevels.rsi !== null && (
+                        <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <Activity className="w-3.5 h-3.5 text-sky-400" />
+                            <span className="text-slate-400 text-[11px]">RSI (14 วัน):</span>
+                            <span className="font-mono font-bold text-white text-xs">{data.technicalLevels.rsi}</span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              data.technicalLevels.rsiStatus === 'oversold'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : data.technicalLevels.rsiStatus === 'overbought'
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : 'bg-slate-700/50 text-slate-300'
+                            }`}
+                          >
+                            {data.technicalLevels.rsiStatus === 'oversold'
+                              ? 'Oversold (ลุ้นเด้ง) 🟢'
+                              : data.technicalLevels.rsiStatus === 'overbought'
+                              ? 'Overbought (ระวังย่อ) 🔴'
+                              : 'เป็นกลาง (30-70) ⚪'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* EMA 200 Trend Status Card */}
+                      {data.technicalLevels.ema200 && (
+                        <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-purple-400" />
+                            <span className="text-slate-400 text-[11px]">EMA 200 วัน:</span>
+                            <span className="font-mono font-bold text-purple-300 text-xs">
+                              {currencySymbol}{data.technicalLevels.ema200.toFixed(2)}
+                            </span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              data.technicalLevels.trendVsEma200 === 'bullish'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            }`}
+                          >
+                            {data.technicalLevels.trendVsEma200 === 'bullish'
+                              ? 'ยืนเหนือเส้น (Bullish 🐂)'
+                              : 'ต่ำกว่าเส้น (Bearish 🐻)'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1752,6 +1892,8 @@ export function StockDetailModal({
         setShowSR={setShowSR}
         showSMA={showSMA}
         setShowSMA={setShowSMA}
+        showEMA200={showEMA200}
+        setShowEMA200={setShowEMA200}
         showVolume={showVolume}
         setShowVolume={setShowVolume}
         chartPoints={chartPoints}

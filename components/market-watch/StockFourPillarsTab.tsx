@@ -234,13 +234,6 @@ export function StockFourPillarsTab({
               <strong className="text-indigo-200 font-bold">สิทธิบัตรและโครงสร้างพื้นฐานขนาดใหญ่</strong>
             </p>
 
-            {/* Benchmark Callout: ADVANC */}
-            <div className="p-2.5 rounded-lg bg-indigo-950/30 border border-indigo-500/30 text-xs sm:text-[13px] text-slate-200">
-              💡 <strong className="text-indigo-300">ตัวอย่างกรณีศึกษา:</strong> หุ้นกลุ่มสื่อสารอย่าง{' '}
-              <strong className="text-white font-bold">ADVANC</strong> ที่มีโครงสร้างพื้นฐานเสาสัญญาณและคลื่นความถี่พร้อม{' '}
-              <strong className="text-emerald-300 font-bold">ฐานลูกค้าขนาดใหญ่กว่า 45 ล้านราย</strong>{' '}
-              ทำให้มีรายได้สม่ำเสมอและคู่แข่งรายใหม่เข้ามาเจาะตลาดได้ยากมาก
-            </div>
           </div>
         </div>
       </div>

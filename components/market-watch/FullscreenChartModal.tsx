@@ -49,6 +49,8 @@ interface FullscreenChartModalProps {
   setShowSR: (show: boolean) => void
   showSMA: boolean
   setShowSMA: (show: boolean) => void
+  showEMA200?: boolean
+  setShowEMA200?: (show: boolean) => void
   showVolume: boolean
   setShowVolume: (show: boolean) => void
   chartPoints: CandlePoint[]
@@ -76,6 +78,8 @@ export function FullscreenChartModal({
   setShowSR,
   showSMA,
   setShowSMA,
+  showEMA200 = false,
+  setShowEMA200,
   showVolume,
   setShowVolume,
   chartPoints,
@@ -274,6 +278,23 @@ export function FullscreenChartModal({
                 <span>SMA 20/50</span>
               </button>
 
+              {/* EMA 200 Toggle */}
+              {setShowEMA200 && (
+                <button
+                  type="button"
+                  onClick={() => setShowEMA200(!showEMA200)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    showEMA200
+                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-xs'
+                      : 'bg-[#07090F] text-slate-500 border-white/[0.08] hover:text-slate-300'
+                  }`}
+                  title="แสดง/ซ่อน เส้นค่าเฉลี่ย EMA 200 วัน (Trend Line หลัก)"
+                >
+                  <span className={`w-2 h-2 rounded-full ${showEMA200 ? 'bg-purple-400' : 'bg-slate-600'}`} />
+                  <span>EMA 200</span>
+                </button>
+              )}
+
               {/* Volume Toggle */}
               <button
                 type="button"
@@ -318,6 +339,7 @@ export function FullscreenChartModal({
                   currencySymbol={currencySymbol}
                   showSR={showSR}
                   showSMA={showSMA}
+                  showEMA200={showEMA200}
                   showVolume={showVolume}
                   technicalLevels={technicalLevels}
                   height={showVolume ? 420 : 540}
@@ -432,7 +454,7 @@ export function FullscreenChartModal({
                       </>
                     )}
 
-                    {/* Moving Average SMA Lines */}
+                    {/* Moving Average SMA & EMA Lines */}
                     {showSMA && (
                       <>
                         <Line
@@ -456,6 +478,19 @@ export function FullscreenChartModal({
                           isAnimationActive={false}
                         />
                       </>
+                    )}
+                    {showEMA200 && (
+                      <Line
+                        type="monotone"
+                        dataKey="ema200"
+                        name="EMA 200"
+                        stroke="#A855F7"
+                        strokeWidth={2}
+                        strokeDasharray="4 3"
+                        dot={false}
+                        connectNulls={true}
+                        isAnimationActive={false}
+                      />
                     )}
 
                     {/* Area Curve */}
