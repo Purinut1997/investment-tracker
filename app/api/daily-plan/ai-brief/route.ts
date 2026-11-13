@@ -22,12 +22,46 @@ export async function POST(req: NextRequest) {
       totalCash,
       baseCurrency = 'THB',
       planDate,
+      forceRefresh = false,
     } = body
 
     if (!portfolioTriggers || portfolioTriggers.length === 0) {
       return NextResponse.json({
         advice: 'ยังไม่มีข้อมูลสินทรัพย์ในพอร์ตที่เพียงพอสำหรับการจัดทำแผนประจำวัน กรุณาบันทึกรายการลงทุนเพื่อเริ่มการวิเคราะห์',
       })
+    }
+
+    // 1. Day-level caching check (Asia/Bangkok time) to prevent token waste and rapid re-generation
+    if (!forceRefresh) {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Bangkok',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      })
+      const todayBangkok = formatter.format(new Date())
+
+      const latestLog = await prisma.aiAdviceLog.findFirst({
+        where: {
+          userId,
+          logType: 'advisor',
+          prompt: { contains: 'AI Daily Investment Strategist' },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (latestLog) {
+        const logDateBangkok = formatter.format(new Date(latestLog.createdAt))
+        if (logDateBangkok === todayBangkok) {
+          return NextResponse.json({
+            success: true,
+            advice: latestLog.response,
+            modelUsed: latestLog.modelUsed,
+            generatedAt: latestLog.createdAt.toISOString(),
+            cached: true,
+          })
+        }
+      }
     }
 
     const regimeTitle = marketOverview?.regime?.title || 'Consolidation'
@@ -47,7 +81,28 @@ export async function POST(req: NextRequest) {
       ? `${vixBenchmark.price} pts (${vixBenchmark.price < 15 ? 'สงบ/Low Volatility' : vixBenchmark.price < 20 ? 'ปกติ/Balanced' : vixBenchmark.price < 28 ? 'กังวลสูง/Elevated Fear' : 'ตื่นตระหนก/Extreme Fear — จุดช้อนซื้อ'})`
       : 'N/A'
 
-    const topTriggers = (portfolioTriggers as any[]).slice(0, 6)
+    // 2. Prioritize triggers intelligently (High priority > Extreme RSI > Near S1 > High weight)
+    const sortedTriggers = [...(portfolioTriggers as any[])].sort((a, b) => {
+      const getScore = (item: any) => {
+        let score = 0
+        if (item.actionPriority === 'HIGH') score += 100
+        else if (item.actionPriority === 'MEDIUM') score += 50
+
+        const rsi = Number(item.rsi14)
+        if (rsi && (rsi <= 30 || rsi >= 70)) score += 35
+        else if (rsi && (rsi <= 40 || rsi >= 65)) score += 15
+
+        const distS1 = Math.abs(Number(item.distanceToS1Percent ?? 999))
+        if (distS1 <= 2.5) score += 25
+        else if (distS1 <= 5) score += 10
+
+        score += Math.min(20, (Number(item.allocationPercent) || 0) * 0.5)
+        return score
+      }
+      return getScore(b) - getScore(a)
+    })
+
+    const topTriggers = sortedTriggers.slice(0, 8)
     const triggerSummary = topTriggers
       .map((t) => {
         const isThai =
@@ -103,7 +158,8 @@ ${triggerSummary}
     const aiResult = await callGemini({
       userId,
       prompt,
-      logType: 'advisor',
+      logType: 'daily_brief',
+      thinkingBudget: 0,
       systemInstruction:
         'คุณเป็น Senior Portfolio Strategist ที่ให้คำแนะนำการลงทุนตามหลักการบริหารความเสี่ยงระดับสถาบัน ชัดเจน ตรงประเด็น ใช้ภาษาไทยเข้าใจง่าย',
     })

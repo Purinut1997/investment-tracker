@@ -24,6 +24,8 @@ export interface CallGeminiOptions {
     | 'csv_mapping'
     | 'quick_add_multimodal'
     | 'stock_insight'
+    | 'daily_brief'
+    | 'bucket_chat'
   systemInstruction?: string
   responseMimeType?: 'application/json' | 'text/plain'
   thinkingBudget?: number
@@ -43,35 +45,36 @@ export async function callGemini({
   responseMimeType,
   thinkingBudget,
 }: CallGeminiOptions): Promise<CallGeminiResult> {
-  // 1. Get user settings and API key
+  // 1. Get user settings and prepare candidate API keys (User key first, then System key fallback)
   const userSettings = await prisma.userSettings.findUnique({
     where: { userId },
     include: { selectedAiModel: true },
   })
 
-  let apiKey: string | null = null
+  const apiKeysToTry: string[] = []
 
   if (userSettings?.geminiApiKeyEncrypted) {
     try {
-      apiKey = decrypt(userSettings.geminiApiKeyEncrypted)
+      const decrypted = decrypt(userSettings.geminiApiKeyEncrypted)
+      if (decrypted && decrypted.trim().length > 0) {
+        apiKeysToTry.push(decrypted.trim())
+      }
     } catch (err) {
-      console.error('[Gemini] Failed to decrypt user API key:', err)
-      throw new Error('ไม่สามารถถอดรหัส Gemini API Key ได้ กรุณาบันทึกคีย์ใหม่อีกครั้งในหน้าตั้งค่า')
+      console.warn('[Gemini] Failed to decrypt user API key, will try system key:', err)
     }
-  } else if (process.env.GEMINI_API_KEY) {
-    apiKey = process.env.GEMINI_API_KEY
   }
 
-  if (!apiKey) {
+  const systemKey = process.env.GEMINI_API_KEY?.trim()
+  if (systemKey && !apiKeysToTry.includes(systemKey)) {
+    apiKeysToTry.push(systemKey)
+  }
+
+  if (apiKeysToTry.length === 0) {
     throw new Error('กรุณาระบุ Gemini API Key ในหน้าตั้งค่า (Settings) ก่อนใช้งานฟีเจอร์ AI')
   }
 
-  const ai = new GoogleGenerativeAI(apiKey)
-
   // 2. Determine models to try based on Auto or Manual mode
   let modelsToTry: string[] = []
-
-  // Deprecated models that return 404 in 2026
   const deprecatedModels = new Set(['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'])
 
   if (userSettings?.aiModelMode === 'manual' && userSettings.selectedAiModel?.modelId) {
@@ -86,73 +89,100 @@ export async function callGemini({
     if (dbModels.length > 0) {
       modelsToTry = dbModels.map((m) => m.modelId).filter((id) => !deprecatedModels.has(id))
     }
-    
+
     if (modelsToTry.length === 0) {
       modelsToTry = ['gemini-2.5-flash', 'gemini-3-flash']
     }
   }
 
+  // Determine optimal thinking budget:
+  // For fast responses (<4s), default to 0 for operational endpoints unless explicitly specified or forecast
+  const effectiveThinkingBudget =
+    thinkingBudget !== undefined
+      ? thinkingBudget
+      : logType === 'forecast_explain'
+      ? 512
+      : 0
+
   let lastError: any = null
 
-  // 3. Fallback execution chain
-  for (const modelId of modelsToTry) {
-    try {
-      const model = ai.getGenerativeModel({
-        model: modelId,
-        ...(systemInstruction ? { systemInstruction } : {}),
-        generationConfig: {
-          ...(responseMimeType ? { responseMimeType } : {}),
-          ...(thinkingBudget !== undefined
-            ? { thinkingConfig: { thinkingBudget } }
-            : logType === 'quick_add_multimodal' || logType === 'csv_mapping'
-            ? { thinkingConfig: { thinkingBudget: 0 } }
-            : {}),
-        } as any,
-      })
+  // 3. Fallback execution chain across API Keys and Models
+  for (let keyIdx = 0; keyIdx < apiKeysToTry.length; keyIdx++) {
+    const currentApiKey = apiKeysToTry[keyIdx]
+    const isUserKey = keyIdx === 0 && Boolean(userSettings?.geminiApiKeyEncrypted)
+    const ai = new GoogleGenerativeAI(currentApiKey)
 
-      const contentPayload = images && images.length > 0
-        ? [prompt, ...images]
-        : prompt
-
-      const result = await model.generateContent(contentPayload as any)
-      const response = await result.response
-      const text = response.text()
-
-      if (!text) {
-        throw new Error('Empty response from model')
-      }
-
-      // 4. Log to AiAdviceLog
-      prisma.aiAdviceLog
-        .create({
-          data: {
-            userId,
-            logType: logType === 'stock_insight' ? 'advisor' : logType,
-            prompt,
-            response: text,
-            modelUsed: modelId,
-          },
+    for (const modelId of modelsToTry) {
+      try {
+        const model = ai.getGenerativeModel({
+          model: modelId,
+          ...(systemInstruction ? { systemInstruction } : {}),
+          generationConfig: {
+            ...(responseMimeType ? { responseMimeType } : {}),
+            ...(effectiveThinkingBudget !== undefined
+              ? { thinkingConfig: { thinkingBudget: effectiveThinkingBudget } }
+              : {}),
+          } as any,
         })
-        .catch((err) => console.error('[AiAdviceLog Error]', err))
 
-      return {
-        text,
-        modelUsed: modelId,
-      }
-    } catch (err: any) {
-      lastError = err
-      const errMsg = err?.message || ''
-      console.warn(`[Gemini] Model ${modelId} failed:`, errMsg)
+        const contentPayload = images && images.length > 0 ? [prompt, ...images] : prompt
 
-      // If user selected manual mode, do not fallback
-      if (userSettings?.aiModelMode === 'manual') {
-        break
-      }
+        const result = await model.generateContent(contentPayload as any)
+        const response = await result.response
+        const text = response.text()
 
-      // If rate limit (429) or quota exceeded, proceed to next model
-      if (errMsg.includes('429') || errMsg.includes('Quota') || errMsg.includes('ResourceExhausted')) {
-        continue
+        if (!text) {
+          throw new Error('Empty response from model')
+        }
+
+        // Map logType safely to Prisma enum (advisor, weekly_digest, forecast_explain, tax_explain, csv_mapping, quick_add_multimodal)
+        const validDbLogType =
+          logType === 'weekly_digest' ||
+          logType === 'forecast_explain' ||
+          logType === 'tax_explain' ||
+          logType === 'csv_mapping' ||
+          logType === 'quick_add_multimodal'
+            ? logType
+            : 'advisor'
+
+        // 4. Log to AiAdviceLog asynchronously
+        prisma.aiAdviceLog
+          .create({
+            data: {
+              userId,
+              logType: validDbLogType,
+              prompt,
+              response: text,
+              modelUsed: modelId,
+            },
+          })
+          .catch((err) => console.error('[AiAdviceLog Error]', err))
+
+        return {
+          text,
+          modelUsed: modelId,
+        }
+      } catch (err: any) {
+        lastError = err
+        const errMsg = err?.message || ''
+        console.warn(`[Gemini] Model ${modelId} with key #${keyIdx + 1} failed:`, errMsg)
+
+        // If rate limit (429) or quota exceeded, or invalid key on user key:
+        // Try next model, or let loop fall through to system key fallback
+        const isQuotaOrAuth =
+          errMsg.includes('429') ||
+          errMsg.includes('Quota') ||
+          errMsg.includes('ResourceExhausted') ||
+          errMsg.includes('API_KEY_INVALID')
+
+        if (userSettings?.aiModelMode === 'manual' && !isQuotaOrAuth) {
+          break
+        }
       }
+    }
+
+    if (isUserKey && apiKeysToTry.length > 1) {
+      console.warn('[Gemini] User key exhausted or failed, falling back to system key...')
     }
   }
 

@@ -250,6 +250,7 @@ export async function POST(req: NextRequest) {
         : `วิเคราะห์ตามเป้าหมายของตะกร้า "${bucket.name}" (${bucket.description || ''})`
 
     const prompt = `
+[AI Strategy Bucket Chat: ${bucket.name}]
 คุณเป็นที่ปรึกษาการลงทุนส่วนบุคคลอัจฉริยะ (AI Portfolio Strategist)
 ผู้ใช้กำลังถามคำถามเจาะจงเกี่ยวกับตะกร้าพอร์ตย่อยชื่อ: "${bucket.name}" (${strategyMeta.label})
 
@@ -285,7 +286,8 @@ ${roleSpecificInstruction}
       const { text, modelUsed } = await callGemini({
         userId,
         prompt,
-        logType: 'advisor',
+        logType: 'bucket_chat',
+        thinkingBudget: 0,
         systemInstruction:
           'คุณเป็น AI Strategist ประจำพอร์ตการลงทุน ตอบสั้น กระชับ ฟันธงชัดเจน อิงตัวเลขต้นทุนและแนวรับแนวต้านจริงของผู้ใช้',
       })

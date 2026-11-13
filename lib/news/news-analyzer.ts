@@ -798,6 +798,7 @@ ${newsDigest}
         userId,
         prompt,
         logType: 'advisor',
+        thinkingBudget: 0,
         responseMimeType: 'application/json',
       })
 
@@ -1577,6 +1578,7 @@ export async function generateNewsDeepDive(
       userId,
       prompt,
       logType: 'advisor',
+      thinkingBudget: 0,
       responseMimeType: 'application/json',
     })
 

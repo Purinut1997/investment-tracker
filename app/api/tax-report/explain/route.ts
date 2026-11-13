@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { getExchangeRate } from '@/lib/market-data/frankfurter'
 
 export const maxDuration = 45
 
@@ -51,7 +52,15 @@ export async function POST(req: NextRequest) {
       repatriated = false,
     } = await req.json()
 
-    const fx = usdThbRate ?? 35.5
+    let fx = Number(usdThbRate) || 0
+    if (fx <= 0) {
+      try {
+        const liveFx = await getExchangeRate('USD', 'THB')
+        fx = liveFx && liveFx > 0 ? liveFx : 34.0
+      } catch {
+        fx = 34.0
+      }
+    }
     const taxYear2024 = 2024  // rule change year (ป.161/2566)
 
     const divGrossUSD = Number(dividends?.totalDividendGrossUSD ?? 0)

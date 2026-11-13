@@ -21,15 +21,6 @@ export async function GET(req: NextRequest) {
       select: { response: true, modelUsed: true, createdAt: true },
     })
 
-    const hasThai = latestLog?.response ? /[ก-๙]/.test(latestLog.response) : false
-    if (!hasThai && latestLog) {
-      return NextResponse.json({
-        explanation: null,
-        modelUsed: null,
-        updatedAt: null,
-      })
-    }
-
     return NextResponse.json({
       explanation: latestLog?.response ?? null,
       modelUsed: latestLog?.modelUsed ?? null,
@@ -77,7 +68,7 @@ export async function POST(req: NextRequest) {
   • กรณีตลาดแย่ (P10 Bear Market): ฿${Number(finalP10).toLocaleString()}
   • กรณีมัธยฐานหลัก (P50 Expected Wealth): ฿${Number(finalP50).toLocaleString()}
   • กรณีตลาดดีเยี่ยม (P90 Bull Market): ฿${Number(finalP90).toLocaleString()}
-${adjustInflation && finalRealP50 ? `- อำนาจซื้อแท้จริงหลังหักเงินเฟ้อ (Real Purchasing Power): ฿${Number(finalRealP50).toLocaleString()}` : ''}
+${adjustInflation && finalRealP50 ? `- อำนาจซื้อแท้จริงหลังหักเงินเฟ้อ (Real Purchasing Power): ฿${Number(finalRealP50).toLocaleString()}` : '- หมายเหตุ: ผู้ใช้ไม่ได้เลือกตัวเลือกปรับเงินเฟ้อ ให้วิเคราะห์มูลค่าพอร์ตในรูปแบบตัวเลข Nominal Value โดยไม่ต้องคาดเดาเงินเฟ้อเอง'}
 ${retirementMonthlyIncome ? `- เงินเดือนเกษียณใช้ชีวิตตามกฎ 4% Rule: ฿${Number(retirementMonthlyIncome).toLocaleString()}/เดือน` : ''}
 ${dividendMonthlyIncome ? `- กระแสเงินปันผลรับแท้จริงต่อเดือน: ฿${Number(dividendMonthlyIncome).toLocaleString()}/เดือน` : ''}
 ${milestonesSummary ? `- ไทม์ไลน์หลักไมล์สำคัญ: ${milestonesSummary}` : ''}
@@ -93,7 +84,7 @@ ${milestonesSummary ? `- ไทม์ไลน์หลักไมล์สำ�
 
 ### 📈 1. การตีความผลลัพธ์และอำนาจซื้อแท้จริง (Executive Interpretation & Inflation Reality)
 - วิเคราะห์ผลลัพธ์มัธยฐาน P50 เทียบกับเป้าหมายที่ตั้งไว้
-- ชี้ให้เห็นถึงความเสี่ยงกรณีตลาดแย่ (P10) และผลกระทบของการกัดกร่อนจากเงินเฟ้อต่ออำนาจซื้อแท้จริง
+${adjustInflation ? '- ชี้ให้เห็นถึงความเสี่ยงกรณีตลาดแย่ (P10) และผลกระทบของการกัดกร่อนจากเงินเฟ้อต่ออำนาจซื้อแท้จริง' : '- ชี้ให้เห็นถึงความเสี่ยงกรณีตลาดแย่ (P10) และการปกป้องเงินต้นในระยะยาว'}
 - วิเคราะห์กระแสเงินสดเกษียณจากกฎ 4% Rule และเงินปันผลว่าเพียงพอต่อคุณภาพชีวิตจริงหรือไม่
 
 ### 🎯 2. ประเมินไทม์ไลน์และจุดเร่งทบต้น (Milestone Velocity & Compounding Effect)

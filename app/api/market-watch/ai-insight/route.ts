@@ -119,6 +119,34 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanSymbol = symbol.toUpperCase()
+    const { forceRefresh = false } = body
+
+    // 1. Check recent cache (within 12 hours) if not forcing refresh
+    if (!forceRefresh) {
+      const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000)
+      const existingLog = await prisma.aiAdviceLog.findFirst({
+        where: {
+          userId: session.user.id,
+          prompt: { contains: `[AI Stock Deep Dive Analysis: ${cleanSymbol}]` },
+          createdAt: { gte: twelveHoursAgo },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (existingLog) {
+        const structured = parseStructuredInsight(existingLog.response)
+        if (structured) {
+          return NextResponse.json({
+            insight: existingLog.response,
+            structuredInsight: structured,
+            modelUsed: existingLog.modelUsed,
+            updatedAt: existingLog.createdAt.toISOString(),
+            timestamp: new Date(existingLog.createdAt).getTime(),
+            cached: true,
+          })
+        }
+      }
+    }
 
     const prompt = `
 [AI Stock Deep Dive Analysis: ${cleanSymbol}]
