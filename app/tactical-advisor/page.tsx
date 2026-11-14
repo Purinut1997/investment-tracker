@@ -421,32 +421,39 @@ export default function TacticalAdvisorPage() {
                   </div>
 
                   {/* ── THE 4 PILLARS GRID ── */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
                     {/* เสาที่ 1: Sentiment & Volatility */}
-                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-3.5 hover:border-white/[0.12] transition-colors">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
-                            <Flame className="w-4 h-4 text-rose-400" />
-                            เสาที่ 1: อารมณ์ & ความกลัว
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-mono">Sentiment</span>
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-4 hover:border-white/[0.12] transition-colors">
+                      <div className="space-y-3.5">
+                        {/* Clean Stacked Header */}
+                        <div className="flex items-center gap-2.5 pb-2 border-b border-white/[0.04]">
+                          <div className="p-1.5 rounded-lg bg-rose-500/15 text-rose-400 shrink-0">
+                            <Flame className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-bold text-rose-300">
+                              เสาที่ 1: อารมณ์ & ความกลัว
+                            </h4>
+                            <span className="text-[11px] text-slate-400 font-mono block">
+                              Sentiment & Volatility
+                            </span>
+                          </div>
                         </div>
 
                         {/* CNN Fear & Greed */}
-                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-2">
                           <div className="flex items-center justify-between text-xs text-slate-300">
                             <span>CNN Fear & Greed:</span>
-                            <span className="font-mono font-bold text-base text-white">
+                            <span className="font-mono font-bold text-base sm:text-lg text-white">
                               {pillars.sentiment.fearGreedScore}/100
                             </span>
                           </div>
-                          <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center justify-between gap-2 text-[11px] flex-wrap">
                             <span className="px-2 py-0.5 rounded-md bg-white/[0.06] text-slate-200 font-medium">
                               {pillars.sentiment.fearGreedLabelTh}
                             </span>
                             <span
-                              className={`font-semibold ${
+                              className={`font-semibold whitespace-nowrap ${
                                 pillars.sentiment.fearGreed1WDiff < 0
                                   ? 'text-rose-400'
                                   : pillars.sentiment.fearGreed1WDiff > 0
@@ -455,66 +462,79 @@ export default function TacticalAdvisorPage() {
                               }`}
                             >
                               {pillars.sentiment.fearGreed1WDiff < 0
-                                ? `⭣ ${pillars.sentiment.fearGreed1WDiff} pts vs วีคก่อน`
+                                ? `⭣ ลดลง ${Math.abs(pillars.sentiment.fearGreed1WDiff)} pts vs วีคก่อน`
                                 : pillars.sentiment.fearGreed1WDiff > 0
-                                ? `⭡ +${pillars.sentiment.fearGreed1WDiff} pts vs วีคก่อน`
+                                ? `⭡ เพิ่มขึ้น ${pillars.sentiment.fearGreed1WDiff} pts vs วีคก่อน`
                                 : 'เท่ากับสัปดาห์ก่อน'}
                             </span>
                           </div>
                         </div>
 
                         {/* VIX Volatility Index */}
-                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-2">
                           <div className="flex items-center justify-between text-xs text-slate-300">
                             <span>VIX Index (ความผันผวน):</span>
-                            <span className="font-mono font-bold text-base text-white">
+                            <span className="font-mono font-bold text-base sm:text-lg text-white">
                               {pillars.sentiment.vixValue.toFixed(2)} pts
                             </span>
                           </div>
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span
-                              className={`px-2 py-0.5 rounded-md font-medium border ${
-                                pillars.sentiment.vixStatus === 'NORMAL'
-                                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-                                  : pillars.sentiment.vixStatus === 'ELEVATED'
-                                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-                                  : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
-                              }`}
-                            >
-                              {pillars.sentiment.vixStatusLabel}
-                            </span>
-                            <span className="text-slate-400 text-[10px]">เกณฑ์: &lt;20 ปกติ | &gt;30 Panic</span>
+                          <div className="space-y-1.5 pt-1 border-t border-white/[0.04]">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-md font-medium text-xs border ${
+                                  pillars.sentiment.vixStatus === 'NORMAL'
+                                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                                    : pillars.sentiment.vixStatus === 'ELEVATED'
+                                    ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                                    : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                                }`}
+                              >
+                                {pillars.sentiment.vixStatusLabel}
+                              </span>
+                              <span className="text-slate-400 text-[10px] font-mono">
+                                เกณฑ์: &lt;20 ปกติ | &gt;30 Panic
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-1 border-t border-white/[0.04]">
+                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-2 border-t border-white/[0.04]">
                         {pillars.sentiment.summary}
                       </p>
                     </div>
 
                     {/* เสาที่ 2: Market Trend & Breadth */}
-                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-3.5 hover:border-white/[0.12] transition-colors">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
-                            <BarChart3 className="w-4 h-4 text-sky-400" />
-                            เสาที่ 2: โมเมนตัม & แนวโน้ม
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-mono">Trend & Breadth</span>
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-4 hover:border-white/[0.12] transition-colors">
+                      <div className="space-y-3.5">
+                        {/* Clean Stacked Header */}
+                        <div className="flex items-center gap-2.5 pb-2 border-b border-white/[0.04]">
+                          <div className="p-1.5 rounded-lg bg-sky-500/15 text-sky-400 shrink-0">
+                            <BarChart3 className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-bold text-sky-300">
+                              เสาที่ 2: โมเมนตัม & แนวโน้ม
+                            </h4>
+                            <span className="text-[11px] text-slate-400 font-mono block">
+                              Trend & Breadth
+                            </span>
+                          </div>
                         </div>
 
                         {/* S&P 500 */}
                         <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-300">S&P 500:</span>
-                            <div className="text-right">
+                          <div className="flex items-center justify-between text-xs gap-2">
+                            <span className="text-slate-300 shrink-0">S&P 500:</span>
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <span className="font-mono font-bold text-white text-xs sm:text-sm">
                                 {pillars.momentum.spxPrice.toLocaleString()} pts
                               </span>
                               <span
-                                className={`ml-1 text-[11px] font-mono ${
-                                  pillars.momentum.spxChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold whitespace-nowrap ${
+                                  pillars.momentum.spxChangePercent >= 0
+                                    ? 'bg-emerald-500/15 text-emerald-300'
+                                    : 'bg-rose-500/15 text-rose-300'
                                 }`}
                               >
                                 {pillars.momentum.spxChangePercent >= 0 ? '+' : ''}
@@ -522,7 +542,7 @@ export default function TacticalAdvisorPage() {
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between text-[11px] pt-0.5 border-t border-white/[0.04]">
+                          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/[0.04]">
                             <span className="text-slate-400">Drawdown จากจุดสูงสุด:</span>
                             <span className="font-mono font-bold text-rose-300">
                               {pillars.momentum.spxDrawdownPercent.toFixed(2)}%
@@ -532,15 +552,17 @@ export default function TacticalAdvisorPage() {
 
                         {/* NASDAQ */}
                         <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-300">NASDAQ (Tech):</span>
-                            <div className="text-right">
+                          <div className="flex items-center justify-between text-xs gap-2">
+                            <span className="text-slate-300 shrink-0">NASDAQ (Tech):</span>
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <span className="font-mono font-bold text-white text-xs sm:text-sm">
                                 {pillars.momentum.nasdaqPrice.toLocaleString()} pts
                               </span>
                               <span
-                                className={`ml-1 text-[11px] font-mono ${
-                                  pillars.momentum.nasdaqChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold whitespace-nowrap ${
+                                  pillars.momentum.nasdaqChangePercent >= 0
+                                    ? 'bg-emerald-500/15 text-emerald-300'
+                                    : 'bg-rose-500/15 text-rose-300'
                                 }`}
                               >
                                 {pillars.momentum.nasdaqChangePercent >= 0 ? '+' : ''}
@@ -548,7 +570,7 @@ export default function TacticalAdvisorPage() {
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between text-[11px] pt-0.5 border-t border-white/[0.04]">
+                          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/[0.04]">
                             <span className="text-slate-400">Drawdown จากจุดสูงสุด:</span>
                             <span className="font-mono font-bold text-rose-300">
                               {pillars.momentum.nasdaqDrawdownPercent.toFixed(2)}%
@@ -556,40 +578,51 @@ export default function TacticalAdvisorPage() {
                           </div>
                         </div>
 
-                        {/* Breadth & EMA */}
-                        <div className="text-[11px] text-slate-300 space-y-1">
-                          <div className="flex items-start gap-1.5">
-                            <span className="text-sky-400 font-bold shrink-0">•</span>
-                            <span className="truncate">{pillars.momentum.breadthStatus}</span>
+                        {/* Breadth & EMA: FULL TEXT (NO TRUNCATE) */}
+                        <div className="text-xs text-slate-200 space-y-2 pt-0.5">
+                          <div className="flex items-start gap-2">
+                            <span className="text-sky-400 font-bold shrink-0 mt-0.5">•</span>
+                            <span className="leading-relaxed">
+                              <strong className="text-white font-medium">Breadth:</strong> {pillars.momentum.breadthStatus}
+                            </span>
                           </div>
-                          <div className="flex items-start gap-1.5">
-                            <span className="text-sky-400 font-bold shrink-0">•</span>
-                            <span className="truncate">{pillars.momentum.spxEmaStatus}</span>
+                          <div className="flex items-start gap-2">
+                            <span className="text-sky-400 font-bold shrink-0 mt-0.5">•</span>
+                            <span className="leading-relaxed">
+                              <strong className="text-white font-medium">เส้น EMA:</strong> {pillars.momentum.spxEmaStatus}
+                            </span>
                           </div>
                         </div>
                       </div>
 
-                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-1 border-t border-white/[0.04]">
+                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-2 border-t border-white/[0.04]">
                         {pillars.momentum.summary}
                       </p>
                     </div>
 
                     {/* เสาที่ 3: Macro & Liquidity */}
-                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-3.5 hover:border-white/[0.12] transition-colors">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
-                            <Scale className="w-4 h-4 text-purple-400" />
-                            เสาที่ 3: ต้นทุนการเงิน & Macro
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-mono">Macro & Rates</span>
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-4 hover:border-white/[0.12] transition-colors">
+                      <div className="space-y-3.5">
+                        {/* Clean Stacked Header */}
+                        <div className="flex items-center gap-2.5 pb-2 border-b border-white/[0.04]">
+                          <div className="p-1.5 rounded-lg bg-purple-500/15 text-purple-400 shrink-0">
+                            <Scale className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-bold text-purple-300">
+                              เสาที่ 3: ต้นทุนการเงิน & Macro
+                            </h4>
+                            <span className="text-[11px] text-slate-400 font-mono block">
+                              Macro & Rates
+                            </span>
+                          </div>
                         </div>
 
                         {/* US 10Y Yield */}
-                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-2">
                           <div className="flex items-center justify-between text-xs text-slate-300">
                             <span>US 10Y Bond Yield:</span>
-                            <span className="font-mono font-bold text-base text-white">
+                            <span className="font-mono font-bold text-base sm:text-lg text-white">
                               {pillars.macroLiquidity.us10yYield.toFixed(2)}%
                             </span>
                           </div>
@@ -609,64 +642,81 @@ export default function TacticalAdvisorPage() {
                         </div>
 
                         {/* Fed Policy & CPI Expectations */}
-                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5 text-xs">
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-2 text-xs">
                           <div className="text-slate-300 font-medium">ทิศทางดอกเบี้ย Fed & เงินเฟ้อ:</div>
-                          <div className="text-[11px] text-slate-200 leading-relaxed space-y-1">
-                            <div>• Fed: {pillars.macroLiquidity.fedPolicyStance}</div>
-                            <div>• CPI/PCE: {pillars.macroLiquidity.inflationExpectation}</div>
+                          <div className="text-xs text-slate-200 leading-relaxed space-y-1.5">
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-purple-400 font-bold shrink-0 mt-0.5">•</span>
+                              <span className="leading-relaxed">
+                                <strong className="text-white font-medium">Fed:</strong> {pillars.macroLiquidity.fedPolicyStance}
+                              </span>
+                            </div>
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-purple-400 font-bold shrink-0 mt-0.5">•</span>
+                              <span className="leading-relaxed">
+                                <strong className="text-white font-medium">CPI/PCE:</strong> {pillars.macroLiquidity.inflationExpectation}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-1 border-t border-white/[0.04]">
+                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-2 border-t border-white/[0.04]">
                         {pillars.macroLiquidity.summary}
                       </p>
                     </div>
 
                     {/* เสาที่ 4: Catalysts & Fund Flows */}
-                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-3.5 hover:border-white/[0.12] transition-colors">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
-                            <Zap className="w-4 h-4 text-amber-400" />
-                            เสาที่ 4: ปัจจัยเร่ง & Fund Flows
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-mono">Flows & Events</span>
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-4 hover:border-white/[0.12] transition-colors">
+                      <div className="space-y-3.5">
+                        {/* Clean Stacked Header */}
+                        <div className="flex items-center gap-2.5 pb-2 border-b border-white/[0.04]">
+                          <div className="p-1.5 rounded-lg bg-amber-500/15 text-amber-400 shrink-0">
+                            <Zap className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-bold text-amber-300">
+                              เสาที่ 4: ปัจจัยเร่ง & Fund Flows
+                            </h4>
+                            <span className="text-[11px] text-slate-400 font-mono block">
+                              Flows & Events
+                            </span>
+                          </div>
                         </div>
 
                         {/* Safe-Haven Flow & Assets */}
-                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-300">กระแสเงินทุน:</span>
-                            <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/25 text-[11px] font-semibold">
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-2">
+                          <div className="flex items-center justify-between text-xs gap-2">
+                            <span className="text-slate-300 shrink-0">กระแสเงินทุน:</span>
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/25 text-[11px] font-semibold text-right">
                               {pillars.catalystsAndFlows.safeHavenFlowLabel}
                             </span>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] font-mono border-t border-white/[0.04]">
-                            <div className="text-slate-300">
-                              ทองคำ: <strong className="text-amber-200">${pillars.catalystsAndFlows.goldPrice.toLocaleString()}</strong>
+                          <div className="flex items-center justify-between pt-1.5 text-xs font-mono border-t border-white/[0.04] gap-2">
+                            <div className="text-slate-300 whitespace-nowrap">
+                              ทองคำ: <strong className="text-amber-200 font-bold">${pillars.catalystsAndFlows.goldPrice.toLocaleString()}</strong>
                             </div>
-                            <div className="text-slate-300 text-right">
-                              DXY: <strong className="text-indigo-200">{pillars.catalystsAndFlows.dxyPrice.toFixed(2)}</strong>
+                            <div className="text-slate-300 whitespace-nowrap text-right">
+                              DXY: <strong className="text-indigo-200 font-bold">{pillars.catalystsAndFlows.dxyPrice.toFixed(2)}</strong>
                             </div>
                           </div>
                         </div>
 
-                        {/* 3 Key Catalysts */}
-                        <div className="space-y-1.5">
-                          <span className="text-[11px] font-bold text-slate-300 block">⚡ ข่าวใหญ่เฉพาะช่วง:</span>
-                          <div className="space-y-1 text-[11px] text-slate-200 leading-relaxed">
+                        {/* 3 Key Catalysts: FULL TEXT (NO TRUNCATE) */}
+                        <div className="space-y-2 pt-0.5">
+                          <span className="text-xs font-bold text-slate-300 block">⚡ ข่าวใหญ่เฉพาะช่วง:</span>
+                          <div className="space-y-2 text-xs text-slate-200 leading-relaxed">
                             {pillars.catalystsAndFlows.keyCatalysts.slice(0, 3).map((c, idx) => (
-                              <div key={idx} className="flex items-start gap-1.5">
-                                <span className="text-amber-400 font-bold shrink-0">•</span>
-                                <span className="truncate">{c}</span>
+                              <div key={idx} className="flex items-start gap-2">
+                                <span className="text-amber-400 font-bold shrink-0 mt-0.5">•</span>
+                                <span className="leading-relaxed">{c}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                       </div>
 
-                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-1 border-t border-white/[0.04]">
+                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-2 border-t border-white/[0.04]">
                         {pillars.catalystsAndFlows.summary}
                       </p>
                     </div>
