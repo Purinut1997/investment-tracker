@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import Link from 'next/link'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
@@ -33,6 +34,7 @@ import {
   BarChart3,
   Scale,
   DollarSign,
+  Bot,
 } from 'lucide-react'
 import type { TacticalAdvisorPayload, TacticalActionItem } from '@/app/api/tactical-advisor/route'
 
@@ -1169,17 +1171,33 @@ export default function TacticalAdvisorPage() {
 
             {/* ── CARD 6: COPILOT CHAT BOX ── */}
             <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-[#121622] via-[#141A28] to-[#121622] border border-indigo-500/25 shadow-lg space-y-4">
-              <div className="flex items-center gap-2.5">
-                <MessageSquare className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-base font-bold text-white tracking-wide">
-                  6. ถาม AI เจาะลึกเฉพาะกิจ (Tactical Copilot)
-                </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-white/[0.06]">
+                <div className="flex items-center gap-2.5">
+                  <MessageSquare className="w-5 h-5 text-indigo-400" />
+                  <div>
+                    <h3 className="text-base font-bold text-white tracking-wide">
+                      6. ถาม AI เจาะลึกเฉพาะกิจ (Tactical Copilot)
+                    </h3>
+                    <span className="text-xs text-slate-400">
+                      ระบบป้อนข้อมูลพอร์ตจริง + สัญญาณกราฟ (RSI/SMA/Pivots) + มหภาค 4 เสาหลักให้ AI ครบถ้วน
+                    </span>
+                  </div>
+                </div>
+
+                <Link
+                  href="/ai-advisor"
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-all self-start sm:self-auto shadow-sm"
+                >
+                  <Bot className="w-4 h-4 text-indigo-400" />
+                  <span>เปิดห้องสนทนาเต็มหน้าจอ 360° AI Suite ↗</span>
+                </Link>
               </div>
 
               {/* 1-Click Quick Question Pills */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-slate-400 text-xs sm:text-sm font-medium">ตัวอย่างคำถามคลิกเดียว:</span>
                 {[
+                  'อ่านกราฟและจุดกลับตัวของหุ้นทุกตัวที่ถืออยู่',
                   'ถ้าตลาดร่วงอีก 5% พอร์ตฉันจะกระทบแค่ไหน?',
                   'เงินสดที่มีอยู่ตอนนี้ ควรแบ่งเข้าตัวไหนเป็นไม้แรก?',
                   'ตัวไหนในพอร์ตควรขายทำกำไรก่อนสิ้นปีเพื่อบริหารภาษี?',
