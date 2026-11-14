@@ -7,6 +7,7 @@ import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { runTacticalAnalysis } from '@/app/api/tactical-advisor/route'
 
 export const maxDuration = 60
 
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
     date: todayStr,
     usersChecked: 0,
     briefsGenerated: 0,
+    tacticalSnapshotsGenerated: 0,
     skippedAlreadyGenerated: 0,
     errors: [] as string[],
     timestamp: new Date().toISOString(),
@@ -117,9 +119,12 @@ export async function GET(req: NextRequest) {
 
     for (const { userId } of distinctUsers) {
       try {
-        // Check if an AI brief for today already exists in Bangkok time
+        const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
+        const baseCurrency = userSettings?.baseCurrency ?? 'THB'
         const startOfTodayBangkok = new Date(new Date().setHours(0, 0, 0, 0))
-        const existingLog = await prisma.aiAdviceLog.findFirst({
+
+        // 1. Daily Morning Briefing
+        const existingBriefLog = await prisma.aiAdviceLog.findFirst({
           where: {
             userId,
             logType: 'advisor',
@@ -128,39 +133,28 @@ export async function GET(req: NextRequest) {
           },
         })
 
-        if (existingLog) {
-          results.skippedAlreadyGenerated++
-          continue
-        }
+        if (!existingBriefLog) {
+          // Calculate user's current holdings
+          const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
+          if (holdingsResult.holdings && holdingsResult.holdings.length > 0) {
+            // Scan technical triggers for top holdings
+            const topHoldings = holdingsResult.holdings.slice(0, 8)
+            const triggerLines: string[] = []
 
-        const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
-        const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+            for (const h of topHoldings) {
+              try {
+                const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
+                const signal = await fetchSingleTickerTechnicalSignal(h.ticker, marketHint)
+                const currSym = h.currency === 'THB' ? '฿' : '$'
+                const s1Str = signal?.supportS1 ? `${currSym}${signal.supportS1}` : 'N/A'
+                triggerLines.push(
+                  `- ${h.ticker} (${h.assetName}): ราคา ${currSym}${h.currentPrice} | สัดส่วน ${h.allocationPercent?.toFixed(1)}% | RSI(14): ${signal?.rsi14 ?? 'N/A'} | S1: ${s1Str} | สัญญาณ: ${signal?.badgeText || 'ถือตามรอบปกติ'}`
+                )
+              } catch {}
+            }
 
-        // Calculate user's current holdings
-        const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
-        if (!holdingsResult.holdings || holdingsResult.holdings.length === 0) {
-          continue
-        }
-
-        // Scan technical triggers for top holdings
-        const topHoldings = holdingsResult.holdings.slice(0, 8)
-        const triggerLines: string[] = []
-
-        for (const h of topHoldings) {
-          try {
-            const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
-            const signal = await fetchSingleTickerTechnicalSignal(h.ticker, marketHint)
-            const currSym = h.currency === 'THB' ? '฿' : '$'
-            const s1Str = signal?.supportS1 ? `${currSym}${signal.supportS1}` : 'N/A'
-            triggerLines.push(
-              `- ${h.ticker} (${h.assetName}): ราคา ${currSym}${h.currentPrice} | สัดส่วน ${h.allocationPercent?.toFixed(1)}% | RSI(14): ${signal?.rsi14 ?? 'N/A'} | S1: ${s1Str} | สัญญาณ: ${signal?.badgeText || 'ถือตามรอบปกติ'}`
-            )
-          } catch {}
-        }
-
-        if (triggerLines.length === 0) continue
-
-        const prompt = `
+            if (triggerLines.length > 0) {
+              const prompt = `
 [AI Daily Investment Strategist — สรุปเช้าและแผนปฏิบัติการรายวัน]
 คุณคือ Senior Portfolio Strategist สรุปทิศทางตลาดและแผนปฏิบัติการลงทุนรายวัน วันที่ ${todayStr}:
 
@@ -193,15 +187,40 @@ ${triggerLines.join('\n')}
 - 3. **[คำสั่งสั้นๆ]:** [เหตุผล 1 ประโยค]
 `
 
-        await callGemini({
-          userId,
-          prompt,
-          logType: 'advisor',
-          systemInstruction:
-            'คุณเป็น Senior Portfolio Strategist ที่ให้คำแนะนำการลงทุนตามหลักการบริหารความเสี่ยงระดับสถาบัน ชัดเจน ตรงประเด็น ใช้ภาษาไทยเข้าใจง่าย',
-        })
+              await callGemini({
+                userId,
+                prompt,
+                logType: 'advisor',
+                systemInstruction:
+                  'คุณเป็น Senior Portfolio Strategist ที่ให้คำแนะนำการลงทุนตามหลักการบริหารความเสี่ยงระดับสถาบัน ชัดเจน ตรงประเด็น ใช้ภาษาไทยเข้าใจง่าย',
+              })
 
-        results.briefsGenerated++
+              results.briefsGenerated++
+            }
+          }
+        } else {
+          results.skippedAlreadyGenerated++
+        }
+
+        // 2. Pre-compute Daily AI Tactical Advisor Snapshot
+        try {
+          const existingTacticalLog = await prisma.aiAdviceLog.findFirst({
+            where: {
+              userId,
+              logType: 'advisor',
+              prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
+              createdAt: { gte: startOfTodayBangkok },
+            },
+          })
+
+          if (!existingTacticalLog) {
+            await runTacticalAnalysis(userId, baseCurrency)
+            results.tacticalSnapshotsGenerated++
+          }
+        } catch (tacErr: any) {
+          console.warn(`[Cron Tactical Advisor error for ${userId}]`, tacErr)
+          results.errors.push(`Tactical User ${userId}: ${tacErr?.message || 'Error'}`)
+        }
       } catch (userErr: any) {
         results.errors.push(`User ${userId}: ${userErr.message}`)
       }

@@ -65,23 +65,72 @@ export interface TacticalAdvisorPayload {
   generatedAt: string
 }
 
-function getTodayBangkokDateString(): string {
+export function getBangkokDateString(date: Date = new Date()): string {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Bangkok',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   })
-  return formatter.format(new Date())
+  return formatter.format(date)
 }
 
-function formatThaiDate(date: Date): string {
+export function formatThaiDate(date: Date): string {
   return date.toLocaleDateString('th-TH', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     timeZone: 'Asia/Bangkok',
   })
+}
+
+export function parseAdviceResponse(rawText: string): any {
+  try {
+    return JSON.parse(rawText)
+  } catch {
+    const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim()
+    return JSON.parse(cleaned)
+  }
+}
+
+export function normalizeStoredPayload(
+  rawJson: any,
+  createdAt: Date,
+  modelUsed?: string
+): TacticalAdvisorPayload {
+  return {
+    asOfDate: getBangkokDateString(createdAt),
+    asOfDateThai: formatThaiDate(createdAt),
+    marketRegime: rawJson.marketRegime || {
+      status: 'VOLATILE_CAUTION',
+      statusLabelTh: 'ตลาดผันผวนระมัดระวัง',
+      summaryTh: 'ไม่มีสรุป',
+      riskLevel: 3,
+      riskLevelLabel: 'ปานกลาง',
+      fearGreedScore: 50,
+      fearGreedLabel: 'Neutral',
+      macroDrivers: [],
+    },
+    portfolioResilience: rawJson.portfolioResilience || {
+      score: 70,
+      status: 'MODERATE',
+      statusLabelTh: 'ปานกลาง',
+      strengths: [],
+      vulnerabilities: [],
+      thematicRiskAlert: null,
+    },
+    tacticalActions: rawJson.tacticalActions || [],
+    cashStrategy: rawJson.cashStrategy || {
+      recommendedCashPercent: 15,
+      currentCashPercent: 0,
+      currentCashTotalBase: 0,
+      baseCurrency: 'THB',
+      guidanceText: 'ถือเงินสดตามความเหมาะสม',
+    },
+    trackRecordReview: rawJson.trackRecordReview || [],
+    modelUsed: rawJson.modelUsed || modelUsed,
+    generatedAt: createdAt.toISOString(),
+  }
 }
 
 async function gatherMarketData() {
@@ -130,7 +179,7 @@ async function gatherMarketData() {
   }
 }
 
-async function runTacticalAnalysis(
+export async function runTacticalAnalysis(
   userId: string,
   baseCurrency: string
 ): Promise<TacticalAdvisorPayload> {
@@ -297,7 +346,7 @@ ${pastContextSummaries || 'ยังไม่มีประวัติคำ�
 
   const now = new Date()
   const payload: TacticalAdvisorPayload = {
-    asOfDate: getTodayBangkokDateString(),
+    asOfDate: getBangkokDateString(now),
     asOfDateThai: formatThaiDate(now),
     marketRegime: parsed.marketRegime,
     portfolioResilience: parsed.portfolioResilience,
@@ -320,48 +369,117 @@ export async function GET(req: NextRequest) {
   const userId = session.user.id
   const { searchParams } = new URL(req.url)
   const forceRefresh = searchParams.get('refresh') === 'true'
+  const requestedDate = searchParams.get('date') // e.g. "2026-11-14"
 
   try {
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+    const todayBangkok = getBangkokDateString()
 
-    // 1. Check cached tactical advice if not forcing refresh
-    if (!forceRefresh) {
-      const latestLog = await prisma.aiAdviceLog.findFirst({
-        where: {
-          userId,
-          logType: 'advisor',
-          prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
+    // 1. Fetch past tactical advice logs to build timeline of available dates
+    const pastLogs = await prisma.aiAdviceLog.findMany({
+      where: {
+        userId,
+        logType: 'advisor',
+        prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      select: { id: true, createdAt: true, response: true, modelUsed: true },
+    })
 
-      if (latestLog) {
-        const ageHours = (Date.now() - new Date(latestLog.createdAt).getTime()) / (1000 * 60 * 60)
-        if (ageHours < 8) {
-          try {
-            const parsed = JSON.parse(latestLog.response)
-            return NextResponse.json({
-              success: true,
-              data: parsed,
-              cached: true,
-              generatedAt: latestLog.createdAt.toISOString(),
-              modelUsed: latestLog.modelUsed,
-            })
-          } catch {
-            // fallback to re-generate if parse fails
-          }
-        }
+    // Group logs by Bangkok calendar day (taking the newest log for each day)
+    const dayMap = new Map<string, (typeof pastLogs)[0]>()
+    for (const log of pastLogs) {
+      const dayKey = getBangkokDateString(new Date(log.createdAt))
+      if (!dayMap.has(dayKey)) {
+        dayMap.set(dayKey, log)
       }
     }
 
-    // 2. Run analysis
+    const availableDates = Array.from(dayMap.entries()).map(([dayKey, log]) => {
+      const isToday = dayKey === todayBangkok
+      return {
+        dateKey: dayKey,
+        labelTh: isToday
+          ? `วันนี้ (${formatThaiDate(new Date(log.createdAt))})`
+          : formatThaiDate(new Date(log.createdAt)),
+        createdAt: log.createdAt.toISOString(),
+        isToday,
+      }
+    })
+
+    // 2. If a specific historical date is requested
+    if (requestedDate && requestedDate !== todayBangkok) {
+      const targetLog = dayMap.get(requestedDate)
+      if (targetLog) {
+        try {
+          const parsed = parseAdviceResponse(targetLog.response)
+          const normalized = normalizeStoredPayload(parsed, targetLog.createdAt, targetLog.modelUsed)
+          return NextResponse.json({
+            success: true,
+            data: normalized,
+            cached: true,
+            isHistorical: true,
+            selectedDate: requestedDate,
+            availableDates,
+            generatedAt: targetLog.createdAt.toISOString(),
+            modelUsed: targetLog.modelUsed,
+          })
+        } catch (err) {
+          console.error('[Failed to parse historical log]', err)
+        }
+      }
+      return NextResponse.json(
+        { error: `ไม่พบบันทึกการวิเคราะห์ของวันที่ ${requestedDate}` },
+        { status: 404 }
+      )
+    }
+
+    // 3. Today's snapshot: if not forcing refresh, check if today's snapshot already exists in DB
+    const todayLog = dayMap.get(todayBangkok)
+    if (!forceRefresh && todayLog) {
+      try {
+        const parsed = parseAdviceResponse(todayLog.response)
+        const normalized = normalizeStoredPayload(parsed, todayLog.createdAt, todayLog.modelUsed)
+        return NextResponse.json({
+          success: true,
+          data: normalized,
+          cached: true,
+          isHistorical: false,
+          selectedDate: todayBangkok,
+          availableDates,
+          generatedAt: todayLog.createdAt.toISOString(),
+          modelUsed: todayLog.modelUsed,
+        })
+      } catch {
+        // Fallback to regenerate
+      }
+    }
+
+    // 4. Otherwise, compute fresh analysis for today
     const payload = await runTacticalAnalysis(userId, baseCurrency)
+
+    // Reconstruct availableDates including today's new run if it wasn't there
+    const updatedDates = availableDates.some((d) => d.dateKey === todayBangkok)
+      ? availableDates
+      : [
+          {
+            dateKey: todayBangkok,
+            labelTh: `วันนี้ (${payload.asOfDateThai})`,
+            createdAt: payload.generatedAt,
+            isToday: true,
+          },
+          ...availableDates,
+        ]
 
     return NextResponse.json({
       success: true,
       data: payload,
       cached: false,
+      isHistorical: false,
+      selectedDate: todayBangkok,
+      availableDates: updatedDates,
       generatedAt: payload.generatedAt,
       modelUsed: payload.modelUsed,
     })

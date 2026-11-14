@@ -32,7 +32,26 @@ import {
 } from 'lucide-react'
 import type { TacticalAdvisorPayload, TacticalActionItem } from '@/app/api/tactical-advisor/route'
 
+export interface AvailableDateItem {
+  dateKey: string
+  labelTh: string
+  createdAt: string
+  isToday: boolean
+}
+
+export interface TacticalAdvisorApiResponse {
+  success: boolean
+  data: TacticalAdvisorPayload
+  cached: boolean
+  isHistorical?: boolean
+  selectedDate?: string
+  availableDates?: AvailableDateItem[]
+  generatedAt: string
+  modelUsed: string
+}
+
 export default function TacticalAdvisorPage() {
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedActionFilter, setSelectedActionFilter] = useState<'ALL' | 'ACCUMULATE' | 'HOLD_WATCH' | 'TRIM_PROFIT'>('ALL')
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; market: string } | null>(null)
@@ -42,14 +61,9 @@ export default function TacticalAdvisorPage() {
   const [isChatLoading, setIsChatLoading] = useState(false)
   const [chatAnswer, setChatAnswer] = useState<string | null>(null)
 
-  // Fetch Tactical Advisor Data with SWR
-  const { data: responseData, error, isLoading, mutate } = useSWR<{
-    success: boolean
-    data: TacticalAdvisorPayload
-    cached: boolean
-    generatedAt: string
-    modelUsed: string
-  }>('/api/tactical-advisor', {
+  // Fetch Tactical Advisor Data with SWR (with selected historical date if any)
+  const endpointUrl = selectedDate ? `/api/tactical-advisor?date=${selectedDate}` : '/api/tactical-advisor'
+  const { data: responseData, error, isLoading, mutate } = useSWR<TacticalAdvisorApiResponse>(endpointUrl, {
     revalidateOnFocus: false,
     dedupingInterval: 60000,
   })
@@ -60,6 +74,7 @@ export default function TacticalAdvisorPage() {
   const handleRefresh = async () => {
     try {
       setIsRefreshing(true)
+      setSelectedDate(null)
       const res = await fetch('/api/tactical-advisor?refresh=true', { method: 'GET' })
       if (res.ok) {
         const json = await res.json()
@@ -127,9 +142,15 @@ export default function TacticalAdvisorPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
+            {responseData?.cached && (
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-1.5 shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{responseData.isHistorical ? 'บันทึกประวัติย้อนหลัง' : 'โหลดทันใจจากแคชเช้า (<50ms)'}</span>
+              </span>
+            )}
             {payload?.asOfDateThai && (
-              <span className="text-[11px] font-mono text-slate-400 hidden md:inline">
+              <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
                 ข้อมูล ณ: {payload.asOfDateThai}
               </span>
             )}
@@ -138,6 +159,7 @@ export default function TacticalAdvisorPage() {
               onClick={handleRefresh}
               disabled={isRefreshing || isLoading}
               className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-md hover:shadow-indigo-500/25 disabled:opacity-50"
+              title="วิเคราะห์ตลาดสดใหม่ ณ วินาทีนี้"
             >
               {isRefreshing ? (
                 <>
@@ -153,6 +175,67 @@ export default function TacticalAdvisorPage() {
             </button>
           </div>
         </div>
+
+        {/* ── DAILY TIMELINE SNAPSHOT SELECTOR ── */}
+        {responseData?.availableDates && responseData.availableDates.length > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-sm">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
+              <Calendar className="w-4 h-4 text-indigo-400" />
+              <span>บันทึกการวิเคราะห์รายวัน:</span>
+              <span className="text-[11px] font-normal text-slate-400 hidden md:inline">
+                (สลับดูประวัติคำแนะนำย้อนหลังได้ทันที &lt;50ms)
+              </span>
+            </div>
+
+            {/* Date Pill Selector */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              {responseData.availableDates.map((d) => {
+                const isCurrentActive = selectedDate ? selectedDate === d.dateKey : d.isToday
+                return (
+                  <button
+                    key={d.dateKey}
+                    type="button"
+                    onClick={() => {
+                      if (d.isToday) {
+                        setSelectedDate(null)
+                      } else {
+                        setSelectedDate(d.dateKey)
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                      isCurrentActive
+                        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/25 ring-1 ring-white/20'
+                        : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white border border-white/[0.06]'
+                    }`}
+                  >
+                    {d.isToday && <Sparkles className="w-3 h-3 text-amber-300" />}
+                    <span>{d.labelTh}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── HISTORICAL NOTICE BANNER (WHEN BROWSING PAST DATES) ── */}
+        {responseData?.isHistorical && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs sm:text-sm animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <History className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                คุณกำลังเปิดดู <strong>บันทึกย้อนหลังของวันที่ {payload?.asOfDateThai}</strong> (Historical Snapshot)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedDate(null)}
+              className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-bold cursor-pointer transition-colors shrink-0 self-start sm:self-auto flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>กลับสู่การวิเคราะห์ล่าสุดวันนี้</span>
+            </button>
+          </div>
+        )}
 
         {/* Loading / Error States */}
         {isLoading && !payload && (
