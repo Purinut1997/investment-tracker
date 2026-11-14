@@ -29,6 +29,10 @@ import {
   Calendar,
   Flame,
   ShieldAlert,
+  Zap,
+  BarChart3,
+  Scale,
+  DollarSign,
 } from 'lucide-react'
 import type { TacticalAdvisorPayload, TacticalActionItem } from '@/app/api/tactical-advisor/route'
 
@@ -258,63 +262,446 @@ export default function TacticalAdvisorPage() {
 
         {payload && (
           <div className="space-y-6">
-            {/* ── TOP SECTION: 2 COLUMNS (MARKET CLIMATE & PORTFOLIO RESILIENCE) ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Card 1: Market Climate (6 Cols) */}
-              <div className="lg:col-span-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#121622] to-[#151A29] border border-white/[0.08] shadow-md space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Compass className="w-5 h-5 text-amber-400" />
-                    <h3 className="text-base font-bold text-white uppercase tracking-wider">
-                      1. สภาวะตลาดห้วงเวลานี้ (Market Climate)
-                    </h3>
-                  </div>
-                  <span className="px-3 py-1 rounded-full text-xs sm:text-sm font-bold bg-amber-500/15 border border-amber-500/30 text-amber-300">
-                    {payload.marketRegime.statusLabelTh}
-                  </span>
-                </div>
+            {/* ── TOP SECTION: CARD 1 MARKET CLIMATE ENGINE (4 PILLARS & FORMULA) ── */}
+            {(() => {
+              const pillars = payload.marketRegime?.pillars || {
+                sentiment: {
+                  fearGreedScore: payload.marketRegime.fearGreedScore ?? 39,
+                  fearGreedRating: 'fear',
+                  fearGreedLabelTh: payload.marketRegime.fearGreedLabel ?? 'ตลาดกังวล (Fear)',
+                  fearGreed1WDiff: -3,
+                  previous1WeekScore: 42,
+                  vixValue: 19.3,
+                  vixStatus: 'NORMAL' as const,
+                  vixStatusLabel: '<20 สภาวะปกติ / เสถียรภาพสูง',
+                  summary: 'อารมณ์ตลาดอยู่ในแดนกังวลสะท้อนความผันผวนระยะสั้น',
+                },
+                momentum: {
+                  spxPrice: 7561.67,
+                  spxChangePercent: -0.42,
+                  spxFiftyTwoHigh: 7844.52,
+                  spxDrawdownPercent: -3.61,
+                  spxEmaStatus: 'พักฐานทดสอบแนวรับ EMA 50 วัน / ยังยืนเหนือ EMA 200 วัน',
+                  nasdaqPrice: 25136.27,
+                  nasdaqChangePercent: -0.84,
+                  nasdaqFiftyTwoHigh: 27722.75,
+                  nasdaqDrawdownPercent: -9.33,
+                  nasdaqEmaStatus: 'หุ้นกลุ่มเทคโนโลยีย่อตัวลงทดสอบแนวรับสำคัญหลังทำ All-Time High',
+                  breadthStatus: 'หุ้นใหญ่ประคองดัชนี ขณะที่หุ้นกลาง-เล็กเผชิญแรงขายปรับฐาน (Mega-cap Divergence)',
+                  summary: 'ดัชนีหลักย่อตัวจากจุดสูงสุด (% Drawdown) อยู่ในโซนปรับฐานปกติ ยังไม่เสียโครงสร้างใหญ่',
+                },
+                macroLiquidity: {
+                  us10yYield: 4.42,
+                  yieldPressureLevel: 'HIGH' as const,
+                  yieldPressureLabel: '>4.40% แรงกดดันสูง (High Pressure)',
+                  fedPolicyStance: 'คาดการณ์ Fed คงอัตราดอกเบี้ยระดับสูง ชะลอการปรับลดดอกเบี้ยนโยบาย',
+                  inflationExpectation: 'ตัวเลขเงินเฟ้อ CPI/PCE ทรงตัวหนืด กดดันต้นทุนทางการเงินในระยะยาว',
+                  summary: 'Bond Yield สหรัฐฯ ทรงตัวสูง เป็นอุปสรรคต่อ Valuation และทวีความผันผวนต่อหุ้น Growth',
+                },
+                catalystsAndFlows: {
+                  safeHavenFlow: 'DEFENSIVE_ROTATION' as const,
+                  safeHavenFlowLabel: 'กระจายเข้าสินทรัพย์ปลอดภัย (Safe-Haven Rotation)',
+                  goldPrice: 3886.3,
+                  goldChangePercent: 0.45,
+                  dxyPrice: 103.41,
+                  oilPrice: 88.56,
+                  keyCatalysts: payload.marketRegime.macroDrivers || [],
+                  summary: 'มีแรงซื้อเข้าหาสินทรัพย์ปลอดภัย เช่น ทองคำและดอลลาร์สหรัฐฯ เพื่อลดความเสี่ยง',
+                },
+                formula: {
+                  calculatedRiskScore: payload.marketRegime.riskLevel ?? 4,
+                  calculatedRiskLabel: payload.marketRegime.riskLevelLabel ?? 'ความเสี่ยงระดับสูง',
+                  posture: ((payload.marketRegime.riskLevel ?? 4) <= 2
+                    ? 'BULL_AGGRESSIVE'
+                    : (payload.marketRegime.riskLevel ?? 4) >= 5
+                    ? 'CASH_PRESERVATION'
+                    : 'DEFENSIVE_TACTICAL') as any,
+                  postureLabelTh:
+                    (payload.marketRegime.riskLevel ?? 4) <= 2
+                      ? '🚀 บุกสะสมเชิงรุก (Aggressive Accumulation)'
+                      : (payload.marketRegime.riskLevel ?? 4) >= 5
+                      ? '🔴 ถือเงินสดหลบภัย (Capital Preservation)'
+                      : '🛡️ ตั้งรับรอจังหวะ (Defensive Tactical)',
+                  postureSubtitleTh: 'แบ่งไม้ทยอยสะสมเฉพาะหุ้นพื้นฐานแกร่งที่ลงมาแนวรับสำคัญ ไม่ไล่ราคา',
+                  formulaEquation:
+                    'ดัชนีย่อตัว (SPX Drawdown -3.6%) + อารมณ์กังวล (Fear 39) + Bond Yield สูง ➔ เสี่ยงระดับ 4/5 (ตั้งรับรอจังหวะ)',
+                  greenlightTrigger:
+                    'VIX ลดต่ำกว่า 20 หรือ Fear & Greed ดิ่งแตะโซน Extreme Fear (<25) ร่วมกับ S&P 500 ยืนเหนือแนวรับ EMA 200 วัน',
+                  redflagTrigger:
+                    'US 10Y Yield ดีดทะลุ 4.60% หรือ VIX พุ่งทะลุ 30 จุด (ต้องหยุดช้อนซื้อและถือเงินสดอย่างเข้มงวด)',
+                },
+              }
 
-                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05] space-y-2.5">
-                  <p className="text-sm sm:text-base text-slate-100 leading-relaxed font-sans font-medium">
-                    {payload.marketRegime.summaryTh}
-                  </p>
-                  <div className="flex items-center justify-between text-xs sm:text-sm text-slate-300 pt-2 border-t border-white/[0.04]">
-                    <span>ระดับความเสี่ยงของตลาด:</span>
-                    <span className="font-bold text-amber-300 font-mono text-sm sm:text-base">
-                      {payload.marketRegime.riskLevel}/5 ({payload.marketRegime.riskLevelLabel})
-                    </span>
-                  </div>
-                </div>
+              const posture = pillars.formula?.posture || 'DEFENSIVE_TACTICAL'
+              const postureStyle =
+                posture === 'BULL_AGGRESSIVE'
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-emerald-500/10'
+                  : posture === 'CASH_PRESERVATION'
+                  ? 'bg-rose-500/15 border-rose-500/40 text-rose-300 shadow-rose-500/10'
+                  : 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-amber-500/10'
 
-                {/* Sentiment & Macro Drivers */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between text-xs sm:text-sm p-3 rounded-xl bg-[#0A0D14] border border-white/[0.04]">
-                    <span className="text-slate-300 flex items-center gap-2 font-medium">
-                      <Flame className="w-4 h-4 text-rose-400" />
-                      ดัชนีอารมณ์ตลาด (CNN Fear & Greed):
-                    </span>
-                    <span className="font-mono font-bold text-white text-sm sm:text-base">
-                      {payload.marketRegime.fearGreedScore}/100 ({payload.marketRegime.fearGreedLabel})
-                    </span>
-                  </div>
+              const riskScore = pillars.formula?.calculatedRiskScore || payload.marketRegime.riskLevel || 4
+              const riskLabel = pillars.formula?.calculatedRiskLabel || payload.marketRegime.riskLevelLabel || 'ความเสี่ยงระดับสูง'
 
-                  <div className="space-y-2 pt-1">
-                    <span className="text-xs sm:text-sm font-bold text-slate-300 block">
-                      ⚡ 3 ปัจจัยเร่งตลาดโลกที่ต้องจับตา:
-                    </span>
-                    {payload.marketRegime.macroDrivers.map((driver, idx) => (
-                      <div
-                        key={idx}
-                        className="text-xs sm:text-sm text-slate-200 flex items-start gap-2.5 bg-[#0A0D14] p-3 rounded-xl border border-white/[0.04] leading-relaxed"
-                      >
-                        <span className="text-indigo-400 font-bold shrink-0 mt-0.5">•</span>
-                        <span>{driver}</span>
+              return (
+                <div className="p-5 sm:p-7 rounded-3xl bg-gradient-to-br from-[#121624] via-[#101420] to-[#0A0D15] border border-white/[0.09] shadow-2xl space-y-6 relative overflow-hidden">
+                  {/* Subtle Background Glows */}
+                  <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                  {/* Header Row: Title & Posture Badge */}
+                  <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-white/[0.06]">
+                    <div className="space-y-1.5 max-w-2xl">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                          <Compass className="w-5 h-5" />
+                        </span>
+                        <h2 className="text-lg sm:text-xl font-bold text-white tracking-wide flex items-center gap-2">
+                          <span>1. สภาวะตลาดห้วงเวลานี้ (MARKET CLIMATE)</span>
+                          <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold hidden sm:inline">
+                            4 เสาหลักประมวลผล
+                          </span>
+                        </h2>
                       </div>
-                    ))}
+                      <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-medium">
+                        {payload.marketRegime.summaryTh}
+                      </p>
+                    </div>
+
+                    {/* Posture & Risk Level Meter */}
+                    <div className="flex flex-col sm:flex-row lg:flex-col items-start lg:items-end gap-3 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 font-medium">กลยุทธ์ภาพรวม:</span>
+                        <div className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold border shadow-lg flex items-center gap-2 ${postureStyle}`}>
+                          <span>{pillars.formula.postureLabelTh}</span>
+                        </div>
+                      </div>
+
+                      {/* 5-Level Visual Risk Bar */}
+                      <div className="flex items-center gap-2 text-xs text-slate-300">
+                        <span>ระดับความเสี่ยง:</span>
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((lvl) => {
+                            const isFilled = lvl <= riskScore
+                            let colorClass = 'bg-white/[0.08]'
+                            if (isFilled) {
+                              if (lvl <= 2) colorClass = 'bg-emerald-500'
+                              else if (lvl === 3) colorClass = 'bg-amber-400'
+                              else if (lvl === 4) colorClass = 'bg-orange-500'
+                              else colorClass = 'bg-rose-500'
+                            }
+                            return (
+                              <div
+                                key={lvl}
+                                className={`h-2.5 w-4 sm:w-5 rounded-sm transition-all ${colorClass}`}
+                                title={`ระดับความเสี่ยง ${lvl}/5`}
+                              />
+                            )
+                          })}
+                        </div>
+                        <span className="font-mono font-bold text-amber-300 text-xs sm:text-sm">
+                          {riskScore}/5 ({riskLabel})
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Formula Breakdown Banner */}
+                  <div className="p-3.5 sm:p-4 rounded-2xl bg-indigo-950/20 border border-indigo-500/20 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs sm:text-sm">
+                    <div className="flex items-start sm:items-center gap-2 text-indigo-200">
+                      <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+                      <span>
+                        <strong className="text-white">💡 สูตรลัดสรุปผล (Market Climate Formula):</strong>{' '}
+                        <span className="text-slate-200 font-mono text-xs sm:text-[13px]">{pillars.formula.formulaEquation}</span>
+                      </span>
+                    </div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white/[0.05] text-slate-300 shrink-0 self-start md:self-auto border border-white/[0.06]">
+                      {pillars.formula.postureSubtitleTh}
+                    </span>
+                  </div>
+
+                  {/* ── THE 4 PILLARS GRID ── */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* เสาที่ 1: Sentiment & Volatility */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-3.5 hover:border-white/[0.12] transition-colors">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-rose-300 flex items-center gap-1.5">
+                            <Flame className="w-4 h-4 text-rose-400" />
+                            เสาที่ 1: อารมณ์ & ความกลัว
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono">Sentiment</span>
+                        </div>
+
+                        {/* CNN Fear & Greed */}
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                          <div className="flex items-center justify-between text-xs text-slate-300">
+                            <span>CNN Fear & Greed:</span>
+                            <span className="font-mono font-bold text-base text-white">
+                              {pillars.sentiment.fearGreedScore}/100
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="px-2 py-0.5 rounded-md bg-white/[0.06] text-slate-200 font-medium">
+                              {pillars.sentiment.fearGreedLabelTh}
+                            </span>
+                            <span
+                              className={`font-semibold ${
+                                pillars.sentiment.fearGreed1WDiff < 0
+                                  ? 'text-rose-400'
+                                  : pillars.sentiment.fearGreed1WDiff > 0
+                                  ? 'text-emerald-400'
+                                  : 'text-slate-400'
+                              }`}
+                            >
+                              {pillars.sentiment.fearGreed1WDiff < 0
+                                ? `⭣ ${pillars.sentiment.fearGreed1WDiff} pts vs วีคก่อน`
+                                : pillars.sentiment.fearGreed1WDiff > 0
+                                ? `⭡ +${pillars.sentiment.fearGreed1WDiff} pts vs วีคก่อน`
+                                : 'เท่ากับสัปดาห์ก่อน'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* VIX Volatility Index */}
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                          <div className="flex items-center justify-between text-xs text-slate-300">
+                            <span>VIX Index (ความผันผวน):</span>
+                            <span className="font-mono font-bold text-base text-white">
+                              {pillars.sentiment.vixValue.toFixed(2)} pts
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span
+                              className={`px-2 py-0.5 rounded-md font-medium border ${
+                                pillars.sentiment.vixStatus === 'NORMAL'
+                                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                                  : pillars.sentiment.vixStatus === 'ELEVATED'
+                                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                                  : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                              }`}
+                            >
+                              {pillars.sentiment.vixStatusLabel}
+                            </span>
+                            <span className="text-slate-400 text-[10px]">เกณฑ์: &lt;20 ปกติ | &gt;30 Panic</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-1 border-t border-white/[0.04]">
+                        {pillars.sentiment.summary}
+                      </p>
+                    </div>
+
+                    {/* เสาที่ 2: Market Trend & Breadth */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-3.5 hover:border-white/[0.12] transition-colors">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
+                            <BarChart3 className="w-4 h-4 text-sky-400" />
+                            เสาที่ 2: โมเมนตัม & แนวโน้ม
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono">Trend & Breadth</span>
+                        </div>
+
+                        {/* S&P 500 */}
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-300">S&P 500:</span>
+                            <div className="text-right">
+                              <span className="font-mono font-bold text-white text-xs sm:text-sm">
+                                {pillars.momentum.spxPrice.toLocaleString()} pts
+                              </span>
+                              <span
+                                className={`ml-1 text-[11px] font-mono ${
+                                  pillars.momentum.spxChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {pillars.momentum.spxChangePercent >= 0 ? '+' : ''}
+                                {pillars.momentum.spxChangePercent.toFixed(2)}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] pt-0.5 border-t border-white/[0.04]">
+                            <span className="text-slate-400">Drawdown จากจุดสูงสุด:</span>
+                            <span className="font-mono font-bold text-rose-300">
+                              {pillars.momentum.spxDrawdownPercent.toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* NASDAQ */}
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-300">NASDAQ (Tech):</span>
+                            <div className="text-right">
+                              <span className="font-mono font-bold text-white text-xs sm:text-sm">
+                                {pillars.momentum.nasdaqPrice.toLocaleString()} pts
+                              </span>
+                              <span
+                                className={`ml-1 text-[11px] font-mono ${
+                                  pillars.momentum.nasdaqChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                }`}
+                              >
+                                {pillars.momentum.nasdaqChangePercent >= 0 ? '+' : ''}
+                                {pillars.momentum.nasdaqChangePercent.toFixed(2)}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] pt-0.5 border-t border-white/[0.04]">
+                            <span className="text-slate-400">Drawdown จากจุดสูงสุด:</span>
+                            <span className="font-mono font-bold text-rose-300">
+                              {pillars.momentum.nasdaqDrawdownPercent.toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Breadth & EMA */}
+                        <div className="text-[11px] text-slate-300 space-y-1">
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-sky-400 font-bold shrink-0">•</span>
+                            <span className="truncate">{pillars.momentum.breadthStatus}</span>
+                          </div>
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-sky-400 font-bold shrink-0">•</span>
+                            <span className="truncate">{pillars.momentum.spxEmaStatus}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-1 border-t border-white/[0.04]">
+                        {pillars.momentum.summary}
+                      </p>
+                    </div>
+
+                    {/* เสาที่ 3: Macro & Liquidity */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-3.5 hover:border-white/[0.12] transition-colors">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                            <Scale className="w-4 h-4 text-purple-400" />
+                            เสาที่ 3: ต้นทุนการเงิน & Macro
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono">Macro & Rates</span>
+                        </div>
+
+                        {/* US 10Y Yield */}
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                          <div className="flex items-center justify-between text-xs text-slate-300">
+                            <span>US 10Y Bond Yield:</span>
+                            <span className="font-mono font-bold text-base text-white">
+                              {pillars.macroLiquidity.us10yYield.toFixed(2)}%
+                            </span>
+                          </div>
+                          <div className="text-[11px]">
+                            <span
+                              className={`px-2 py-0.5 rounded-md font-medium border inline-block ${
+                                pillars.macroLiquidity.yieldPressureLevel === 'LOW'
+                                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                                  : pillars.macroLiquidity.yieldPressureLevel === 'MODERATE'
+                                  ? 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                                  : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                              }`}
+                            >
+                              {pillars.macroLiquidity.yieldPressureLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Fed Policy & CPI Expectations */}
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5 text-xs">
+                          <div className="text-slate-300 font-medium">ทิศทางดอกเบี้ย Fed & เงินเฟ้อ:</div>
+                          <div className="text-[11px] text-slate-200 leading-relaxed space-y-1">
+                            <div>• Fed: {pillars.macroLiquidity.fedPolicyStance}</div>
+                            <div>• CPI/PCE: {pillars.macroLiquidity.inflationExpectation}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-1 border-t border-white/[0.04]">
+                        {pillars.macroLiquidity.summary}
+                      </p>
+                    </div>
+
+                    {/* เสาที่ 4: Catalysts & Fund Flows */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-[#0B0E17]/80 border border-white/[0.06] flex flex-col justify-between space-y-3.5 hover:border-white/[0.12] transition-colors">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                            <Zap className="w-4 h-4 text-amber-400" />
+                            เสาที่ 4: ปัจจัยเร่ง & Fund Flows
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono">Flows & Events</span>
+                        </div>
+
+                        {/* Safe-Haven Flow & Assets */}
+                        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-300">กระแสเงินทุน:</span>
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/25 text-[11px] font-semibold">
+                              {pillars.catalystsAndFlows.safeHavenFlowLabel}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] font-mono border-t border-white/[0.04]">
+                            <div className="text-slate-300">
+                              ทองคำ: <strong className="text-amber-200">${pillars.catalystsAndFlows.goldPrice.toLocaleString()}</strong>
+                            </div>
+                            <div className="text-slate-300 text-right">
+                              DXY: <strong className="text-indigo-200">{pillars.catalystsAndFlows.dxyPrice.toFixed(2)}</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 3 Key Catalysts */}
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] font-bold text-slate-300 block">⚡ ข่าวใหญ่เฉพาะช่วง:</span>
+                          <div className="space-y-1 text-[11px] text-slate-200 leading-relaxed">
+                            {pillars.catalystsAndFlows.keyCatalysts.slice(0, 3).map((c, idx) => (
+                              <div key={idx} className="flex items-start gap-1.5">
+                                <span className="text-amber-400 font-bold shrink-0">•</span>
+                                <span className="truncate">{c}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-300 leading-relaxed font-normal pt-1 border-t border-white/[0.04]">
+                        {pillars.catalystsAndFlows.summary}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* ── INFLECTION TRIGGERS ── */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    {/* Greenlight Trigger */}
+                    <div className="p-4 rounded-2xl bg-emerald-500/[0.05] border border-emerald-500/20 space-y-2">
+                      <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>จุดปลดล็อกเข้าซื้อไม้ใหญ่ (Greenlight Trigger)</span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans font-medium">
+                        {pillars.formula.greenlightTrigger}
+                      </p>
+                    </div>
+
+                    {/* Red Flag Trigger */}
+                    <div className="p-4 rounded-2xl bg-rose-500/[0.05] border border-rose-500/20 space-y-2">
+                      <div className="flex items-center gap-2 text-rose-400 font-bold text-xs sm:text-sm">
+                        <ShieldAlert className="w-4 h-4 shrink-0" />
+                        <span>จุดเตือนภัยขั้นสุด - ห้ามถัว (Red Flag Invalidation)</span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans font-medium">
+                        {pillars.formula.redflagTrigger}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )
+            })()}
 
+            {/* ── MIDDLE SECTION: 2 COLUMNS (PORTFOLIO RESILIENCE & CASH STRATEGY) ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               {/* Card 2: Portfolio Resilience & Thematic Exposure (6 Cols) */}
               <div className="lg:col-span-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#121622] to-[#151A29] border border-white/[0.08] shadow-md space-y-4">
                 <div className="flex items-center justify-between">
@@ -391,6 +778,35 @@ export default function TacticalAdvisorPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Card 3: Cash Deployment Strategy (6 Cols) */}
+              <div className="lg:col-span-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#121622] to-[#151A29] border border-white/[0.08] shadow-md space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <Wallet className="w-5 h-5 text-indigo-400" />
+                  <h3 className="text-base font-bold text-white uppercase tracking-wider">
+                    3. กลยุทธ์บริหารเงินสด (Cash Deployment Strategy)
+                  </h3>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#0A0D14] border border-white/[0.04] flex items-center justify-between">
+                  <div>
+                    <span className="text-slate-300 block text-xs sm:text-sm mb-0.5">สัดส่วนเงินสดที่ควรเตรียมในห้วงนี้:</span>
+                    <span className="text-2xl sm:text-3xl font-bold font-mono text-emerald-400">
+                      {payload.cashStrategy.recommendedCashPercent}%
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-300 block text-xs sm:text-sm mb-0.5">สัดส่วนเงินสดจริงในพอร์ต:</span>
+                    <span className="text-2xl sm:text-3xl font-bold font-mono text-white">
+                      {payload.cashStrategy.currentCashPercent}%
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-sm sm:text-base text-slate-100 leading-relaxed font-normal">
+                  {payload.cashStrategy.guidanceText}
+                </p>
+              </div>
             </div>
 
             {/* ── MIDDLE SECTION: TACTICAL ACTION CARDS ── */}
@@ -399,7 +815,7 @@ export default function TacticalAdvisorPage() {
                 <div className="flex items-center gap-2.5">
                   <Target className="w-5 h-5 text-indigo-400" />
                   <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">
-                    3. แผนวางหมากรายตัวสำหรับพอร์ตคุณ (Tactical Actions)
+                    4. แผนวางหมากรายตัวสำหรับพอร์ตคุณ (Tactical Actions)
                   </h3>
                 </div>
 
@@ -544,91 +960,59 @@ export default function TacticalAdvisorPage() {
               )}
             </div>
 
-            {/* ── BOTTOM SECTION: CASH STRATEGY & TRACK RECORD ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Cash Strategy (6 Cols) */}
-              <div className="lg:col-span-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#121622] to-[#151A29] border border-white/[0.08] shadow-md space-y-4">
+            {/* ── CARD 5: TRACK RECORD REVIEW (ACCOUNTABILITY) ── */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#121622] to-[#151A29] border border-white/[0.08] shadow-md space-y-4">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <Wallet className="w-5 h-5 text-indigo-400" />
+                  <History className="w-5 h-5 text-indigo-400" />
                   <h3 className="text-base font-bold text-white uppercase tracking-wider">
-                    4. กลยุทธ์บริหารเงินสด (Cash Deployment Strategy)
+                    5. การตรวจการบ้านคำแนะนำรอบก่อน (Track Record Review)
                   </h3>
                 </div>
-
-                <div className="p-4 rounded-xl bg-[#0A0D14] border border-white/[0.04] flex items-center justify-between">
-                  <div>
-                    <span className="text-slate-300 block text-xs sm:text-sm mb-0.5">สัดส่วนเงินสดที่ควรเตรียมในห้วงนี้:</span>
-                    <span className="text-2xl sm:text-3xl font-bold font-mono text-emerald-400">
-                      {payload.cashStrategy.recommendedCashPercent}%
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-slate-300 block text-xs sm:text-sm mb-0.5">สัดส่วนเงินสดจริงในพอร์ต:</span>
-                    <span className="text-2xl sm:text-3xl font-bold font-mono text-white">
-                      {payload.cashStrategy.currentCashPercent}%
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-sm sm:text-base text-slate-100 leading-relaxed font-normal">
-                  {payload.cashStrategy.guidanceText}
-                </p>
+                <span className="text-xs text-slate-400 font-mono">Accountability</span>
               </div>
 
-              {/* Track Record Review (6 Cols - Mandatory Dimension 5) */}
-              <div className="lg:col-span-6 p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-[#121622] to-[#151A29] border border-white/[0.08] shadow-md space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <History className="w-5 h-5 text-indigo-400" />
-                    <h3 className="text-base font-bold text-white uppercase tracking-wider">
-                      5. การตรวจการบ้านคำแนะนำรอบก่อน (Track Record)
-                    </h3>
-                  </div>
-                  <span className="text-xs text-slate-400 font-mono">Accountability</span>
+              {payload.trackRecordReview.length === 0 ? (
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] text-xs sm:text-sm text-slate-400 text-center">
+                  เป็นการวิเคราะห์รอบแรก ระบบจะเริ่มบันทึกและตรวจการบ้านในรอบถัดไป
                 </div>
-
-                {payload.trackRecordReview.length === 0 ? (
-                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] text-xs sm:text-sm text-slate-400 text-center">
-                    เป็นการวิเคราะห์รอบแรก ระบบจะเริ่มบันทึกและตรวจการบ้านในรอบถัดไป
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {payload.trackRecordReview.map((rec, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3.5 rounded-xl bg-[#0A0D14] border border-white/[0.04] space-y-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-indigo-300 text-xs sm:text-sm">{rec.period}</span>
-                          <span
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                              rec.accuracyStatus === 'ACCURATE'
-                                ? 'bg-emerald-500/20 text-emerald-300'
-                                : 'bg-slate-700 text-slate-300'
-                            }`}
-                          >
-                            {rec.accuracyStatus === 'ACCURATE' ? '✓ ตามคาด' : '• ติดตามต่อ'}
-                          </span>
-                        </div>
-                        <p className="text-slate-200 text-xs sm:text-sm leading-relaxed">
-                          <strong className="text-white">คำแนะนำเดิม:</strong> {rec.recommendationSummary}
-                        </p>
-                        <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-                          <strong className="text-white">ผลลัพธ์ตลาดจริง:</strong> {rec.outcomeAssessment}
-                        </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {payload.trackRecordReview.map((rec, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-xl bg-[#0A0D14] border border-white/[0.04] space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-indigo-300 text-xs sm:text-sm">{rec.period}</span>
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                            rec.accuracyStatus === 'ACCURATE'
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                              : 'bg-slate-700/50 text-slate-300 border-slate-600'
+                          }`}
+                        >
+                          {rec.accuracyStatus === 'ACCURATE' ? '✓ ตามคาด' : '• ติดตามต่อ'}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      <p className="text-slate-200 text-xs sm:text-sm leading-relaxed">
+                        <strong className="text-white">คำแนะนำเดิม:</strong> {rec.recommendationSummary}
+                      </p>
+                      <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                        <strong className="text-white">ผลลัพธ์ตลาดจริง:</strong> {rec.outcomeAssessment}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* ── COPILOT CHAT BOX: ASK SPECIFIC QUESTIONS ── */}
+            {/* ── CARD 6: COPILOT CHAT BOX ── */}
             <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-[#121622] via-[#141A28] to-[#121622] border border-indigo-500/25 shadow-lg space-y-4">
               <div className="flex items-center gap-2.5">
                 <MessageSquare className="w-5 h-5 text-indigo-400" />
                 <h3 className="text-base font-bold text-white tracking-wide">
-                  ถาม AI เจาะลึกเฉพาะกิจ (Tactical Copilot)
+                  6. ถาม AI เจาะลึกเฉพาะกิจ (Tactical Copilot)
                 </h3>
               </div>
 

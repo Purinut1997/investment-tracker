@@ -13,6 +13,8 @@ export interface MarketQuote {
   low?: number
   open?: number
   previousClose?: number
+  fiftyTwoWeekHigh?: number
+  fiftyTwoWeekLow?: number
   timestamp: number
   provider: string
   currency: string

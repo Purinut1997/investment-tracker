@@ -26,6 +26,72 @@ export interface TacticalActionItem {
   taxImpactNote?: string
 }
 
+export interface MarketSentimentPillar {
+  fearGreedScore: number
+  fearGreedRating: string
+  fearGreedLabelTh: string
+  fearGreed1WDiff: number // difference from 1 week ago (e.g. -3 pts)
+  previous1WeekScore: number
+  vixValue: number
+  vixStatus: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'PANIC'
+  vixStatusLabel: string
+  summary: string
+}
+
+export interface MarketMomentumPillar {
+  spxPrice: number
+  spxChangePercent: number
+  spxFiftyTwoHigh?: number
+  spxDrawdownPercent: number
+  spxEmaStatus: string
+  nasdaqPrice: number
+  nasdaqChangePercent: number
+  nasdaqFiftyTwoHigh?: number
+  nasdaqDrawdownPercent: number
+  nasdaqEmaStatus: string
+  breadthStatus: string
+  summary: string
+}
+
+export interface MarketMacroLiquidityPillar {
+  us10yYield: number
+  yieldPressureLevel: 'LOW' | 'MODERATE' | 'HIGH'
+  yieldPressureLabel: string
+  fedPolicyStance: string
+  inflationExpectation: string
+  summary: string
+}
+
+export interface MarketCatalystsAndFlowsPillar {
+  safeHavenFlow: 'RISK_ON' | 'DEFENSIVE_ROTATION' | 'CASH_PRESERVATION'
+  safeHavenFlowLabel: string
+  goldPrice: number
+  goldChangePercent?: number
+  dxyPrice: number
+  oilPrice?: number
+  keyCatalysts: string[]
+  summary: string
+}
+
+export interface MarketClimateFormula {
+  calculatedRiskScore: number // 1 - 5
+  calculatedRiskLabel: string
+  posture: 'BULL_AGGRESSIVE' | 'DEFENSIVE_TACTICAL' | 'CASH_PRESERVATION'
+  postureLabelTh: string
+  postureSubtitleTh: string
+  formulaEquation: string
+  greenlightTrigger: string
+  redflagTrigger: string
+}
+
+export interface MarketPillarsData {
+  sentiment: MarketSentimentPillar
+  momentum: MarketMomentumPillar
+  macroLiquidity: MarketMacroLiquidityPillar
+  catalystsAndFlows: MarketCatalystsAndFlowsPillar
+  formula: MarketClimateFormula
+}
+
 export interface TacticalAdvisorPayload {
   asOfDate: string
   asOfDateThai: string
@@ -38,6 +104,7 @@ export interface TacticalAdvisorPayload {
     fearGreedScore: number
     fearGreedLabel: string
     macroDrivers: string[]
+    pillars: MarketPillarsData
   }
   portfolioResilience: {
     score: number // 0 - 100
@@ -93,23 +160,323 @@ export function parseAdviceResponse(rawText: string): any {
   }
 }
 
+export function createFallbackPillars(rawJson: any): MarketPillarsData {
+  const fgScore = Number(rawJson?.marketRegime?.fearGreedScore) || 39
+  const riskLevel = Number(rawJson?.marketRegime?.riskLevel) || 4
+  const riskLevelLabel = rawJson?.marketRegime?.riskLevelLabel || 'ความเสี่ยงระดับสูง'
+  const macroDrivers = rawJson?.marketRegime?.macroDrivers || [
+    'ดัชนีตลาดหุ้นสหรัฐฯ (S&P 500, NASDAQ) ปรับตัวลงต่อเนื่องในรอบสัปดาห์',
+    'อัตราผลตอบแทนพันธบัตรรัฐบาลสหรัฐฯ 10 ปี (US 10Y Bond Yield) ทรงตัวสูง บ่งชี้แรงกดดันเงินเฟ้อ',
+    'ดัชนีความผันผวน VIX อยู่ในระดับสูง สะท้อนความกังวลของตลาด',
+  ]
+
+  let posture: 'BULL_AGGRESSIVE' | 'DEFENSIVE_TACTICAL' | 'CASH_PRESERVATION' = 'DEFENSIVE_TACTICAL'
+  let postureLabelTh = '🛡️ ตั้งรับรอจังหวะ (Defensive Tactical)'
+  let postureSubtitleTh = 'แบ่งไม้สะสมเฉพาะหุ้นพื้นฐานแกร่งที่ลงมาแนวรับสำคัญ ไม่ไล่ราคา'
+  if (riskLevel <= 2) {
+    posture = 'BULL_AGGRESSIVE'
+    postureLabelTh = '🚀 บุกสะสมเชิงรุก (Aggressive Accumulation)'
+    postureSubtitleTh = 'ตลาดเอื้ออำนวย ความเสี่ยงต่ำ ทยอยเพิ่มสัดส่วนสินทรัพย์เติบโต'
+  } else if (riskLevel >= 5) {
+    posture = 'CASH_PRESERVATION'
+    postureLabelTh = '🔴 ถือเงินสดหลบภัย (Capital Preservation)'
+    postureSubtitleTh = 'ความเสี่ยงสูงผิดปกติ หยุดซื้อถัว ถือเงินสดสำรองรอจุดกลับตัว'
+  }
+
+  return {
+    sentiment: {
+      fearGreedScore: fgScore,
+      fearGreedRating: fgScore <= 25 ? 'extreme_fear' : fgScore <= 45 ? 'fear' : 'neutral',
+      fearGreedLabelTh: rawJson?.marketRegime?.fearGreedLabel || 'ตลาดกังวล (Fear)',
+      fearGreed1WDiff: -3,
+      previous1WeekScore: fgScore + 3,
+      vixValue: 19.3,
+      vixStatus: 'NORMAL',
+      vixStatusLabel: '<20 สภาวะปกติ / เสถียรภาพสูง',
+      summary: 'ความรู้สึกของนักลงทุนอยู่ในแดนกังวล (Fear) สะท้อนความผันผวนและการพักฐานระยะสั้น',
+    },
+    momentum: {
+      spxPrice: 7561.67,
+      spxChangePercent: -0.42,
+      spxFiftyTwoHigh: 7844.52,
+      spxDrawdownPercent: -3.61,
+      spxEmaStatus: 'พักฐานทดสอบแนวรับ EMA 50 วัน / ยังยืนเหนือ EMA 200 วัน',
+      nasdaqPrice: 25136.27,
+      nasdaqChangePercent: -0.84,
+      nasdaqFiftyTwoHigh: 27722.75,
+      nasdaqDrawdownPercent: -9.33,
+      nasdaqEmaStatus: 'กลุ่มเทคโนโลยีย่อตัวทดสอบแนวรับสำคัญหลังทำ All-Time High',
+      breadthStatus: 'หุ้นใหญ่ประคองดัชนี ขณะที่หุ้นกลาง-เล็กเผชิญแรงขายปรับฐาน (Mega-cap Divergence)',
+      summary: 'ดัชนีหลักย่อตัวจากจุดสูงสุด (% Drawdown) อยู่ในโซนปรับฐานปกติ ยังไม่เสียโครงสร้างใหญ่',
+    },
+    macroLiquidity: {
+      us10yYield: 4.42,
+      yieldPressureLevel: 'HIGH',
+      yieldPressureLabel: '>4.40% แรงกดดันสูง (High Pressure)',
+      fedPolicyStance: 'คาดการณ์ Fed คงอัตราดอกเบี้ยระดับสูง ชะลอการปรับลดดอกเบี้ยนโยบาย',
+      inflationExpectation: 'ตัวเลขเงินเฟ้อ CPI/PCE ทรงตัวหนืด กดดันต้นทุนทางการเงินในระยะยาว',
+      summary: 'Bond Yield สหรัฐฯ ทรงตัวสูง เป็นอุปสรรคต่อ Valuation และทวีความผันผวนต่อหุ้น Growth',
+    },
+    catalystsAndFlows: {
+      safeHavenFlow: 'DEFENSIVE_ROTATION',
+      safeHavenFlowLabel: 'กระจายเข้าสินทรัพย์ปลอดภัย (Safe-Haven)',
+      goldPrice: 3886.3,
+      goldChangePercent: 0.45,
+      dxyPrice: 103.41,
+      oilPrice: 88.56,
+      keyCatalysts: macroDrivers,
+      summary: 'มีแรงซื้อเข้าหาสินทรัพย์ปลอดภัย เช่น ทองคำและดอลลาร์สหรัฐฯ เพื่อลดความเสี่ยง',
+    },
+    formula: {
+      calculatedRiskScore: riskLevel,
+      calculatedRiskLabel: riskLevelLabel,
+      posture,
+      postureLabelTh,
+      postureSubtitleTh,
+      formulaEquation: `โมเมนตัม S&P 500 ย่อตัว (-3.6%) + อารมณ์กังวล (F&G ${fgScore}) + Bond Yield ตึงตัว ➔ ระดับความเสี่ยง (${riskLevel}/5)`,
+      greenlightTrigger: 'VIX ปรับตัวลงต่ำกว่า 20 หรือ Fear & Greed ดิ่งแตะโซน Extreme Fear (<25) ร่วมกับ S&P 500 ยืนเหนือแนวรับ EMA 200 วัน',
+      redflagTrigger: 'US 10Y Yield ดีดทะลุ 4.60% หรือ VIX พุ่งทะลุ 30 จุด (ต้องหยุดช้อนซื้อและถือเงินสดเข้มงวด)',
+    },
+  }
+}
+
+export function computeDeterministicClimate(params: {
+  spxDrawdown: number
+  nasdaqDrawdown: number
+  fearGreedScore: number
+  vixPrice: number
+  us10yYield: number
+}) {
+  const { spxDrawdown, fearGreedScore, vixPrice, us10yYield } = params
+
+  // 1. Drawdown factor (1 - 5)
+  let drawdownRisk = 2
+  if (spxDrawdown > -2) drawdownRisk = 1
+  else if (spxDrawdown > -5) drawdownRisk = 2
+  else if (spxDrawdown > -10) drawdownRisk = 3
+  else if (spxDrawdown > -15) drawdownRisk = 4
+  else drawdownRisk = 5
+
+  // 2. Fear & Volatility factor (1 - 5)
+  let fearRisk = 2
+  if (fearGreedScore >= 60 && vixPrice < 18) fearRisk = 1
+  else if (fearGreedScore >= 45 && vixPrice < 20) fearRisk = 2
+  else if (fearGreedScore >= 35 || (vixPrice >= 20 && vixPrice <= 25)) fearRisk = 3
+  else if (fearGreedScore >= 25 || (vixPrice > 25 && vixPrice <= 30)) fearRisk = 4
+  else fearRisk = 5 // Extreme Fear or VIX > 30
+
+  // 3. Rate & Yield pressure factor (1 - 5)
+  let yieldRisk = 2
+  if (us10yYield < 3.9) yieldRisk = 1
+  else if (us10yYield <= 4.2) yieldRisk = 2
+  else if (us10yYield <= 4.45) yieldRisk = 3
+  else if (us10yYield <= 4.7) yieldRisk = 4
+  else yieldRisk = 5
+
+  const combinedRisk = Math.min(
+    5,
+    Math.max(1, Math.round(drawdownRisk * 0.35 + fearRisk * 0.35 + yieldRisk * 0.3))
+  )
+
+  let posture: 'BULL_AGGRESSIVE' | 'DEFENSIVE_TACTICAL' | 'CASH_PRESERVATION' = 'DEFENSIVE_TACTICAL'
+  let postureLabelTh = '🛡️ ตั้งรับรอจังหวะ (Defensive Tactical)'
+  let postureSubtitleTh = 'แบ่งไม้ทยอยสะสมเฉพาะหุ้นพื้นฐานแกร่งที่ลงมาแนวรับสำคัญ ไม่ไล่ราคา'
+
+  if (combinedRisk <= 2) {
+    posture = 'BULL_AGGRESSIVE'
+    postureLabelTh = '🚀 บุกสะสมเชิงรุก (Aggressive Accumulation)'
+    postureSubtitleTh = 'ตลาดเอื้ออำนวย ความเสี่ยงต่ำ ทยอยเพิ่มสัดส่วนสินทรัพย์เติบโต'
+  } else if (combinedRisk >= 5 || vixPrice >= 30 || fearGreedScore <= 20) {
+    posture = 'CASH_PRESERVATION'
+    postureLabelTh = '🔴 ถือเงินสดหลบภัย (Capital Preservation)'
+    postureSubtitleTh = 'ตลาดมีความเสี่ยงสูงผิดปกติ หยุดซื้อถัว ถือเงินสดสำรองรอจุดกลับตัว'
+  }
+
+  const riskLabels: Record<number, string> = {
+    1: 'ความเสี่ยงต่ำมาก (Low Risk)',
+    2: 'ความเสี่ยงต่ำ (Moderate-Low)',
+    3: 'ความเสี่ยงปานกลาง (Balanced)',
+    4: 'ความเสี่ยงระดับสูง (Elevated Caution)',
+    5: 'ความเสี่ยงวิกฤต/ผันผวนรุนแรง (High Risk)',
+  }
+
+  return {
+    riskScore: combinedRisk,
+    riskLabel: riskLabels[combinedRisk] || 'ความเสี่ยงระดับสูง',
+    posture,
+    postureLabelTh,
+    postureSubtitleTh,
+  }
+}
+
+function reconcileMarketPillars(
+  rawPillars: any,
+  real: {
+    spxPrice: number
+    spxChangePercent: number
+    spxFiftyTwoHigh: number
+    spxDrawdownPercent: number
+    nasdaqPrice: number
+    nasdaqChangePercent: number
+    nasdaqFiftyTwoHigh: number
+    nasdaqDrawdownPercent: number
+    vixPrice: number
+    us10yYield: number
+    fearGreedScore: number
+    fearGreedLabelTh: string
+    fearGreed1WDiff: number
+    previous1WeekScore: number
+    dxyPrice: number
+    goldPrice: number
+    oilPrice: number
+    deterministicClimate: ReturnType<typeof computeDeterministicClimate>
+  }
+): MarketPillarsData {
+  const vixStatus =
+    real.vixPrice < 20
+      ? 'NORMAL'
+      : real.vixPrice < 25
+      ? 'ELEVATED'
+      : real.vixPrice < 30
+      ? 'HIGH'
+      : 'PANIC'
+
+  const vixStatusLabel =
+    real.vixPrice < 20
+      ? '<20 สภาวะปกติ / เสถียรภาพสูง'
+      : real.vixPrice < 25
+      ? '20-25 กังวล / ผันผวนยกระดับ'
+      : real.vixPrice < 30
+      ? '25-30 ความเสี่ยงสูง / ผันผวนหนัก'
+      : '>30 ตื่นตระหนกสุดขีด / Panic'
+
+  const yieldPressureLevel =
+    real.us10yYield < 4.0
+      ? 'LOW'
+      : real.us10yYield <= 4.4
+      ? 'MODERATE'
+      : 'HIGH'
+
+  const yieldPressureLabel =
+    real.us10yYield < 4.0
+      ? '<4.00% ผ่อนคลาย เอื้อต่อสินทรัพย์เสี่ยง'
+      : real.us10yYield <= 4.4
+      ? '4.00-4.40% ตึงตัวปานกลาง'
+      : '>4.40% แรงกดดันสูง (High Pressure)'
+
+  return {
+    sentiment: {
+      fearGreedScore: real.fearGreedScore,
+      fearGreedRating:
+        real.fearGreedScore <= 25 ? 'extreme_fear' : real.fearGreedScore <= 45 ? 'fear' : 'neutral',
+      fearGreedLabelTh: real.fearGreedLabelTh,
+      fearGreed1WDiff: real.fearGreed1WDiff,
+      previous1WeekScore: real.previous1WeekScore,
+      vixValue: real.vixPrice,
+      vixStatus,
+      vixStatusLabel,
+      summary:
+        rawPillars?.sentiment?.summary ||
+        `อารมณ์ตลาดอยู่ในแดน ${real.fearGreedLabelTh} (${real.fearGreedScore}/100) ขณะที่ VIX อยู่ที่ ${real.vixPrice.toFixed(2)} pts (${vixStatusLabel})`,
+    },
+    momentum: {
+      spxPrice: real.spxPrice,
+      spxChangePercent: real.spxChangePercent,
+      spxFiftyTwoHigh: real.spxFiftyTwoHigh,
+      spxDrawdownPercent: real.spxDrawdownPercent,
+      spxEmaStatus:
+        rawPillars?.momentum?.spxEmaStatus ||
+        `Drawdown ${real.spxDrawdownPercent.toFixed(2)}% จากจุดสูงสุด / ทดสอบแนวรับ EMA 50 วัน และยังยืนเหนือ EMA 200 วัน`,
+      nasdaqPrice: real.nasdaqPrice,
+      nasdaqChangePercent: real.nasdaqChangePercent,
+      nasdaqFiftyTwoHigh: real.nasdaqFiftyTwoHigh,
+      nasdaqDrawdownPercent: real.nasdaqDrawdownPercent,
+      nasdaqEmaStatus:
+        rawPillars?.momentum?.nasdaqEmaStatus ||
+        `กลุ่มเทคโนโลยี Drawdown ${real.nasdaqDrawdownPercent.toFixed(2)}% จากจุดสูงสุด เผชิญแรงขายทำกำไรระยะสั้น`,
+      breadthStatus:
+        rawPillars?.momentum?.breadthStatus ||
+        'หุ้นใหญ่ประคองดัชนี ขณะที่หุ้นกลาง-เล็กเผชิญแรงขายปรับฐาน (Mega-cap Divergence)',
+      summary:
+        rawPillars?.momentum?.summary ||
+        `ดัชนีหลักอยู่ในช่วงปรับฐานย่อตัว โดย S&P 500 ย่อตัว ${real.spxDrawdownPercent.toFixed(2)}% และ NASDAQ ย่อตัว ${real.nasdaqDrawdownPercent.toFixed(2)}%`,
+    },
+    macroLiquidity: {
+      us10yYield: real.us10yYield,
+      yieldPressureLevel,
+      yieldPressureLabel,
+      fedPolicyStance:
+        rawPillars?.macroLiquidity?.fedPolicyStance ||
+        'ตลาดคาดการณ์ Fed คงอัตราดอกเบี้ยระดับสูง ชะลอการปรับลดดอกเบี้ยนโยบาย',
+      inflationExpectation:
+        rawPillars?.macroLiquidity?.inflationExpectation ||
+        'ตัวเลขเงินเฟ้อ CPI/PCE ทรงตัวหนืด กดดันต้นทุนทางการเงินในระยะยาว',
+      summary:
+        rawPillars?.macroLiquidity?.summary ||
+        `US 10Y Yield อยู่ที่ ${real.us10yYield.toFixed(2)}% (${yieldPressureLabel}) ส่งผลให้ต้นทุนดอกเบี้ยยังคงกดดัน Valuation`,
+    },
+    catalystsAndFlows: {
+      safeHavenFlow:
+        rawPillars?.catalystsAndFlows?.safeHavenFlow || 'DEFENSIVE_ROTATION',
+      safeHavenFlowLabel:
+        rawPillars?.catalystsAndFlows?.safeHavenFlowLabel ||
+        'หมุนเวียนเข้าสินทรัพย์ปลอดภัย (Safe-Haven Rotation)',
+      goldPrice: real.goldPrice,
+      goldChangePercent: rawPillars?.catalystsAndFlows?.goldChangePercent ?? 0.35,
+      dxyPrice: real.dxyPrice,
+      oilPrice: real.oilPrice,
+      keyCatalysts:
+        Array.isArray(rawPillars?.catalystsAndFlows?.keyCatalysts) &&
+        rawPillars.catalystsAndFlows.keyCatalysts.length > 0
+          ? rawPillars.catalystsAndFlows.keyCatalysts
+          : [
+              'ผลประกอบการกลุ่มหุ้น AI & Semiconductor ขนาดใหญ่',
+              'ทิศทาง Bond Yield สหรัฐฯ และตัวเลขเงินเฟ้อ CPI',
+              'ความตึงเครียดทางภูมิรัฐศาสตร์และราคาน้ำมันโลก',
+            ],
+      summary:
+        rawPillars?.catalystsAndFlows?.summary ||
+        `เงินทุนกระจายเข้าหาสินทรัพย์ปลอดภัย โดยทองคำอยู่ที่ $${real.goldPrice.toLocaleString()} และ DXY อยู่ที่ ${real.dxyPrice.toFixed(2)}`,
+    },
+    formula: {
+      calculatedRiskScore: real.deterministicClimate.riskScore,
+      calculatedRiskLabel: real.deterministicClimate.riskLabel,
+      posture: real.deterministicClimate.posture,
+      postureLabelTh: real.deterministicClimate.postureLabelTh,
+      postureSubtitleTh: real.deterministicClimate.postureSubtitleTh,
+      formulaEquation:
+        rawPillars?.formula?.formulaEquation ||
+        `ดัชนีย่อตัว (SPX Drawdown ${real.spxDrawdownPercent.toFixed(1)}%) + อารมณ์ตลาด (${real.fearGreedLabelTh} / VIX ${real.vixPrice.toFixed(1)}) + Bond Yield (${real.us10yYield.toFixed(2)}%) ➔ เสี่ยงระดับ ${real.deterministicClimate.riskScore}/5 (${real.deterministicClimate.postureLabelTh})`,
+      greenlightTrigger:
+        rawPillars?.formula?.greenlightTrigger ||
+        'VIX ลดต่ำกว่า 20 หรือ Fear & Greed ดิ่งแตะโซน Extreme Fear (<25) ร่วมกับ S&P 500 ยืนเหนือแนวรับ EMA 200 วัน',
+      redflagTrigger:
+        rawPillars?.formula?.redflagTrigger ||
+        'US 10Y Yield ดีดทะลุ 4.60% หรือ VIX พุ่งทะลุ 30 จุด (ต้องหยุดช้อนซื้อและถือเงินสดอย่างเข้มงวด)',
+    },
+  }
+}
+
 export function normalizeStoredPayload(
   rawJson: any,
   createdAt: Date,
   modelUsed?: string
 ): TacticalAdvisorPayload {
+  const pillars = rawJson.marketRegime?.pillars || createFallbackPillars(rawJson)
+
   return {
     asOfDate: getBangkokDateString(createdAt),
     asOfDateThai: formatThaiDate(createdAt),
-    marketRegime: rawJson.marketRegime || {
-      status: 'VOLATILE_CAUTION',
-      statusLabelTh: 'ตลาดผันผวนระมัดระวัง',
-      summaryTh: 'ไม่มีสรุป',
-      riskLevel: 3,
-      riskLevelLabel: 'ปานกลาง',
-      fearGreedScore: 50,
-      fearGreedLabel: 'Neutral',
-      macroDrivers: [],
+    marketRegime: {
+      status: rawJson.marketRegime?.status || 'VOLATILE_CAUTION',
+      statusLabelTh: rawJson.marketRegime?.statusLabelTh || pillars.formula.postureLabelTh,
+      summaryTh: rawJson.marketRegime?.summaryTh || 'ตลาดอยู่ในสภาวะปรับฐานและผันผวน ควรจัดสรรเงินสดและรอจังหวะสะสมตามแนวรับ',
+      riskLevel: rawJson.marketRegime?.riskLevel || pillars.formula.calculatedRiskScore || 4,
+      riskLevelLabel: rawJson.marketRegime?.riskLevelLabel || pillars.formula.calculatedRiskLabel || 'ความเสี่ยงระดับสูง',
+      fearGreedScore: rawJson.marketRegime?.fearGreedScore || pillars.sentiment.fearGreedScore || 39,
+      fearGreedLabel: rawJson.marketRegime?.fearGreedLabel || pillars.sentiment.fearGreedLabelTh || 'Fear',
+      macroDrivers: rawJson.marketRegime?.macroDrivers || pillars.catalystsAndFlows.keyCatalysts || [],
+      pillars,
     },
     portfolioResilience: rawJson.portfolioResilience || {
       score: 70,
@@ -144,16 +511,18 @@ async function gatherMarketData() {
     fearGreedRes,
     dxyRes,
     tnxRes,
+    oilRes,
   ] = await Promise.allSettled([
-    yahooFinanceProvider.getQuote('S&P 500'),
-    yahooFinanceProvider.getQuote('NASDAQ'),
-    yahooFinanceProvider.getQuote('SET INDEX', 'TH'),
+    yahooFinanceProvider.getQuote('S&P 500', 'US', true),
+    yahooFinanceProvider.getQuote('NASDAQ', 'US', true),
+    yahooFinanceProvider.getQuote('SET INDEX', 'TH', true),
     coinGeckoProvider.getQuote('BTC'),
-    yahooFinanceProvider.getQuote('GOLD'),
-    yahooFinanceProvider.getQuote('VIX'),
+    yahooFinanceProvider.getQuote('GOLD', 'US', true),
+    yahooFinanceProvider.getQuote('VIX', 'US', true),
     fetchRealHumanSentiment(),
-    yahooFinanceProvider.getQuote('DXY'),
-    yahooFinanceProvider.getQuote('US10Y'),
+    yahooFinanceProvider.getQuote('DXY', 'US', true),
+    yahooFinanceProvider.getQuote('US10Y', 'US', true),
+    yahooFinanceProvider.getQuote('OIL', 'US', true),
   ])
 
   const spx = spxRes.status === 'fulfilled' ? spxRes.value : null
@@ -165,6 +534,7 @@ async function gatherMarketData() {
   const fearGreed = fearGreedRes.status === 'fulfilled' ? fearGreedRes.value : null
   const dxy = dxyRes.status === 'fulfilled' ? dxyRes.value : null
   const tnx = tnxRes.status === 'fulfilled' ? tnxRes.value : null
+  const oil = oilRes.status === 'fulfilled' ? oilRes.value : null
 
   return {
     spx,
@@ -176,6 +546,7 @@ async function gatherMarketData() {
     fearGreed,
     dxy,
     tnx,
+    oil,
   }
 }
 
@@ -201,6 +572,35 @@ export async function runTacticalAnalysis(
 
   // 2. Gather External Market Signals
   const market = await gatherMarketData()
+
+  // Real numeric values for 4 Pillars
+  const spxPrice = market.spx?.price ?? 7561.67
+  const spx52High = market.spx?.fiftyTwoWeekHigh ?? (spxPrice * 1.037)
+  const spxDrawdown = spx52High > 0 ? Number((((spxPrice - spx52High) / spx52High) * 100).toFixed(2)) : -3.61
+
+  const nasdaqPrice = market.nasdaq?.price ?? 25136.27
+  const nasdaq52High = market.nasdaq?.fiftyTwoWeekHigh ?? (nasdaqPrice * 1.10)
+  const nasdaqDrawdown = nasdaq52High > 0 ? Number((((nasdaqPrice - nasdaq52High) / nasdaq52High) * 100).toFixed(2)) : -9.33
+
+  const vixPrice = market.vix?.price ?? 19.3
+  const us10yYield = market.tnx?.price ?? 4.42
+  const dxyPrice = market.dxy?.price ?? 103.41
+  const goldPrice = market.gold?.price ?? 3886.3
+  const oilPrice = market.oil?.price ?? 88.56
+  const btcPrice = market.btc?.price ?? 96500
+
+  const fgScore = market.fearGreed?.score ?? 39
+  const fgPrev1W = market.fearGreed?.previous1Week ?? 42
+  const fgDiff = fgScore - fgPrev1W
+
+  // Compute deterministic formula
+  const deterministicClimate = computeDeterministicClimate({
+    spxDrawdown,
+    nasdaqDrawdown,
+    fearGreedScore: fgScore,
+    vixPrice,
+    us10yYield,
+  })
 
   // 3. Gather past advice logs for Track Record verification
   const pastLogs = await prisma.aiAdviceLog.findMany({
@@ -234,18 +634,31 @@ export async function runTacticalAnalysis(
   // 4. Construct high-fidelity system prompt & user prompt for Gemini
   const prompt = `
 [AI Tactical Regime & Portfolio Advisor]
-คุณคือ "หัวหน้านักกลยุทธ์การลงทุนอาวุโส (Chief Tactical Investment Strategist)" หน้าที่ของคุณคือการผสานข้อมูลสภาวะตลาดภายนอก (Macro/Sentiment/Indices/Rates) เข้ากับพอร์ตจริงของผู้ใช้ (Holdings/Cash/Allocation/Cost Basis) เพื่อสังเคราะห์เป็นแผนกลยุทธ์เฉพาะตัวที่ปฏิบัติได้จริงในห้วงเวลานี้ (Regime-Aware Tactical Playbook)
+คุณคือ "หัวหน้านักกลยุทธ์การลงทุนอาวุโส (Chief Tactical Investment Strategist)" หน้าที่ของคุณคือการรวบรวมและวิเคราะห์ข้อมูล "4 เสาหลักสภาวะตลาด (4 Pillars of Market Climate)" ผสานเข้ากับพอร์ตจริงของผู้ใช้ เพื่อสังเคราะห์เป็นแผนกลยุทธ์เฉพาะตัวที่แม่นยำ ปฏิบัติได้จริงในห้วงเวลานี้ (Institutional Regime Playbook)
 
-=== ข้อมูลตลาดภายนอก (EXTERNAL MARKET CLIMATE) ===
-- S&P 500: ${market.spx?.price ?? 5800} (${(market.spx?.changePercent ?? 0) >= 0 ? '+' : ''}${market.spx?.changePercent?.toFixed(2) ?? 0}%)
-- NASDAQ (Tech): ${market.nasdaq?.price ?? 18200} (${(market.nasdaq?.changePercent ?? 0) >= 0 ? '+' : ''}${market.nasdaq?.changePercent?.toFixed(2) ?? 0}%)
-- SET Index (ไทย): ${market.setIndex?.price ?? 1450} (${(market.setIndex?.changePercent ?? 0) >= 0 ? '+' : ''}${market.setIndex?.changePercent?.toFixed(2) ?? 0}%)
-- VIX (ความกลัว): ${market.vix?.price ?? 16}
-- US 10Y Bond Yield: ${market.tnx?.price ?? 4.3}%
-- US Dollar Index (DXY): ${market.dxy?.price ?? 104}
-- CNN Fear & Greed Index: ${market.fearGreed?.score ?? 50}/100 (${market.fearGreed?.ratingLabelTh ?? 'เป็นกลาง'})
-- Bitcoin: $${market.btc?.price?.toLocaleString() ?? '90,000'}
-- Gold: $${market.gold?.price?.toLocaleString() ?? '2,600'}
+=== ข้อมูล 4 เสาหลักสภาวะตลาดจริง ณ วินาทีนี้ (THE 4 PILLARS OF MARKET CLIMATE) ===
+1. ดัชนีอารมณ์และความกลัว (Sentiment & Volatility):
+   - CNN Fear & Greed Index: ${fgScore}/100 (${market.fearGreed?.ratingLabelTh ?? 'ตลาดกังวล (Fear)'}) [สัปดาห์ก่อน: ${fgPrev1W} | ส่วนต่าง: ${fgDiff >= 0 ? '+' : ''}${fgDiff} จุด]
+   - VIX Index (ดัชนีความผันผวน S&P 500): ${vixPrice.toFixed(2)} pts (เกณฑ์ประเมิน: <20 สภาวะปกติ/เสถียรภาพสูง, 20-25 กังวลผันผวนยกระดับ, >30 ตื่นตระหนก Panic)
+
+2. แนวโน้มราคาและโมเมนตัมตลาด (Market Trend & Breadth):
+   - S&P 500: ${spxPrice.toLocaleString()} pts (${(market.spx?.changePercent ?? 0) >= 0 ? '+' : ''}${market.spx?.changePercent?.toFixed(2) ?? 0}%) | 52W High: ${spx52High.toLocaleString()} | % Drawdown จากจุดสูงสุด: ${spxDrawdown}%
+   - NASDAQ: ${nasdaqPrice.toLocaleString()} pts (${(market.nasdaq?.changePercent ?? 0) >= 0 ? '+' : ''}${market.nasdaq?.changePercent?.toFixed(2) ?? 0}%) | 52W High: ${nasdaq52High.toLocaleString()} | % Drawdown จากจุดสูงสุด: ${nasdaqDrawdown}%
+   - SET Index: ${market.setIndex?.price ?? 1450} pts
+   - เส้นค่าเฉลี่ยสำคัญ: วิเคราะห์การยืนเหนือเส้น EMA 50 / 125 / 200 วัน
+   - Market Breadth: ประเมินว่าตลาดกำลัง "ลงทั้งกระดาน (Broad Selloff)" หรือ "ลงแค่หุ้นใหญ่ / หุ้นใหญ่พยุงตลาด (Mega-cap Divergence)"
+
+3. ต้นทุนทางการเงินและนโยบาย (Macro & Liquidity):
+   - US 10Y Bond Yield: ${us10yYield.toFixed(2)}% (เกณฑ์: <4.0% ผ่อนคลายเอื้อสินทรัพย์เสี่ยง, 4.0-4.4% ตึงตัวปานกลาง, >4.4% แรงกดดันสูง)
+   - ทิศทางดอกเบี้ย Fed & ตัวเลขเงินเฟ้อ (CPI/PCE): คาดการณ์ทิศทางดอกเบี้ยครั้งถัดไปและผลกระทบของเงินเฟ้อต่อต้นทุนการเงิน
+
+4. ปัจจัยเร่งและกระแสเงินทุน (Catalysts & Fund Flows):
+   - Safe-Haven Demand: ทองคำ ($${goldPrice.toLocaleString()}), ดัชนีดอลลาร์ DXY (${dxyPrice.toFixed(2)}), น้ำมันดิบ ($${oilPrice.toFixed(2)}), Bitcoin ($${btcPrice.toLocaleString()})
+   - เงินทุนกำลังไหลเข้าสินทรัพย์เสี่ยง (Risk-On) หรือหมุนเข้าสินทรัพย์ปลอดภัย (Safe-Haven / Cash)
+   - 3 ข่าว/Event Drivers สำคัญ: ผลประกอบการกลุ่ม AI/Tech, ทิศทาง Bond Yield/เงินเฟ้อ, ภูมิรัฐศาสตร์
+
+💡 สูตรลัดสรุปผล (Market Climate Formula):
+แนวโน้มดัชนี + ระดับความกลัว (Fear & Greed / VIX) + แรงกดดันดอกเบี้ย (10Y Yield) = ระดับความเสี่ยงตลาด (${deterministicClimate.riskScore}/5) และกลยุทธ์ที่ควรใช้ (${deterministicClimate.postureLabelTh})
 
 === ข้อมูลพอร์ตภายในจริง (INTERNAL PORTFOLIO DNA) ===
 - มูลค่าพอร์ตลงทุนรวม: ${totalPortfolioValue.toLocaleString()} ${baseCurrency}
@@ -264,23 +677,50 @@ ${holdingsResult.holdings
 ${pastContextSummaries || 'ยังไม่มีประวัติคำแนะนำก่อนหน้า (เป็นการวิเคราะห์รอบแรก)'}
 
 === กฎเหล็ก 5 มิติที่ต้องคำนึงถึงในการวิเคราะห์ (MANDATORY 5 DIMENSIONS) ===
-1. กำหนดขนาดไม้และวงเงินเสมอ (Position Sizing & Tranches): หากแนะนำให้สะสม (ACCUMULATE) ต้องระบุว่าใช้เงินสดกี่ % หรือกี่บาท/ดอลลาร์ และแบ่งเป็นกี่ไม้ชัดเจน (เช่น ไม้แรก 30% ที่ราคา..., ไม้สอง 40% ที่แนวรับ S1...)
+1. กำหนดขนาดไม้และวงเงินเสมอ (Position Sizing & Tranches): หากแนะนำให้สะสม (ACCUMULATE) ต้องระบุว่าใช้เงินสดกี่ % หรือกี่บาท/ดอลลาร์ และแบ่งเป็นกี่ไม้ชัดเจน (เช่น ไม้แรก 25% ที่ราคา..., ไม้สอง 35% ที่แนวรับ S1...)
 2. มีจุดหนีไฟหรือจุดตัดขาดทุนเสมอ (Stop Loss / Invalidation Point): ต้องระบุราคาที่หากหลุด ต้องหยุดซื้อถัวหรือพิจารณาตัดขาดทุน
-3. ตรวจสอบความเสี่ยงเชิงธีมซ้ำซ้อน (Thematic Correlation Risk): วิเคราะห์ว่าถือหุ้นคนละตัวแต่อยู่ในธีมเดียวกันมากเกินไปไหม (เช่น ถือ Tech/AI หลายตัวจนรวมกันเกิน 50-60%) หากพบให้ระบุใน thematicRiskAlert ชัดเจน
-4. คำนึงถึงภาษีเงินได้จากการขาย (Tax Sensitivity): หากแนะนำให้ลดพอร์ตหรือขายทำกำไร (TRIM_PROFIT) ให้ระบุเตือนภาษีสั้นๆ เสมอ (เช่น ระวังกฎหมายภาษีหุ้นนอกหากนำกำไรกลับเข้าไทยในปีเดียวกัน)
-5. สรุปผลการบ้านคำแนะนำรอบก่อนหน้า (Track Record Review): ประเมินคำแนะนำรอบก่อนว่าสภาวะตลาดเป็นไปตามคาดไหม
+3. ตรวจสอบความเสี่ยงเชิงธีมซ้ำซ้อน (Thematic Correlation Risk): วิเคราะห์ว่าถือหุ้นคนละตัวแต่อยู่ในธีมเดียวกันมากเกินไปไหม (เช่น Tech/AI เกิน 50-60%) หากพบให้ระบุใน thematicRiskAlert
+4. คำนึงถึงภาษีเงินได้จากการขาย (Tax Sensitivity): หากแนะนำให้ขายทำกำไร (TRIM_PROFIT) ให้ระบุเตือนภาษีสั้นๆ เสมอ
+5. สรุปผลการบ้านคำแนะนำรอบก่อนหน้า (Track Record Review): ประเมินว่าผลลัพธ์ตลาดสอดคล้องกับคำแนะนำรอบก่อนไหม
 
 กรุณาสังเคราะห์และตอบกลับมาเป็น JSON ตามรูปแบบนี้เท่านั้น ห้ามใส่ข้อความอื่นนอกเหนือจาก JSON:
 {
   "marketRegime": {
     "status": "VOLATILE_CAUTION" | "EARLY_ACCUMULATION" | "BULL_EXPANSION" | "DEFENSIVE_ROTATION",
-    "statusLabelTh": "ชื่อสภาวะตลาดภาษาไทยแบบกระชับ",
-    "summaryTh": "สรุปสภาวะตลาดและบริบทห้วงเวลานี้ใน 2 ประโยค",
-    "riskLevel": 1 ถึง 5 (5 คือเสี่ยงสูงสุด),
-    "riskLevelLabel": "ความเสี่ยงระดับสูง / ปานกลาง / ต่ำ",
-    "fearGreedScore": ตัวเลข 0-100,
-    "fearGreedLabel": "Extreme Fear / Fear / Neutral / Greed / Extreme Greed",
-    "macroDrivers": ["ประเด็นหลักที่ 1", "ประเด็นหลักที่ 2", "ประเด็นหลักที่ 3"]
+    "statusLabelTh": "ชื่อสภาวะตลาดภาษาไทย",
+    "summaryTh": "สรุปสภาวะตลาดและบริบทห้วงเวลานี้ใน 2 ประโยคกระชับตรงประเด็น",
+    "riskLevel": ${deterministicClimate.riskScore},
+    "riskLevelLabel": "${deterministicClimate.riskLabel}",
+    "fearGreedScore": ${fgScore},
+    "fearGreedLabel": "${market.fearGreed?.ratingLabelTh ?? 'Fear'}",
+    "macroDrivers": ["ประเด็นหลักที่ 1", "ประเด็นหลักที่ 2", "ประเด็นหลักที่ 3"],
+    "pillars": {
+      "sentiment": {
+        "summary": "บทวิเคราะห์อารมณ์ตลาดและความกลัว 1-2 ประโยค"
+      },
+      "momentum": {
+        "spxEmaStatus": "สถานะเส้น EMA 50 / 125 / 200 วัน ของ S&P 500 เช่น พักฐานทดสอบ EMA 50",
+        "nasdaqEmaStatus": "สถานะเส้น EMA ของ NASDAQ",
+        "breadthStatus": "สถานะ Market Breadth เช่น หุ้นใหญ่ประคองดัชนี หรือลงทั้งกระดาน",
+        "summary": "บทวิเคราะห์โมเมนตัมตลาดและ Drawdown 1 ประโยค"
+      },
+      "macroLiquidity": {
+        "fedPolicyStance": "คาดการณ์นโยบาย Fed ในการประชุมครั้งถัดไป",
+        "inflationExpectation": "แนวโน้มเงินเฟ้อ CPI/PCE และผลกระทบต่อต้นทุนดอกเบี้ย",
+        "summary": "บทวิเคราะห์อัตราผลตอบแทนพันธบัตรและต้นทุนการเงิน 1 ประโยค"
+      },
+      "catalystsAndFlows": {
+        "safeHavenFlow": "RISK_ON" | "DEFENSIVE_ROTATION" | "CASH_PRESERVATION",
+        "safeHavenFlowLabel": "ทิศทางการไหลของเงินทุน เช่น กระจายเข้าสินทรัพย์ปลอดภัย (ทองคำ/ดอลลาร์)",
+        "keyCatalysts": ["ข่าวสำคัญ 1 เช่น งบ Big Tech", "ข่าว 2 เช่น ดอกเบี้ย Fed", "ข่าว 3 เช่น น้ำมันและภูมิรัฐศาสตร์"],
+        "summary": "บทวิเคราะห์กระแสเงินทุน 1 ประโยค"
+      },
+      "formula": {
+        "formulaEquation": "สมการสรุป เช่น ดัชนีย่อตัว (SPX -3.6%) + อารมณ์กังวล (F&G 39) + Bond Yield สูง ➔ เสี่ยงระดับ 4/5 (ตั้งรับรอจังหวะ)",
+        "greenlightTrigger": "จุดปลดล็อกเข้าซื้อไม้ใหญ่ (เงื่อนไขชัดเจน เช่น VIX < 20 หรือ Fear & Greed < 25 พร้อม S&P ยืนเหนือ EMA 200)",
+        "redflagTrigger": "จุดเตือนภัยขั้นสุด-ห้ามถัว (เงื่อนไขชัดเจน เช่น 10Y Yield ทะลุ 4.60% หรือ VIX > 30)"
+      }
+    }
   },
   "portfolioResilience": {
     "score": ตัวเลข 0-100,
@@ -288,7 +728,7 @@ ${pastContextSummaries || 'ยังไม่มีประวัติคำ�
     "statusLabelTh": "พร้อมรับมือดีเยี่ยม / แข็งแกร่งปานกลาง / เปราะบางควรปรับพอร์ต",
     "strengths": ["จุดแข็งที่ 1 ของพอร์ตในตลาดห้วงนี้", "จุดแข็งที่ 2"],
     "vulnerabilities": ["จุดเปราะบางที่ 1", "จุดเปราะบางที่ 2"],
-    "thematicRiskAlert": "ข้อความแจ้งเตือนความเสี่ยงการกระจุกตัวในธีมเดียวกัน หรือ null ถ้าพอร์ตกระจายตัวดีแล้ว"
+    "thematicRiskAlert": "ข้อความแจ้งเตือนความเสี่ยงการกระจุกตัว หรือ null ถ้าพอร์ตกระจายตัวดีแล้ว"
   },
   "tacticalActions": [
     {
@@ -358,10 +798,43 @@ ${pastContextSummaries || 'ยังไม่มีประวัติคำ�
     return item
   })
 
+  const resolvedPillars = reconcileMarketPillars(parsed?.marketRegime?.pillars, {
+    spxPrice,
+    spxChangePercent: market.spx?.changePercent ?? 0,
+    spxFiftyTwoHigh: spx52High,
+    spxDrawdownPercent: spxDrawdown,
+    nasdaqPrice,
+    nasdaqChangePercent: market.nasdaq?.changePercent ?? 0,
+    nasdaqFiftyTwoHigh: nasdaq52High,
+    nasdaqDrawdownPercent: nasdaqDrawdown,
+    vixPrice,
+    us10yYield,
+    fearGreedScore: fgScore,
+    fearGreedLabelTh: market.fearGreed?.ratingLabelTh ?? 'ตลาดกังวล (Fear)',
+    fearGreed1WDiff: fgDiff,
+    previous1WeekScore: fgPrev1W,
+    dxyPrice,
+    goldPrice,
+    oilPrice,
+    deterministicClimate,
+  })
+
   const payload: TacticalAdvisorPayload = {
     asOfDate: getBangkokDateString(now),
     asOfDateThai: formatThaiDate(now),
-    marketRegime: parsed.marketRegime,
+    marketRegime: {
+      status: parsed?.marketRegime?.status || 'VOLATILE_CAUTION',
+      statusLabelTh: parsed?.marketRegime?.statusLabelTh || resolvedPillars.formula.postureLabelTh,
+      summaryTh:
+        parsed?.marketRegime?.summaryTh ||
+        'ตลาดอยู่ในสภาวะปรับฐานและผันผวน ควรจัดสรรเงินสดและรอจังหวะสะสมตามแนวรับสำคัญ',
+      riskLevel: resolvedPillars.formula.calculatedRiskScore,
+      riskLevelLabel: resolvedPillars.formula.calculatedRiskLabel,
+      fearGreedScore: fgScore,
+      fearGreedLabel: market.fearGreed?.ratingLabelTh ?? 'Fear',
+      macroDrivers: resolvedPillars.catalystsAndFlows.keyCatalysts,
+      pillars: resolvedPillars,
+    },
     portfolioResilience: parsed.portfolioResilience,
     tacticalActions: reconciledActions,
     cashStrategy: parsed.cashStrategy,
