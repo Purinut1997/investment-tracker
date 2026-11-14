@@ -60,7 +60,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
 
     // 1. Map symbol to Yahoo Finance ticker format first so cache key is market-aware
     let yfTicker = rawSymbol
-    if (rawSymbol === 'SET' || rawSymbol === 'SET INDEX' || rawSymbol === '^SET') {
+    if (rawSymbol === 'SET' || rawSymbol === 'SET INDEX' || rawSymbol === '^SET' || rawSymbol === '^SET.BK') {
       yfTicker = '%5ESET.BK'
     } else if (rawSymbol === 'S&P 500' || rawSymbol === 'SP500' || rawSymbol === '^SPX' || rawSymbol === '^GSPC') {
       yfTicker = '%5EGSPC'
@@ -124,6 +124,19 @@ export class YahooFinanceProvider implements MarketDataProvider {
       let currency = 'USD'
       if (rawSymbol.includes('SET') || market === 'TH' || rawSymbol.endsWith('.BK') || yfTicker.endsWith('.BK')) {
         currency = rawSymbol.includes('SET') ? 'PTS' : 'THB'
+      } else if (
+        rawSymbol === 'S&P 500' ||
+        rawSymbol === 'SP500' ||
+        rawSymbol === '^GSPC' ||
+        rawSymbol === '^SPX' ||
+        rawSymbol === 'NASDAQ' ||
+        rawSymbol === '^IXIC' ||
+        rawSymbol === 'DOW' ||
+        rawSymbol === '^DJI' ||
+        rawSymbol === 'VIX' ||
+        rawSymbol === '^VIX'
+      ) {
+        currency = 'PTS'
       }
 
       const quote: MarketQuote = {

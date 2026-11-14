@@ -120,7 +120,7 @@ async function refreshStaleAssetsInBackground(assetIds: string[]) {
     })
     await Promise.allSettled(
       assets.map(async (asset) => {
-        const quote = await fetchLiveAssetQuote(asset, false)
+        const quote = await fetchLiveAssetQuote(asset, true)
         if (quote && quote.price > 0) {
           await syncAssetLivePrice(asset.id, quote.price, quote.provider)
         }

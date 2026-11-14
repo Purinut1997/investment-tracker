@@ -93,7 +93,7 @@ export async function GET() {
         price: spx.price,
         changePercent: spx.changePercent,
         change: spx.change,
-        currency: 'USD',
+        currency: 'PTS',
         category: 'index',
       })
     }
@@ -106,7 +106,7 @@ export async function GET() {
         price: ndq.price,
         changePercent: ndq.changePercent,
         change: ndq.change,
-        currency: 'USD',
+        currency: 'PTS',
         category: 'index',
       })
     }
@@ -297,7 +297,7 @@ export async function GET() {
       },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=180',
+          'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
         },
       }
     )
@@ -312,7 +312,7 @@ export async function GET() {
         },
         {
           headers: {
-            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=180',
+            'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
           },
         }
       )

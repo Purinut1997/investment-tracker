@@ -16,17 +16,17 @@ export interface TickerItem {
 }
 
 const DEFAULT_FALLBACK_TICKERS: TickerItem[] = [
-  { symbol: 'SET INDEX', name: 'ตลาดหุ้นไทย', price: 1583.34, changePercent: 1.32, currency: 'PTS', category: 'index' },
-  { symbol: 'S&P 500', name: 'ดัชนีสหรัฐฯ', price: 7634.97, changePercent: 1.10, currency: 'USD', category: 'index' },
-  { symbol: 'NASDAQ', name: 'หุ้นเทคโนโลยี', price: 26399.90, changePercent: 1.62, currency: 'USD', category: 'index' },
-  { symbol: 'BTC', name: 'Bitcoin', price: 76670.0, changePercent: 1.14, currency: 'USD', category: 'crypto' },
-  { symbol: 'ETH', name: 'Ethereum', price: 2467.94, changePercent: 2.97, currency: 'USD', category: 'crypto' },
-  { symbol: 'SOL', name: 'Solana', price: 101.36, changePercent: 4.33, currency: 'USD', category: 'crypto' },
-  { symbol: 'GOLD (XAU)', name: 'ทองคำโลก', price: 4398.70, changePercent: 0.26, currency: 'USD', category: 'commodity' },
-  { symbol: 'NVDA', name: 'NVIDIA', price: 218.93, changePercent: 2.35, currency: 'USD', category: 'stock' },
-  { symbol: 'PTT', name: 'ปตท.', price: 42.25, changePercent: 0.60, currency: 'THB', category: 'stock' },
-  { symbol: 'USD / THB', name: 'ดอลลาร์/บาท', price: 33.31, changePercent: 0, currency: 'THB', category: 'fx' },
-  { symbol: 'EUR / THB', name: 'ยูโร/บาท', price: 38.45, changePercent: 0, currency: 'THB', category: 'fx' },
+  { symbol: 'SET INDEX', name: 'ตลาดหุ้นไทย', price: 1504.88, changePercent: 0.39, currency: 'PTS', category: 'index' },
+  { symbol: 'S&P 500', name: 'ดัชนีสหรัฐฯ', price: 7561.67, changePercent: -0.40, currency: 'PTS', category: 'index' },
+  { symbol: 'NASDAQ', name: 'หุ้นเทคโนโลยี', price: 25136.27, changePercent: -0.91, currency: 'PTS', category: 'index' },
+  { symbol: 'BTC', name: 'Bitcoin', price: 67308.0, changePercent: -2.08, currency: 'USD', category: 'crypto' },
+  { symbol: 'ETH', name: 'Ethereum', price: 1902.91, changePercent: -1.27, currency: 'USD', category: 'crypto' },
+  { symbol: 'SOL', name: 'Solana', price: 75.50, changePercent: -5.18, currency: 'USD', category: 'crypto' },
+  { symbol: 'GOLD (XAU)', name: 'ทองคำโลก', price: 3886.30, changePercent: 0.03, currency: 'USD', category: 'commodity' },
+  { symbol: 'NVDA', name: 'NVIDIA', price: 162.85, changePercent: -2.01, currency: 'USD', category: 'stock' },
+  { symbol: 'PTT', name: 'ปตท.', price: 38.00, changePercent: -0.65, currency: 'THB', category: 'stock' },
+  { symbol: 'USD / THB', name: 'ดอลลาร์/บาท', price: 34.25, changePercent: 0, currency: 'THB', category: 'fx' },
+  { symbol: 'EUR / THB', name: 'ยูโร/บาท', price: 37.10, changePercent: 0, currency: 'THB', category: 'fx' },
 ]
 
 function getCategoryIcon(item: TickerItem) {
@@ -57,9 +57,10 @@ function formatPrice(price: number, currency: string) {
 export function TickerTape() {
   const { data } = useSWR<{ items: TickerItem[] }>('/api/market-data/ticker', {
     fallbackData: { items: DEFAULT_FALLBACK_TICKERS },
-    revalidateOnMount: false, // Render fallback immediately (0ms) without blocking page load
-    refreshInterval: 60000,
-    revalidateOnFocus: false,
+    revalidateOnMount: true, // Always fetch live market data immediately on load
+    refreshInterval: 30000,  // Auto-refresh live market prices every 30 seconds
+    revalidateOnFocus: true, // Re-fetch when user returns to the tab
+    dedupingInterval: 10000,
   })
 
   const items = (data?.items && data.items.length > 0) ? data.items : DEFAULT_FALLBACK_TICKERS

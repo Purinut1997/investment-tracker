@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
         },
       },
       distinct: ['assetId'],
-      take: 20, // Limit batch size to stay within Vercel execution window
+      take: 100, // Sync up to 100 distinct assets in portfolio
     })
 
     const today = new Date()

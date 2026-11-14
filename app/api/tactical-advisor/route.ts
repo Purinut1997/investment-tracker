@@ -345,12 +345,25 @@ ${pastContextSummaries || 'ยังไม่มีประวัติคำ�
   }
 
   const now = new Date()
+  const holdingsMap = new Map(holdingsResult.holdings.map((h) => [h.ticker.toUpperCase(), h]))
+  const reconciledActions = (parsed.tacticalActions || []).map((item: any) => {
+    const matched = holdingsMap.get(item.ticker?.toUpperCase())
+    if (matched && matched.currentPrice > 0) {
+      return {
+        ...item,
+        currentPrice: Number(matched.currentPrice),
+        currency: matched.currency === 'THB' ? '฿' : '$',
+      }
+    }
+    return item
+  })
+
   const payload: TacticalAdvisorPayload = {
     asOfDate: getBangkokDateString(now),
     asOfDateThai: formatThaiDate(now),
     marketRegime: parsed.marketRegime,
     portfolioResilience: parsed.portfolioResilience,
-    tacticalActions: parsed.tacticalActions || [],
+    tacticalActions: reconciledActions,
     cashStrategy: parsed.cashStrategy,
     trackRecordReview: parsed.trackRecordReview || [],
     modelUsed: aiResult.modelUsed,
