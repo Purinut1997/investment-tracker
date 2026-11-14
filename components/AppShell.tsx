@@ -63,7 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         label: 'กลยุทธ์ & บริหารความเสี่ยง',
         href: '/plans',
-        matchPrefixes: ['/plans', '/radar', '/forecast'],
+        matchPrefixes: ['/plans', '/tactical-advisor', '/radar', '/forecast'],
         icon: PieChart,
         badge: 'AI',
       },
@@ -103,11 +103,12 @@ const HUB_SUB_TABS: Array<{
     ],
   },
   {
-    hubPrefixes: ['/plans', '/radar', '/forecast'],
+    hubPrefixes: ['/plans', '/tactical-advisor', '/radar', '/forecast'],
     tabs: [
       { label: 'สัดส่วนเป้าหมาย & ปรับพอร์ต DCA', href: '/plans', icon: PieChart, badge: 'Dime! Style' },
+      { label: 'AI ชี้เป้าตามสภาวะตลาด', href: '/tactical-advisor', icon: Sparkles, badge: 'ใหม่' },
       { label: 'เรดาร์ความเสี่ยง & โอกาสช้อนซื้อ', href: '/radar', icon: Radar },
-      { label: 'จำลองพอร์ต 10 ปี (Monte Carlo)', href: '/forecast', icon: Sparkles },
+      { label: 'จำลองพอร์ต 10 ปี (Monte Carlo)', href: '/forecast', icon: TrendingUp },
     ],
   },
   {
@@ -612,7 +613,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           },
           {
             href: '/plans',
-            match: ['/plans', '/radar', '/forecast'],
+            match: ['/plans', '/tactical-advisor', '/radar', '/forecast'],
             icon: PieChart,
             label: 'กลยุทธ์/เสี่ยง',
           },
