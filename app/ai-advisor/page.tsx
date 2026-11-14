@@ -23,6 +23,9 @@ import {
   ChevronRight,
   Info,
   CheckCircle2,
+  Newspaper,
+  Globe,
+  LineChart,
 } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
 import { StockLogo } from '@/components/StockLogo'
@@ -38,31 +41,47 @@ interface ChatMessage {
   modelUsed?: string
 }
 
+interface ExternalNewsItem {
+  id: string
+  symbol?: string | null
+  headline: string
+  summary?: string | null
+  sourceName: string
+  sourceUrl?: string
+  publishedAt: string
+  sentiment?: 'positive' | 'negative' | 'neutral' | 'BULLISH' | 'BEARISH' | 'NEUTRAL' | null
+}
+
 const QUICK_STRATEGY_QUESTIONS = [
   {
-    category: 'กราฟ & เทคนิค',
+    category: '📰 ข่าวภายนอกกระทบพอร์ต',
+    icon: Newspaper,
+    prompt:
+      'สรุปข่าวสารภายนอกล่าสุด (เช่น ข่าว AI Chips ของ Google/Nvidia, การเคลื่อนไหวของ Bond Yield, นโยบาย Fed, หรือคดีความ) ที่ส่งผลกระทบต่อหุ้นในพอร์ตของผมให้หน่อย',
+  },
+  {
+    category: '📊 กราฟ & เทคนิครายตัว',
     icon: BarChart3,
-    prompt: 'อ่านกราฟและแนวโน้มหุ้นทุกตัวที่ผมถืออยู่ให้หน่อย พร้อมระบุ RSI(14) แนวรับ S1/S2 และ SMA สำคัญ',
+    prompt:
+      'อ่านกราฟแท่งเทียนและแนวโน้มราคาของหุ้นทุกตัวที่ผมถืออยู่ให้หน่อย พร้อมระบุ RSI(14) แนวรับ S1/S2 เส้น SMA 50/200 และจุดย่อตัวจากจุดสูงสุด',
   },
   {
-    category: 'แบ่งไม้ช้อนซื้อ',
+    category: '🎯 แบ่งไม้ช้อนซื้อ',
     icon: Layers,
-    prompt: 'เงินสดที่มีอยู่ตอนนี้ ควรแบ่งเข้าตัวไหนเป็นไม้แรก (Tranche Entry) ตามแนวรับและสภาวะตลาดห้วงนี้?',
+    prompt:
+      'เงินสดที่มีอยู่ตอนนี้ ควรแบ่งเข้าตัวไหนเป็นไม้แรก (Tranche Entry) ตามแนวรับและสภาวะตลาดห้วงนี้?',
   },
   {
-    category: 'จุดหนีไฟ Stop Loss',
+    category: '🛡️ จุดหนีไฟ Stop Loss',
     icon: ShieldAlert,
-    prompt: 'ตรวจสอบจุดหนีไฟ (Stop Loss) และแนวรับสำคัญของหุ้นแต่ละตัวในพอร์ต มีตัวไหนเสี่ยงหลุดแนวรับบ้าง?',
+    prompt:
+      'ตรวจสอบจุดหนีไฟ (Stop Loss) และแนวรับสำคัญของหุ้นแต่ละตัวในพอร์ต มีตัวไหนเสี่ยงหลุดแนวรับบ้าง?',
   },
   {
-    category: 'กระจายความเสี่ยง',
-    icon: TrendingUp,
-    prompt: 'พอร์ตกระจุกตัวในกลุ่ม Tech & AI สูงถึง ~80% มีแนวทาง Rebalancing หรือลดความเสี่ยงอย่างไรให้พอร์ตยังเติบโต?',
-  },
-  {
-    category: 'บริหารภาษีต่างประเทศ',
-    icon: Info,
-    prompt: 'ในพอร์ตนี้ มีตัวไหนที่ควรพิจารณาขายทำกำไรหรือตัดขาดทุนก่อนสิ้นปีเพื่อบริหารภาษีต่างประเทศ (มาตรา 41)?',
+    category: '🌐 ดอกเบี้ย Fed & มหภาค',
+    icon: Globe,
+    prompt:
+      'วิเคราะห์ข่าว Bond Yield สหรัฐฯ 10 ปีที่ทรงตัวสูง และความกังวลเรื่องดอกเบี้ย Fed ว่ากำลังกดดันหุ้นกลุ่ม Tech & AI ในพอร์ตของผมอย่างไร?',
   },
 ]
 
@@ -72,9 +91,10 @@ export default function AiAdvisorPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; market: string } | null>(null)
+  const [activeLeftTab, setActiveLeftTab] = useState<'charts' | 'news'>('charts')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Fetch 360° Tactical & Market Context
+  // 1. Fetch 360° Tactical & Market Context
   const { data: responseData, isLoading: isContextLoading } = useSWR<TacticalAdvisorApiResponse>(
     '/api/tactical-advisor',
     {
@@ -83,8 +103,18 @@ export default function AiAdvisorPage() {
     }
   )
 
+  // 2. Fetch Live External News Feed
+  const { data: newsApiResponse } = useSWR<{ news: ExternalNewsItem[] }>(
+    '/api/news?category=portfolio',
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+    }
+  )
+
   const payload = responseData?.data
   const pillars = payload?.marketRegime?.pillars
+  const externalNewsList = newsApiResponse?.news || []
 
   // Scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -104,12 +134,13 @@ export default function AiAdvisorPage() {
 
       const welcomeText = `สวัสดีครับ ผมคือ **AI ที่ปรึกษาการลงทุน 360° (Senior Wealth Copilot)** ประจำตัวคุณ
 
-ผมได้ประมวลผลข้อมูลของพอร์ตคุณครบทั้ง 3 มิติเรียบร้อยแล้ว:
-- **ข้อมูลภายในพอร์ต:** มูลค่าสินทรัพย์รวม, เงินสดสำรอง (Dry Powder), สัดส่วนการถือครองรายตัว, และต้นทุน/กำไรขาดทุนจริง
-- **สัญญาณเทคนิครายตัว:** Wilder's RSI(14), เส้นค่าเฉลี่ย SMA 50/200, จุดแนวรับ Pivot S1/S2 และจุดตัดขาดทุน
-- **สภาวะมหภาค 4 เสาหลัก:** สภาวะตลาดขณะนี้คือ **${regimeName}** (ความเสี่ยง **${riskScore}/5**) โดยเน้นกลยุทธ์ **${posture}**
+ผมได้ประมวลผลข้อมูลรอบด้านครบทุกมิติ พร้อมให้คำปรึกษาแล้วครับ:
+- **ข้อมูลภายในพอร์ต:** มูลค่าสินทรัพย์รวม, เงินสดสำรอง (Dry Powder), สัดส่วนการถือครองรายตัว, ต้นทุน และกำไร/ขาดทุนจริง
+- **ข้อมูลกราฟเทคนิคภายนอก:** วิเคราะห์แท่งเทียน, Wilder's RSI(14), เส้นค่าเฉลี่ย SMA 50/200, และแนวรับ/แนวต้าน Pivot S1/S2/R1
+- **ข่าวสารภายนอกสด (Live News):** เชื่อมต่อข่าวเศรษฐกิจโลกและข่าวรายบริษัทจาก Finnhub, Yahoo Finance, Google News
+- **สภาวะมหภาค 4 เสาหลัก:** สภาวะตลาดขณะนี้คือ **${regimeName}** (ความเสี่ยง **${riskScore}/5**) กลยุทธ์หลัก: **${posture}**
 
-💡 คุณสามารถเลือกหัวข้อที่ต้องการปรึกษาจากปุ่มคลิกเดียวด้านล่าง หรือพิมพ์คำถามเจาะลึกที่ต้องการได้ทันทีครับ`
+💡 คุณสามารถเลือกหัวข้อด่วนจากปุ่มแนะนำด้านบน คลิกดูกราฟสด/ข่าวสารจากแถบซ้าย หรือพิมพ์คำถามเจาะลึกได้ทันทีครับ`
 
       setMessages([
         {
@@ -216,7 +247,7 @@ export default function AiAdvisorPage() {
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-slate-300">
-              วิเคราะห์ครบทุกมิติ: ผสานข้อมูลพอร์ตจริง + สัญญาณเทคนิคเชิงปริมาณ (RSI / SMA / Pivots) + สภาวะมหภาค 4 เสาหลัก
+              วิเคราะห์ครบทุกมิติ: ผสานข้อมูลพอร์ตจริง + ข่าวสารภายนอกสด (Finnhub/Yahoo) + กราฟเทคนิคแท่งเทียน + มหภาค 4 เสาหลัก
             </p>
           </div>
 
@@ -292,39 +323,80 @@ export default function AiAdvisorPage() {
               )}
             </div>
 
-            {/* 2. Real-Time Holdings Technical Watchlist */}
+            {/* 2. DUAL-TAB COCKPIT: TECHNICAL CHARTS vs LIVE EXTERNAL NEWS */}
             <div className="p-5 rounded-2xl bg-[#0D1019] border border-white/[0.08] shadow-lg space-y-3.5">
+              {/* Tab Selector Header */}
               <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-indigo-400" />
-                  <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
-                    มอนิเตอร์หุ้นในพอร์ต & สัญญาณ
-                  </h3>
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/50 border border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={() => setActiveLeftTab('charts')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      activeLeftTab === 'charts'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <LineChart className="w-3.5 h-3.5" />
+                    <span>กราฟเทคนิค & กรอบ</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveLeftTab('news')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      activeLeftTab === 'news'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Newspaper className="w-3.5 h-3.5" />
+                    <span>ข่าวภายนอกสด</span>
+                    {externalNewsList.length > 0 && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    )}
+                  </button>
                 </div>
-                <span className="text-[11px] text-slate-400">
-                  {payload?.tacticalActions?.length || 0} ตัว
+
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {activeLeftTab === 'charts'
+                    ? `${payload?.tacticalActions?.length || 0} หุ้น`
+                    : `${externalNewsList.length} ข่าว`}
                 </span>
               </div>
 
-              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-                {(payload?.tacticalActions || []).map((stock) => {
-                  const isAccumulate = stock.action === 'ACCUMULATE'
-                  const isTrim = stock.action === 'TRIM_PROFIT'
+              {/* TAB 1: TECHNICAL CHARTS & WATCHLIST */}
+              {activeLeftTab === 'charts' && (
+                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                  {(payload?.tacticalActions || []).map((stock) => {
+                    const isAccumulate = stock.action === 'ACCUMULATE'
+                    const isTrim = stock.action === 'TRIM_PROFIT'
 
-                  return (
-                    <div
-                      key={stock.id}
-                      className="p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] transition-colors flex items-center justify-between gap-3 group"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <StockLogo ticker={stock.ticker} name={stock.assetName} size={32} />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-white text-xs sm:text-sm tracking-wide">
-                              {stock.ticker}
+                    return (
+                      <div
+                        key={stock.id}
+                        className="p-3.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] transition-colors space-y-2.5 group"
+                      >
+                        {/* Header Row: Logo, Ticker, Action Badge */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <StockLogo ticker={stock.ticker} name={stock.assetName} size={32} />
+                            <div className="min-w-0">
+                              <span className="font-bold text-white text-xs sm:text-sm tracking-wide block">
+                                {stock.ticker}
+                              </span>
+                              <span className="text-[11px] text-slate-400 truncate max-w-[130px] block">
+                                {stock.assetName}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="text-white font-mono font-bold text-xs sm:text-sm block">
+                              {stock.currency}{stock.currentPrice.toFixed(2)}
                             </span>
                             <span
-                              className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                              className={`text-[10px] px-1.5 py-0.2 rounded font-semibold inline-block ${
                                 isAccumulate
                                   ? 'bg-emerald-500/20 text-emerald-300'
                                   : isTrim
@@ -335,38 +407,123 @@ export default function AiAdvisorPage() {
                               {stock.actionLabel}
                             </span>
                           </div>
-                          <span className="text-[11px] text-slate-400 font-mono block">
-                            {stock.currency}{stock.currentPrice.toFixed(2)} | หนีไฟ: {stock.stopLossPoint || '-'}
-                          </span>
+                        </div>
+
+                        {/* Pivot & Support Zone Info */}
+                        <div className="p-2 rounded-lg bg-black/40 border border-white/[0.04] flex items-center justify-between text-[11px] font-mono text-slate-300">
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">กรอบเป้าหมาย</span>
+                            <span className="text-indigo-300 font-semibold">{stock.targetZone}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-slate-500 block text-[10px]">จุดหนีไฟ (Stop)</span>
+                            <span className="text-rose-300 font-semibold">{stock.stopLossPoint || '-'}</span>
+                          </div>
+                        </div>
+
+                        {/* Interactive Buttons: Open Live Chart Modal & Ask AI */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStock({ symbol: stock.ticker, market: stock.market })}
+                            className="flex-1 py-1.5 px-2.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-white/[0.06]"
+                          >
+                            <LineChart className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>ดูกราฟแท่งเทียนสด ↗</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const q = `วิเคราะห์กราฟเทคนิค ทรงราคา และแนวรับแนวต้านของหุ้น ${stock.ticker} ให้ละเอียด พร้อมบอกจังหวะเข้า/ออก`
+                              setInputQuestion(q)
+                              handleSendMessage(q)
+                            }}
+                            className="py-1.5 px-2.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-indigo-500/30"
+                            title="ถาม AI เจาะลึกตัวนี้"
+                          >
+                            <Bot className="w-3.5 h-3.5" />
+                            <span>ถาม AI</span>
+                          </button>
                         </div>
                       </div>
+                    )
+                  })}
+                </div>
+              )}
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const q = `วิเคราะห์กราฟ เทคนิค และแนวรับแนวต้านของหุ้น ${stock.ticker} ให้ละเอียด พร้อมบอกจังหวะเข้า/ออก`
-                            setInputQuestion(q)
-                            handleSendMessage(q)
-                          }}
-                          title="ถาม AI เจาะลึกตัวนี้"
-                          className="p-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/20 text-indigo-300 text-xs transition-colors cursor-pointer"
-                        >
-                          <Bot className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedStock({ symbol: stock.ticker, market: stock.market })}
-                          title="ดูกราฟเต็ม"
-                          className="p-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-slate-400 hover:text-white text-xs transition-colors cursor-pointer"
-                        >
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+              {/* TAB 2: LIVE EXTERNAL NEWS FEED */}
+              {activeLeftTab === 'news' && (
+                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                  {externalNewsList.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-slate-400 bg-black/30 rounded-xl border border-white/[0.04]">
+                      กำลังดึงข้อมูลข่าวสารภายนอกสดจากสำนักข่าวการเงิน...
                     </div>
-                  )
-                })}
-              </div>
+                  ) : (
+                    externalNewsList.slice(0, 15).map((news) => {
+                      const isPositive = news.sentiment === 'positive' || news.sentiment === 'BULLISH'
+                      const isNegative = news.sentiment === 'negative' || news.sentiment === 'BEARISH'
+
+                      return (
+                        <div
+                          key={news.id}
+                          className="p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.05] transition-colors space-y-2 group"
+                        >
+                          {/* News Header: Ticker, Sentiment, Source */}
+                          <div className="flex items-center justify-between gap-2 text-[10px]">
+                            <div className="flex items-center gap-1.5">
+                              {news.symbol ? (
+                                <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold font-mono">
+                                  {news.symbol}
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300 font-bold">
+                                  ตลาดโลก
+                                </span>
+                              )}
+
+                              <span
+                                className={`px-1.5 py-0.5 rounded font-semibold ${
+                                  isPositive
+                                    ? 'bg-emerald-500/15 text-emerald-300'
+                                    : isNegative
+                                    ? 'bg-rose-500/15 text-rose-300'
+                                    : 'bg-white/[0.05] text-slate-400'
+                                }`}
+                              >
+                                {isPositive ? 'เชิงบวก' : isNegative ? 'เชิงลบ/เตือน' : 'เป็นกลาง'}
+                              </span>
+                            </div>
+
+                            <span className="text-slate-400 font-mono truncate max-w-[120px]">
+                              {news.sourceName}
+                            </span>
+                          </div>
+
+                          {/* Headline */}
+                          <h4 className="text-xs font-semibold text-white leading-snug group-hover:text-indigo-300 transition-colors">
+                            {news.headline}
+                          </h4>
+
+                          {/* 1-Click Ask AI About This News */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const prompt = `ช่วยวิเคราะห์ผลกระทบของข่าวนี้: "${news.headline}" (แหล่งข่าว: ${news.sourceName}) ว่าส่งผลต่อราคาและทิศทางของหุ้น ${news.symbol || 'ในตลาด'} อย่างไร?`
+                              setInputQuestion(prompt)
+                              handleSendMessage(prompt)
+                            }}
+                            className="w-full py-1.5 px-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Zap className="w-3 h-3 text-amber-400" />
+                            <span>ให้ AI วิเคราะห์ผลกระทบจากข่าวนี้</span>
+                          </button>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 3. Market Climate 4 Pillars Quick Glance */}
@@ -432,9 +589,9 @@ export default function AiAdvisorPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-300 pl-4 font-mono">
                     <span>✓ พอร์ต & เงินสดจริง</span>
+                    <span>✓ ข่าว Finnhub/Yahoo</span>
                     <span>✓ Wilder's RSI(14)</span>
-                    <span>✓ SMA 50 / 200</span>
-                    <span>✓ Pivot S1/S2/R1</span>
+                    <span>✓ แท่งเทียน & Pivot S1/R1</span>
                   </div>
                 </div>
               </div>
@@ -462,7 +619,7 @@ export default function AiAdvisorPage() {
                     </span>
                   </div>
                   <span className="text-xs text-slate-400">
-                    CMT Chartered Market Technician & Senior Investment Strategist
+                    ผสานข้อมูลรอบด้าน: ข่าวภายนอก + กราฟเทคนิค + มหภาค + ข้อมูลพอร์ตจริง
                   </span>
                 </div>
               </div>
@@ -533,7 +690,7 @@ export default function AiAdvisorPage() {
                       {/* Top Header of Message */}
                       <div className="flex items-center justify-between gap-3 text-xs pb-1 border-b border-white/[0.06]">
                         <span className={`font-semibold ${isUser ? 'text-indigo-200' : 'text-indigo-400'}`}>
-                          {isUser ? 'คุณ' : 'Senior Wealth Copilot'}
+                          {isUser ? 'คุณ' : 'Senior Wealth Copilot (360°)'}
                         </span>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-slate-400 font-mono">{msg.timestamp}</span>
@@ -585,7 +742,7 @@ export default function AiAdvisorPage() {
                   </div>
                   <div className="p-4 rounded-2xl rounded-tl-none bg-black/60 border border-indigo-500/30 text-xs sm:text-sm text-indigo-300 flex items-center gap-2.5 animate-pulse">
                     <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
-                    <span>กำลังวิเคราะห์พอร์ตจริง คำนวณสัญญาณกราฟเทคนิค (RSI/SMA/Pivot) และสภาวะมหภาค...</span>
+                    <span>กำลังเชื่อมต่อข่าวสารภายนอกสด คำนวณกราฟเทคนิคแท่งเทียน และวิเคราะห์ร่วมกับพอร์ตของคุณ...</span>
                   </div>
                 </div>
               )}
@@ -606,7 +763,7 @@ export default function AiAdvisorPage() {
                   type="text"
                   value={inputQuestion}
                   onChange={(e) => setInputQuestion(e.target.value)}
-                  placeholder="พิมพ์คำถามวิเคราะห์กราฟ พอร์ต หรือขอคำแนะนำกลยุทธ์การลงทุน..."
+                  placeholder="พิมพ์คำถามวิเคราะห์ข่าว กราฟ หรือกลยุทธ์การลงทุน เช่น 'วิเคราะห์ข่าวดอกเบี้ยกระทบพอร์ต'..."
                   disabled={isLoading}
                   className="flex-1 px-4 py-3 rounded-2xl bg-[#090C14] border border-white/[0.1] text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
                 />
@@ -630,7 +787,7 @@ export default function AiAdvisorPage() {
         </div>
       </div>
 
-      {/* Stock Detail Modal */}
+      {/* Stock Detail Modal for full candlestick charts & fundamentals */}
       {selectedStock && (
         <StockDetailModal
           isOpen={true}

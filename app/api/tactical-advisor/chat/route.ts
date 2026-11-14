@@ -83,8 +83,10 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // 2. Fetch Live Technical Signals for all user holdings in parallel
     const holdingsToAnalyze = holdingsResult.holdings.slice(0, 15)
+    const userSymbols = holdingsToAnalyze.map((h) => h.ticker.toUpperCase())
+
+    // 2. Fetch Live Technical Signals & Chart Levels for all holdings in parallel
     const technicalSignals = await getBatchTechnicalSignals(
       holdingsToAnalyze.map((h) => ({
         ticker: h.ticker,
@@ -97,7 +99,60 @@ export async function POST(req: NextRequest) {
       }))
     )
 
-    // 3. Compile Detailed Holdings & Technical Signals Dossier
+    // 3. Fetch Real External News & Catalysts from Database (Finnhub / Yahoo / Google News RSS)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    let [portfolioNews, generalMarketNews] = await Promise.all([
+      prisma.newsItem.findMany({
+        where: {
+          symbol: { in: userSymbols },
+          publishedAt: { gte: sevenDaysAgo },
+        },
+        orderBy: { publishedAt: 'desc' },
+        take: 12,
+      }),
+      prisma.newsItem.findMany({
+        where: {
+          symbol: null,
+          publishedAt: { gte: sevenDaysAgo },
+        },
+        orderBy: { publishedAt: 'desc' },
+        take: 8,
+      }),
+    ])
+
+    // Fallback if recent 7-day filter yields too few items
+    let allNews = [...portfolioNews, ...generalMarketNews]
+    if (allNews.length < 5) {
+      allNews = await prisma.newsItem.findMany({
+        where: {
+          OR: [{ symbol: { in: userSymbols } }, { symbol: null }],
+        },
+        orderBy: { publishedAt: 'desc' },
+        take: 15,
+      })
+    }
+
+    const externalNewsText =
+      allNews.length > 0
+        ? allNews
+            .slice(0, 15)
+            .map((n) => {
+              const symTag = n.symbol ? `[หุ้น ${n.symbol}]` : '[ข่าวเศรษฐกิจโลก & การเงิน]'
+              const sentimentTag = n.sentiment ? ` (ทิศทางข่าว: ${n.sentiment})` : ''
+              const timeStr = n.publishedAt
+                ? new Date(n.publishedAt).toLocaleDateString('th-TH', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                : ''
+              const summarySnippet = n.summary ? `\n    สรุปเนื้อหา: ${n.summary.slice(0, 240)}...` : ''
+              return `- ${symTag} "${n.headline}" (แหล่งข่าว: ${n.sourceName} | วันที่: ${timeStr})${sentimentTag}${summarySnippet}`
+            })
+            .join('\n')
+        : 'ไม่มีข่าวล่าสุดในระบบ'
+
+    // 4. Compile Detailed Technical Chart Profiles & Support/Resistance Levels
     const detailedHoldingsText = holdingsToAnalyze
       .map((h) => {
         const sig = technicalSignals[h.ticker.toUpperCase()]
@@ -107,10 +162,10 @@ export async function POST(req: NextRequest) {
         const rsiDesc = sig?.rsi14
           ? `RSI(14): ${sig.rsi14} (${
               sig.rsi14 <= 35
-                ? 'Oversold/ขายมากเกินไป'
+                ? 'Oversold / ขายมากเกินไป มีโอกาสรีบาวด์'
                 : sig.rsi14 >= 68
-                ? 'Overbought/ซื้อมากเกินไป'
-                : 'ปกติ/พักตัว'
+                ? 'Overbought / ซื้อมากเกินไป ตึงตัว'
+                : 'Neutral / พักตัวในกรอบ'
             })`
           : 'RSI: ไม่มีข้อมูล'
 
@@ -118,12 +173,12 @@ export async function POST(req: NextRequest) {
           [
             sig?.sma50
               ? `SMA 50: ${currencySymbol}${sig.sma50} (${
-                  sig.currentPrice >= sig.sma50 ? 'ราคายืนเหนือ' : 'ราคาหลุดต่ำกว่า'
+                  sig.currentPrice >= sig.sma50 ? 'ราคายืนเหนือแนวรับเส้น 50 วัน' : 'ราคาหลุดต่ำกว่าเส้น 50 วัน'
                 })`
               : null,
             sig?.sma200
               ? `SMA 200: ${currencySymbol}${sig.sma200} (${
-                  sig.currentPrice >= sig.sma200 ? 'ราคายืนเหนือ' : 'ราคาหลุดต่ำกว่า'
+                  sig.currentPrice >= sig.sma200 ? 'โครงสร้างหลักระยะยาวยังเป็นขาขึ้น' : 'ราคาหลุดต่ำกว่าเส้น 200 วัน'
                 })`
               : null,
           ]
@@ -132,35 +187,42 @@ export async function POST(req: NextRequest) {
 
         const pivotDesc =
           [
-            sig?.supportS1 ? `แนวรับ S1: ${currencySymbol}${sig.supportS1}` : null,
-            sig?.supportS2 ? `แนวรับ S2 (จุดหนีไฟ): ${currencySymbol}${sig.supportS2}` : null,
-            sig?.resistanceR1 ? `แนวต้าน R1: ${currencySymbol}${sig.resistanceR1}` : null,
+            sig?.supportS1 ? `แนวรับแรก S1: ${currencySymbol}${sig.supportS1}` : null,
+            sig?.supportS2 ? `แนวรับหนีไฟ S2: ${currencySymbol}${sig.supportS2}` : null,
+            sig?.resistanceR1 ? `แนวต้านเป้าหมาย R1: ${currencySymbol}${sig.resistanceR1}` : null,
           ]
             .filter(Boolean)
             .join(' | ') || 'Pivots: ไม่มีข้อมูล'
 
-        const pullbackDesc =
+        const rangeDesc = [
+          sig?.fiftyTwoWeekHigh ? `จุดสูงสุด 52 สัปดาห์: ${currencySymbol}${sig.fiftyTwoWeekHigh}` : null,
+          sig?.fiftyTwoWeekLow ? `จุดต่ำสุด 52 สัปดาห์: ${currencySymbol}${sig.fiftyTwoWeekLow}` : null,
           sig?.pullbackFromHigh !== undefined
             ? `ย่อตัวจากจุดสูงสุด 52W: ${sig.pullbackFromHigh.toFixed(1)}%`
-            : ''
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' | ')
 
         const statusBadge = sig?.badgeText || 'ตามแผน'
-        const reason = sig?.technicalReason || 'สัดส่วนและแนวโน้มตามแผนพอร์ตหลัก'
+        const reason = sig?.technicalReason || 'โครงสร้างราคาและแนวโน้มตามแผนหลัก'
 
         return `
 - [${h.ticker}] ${h.assetName}
-  * สัดส่วนในพอร์ต: ${h.allocationPercent.toFixed(1)}% (อันดับน้ำหนักการลงทุน)
-  * ต้นทุนเฉลี่ย: ${currencySymbol}${h.avgCost.toFixed(2)} | ราคาตลาดปัจจุบัน: ${currencySymbol}${h.currentPrice.toFixed(
+  * สัดส่วนในพอร์ต: ${h.allocationPercent.toFixed(1)}% | ต้นทุนเฉลี่ย: ${currencySymbol}${h.avgCost.toFixed(
+          2
+        )} | ราคาตลาดปัจจุบัน: ${currencySymbol}${h.currentPrice.toFixed(
           2
         )} | กำไร/ขาดทุน: ${pnlPrefix}${h.unrealizedPnLPercent.toFixed(2)}%
-  * สัญญาณเทคนิค: ${rsiDesc} | ${statusBadge} | ${pullbackDesc}
-  * ค่าเฉลี่ยเคลื่อนที่: ${smaDesc}
+  * กราฟและกรอบราคาภายนอก: ${rangeDesc}
+  * สัญญาณเทคนิค: ${rsiDesc} | สถานะสัญญาณ: ${statusBadge}
+  * ค่าเฉลี่ยเคลื่อนที่ (Trend): ${smaDesc}
   * จุดแนวรับ/แนวต้าน Pivot: ${pivotDesc}
-  * คำอธิบายเทคนิค: ${reason}`
+  * บทวิเคราะห์เทคนิค: ${reason}`
       })
       .join('\n')
 
-    // 4. Resolve 4 Pillars Market Climate Data
+    // 5. Resolve 4 Pillars Macro Climate Data
     const pillars: MarketPillarsData =
       tacticalContext?.marketRegime?.pillars || createFallbackPillars(tacticalContext || {})
 
@@ -169,7 +231,7 @@ export async function POST(req: NextRequest) {
       pillars.formula?.calculatedRiskScore || 4
     }/5: ${pillars.formula?.calculatedRiskLabel || 'ความเสี่ยงระดับสูง'})
 - กลยุทธ์ภาพรวมที่แนะนำ: ${pillars.formula?.postureLabelTh || '🛡️ ตั้งรับรอจังหวะ (Defensive Tactical)'} (${
-      pillars.formula?.postureSubtitleTh || 'แบ่งไม้ทยอยสะสมเฉพาะหุ้นพื้นฐานแกร่งที่ลงมาแนวรับสำคัญ'
+      pillars.formula?.postureSubtitleTh || 'แบ่งไม้ทยอยสะสมเฉพาะหุ้นพื้นฐานแกร่งที่ลงมาแนวรับสำคัญ ไม่ไล่ราคา'
     })
 - สูตรประเมินสภาวะ (Formula): ${
       pillars.formula?.formulaEquation ||
@@ -201,7 +263,7 @@ export async function POST(req: NextRequest) {
     } | ปัจจัยเร่งตลาด: ${(pillars.catalystsAndFlows.keyCatalysts || []).join('; ')}
 `
 
-    // 5. Multi-Turn Conversation Thread
+    // 6. Multi-Turn Conversation Thread
     const previousHistoryText =
       messageHistory.length > 1
         ? `
@@ -215,18 +277,24 @@ ${messageHistory
 
     const prompt = `
 [AI Tactical Wealth Advisor Copilot]
-ผู้ใช้กำลังสอบถามเกี่ยวกับกลยุทธ์การลงทุน วิเคราะห์พอร์ต สัญญาณเทคนิค หรือแนวทางตัดสินใจในห้วงเวลานี้
+ผู้ใช้ต้องการให้คุณวิเคราะห์และให้คำปรึกษาการลงทุนแบบ "ครอบคลุมรอบด้าน 360 องศา" โดยต้องดึงข้อมูลทั้งจากภายนอก (ข่าวสารตลาดโลก ข่าวรายตัว กราฟราคา สัญญาณเทคนิค) และข้อมูลภายใน (พอร์ต เงินสด ต้นทุน) มาประมวลผลร่วมกัน
 
-=== ข้อมูลสภาวะตลาดโลก 4 เสาหลัก (MARKET CLIMATE) ===
+=== 1. ข้อมูลข่าวสารและความเคลื่อนไหวภายนอกล่าสุด (EXTERNAL LIVE NEWS & CATALYSTS) ===
+${externalNewsText}
+
+=== 2. ข้อมูลสภาวะตลาดโลก 4 เสาหลัก (EXTERNAL MACRO CLIMATE & SENTIMENT) ===
 ${macroSummary}
 
-=== ข้อมูลพอร์ตโฟลิโอภายในของนักลงทุน (INTERNAL PORTFOLIO DNA) ===
+=== 3. ข้อมูลกราฟเทคนิคและกรอบราคาภายนอกรายตัว (EXTERNAL TECHNICAL CHART PROFILES) ===
+${detailedHoldingsText || 'ไม่มีหุ้นในพอร์ต'}
+
+=== 4. ข้อมูลพอร์ตโฟลิโอภายในของนักลงทุน (INTERNAL PORTFOLIO DNA) ===
 - สกุลเงินหลัก: ${baseCurrency}
 - มูลค่าสินทรัพย์รวมในพอร์ต: ${totalPortfolioValue.toLocaleString()} ${baseCurrency}
 - เงินสดสำรองรวม (Dry Powder): ${totalCash.toLocaleString()} ${baseCurrency} (${cashPercent.toFixed(
       1
-    )}% ของความมั่งคั่งรวม | คำแนะนำกลยุทธ์เงินสดในสภาวะนี้: ควรมีประมาณ 25%)
-- การกระจุกตัวของธีมการลงทุน: ${
+    )}% ของความมั่งคั่งรวม | สภาวะนี้แนะนำถือเงินสดประมาณ 25%)
+- การกระจุกตัว: ${
       techAiAllocationPercent > 50
         ? `🚨 พอร์ตมีความเสี่ยงกระจุกตัวสูงมากในกลุ่ม US Tech & AI (${techAiAllocationPercent.toFixed(
             1
@@ -234,27 +302,24 @@ ${macroSummary}
         : `กระจายตัวปกติ (Tech & AI: ${techAiAllocationPercent.toFixed(1)}%)`
     }
 
-=== รายการสินทรัพย์ที่ถือครองจริง พร้อมสัญญาณเทคนิครายตัว (RSI, SMA, Pivot S1/S2/R1) ===
-${detailedHoldingsText || 'ไม่มีหุ้นในพอร์ต'}
-
 ${previousHistoryText}
 
 === คำถามล่าสุดของผู้ใช้ ===
 "${activeQuestion}"
 
-=== คำแนะนำและกรอบการตอบ (INSTITUTIONAL ADVISORY STANDARDS) ===
-1. ตอบเป็นภาษาไทยที่กระชับ สุภาพ มั่นใจ ตรงไปตรงมา มีหลักการทางสถิติและการเงินรองรับ
-2. หากผู้ใช้ถามเรื่อง "กราฟ", "แนวโน้ม", "แนวรับแนวต้าน", หรือ "จุดกลับตัว":
-   - คุณต้องอ้างอิงตัวเลขจริงจากสัญญาณเทคนิคที่ให้ไว้ข้างบนอย่างครบถ้วน (Wilder's RSI, SMA 50/200, แนวรับ S1/S2, แนวต้าน R1, % ย่อตัวจาก 52W High)
-   - ห้ามตอบแบบกำกวมว่า "การคาดเดาอนาคตยาก ให้บริหารความเสี่ยง" โดยไม่มีตัวเลขเด็ดขาด! ให้ชี้จุดกลับตัวและจุดรับที่ได้เปรียบเชิงปริมาณอย่างชัดเจน
-3. หากผู้ใช้ถามเรื่องการซื้อเพิ่ม (Dip Buy / DCA):
-   - แนะนำการแบ่งไม้ (Tranche Entry) ตามแนวรับสำคัญ (เช่น ไม้แรกที่ S1, ไม้สองที่ SMA 200)
-   - ต้องระบุจุดหนีไฟ (Stop Loss) เสมอ
-4. หากผู้ใช้ถามเรื่องการลดความเสี่ยงหรือพอร์ตกระจุกตัว:
-   - นำเสนอแนวทางปรับสัดส่วน (Rebalancing) อย่างมีเหตุผล โดยคำนึงถึงผลกระทบทางภาษีต่างประเทศ (มาตรา 41)
-5. กฎเรื่องการจัดหน้า (Typography & Clean Formatting):
-   - แบ่งหัวข้อให้ชัดเจน มีโครงสร้างเป็นระเบียบ สบายตา
-   - ห้ามใส่เครื่องหมายดอกจัน (**) ฟุ่มเฟือย ให้ใช้เน้นเฉพาะตัวเลขสำคัญหรือชื่อหุ้นเท่านั้น
+=== กฎเหล็กการวิเคราะห์แบบรอบด้าน (360° INSTITUTIONAL ADVISORY STANDARDS) ===
+1. ต้องดึง "ข่าวสารภายนอกล่าสุด (External News & Catalysts)" มาอ้างอิงเสมอ:
+   - ห้ามตอบโดยอิงแค่ตัวเลขสัดส่วนในพอร์ตเท่านั้น! ผู้ใช้ต้องการรู้ว่าโลกภายนอก ข่าวในตลาด Wall Street และข่าวของหุ้นแต่ละตัวกำลังเกิดอะไรขึ้น
+   - คุณต้องหยิบยกประเด็นข่าวจริงที่ให้ไว้ข้างบน (เช่น ข่าว AI Chips ของ Google/Nvidia, ข่าวเม็ดเงิน ETF ไหลเข้า, ข่าว Bond Yield พุ่งแรง, นโยบาย Fed, หรือคดีผูกขาด) มาอธิบายว่าข่าวนี้ส่งผลเชิงบวกหรือเชิงลบต่อราคาและพื้นฐานหุ้นอย่างไร
+2. ต้องวิเคราะห์ "โครงสร้างกราฟราคาภายนอก (Technical Chart Analysis)" อย่างชัดเจน:
+   - ต้องอ้างอิงตัวเลขทางเทคนิคจริง: ระดับราคา, ระยะย่อตัวจากจุดสูงสุด 52 สัปดาห์ (% Drawdown), ค่าโมเมนตัม Wilder's RSI(14), ตำแหน่งราคาเทียบกับเส้นค่าเฉลี่ย SMA 50 / SMA 200 วัน, และจุดแนวรับ Pivot S1/S2 กับแนวต้าน R1
+   - อธิบายว่ากราฟตัวไหนมีสัญญาณกลับตัวหรือน่าช้อนซื้อ (Dip Buy) ตัวไหนตึงตัว หรือตัวไหนเสี่ยงหลุดแนวรับ
+3. เชื่อมโยงเข้ากับพอร์ตและเงินสดจริงของผู้ใช้:
+   - แนะนำการแบ่งไม้เข้าซื้อ (Tranche Plan เช่น ไม้ 1 ที่ S1, ไม้ 2 ที่ SMA 200) และต้องระบุจุดหนีไฟ (Stop Loss) เสมอ
+   - สื่อสารเรื่องการกระจุกตัว 80.9% ใน Tech/AI และแนวทางบริหารความเสี่ยงหรือภาษีต่างประเทศอย่างรอบคอบ
+4. กฎการจัดหน้า (Clean Formatting):
+   - แบ่งหัวข้อให้ชัดเจน สบายตา มีลำดับขั้นตอน
+   - ห้ามใส่เครื่องหมายดอกจัน (**) ซ้ำซ้อนหรือพร่ำเพรื่อในประโยค ให้เน้นเฉพาะตัวเลขสำคัญหรือชื่อหุ้นเท่านั้น
    - ใช้เครื่องหมายขีด (-) นำหน้ารายการ
 `
 
@@ -263,7 +328,7 @@ ${previousHistoryText}
       prompt,
       logType: 'bucket_chat',
       systemInstruction:
-        'คุณคือ Senior Chief Investment Officer (CIO) & Chartered Market Technician (CMT) ผู้เชี่ยวชาญด้านกลยุทธ์การลงทุนระดับสากล มีความรอบรู้ลึกซึ้งทั้งสภาวะมหภาค (4 เสาหลัก) การจัดพอร์ต (Asset Allocation) และสัญญาณเทคนิคเชิงปริมาณ (RSI, SMA, Pivots) ตอบด้วยตัวเลขที่ชัดเจน มีเหตุผล ตรงไปตรงมา ไม่กำกวม และจัดหน้าอย่างสะอาดตา',
+        'คุณคือ Senior Chief Investment Officer (CIO) & Chartered Market Technician (CMT) ผู้เชี่ยวชาญด้านกลยุทธ์การลงทุนระดับสากล วิเคราะห์รอบด้าน 360 องศา ทั้งข่าวสารภายนอกล่าสุด (Finnhub, Bloomberg, CNBC) กราฟเทคนิคเชิงปริมาณ (RSI, SMA, Pivots, 52W Range) และโครงสร้างพอร์ตภายใน ตอบด้วยข้อมูลเชิงลึก ตัวเลขชัดเจน มีเหตุผล ตรงไปตรงมา และจัดหน้าอย่างสะอาดตา',
       thinkingBudget: 0,
     })
 
@@ -283,6 +348,16 @@ ${previousHistoryText}
         holdingsCount: holdingsResult.holdings.length,
       },
       technicalSignals,
+      recentNews: allNews.slice(0, 15).map((n) => ({
+        id: n.id,
+        symbol: n.symbol,
+        headline: n.headline,
+        sourceName: n.sourceName,
+        sourceUrl: n.sourceUrl,
+        publishedAt: n.publishedAt.toISOString(),
+        sentiment: n.sentiment,
+        summary: n.summary,
+      })),
     })
   } catch (error: any) {
     console.error('[tactical-advisor chat error]', error)
