@@ -52,6 +52,24 @@ interface ExternalNewsItem {
   sentiment?: 'positive' | 'negative' | 'neutral' | 'BULLISH' | 'BEARISH' | 'NEUTRAL' | null
 }
 
+function formatNumber(val: number | null | undefined, decimals = 2, fallback = '0.00'): string {
+  if (val === null || val === undefined || isNaN(Number(val))) return fallback
+  return Number(val).toFixed(decimals)
+}
+
+function formatInt(val: number | null | undefined, fallback = '0'): string {
+  if (val === null || val === undefined || isNaN(Number(val))) return fallback
+  return Math.round(Number(val)).toLocaleString()
+}
+
+function formatLocale(val: number | null | undefined, decimals = 2, fallback = '0.00'): string {
+  if (val === null || val === undefined || isNaN(Number(val))) return fallback
+  return Number(val).toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}
+
 const QUICK_STRATEGY_QUESTIONS = [
   {
     category: '📰 ข่าวภายนอกกระทบพอร์ต',
@@ -393,7 +411,7 @@ export default function AiAdvisorPage() {
 
                           <div className="text-right shrink-0">
                             <span className="text-white font-mono font-bold text-xs sm:text-sm block">
-                              {stock.currency}{stock.currentPrice.toFixed(2)}
+                              {stock.currency}{formatNumber(stock.currentPrice)}
                             </span>
                             <span
                               className={`text-[10px] px-1.5 py-0.2 rounded font-semibold inline-block ${
@@ -557,27 +575,29 @@ export default function AiAdvisorPage() {
                   <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.05]">
                     <span className="text-slate-400 block text-[11px]">VIX Volatility</span>
                     <strong className="text-white font-mono text-sm block">
-                      {pillars.sentiment.vixValue} pts
+                      {formatNumber(pillars.sentiment?.vixValue)} pts
                     </strong>
-                    <span className="text-[10px] text-emerald-400">{pillars.sentiment.vixStatus}</span>
+                    <span className="text-[10px] text-emerald-400">{pillars.sentiment?.vixStatus || 'NORMAL'}</span>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.05]">
                     <span className="text-slate-400 block text-[11px]">US 10Y Yield</span>
                     <strong className="text-amber-300 font-mono text-sm block">
-                      {pillars.macroLiquidity.us10yYield.toFixed(2)}%
+                      {formatNumber(pillars.macroLiquidity?.us10yYield)}%
                     </strong>
                     <span className="text-[10px] text-slate-400">
-                      {pillars.macroLiquidity.yieldPressureLevel}
+                      {pillars.macroLiquidity?.yieldPressureLevel || 'MODERATE'}
                     </span>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.05]">
                     <span className="text-slate-400 block text-[11px]">Gold Safe-Haven</span>
                     <strong className="text-white font-mono text-sm block">
-                      ${pillars.catalystsAndFlows.goldPrice?.toLocaleString()}
+                      ${formatLocale(pillars.catalystsAndFlows?.goldPrice, 1, '0.0')}
                     </strong>
-                    <span className="text-[10px] text-slate-400 font-mono">DXY {pillars.catalystsAndFlows.dxyPrice}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      DXY {formatNumber(pillars.catalystsAndFlows?.dxyPrice)}
+                    </span>
                   </div>
                 </div>
 

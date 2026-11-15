@@ -462,7 +462,183 @@ export function normalizeStoredPayload(
   createdAt: Date,
   modelUsed?: string
 ): TacticalAdvisorPayload {
-  const pillars = rawJson.marketRegime?.pillars || createFallbackPillars(rawJson)
+  const fallback = createFallbackPillars(rawJson)
+  const rawPillars = rawJson?.marketRegime?.pillars
+
+  const sentiment: MarketSentimentPillar = {
+    fearGreedScore:
+      typeof rawPillars?.sentiment?.fearGreedScore === 'number'
+        ? rawPillars.sentiment.fearGreedScore
+        : typeof rawJson?.marketRegime?.fearGreedScore === 'number'
+        ? rawJson.marketRegime.fearGreedScore
+        : fallback.sentiment.fearGreedScore,
+    fearGreedRating:
+      rawPillars?.sentiment?.fearGreedRating || fallback.sentiment.fearGreedRating,
+    fearGreedLabelTh:
+      rawPillars?.sentiment?.fearGreedLabelTh ||
+      rawJson?.marketRegime?.fearGreedLabel ||
+      fallback.sentiment.fearGreedLabelTh,
+    fearGreed1WDiff:
+      typeof rawPillars?.sentiment?.fearGreed1WDiff === 'number'
+        ? rawPillars.sentiment.fearGreed1WDiff
+        : fallback.sentiment.fearGreed1WDiff,
+    previous1WeekScore:
+      typeof rawPillars?.sentiment?.previous1WeekScore === 'number'
+        ? rawPillars.sentiment.previous1WeekScore
+        : fallback.sentiment.previous1WeekScore,
+    vixValue:
+      typeof rawPillars?.sentiment?.vixValue === 'number'
+        ? rawPillars.sentiment.vixValue
+        : fallback.sentiment.vixValue,
+    vixStatus:
+      rawPillars?.sentiment?.vixStatus || fallback.sentiment.vixStatus,
+    vixStatusLabel:
+      rawPillars?.sentiment?.vixStatusLabel || fallback.sentiment.vixStatusLabel,
+    summary:
+      rawPillars?.sentiment?.summary || fallback.sentiment.summary,
+  }
+
+  const momentum: MarketMomentumPillar = {
+    spxPrice:
+      typeof rawPillars?.momentum?.spxPrice === 'number'
+        ? rawPillars.momentum.spxPrice
+        : fallback.momentum.spxPrice,
+    spxChangePercent:
+      typeof rawPillars?.momentum?.spxChangePercent === 'number'
+        ? rawPillars.momentum.spxChangePercent
+        : fallback.momentum.spxChangePercent,
+    spxFiftyTwoHigh:
+      typeof rawPillars?.momentum?.spxFiftyTwoHigh === 'number'
+        ? rawPillars.momentum.spxFiftyTwoHigh
+        : fallback.momentum.spxFiftyTwoHigh,
+    spxDrawdownPercent:
+      typeof rawPillars?.momentum?.spxDrawdownPercent === 'number'
+        ? rawPillars.momentum.spxDrawdownPercent
+        : fallback.momentum.spxDrawdownPercent,
+    spxEmaStatus:
+      rawPillars?.momentum?.spxEmaStatus || fallback.momentum.spxEmaStatus,
+    nasdaqPrice:
+      typeof rawPillars?.momentum?.nasdaqPrice === 'number'
+        ? rawPillars.momentum.nasdaqPrice
+        : fallback.momentum.nasdaqPrice,
+    nasdaqChangePercent:
+      typeof rawPillars?.momentum?.nasdaqChangePercent === 'number'
+        ? rawPillars.momentum.nasdaqChangePercent
+        : fallback.momentum.nasdaqChangePercent,
+    nasdaqFiftyTwoHigh:
+      typeof rawPillars?.momentum?.nasdaqFiftyTwoHigh === 'number'
+        ? rawPillars.momentum.nasdaqFiftyTwoHigh
+        : fallback.momentum.nasdaqFiftyTwoHigh,
+    nasdaqDrawdownPercent:
+      typeof rawPillars?.momentum?.nasdaqDrawdownPercent === 'number'
+        ? rawPillars.momentum.nasdaqDrawdownPercent
+        : fallback.momentum.nasdaqDrawdownPercent,
+    nasdaqEmaStatus:
+      rawPillars?.momentum?.nasdaqEmaStatus || fallback.momentum.nasdaqEmaStatus,
+    breadthStatus:
+      rawPillars?.momentum?.breadthStatus || fallback.momentum.breadthStatus,
+    summary:
+      rawPillars?.momentum?.summary || fallback.momentum.summary,
+  }
+
+  const macroLiquidity: MarketMacroLiquidityPillar = {
+    us10yYield:
+      typeof rawPillars?.macroLiquidity?.us10yYield === 'number'
+        ? rawPillars.macroLiquidity.us10yYield
+        : fallback.macroLiquidity.us10yYield,
+    yieldPressureLevel:
+      rawPillars?.macroLiquidity?.yieldPressureLevel || fallback.macroLiquidity.yieldPressureLevel,
+    yieldPressureLabel:
+      rawPillars?.macroLiquidity?.yieldPressureLabel || fallback.macroLiquidity.yieldPressureLabel,
+    fedPolicyStance:
+      rawPillars?.macroLiquidity?.fedPolicyStance || fallback.macroLiquidity.fedPolicyStance,
+    inflationExpectation:
+      rawPillars?.macroLiquidity?.inflationExpectation || fallback.macroLiquidity.inflationExpectation,
+    summary:
+      rawPillars?.macroLiquidity?.summary || fallback.macroLiquidity.summary,
+  }
+
+  const catalystsAndFlows: MarketCatalystsAndFlowsPillar = {
+    safeHavenFlow:
+      rawPillars?.catalystsAndFlows?.safeHavenFlow || fallback.catalystsAndFlows.safeHavenFlow,
+    safeHavenFlowLabel:
+      rawPillars?.catalystsAndFlows?.safeHavenFlowLabel || fallback.catalystsAndFlows.safeHavenFlowLabel,
+    goldPrice:
+      typeof rawPillars?.catalystsAndFlows?.goldPrice === 'number'
+        ? rawPillars.catalystsAndFlows.goldPrice
+        : fallback.catalystsAndFlows.goldPrice,
+    goldChangePercent:
+      typeof rawPillars?.catalystsAndFlows?.goldChangePercent === 'number'
+        ? rawPillars.catalystsAndFlows.goldChangePercent
+        : fallback.catalystsAndFlows.goldChangePercent,
+    dxyPrice:
+      typeof rawPillars?.catalystsAndFlows?.dxyPrice === 'number'
+        ? rawPillars.catalystsAndFlows.dxyPrice
+        : fallback.catalystsAndFlows.dxyPrice,
+    oilPrice:
+      typeof rawPillars?.catalystsAndFlows?.oilPrice === 'number'
+        ? rawPillars.catalystsAndFlows.oilPrice
+        : fallback.catalystsAndFlows.oilPrice,
+    keyCatalysts:
+      Array.isArray(rawPillars?.catalystsAndFlows?.keyCatalysts) &&
+      rawPillars.catalystsAndFlows.keyCatalysts.length > 0
+        ? rawPillars.catalystsAndFlows.keyCatalysts
+        : fallback.catalystsAndFlows.keyCatalysts,
+    summary:
+      rawPillars?.catalystsAndFlows?.summary || fallback.catalystsAndFlows.summary,
+  }
+
+  const formula: MarketClimateFormula = {
+    calculatedRiskScore:
+      typeof rawPillars?.formula?.calculatedRiskScore === 'number'
+        ? rawPillars.formula.calculatedRiskScore
+        : typeof rawJson?.marketRegime?.riskLevel === 'number'
+        ? rawJson.marketRegime.riskLevel
+        : fallback.formula.calculatedRiskScore,
+    calculatedRiskLabel:
+      rawPillars?.formula?.calculatedRiskLabel ||
+      rawJson?.marketRegime?.riskLevelLabel ||
+      fallback.formula.calculatedRiskLabel,
+    posture:
+      rawPillars?.formula?.posture || fallback.formula.posture,
+    postureLabelTh:
+      rawPillars?.formula?.postureLabelTh || fallback.formula.postureLabelTh,
+    postureSubtitleTh:
+      rawPillars?.formula?.postureSubtitleTh || fallback.formula.postureSubtitleTh,
+    formulaEquation:
+      rawPillars?.formula?.formulaEquation || fallback.formula.formulaEquation,
+    greenlightTrigger:
+      rawPillars?.formula?.greenlightTrigger || fallback.formula.greenlightTrigger,
+    redflagTrigger:
+      rawPillars?.formula?.redflagTrigger || fallback.formula.redflagTrigger,
+  }
+
+  const pillars: MarketPillarsData = {
+    sentiment,
+    momentum,
+    macroLiquidity,
+    catalystsAndFlows,
+    formula,
+  }
+
+  const tacticalActions = Array.isArray(rawJson?.tacticalActions)
+    ? rawJson.tacticalActions.map((item: any, idx: number) => ({
+        id: String(item.id || idx + 1),
+        ticker: String(item.ticker || '').toUpperCase(),
+        assetName: String(item.assetName || item.ticker || ''),
+        market: item.market || 'US',
+        action: item.action || 'HOLD_WATCH',
+        actionLabel: item.actionLabel || 'ถือจับตา',
+        badgeColor: item.badgeColor || 'amber',
+        currentPrice: Number(item.currentPrice ?? 0),
+        currency: item.currency || '$',
+        targetZone: String(item.targetZone || '-'),
+        tranchePlan: String(item.tranchePlan || '-'),
+        stopLossPoint: String(item.stopLossPoint || '-'),
+        rationale: String(item.rationale || ''),
+        taxImpactNote: item.taxImpactNote ? String(item.taxImpactNote) : undefined,
+      }))
+    : []
 
   return {
     asOfDate: getBangkokDateString(createdAt),
@@ -470,12 +646,17 @@ export function normalizeStoredPayload(
     marketRegime: {
       status: rawJson.marketRegime?.status || 'VOLATILE_CAUTION',
       statusLabelTh: rawJson.marketRegime?.statusLabelTh || pillars.formula.postureLabelTh,
-      summaryTh: rawJson.marketRegime?.summaryTh || 'ตลาดอยู่ในสภาวะปรับฐานและผันผวน ควรจัดสรรเงินสดและรอจังหวะสะสมตามแนวรับ',
-      riskLevel: rawJson.marketRegime?.riskLevel || pillars.formula.calculatedRiskScore || 4,
-      riskLevelLabel: rawJson.marketRegime?.riskLevelLabel || pillars.formula.calculatedRiskLabel || 'ความเสี่ยงระดับสูง',
-      fearGreedScore: rawJson.marketRegime?.fearGreedScore || pillars.sentiment.fearGreedScore || 39,
-      fearGreedLabel: rawJson.marketRegime?.fearGreedLabel || pillars.sentiment.fearGreedLabelTh || 'Fear',
-      macroDrivers: rawJson.marketRegime?.macroDrivers || pillars.catalystsAndFlows.keyCatalysts || [],
+      summaryTh:
+        rawJson.marketRegime?.summaryTh ||
+        'ตลาดอยู่ในสภาวะปรับฐานและผันผวน ควรจัดสรรเงินสดและรอจังหวะสะสมตามแนวรับ',
+      riskLevel: pillars.formula.calculatedRiskScore,
+      riskLevelLabel: pillars.formula.calculatedRiskLabel,
+      fearGreedScore: pillars.sentiment.fearGreedScore,
+      fearGreedLabel: pillars.sentiment.fearGreedLabelTh,
+      macroDrivers:
+        Array.isArray(rawJson.marketRegime?.macroDrivers) && rawJson.marketRegime.macroDrivers.length > 0
+          ? rawJson.marketRegime.macroDrivers
+          : pillars.catalystsAndFlows.keyCatalysts,
       pillars,
     },
     portfolioResilience: rawJson.portfolioResilience || {
@@ -486,7 +667,7 @@ export function normalizeStoredPayload(
       vulnerabilities: [],
       thematicRiskAlert: null,
     },
-    tacticalActions: rawJson.tacticalActions || [],
+    tacticalActions,
     cashStrategy: rawJson.cashStrategy || {
       recommendedCashPercent: 15,
       currentCashPercent: 0,
@@ -494,7 +675,7 @@ export function normalizeStoredPayload(
       baseCurrency: 'THB',
       guidanceText: 'ถือเงินสดตามความเหมาะสม',
     },
-    trackRecordReview: rawJson.trackRecordReview || [],
+    trackRecordReview: Array.isArray(rawJson.trackRecordReview) ? rawJson.trackRecordReview : [],
     modelUsed: rawJson.modelUsed || modelUsed,
     generatedAt: createdAt.toISOString(),
   }
@@ -841,6 +1022,28 @@ ${pastContextSummaries || 'ยังไม่มีประวัติคำ�
     trackRecordReview: parsed.trackRecordReview || [],
     modelUsed: aiResult.modelUsed,
     generatedAt: now.toISOString(),
+  }
+
+  // Persist reconciled full payload back to aiAdviceLog so cache reads are 100% complete
+  try {
+    const latestLog = await prisma.aiAdviceLog.findFirst({
+      where: {
+        userId,
+        logType: 'advisor',
+        prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (latestLog) {
+      await prisma.aiAdviceLog.update({
+        where: { id: latestLog.id },
+        data: {
+          response: JSON.stringify(payload),
+        },
+      })
+    }
+  } catch (err) {
+    console.error('[Failed to update aiAdviceLog with reconciled payload]', err)
   }
 
   return payload

@@ -56,6 +56,24 @@ export interface TacticalAdvisorApiResponse {
   modelUsed: string
 }
 
+function formatNumber(val: number | null | undefined, decimals = 2, fallback = '0.00'): string {
+  if (val === null || val === undefined || isNaN(Number(val))) return fallback
+  return Number(val).toFixed(decimals)
+}
+
+function formatInt(val: number | null | undefined, fallback = '0'): string {
+  if (val === null || val === undefined || isNaN(Number(val))) return fallback
+  return Math.round(Number(val)).toLocaleString()
+}
+
+function formatLocale(val: number | null | undefined, decimals = 2, fallback = '0.00'): string {
+  if (val === null || val === undefined || isNaN(Number(val))) return fallback
+  return Number(val).toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}
+
 function parseInlineMarkdown(text: string): React.ReactNode[] {
   if (!text) return []
   const parts = text.split(/(\*\*.*?\*\*)/g)
@@ -587,7 +605,7 @@ export default function TacticalAdvisorPage() {
                           <div className="flex items-center justify-between text-xs text-slate-300">
                             <span>VIX Index (ความผันผวน):</span>
                             <span className="font-mono font-bold text-base sm:text-lg text-white">
-                              {pillars.sentiment.vixValue.toFixed(2)} pts
+                              {formatNumber(pillars.sentiment?.vixValue)} pts
                             </span>
                           </div>
                           <div className="space-y-1.5 pt-1 border-t border-white/[0.04]">
@@ -640,24 +658,24 @@ export default function TacticalAdvisorPage() {
                             <span className="text-slate-300 shrink-0">S&P 500:</span>
                             <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <span className="font-mono font-bold text-white text-xs sm:text-sm">
-                                {pillars.momentum.spxPrice.toLocaleString()} pts
+                                {formatLocale(pillars.momentum?.spxPrice, 2, '0.00')} pts
                               </span>
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold whitespace-nowrap ${
-                                  pillars.momentum.spxChangePercent >= 0
+                                  (pillars.momentum?.spxChangePercent ?? 0) >= 0
                                     ? 'bg-emerald-500/15 text-emerald-300'
                                     : 'bg-rose-500/15 text-rose-300'
                                 }`}
                               >
-                                {pillars.momentum.spxChangePercent >= 0 ? '+' : ''}
-                                {pillars.momentum.spxChangePercent.toFixed(2)}%
+                                {(pillars.momentum?.spxChangePercent ?? 0) >= 0 ? '+' : ''}
+                                {formatNumber(pillars.momentum?.spxChangePercent)}%
                               </span>
                             </div>
                           </div>
                           <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/[0.04]">
                             <span className="text-slate-400">Drawdown จากจุดสูงสุด:</span>
                             <span className="font-mono font-bold text-rose-300">
-                              {pillars.momentum.spxDrawdownPercent.toFixed(2)}%
+                              {formatNumber(pillars.momentum?.spxDrawdownPercent)}%
                             </span>
                           </div>
                         </div>
@@ -668,24 +686,24 @@ export default function TacticalAdvisorPage() {
                             <span className="text-slate-300 shrink-0">NASDAQ (Tech):</span>
                             <div className="flex items-center gap-1.5 whitespace-nowrap">
                               <span className="font-mono font-bold text-white text-xs sm:text-sm">
-                                {pillars.momentum.nasdaqPrice.toLocaleString()} pts
+                                {formatLocale(pillars.momentum?.nasdaqPrice, 2, '0.00')} pts
                               </span>
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[11px] font-mono font-semibold whitespace-nowrap ${
-                                  pillars.momentum.nasdaqChangePercent >= 0
+                                  (pillars.momentum?.nasdaqChangePercent ?? 0) >= 0
                                     ? 'bg-emerald-500/15 text-emerald-300'
                                     : 'bg-rose-500/15 text-rose-300'
                                 }`}
                               >
-                                {pillars.momentum.nasdaqChangePercent >= 0 ? '+' : ''}
-                                {pillars.momentum.nasdaqChangePercent.toFixed(2)}%
+                                {(pillars.momentum?.nasdaqChangePercent ?? 0) >= 0 ? '+' : ''}
+                                {formatNumber(pillars.momentum?.nasdaqChangePercent)}%
                               </span>
                             </div>
                           </div>
                           <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/[0.04]">
                             <span className="text-slate-400">Drawdown จากจุดสูงสุด:</span>
                             <span className="font-mono font-bold text-rose-300">
-                              {pillars.momentum.nasdaqDrawdownPercent.toFixed(2)}%
+                              {formatNumber(pillars.momentum?.nasdaqDrawdownPercent)}%
                             </span>
                           </div>
                         </div>
@@ -735,7 +753,7 @@ export default function TacticalAdvisorPage() {
                           <div className="flex items-center justify-between text-xs text-slate-300">
                             <span>US 10Y Bond Yield:</span>
                             <span className="font-mono font-bold text-base sm:text-lg text-white">
-                              {pillars.macroLiquidity.us10yYield.toFixed(2)}%
+                              {formatNumber(pillars.macroLiquidity?.us10yYield)}%
                             </span>
                           </div>
                           <div className="text-[11px]">
@@ -806,10 +824,10 @@ export default function TacticalAdvisorPage() {
                           </div>
                           <div className="flex items-center justify-between pt-1.5 text-xs font-mono border-t border-white/[0.04] gap-2">
                             <div className="text-slate-300 whitespace-nowrap">
-                              ทองคำ: <strong className="text-amber-200 font-bold">${pillars.catalystsAndFlows.goldPrice.toLocaleString()}</strong>
+                              ทองคำ: <strong className="text-amber-200 font-bold">${formatLocale(pillars.catalystsAndFlows?.goldPrice, 1, '0.0')}</strong>
                             </div>
                             <div className="text-slate-300 whitespace-nowrap text-right">
-                              DXY: <strong className="text-indigo-200 font-bold">{pillars.catalystsAndFlows.dxyPrice.toFixed(2)}</strong>
+                              DXY: <strong className="text-indigo-200 font-bold">{formatNumber(pillars.catalystsAndFlows?.dxyPrice)}</strong>
                             </div>
                           </div>
                         </div>
@@ -932,10 +950,11 @@ export default function TacticalAdvisorPage() {
                   </div>
                   <div className="text-right">
                     <span className="font-mono font-bold text-white text-base sm:text-lg">
-                      {payload.cashStrategy.currentCashPercent}%
+                      {formatNumber(payload.cashStrategy?.currentCashPercent, 1)}%
                     </span>
                     <span className="text-slate-400 text-xs sm:text-sm ml-1.5 font-sans">
-                      ({payload.cashStrategy.currentCashTotalBase.toLocaleString()} {payload.cashStrategy.baseCurrency})
+                      ({formatLocale(payload.cashStrategy?.currentCashTotalBase, 0, '0')}{' '}
+                      {payload.cashStrategy?.baseCurrency || 'THB'})
                     </span>
                   </div>
                 </div>
@@ -1060,7 +1079,7 @@ export default function TacticalAdvisorPage() {
                             <div>
                               <span className="text-xs text-slate-400 block mb-0.5">ราคาปัจจุบัน</span>
                               <span className="text-white font-bold text-base sm:text-lg">
-                                {item.currency}{item.currentPrice.toFixed(2)}
+                                {item.currency}{formatNumber(item.currentPrice)}
                               </span>
                             </div>
                             <div className="text-right">
