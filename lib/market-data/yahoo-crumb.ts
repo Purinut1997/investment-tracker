@@ -126,7 +126,7 @@ export async function getYahooQuoteSummary(symbol: string): Promise<YahooQuoteSu
 
       const revenue = financial.totalRevenue?.raw ?? null
       const revenueGrowth = financial.revenueGrowth?.raw ?? null
-      const eps = stats.trailingEps?.raw ?? financial.revenuePerShare?.raw ?? null
+      const eps = stats.trailingEps?.raw ?? detail.trailingEps?.raw ?? null
       const freeCashflow = financial.freeCashflow?.raw ?? financial.operatingCashflow?.raw ?? null
 
       const roeRaw = financial.returnOnEquity?.raw ?? null
@@ -139,17 +139,20 @@ export async function getYahooQuoteSummary(symbol: string): Promise<YahooQuoteSu
       }
 
       const result: YahooQuoteSummaryData = {
-        pe: pe ? Number(pe) : null,
-        forwardPe: forwardPe ? Number(forwardPe) : null,
-        pb: pb ? Number(pb) : null,
-        evEbitda: evEbitda ? Number(evEbitda) : null,
-        marketCap: marketCap ? Number(marketCap) : null,
-        dividendYield: dividendYield ? Number(dividendYield) * 100 : null, // percentage
-        payoutRatio: payoutRatio ? Number(payoutRatio) * 100 : null, // percentage
-        revenue: revenue ? Number(revenue) : null,
-        revenueGrowth: revenueGrowth ? Number(revenueGrowth) * 100 : null, // percentage
-        eps: eps ? Number(eps) : null,
-        freeCashflow: freeCashflow ? Number(freeCashflow) : null,
+        pe: pe !== null && pe !== undefined ? Number(pe) : null,
+        forwardPe: forwardPe !== null && forwardPe !== undefined ? Number(forwardPe) : null,
+        pb: pb !== null && pb !== undefined ? Number(pb) : null,
+        evEbitda: evEbitda !== null && evEbitda !== undefined ? Number(evEbitda) : null,
+        marketCap: marketCap !== null && marketCap !== undefined ? Number(marketCap) : null,
+        dividendYield:
+          dividendYield !== null && dividendYield !== undefined ? Number(dividendYield) * 100 : null, // percentage
+        payoutRatio:
+          payoutRatio !== null && payoutRatio !== undefined ? Number(payoutRatio) * 100 : null, // percentage
+        revenue: revenue !== null && revenue !== undefined ? Number(revenue) : null,
+        revenueGrowth:
+          revenueGrowth !== null && revenueGrowth !== undefined ? Number(revenueGrowth) * 100 : null, // percentage
+        eps: eps !== null && eps !== undefined ? Number(eps) : null,
+        freeCashflow: freeCashflow !== null && freeCashflow !== undefined ? Number(freeCashflow) : null,
         roe,
         debtToEquity,
       }

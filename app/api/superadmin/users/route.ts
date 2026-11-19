@@ -76,7 +76,7 @@ export async function PATCH(req: NextRequest) {
   // Prevent removing last superadmin
   if (
     targetUser.role === 'superadmin' &&
-    (role !== 'superadmin' || status === 'suspended')
+    ((role !== undefined && role !== 'superadmin') || status === 'suspended')
   ) {
     const hasOther = await hasOtherSuperadmin(userId)
     if (!hasOther) {
@@ -95,6 +95,16 @@ export async function PATCH(req: NextRequest) {
       // Roles live in the JWT. Invalidate existing sessions whenever access
       // changes so the next sign-in receives the new authority immediately.
       sessionVersion: { increment: 1 },
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      status: true,
+      authProvider: true,
+      emailVerified: true,
+      createdAt: true,
     },
   })
 

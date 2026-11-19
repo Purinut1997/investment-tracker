@@ -1,12 +1,7 @@
 import { yahooFinanceProvider } from './yahoo'
-import { coinGeckoProvider } from './coingecko'
+import { coinGeckoProvider, SUPPORTED_CRYPTO_SYMBOLS as CRYPTO_SYMBOLS } from './coingecko'
 import { MarketQuote } from './types'
 import { WatchlistType } from '@prisma/client'
-
-const CRYPTO_SYMBOLS = new Set([
-  'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK',
-  'USDT', 'USDC', 'MATIC', 'NEAR', 'SUI', 'PEPE', 'SHIB', 'LTC', 'BCH'
-])
 
 export interface ResolvedQuoteResult {
   quote: MarketQuote | null

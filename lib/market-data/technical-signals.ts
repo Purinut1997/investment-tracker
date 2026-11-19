@@ -138,7 +138,7 @@ export async function fetchSingleTickerTechnicalSignal(
       try {
         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
           cand
-        )}?range=6mo&interval=1d`
+        )}?range=1y&interval=1d`
 
         const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
           headers: {
@@ -305,7 +305,7 @@ export async function fetchSingleTickerTechnicalSignal(
 
     const metricSummary = [
       rsi14 ? `RSI ${rsi14} (${rsi14 <= 35 ? 'Oversold' : rsi14 >= 68 ? 'Overbought' : 'ปกติ'})` : null,
-      supportS1 ? `แนวรับ S1: $${supportS1}` : null,
+      supportS1 ? `แนวรับ S1: ${currencySymbol}${supportS1}` : null,
       pullbackFromHigh !== 0 ? `ย่อตัว ${pullbackFromHigh.toFixed(1)}%` : null,
     ]
       .filter(Boolean)

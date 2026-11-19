@@ -57,7 +57,7 @@ export function calculatePortfolioHealthScore(
 
   // ─── 2. Concentration Risk (Weight: 20%) ──────────────────
   // Check if any single holding dominates > 25% or > 40%
-  const maxHolding = holdings[0] // sorted descending by value
+  const maxHolding = [...holdings].sort((a, b) => b.allocationPercent - a.allocationPercent)[0]
   let concentrationScore = 20
 
   if (maxHolding) {

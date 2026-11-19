@@ -462,7 +462,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <div className="space-y-0.5">
                       {group.items.map((item) => {
                         const Icon = item.icon
-                        const active = pathname === item.href
+                        const active = item.matchPrefixes
+                          ? item.matchPrefixes.some(
+                              (p) => pathname === p || pathname.startsWith(`${p}/`)
+                            )
+                          : pathname === item.href ||
+                            (item.href !== '/dashboard' && pathname.startsWith(item.href))
                         return (
                           <Link
                             key={item.href}
@@ -615,7 +620,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           },
           {
             href: '/plans',
-            match: ['/plans', '/tactical-advisor', '/radar', '/forecast'],
+            match: ['/plans', '/tactical-advisor', '/ai-advisor', '/radar', '/forecast'],
             icon: PieChart,
             label: 'กลยุทธ์/เสี่ยง',
           },

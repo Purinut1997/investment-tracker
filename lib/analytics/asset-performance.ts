@@ -8,7 +8,7 @@
  */
 
 import { prisma } from '../prisma'
-import { getCachedOrFetchPrice } from '../market-data/cache-layer'
+import { getBatchCachedOrFetchPrices } from '../market-data/cache-layer'
 import { getExchangeRate } from '../market-data/frankfurter'
 
 export interface RealizedTradeRecord {
@@ -185,7 +185,10 @@ export async function calculateAssetPerformance(
         }
 
         const state = assetMap.get(assetId)!
-        const isUsd = state.asset.currency === 'USD' || state.asset.market === 'US'
+        const isUsd =
+          state.asset.currency === 'USD' ||
+          state.asset.market === 'US' ||
+          state.asset.market === 'CRYPTO'
         const fx = isUsd ? usdThbRate : 1.0
 
         const qty = Number(txn.quantity)
@@ -265,16 +268,8 @@ export async function calculateAssetPerformance(
         return remainingQty > 0.00001
       })
 
-      const priceResults = await Promise.all(
-        activeEntries.map(([assetId]) => getCachedOrFetchPrice(assetId, undefined, forceRefresh))
-      )
-      const priceMap = new Map<string, { price: number; isStale: boolean }>()
-      activeEntries.forEach(([assetId], idx) => {
-        const p = priceResults[idx]
-        if (p) {
-          priceMap.set(assetId, { price: p.price, isStale: p.isStale })
-        }
-      })
+      const activeAssetIds = activeEntries.map(([assetId]) => assetId)
+      const priceMap = await getBatchCachedOrFetchPrices(activeAssetIds, forceRefresh)
 
       // 4. Assemble each asset's comprehensive performance item
       const assetPerformanceList: AssetPerformanceItem[] = []
@@ -287,7 +282,10 @@ export async function calculateAssetPerformance(
       let portfolioTotalInvestedCostBase = 0
 
       for (const [assetId, data] of assetEntries) {
-        const isUsd = data.asset.currency === 'USD' || data.asset.market === 'US'
+        const isUsd =
+          data.asset.currency === 'USD' ||
+          data.asset.market === 'US' ||
+          data.asset.market === 'CRYPTO'
         const fx = isUsd ? usdThbRate : 1.0
 
         // Realized breakdown

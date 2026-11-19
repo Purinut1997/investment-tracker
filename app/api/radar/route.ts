@@ -9,6 +9,8 @@ import {
   OpportunityRadarReport,
 } from '@/lib/analytics/risk-sentinel'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
 
 export const maxDuration = 45
 
@@ -25,12 +27,7 @@ async function getPortfolioRadarData(userId: string) {
     select: { cashBalance: true, currency: true },
   })
 
-  // Simple conversion or sum for cash balance (assuming base currency or 1:1 if THB)
-  let totalCash = 0
-  for (const acc of accounts) {
-    const bal = Number(acc.cashBalance) || 0
-    totalCash += bal
-  }
+  const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
 
   // 3. Fetch default preset target allocation
   const defaultPreset = await prisma.investmentPreset.findFirst({
@@ -38,10 +35,44 @@ async function getPortfolioRadarData(userId: string) {
   })
   const targetAllocation = (defaultPreset?.targetAllocation as Record<string, number>) ?? undefined
 
-  // 4. Fetch watchlist
+  // 4. Fetch watchlist and enrich first 6 unheld items with live price & pullback signals
   const watchlists = await prisma.watchlistItem.findMany({
     where: { userId },
     select: { symbol: true, displayName: true, itemType: true },
+  })
+
+  const heldSet = new Set(holdingsResult.holdings.map((h) => h.ticker.toUpperCase()))
+  const unheldWatchlist = watchlists.filter((w) => !heldSet.has(w.symbol.toUpperCase())).slice(0, 6)
+  const enrichedMap = new Map<
+    string,
+    { currentPrice: number; currency: string; changePercent: number; pullbackFromHigh: number; rsi14: number | null; market: string }
+  >()
+
+  await Promise.all(
+    unheldWatchlist.map(async (w) => {
+      const mkt =
+        w.itemType === 'crypto' ? 'CRYPTO' : w.symbol.toUpperCase().endsWith('.BK') ? 'TH' : 'US'
+      try {
+        const sig = await fetchSingleTickerTechnicalSignal(w.symbol, mkt)
+        if (sig && sig.currentPrice > 0) {
+          enrichedMap.set(w.symbol.toUpperCase(), {
+            currentPrice: sig.currentPrice,
+            currency: sig.currencySymbol === '฿' ? 'THB' : 'USD',
+            changePercent: sig.changePercent,
+            pullbackFromHigh: sig.pullbackFromHigh,
+            rsi14: sig.rsi14,
+            market: mkt,
+          })
+        }
+      } catch {
+        // ignore quote failure for individual watchlist ticker
+      }
+    })
+  )
+
+  const enrichedWatchlists = watchlists.map((w) => {
+    const extra = enrichedMap.get(w.symbol.toUpperCase())
+    return extra ? { ...w, ...extra } : w
   })
 
   // 5. Run analysis engines
@@ -53,7 +84,7 @@ async function getPortfolioRadarData(userId: string) {
 
   const opportunityReport: OpportunityRadarReport = scanPortfolioOpportunities(
     holdingsResult.holdings,
-    watchlists,
+    enrichedWatchlists,
     totalCash,
     targetAllocation,
     baseCurrency
@@ -135,6 +166,7 @@ export async function POST(req: NextRequest) {
 
     // Prepare institutional-grade prompt for Gemini AI
     const prompt = `
+[AI Risk Sentinel]
 คุณเป็น "Chief Risk Officer (CRO) & Global Chief Investment Officer (CIO)" สถาบันบริหารความมั่งคั่งระดับโลก (Institutional Wealth Management)
 จงประเมินและสรุปยุทธศาสตร์ "AI Strategic Executive Briefing & Capital Allocation Blueprint" เป็นภาษาไทยระดับมืออาชีพ สำหรับพอร์ตนี้:
 

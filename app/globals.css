@@ -87,11 +87,20 @@ body {
   :root { --main-gutter: 24px; }
   .app-shell { --sidebar-width: 72px !important; }
   .app-sidebar { width: 72px; }
-  .app-sidebar-expanded > div:first-child,
-  .app-sidebar-expanded > div:last-child,
+  .app-sidebar-expanded > div:first-child a > div:nth-child(2),
+  .app-sidebar-expanded > div:first-child button,
+  .app-sidebar-expanded > div:last-child > div > div > div:nth-child(2),
   .app-sidebar-expanded a > span,
   .app-sidebar-expanded p {
     display: none;
+  }
+  .app-sidebar-expanded > div:first-child > div:first-child {
+    justify-content: center;
+  }
+  .app-sidebar-expanded > div:last-child > div {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 4px;
   }
   .app-sidebar-expanded nav,
   .app-sidebar-expanded > div:nth-child(2) {
@@ -378,7 +387,7 @@ body {
 }
 .auth-card {
   width: 100%;
-  max-w: 440px;
+  max-width: 440px;
   background: #12151C;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;

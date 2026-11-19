@@ -41,12 +41,17 @@ export async function getExchangeRate(
     })
 
     if (cached) {
-      return Number(cached.rate)
+      const rateVal = Number(cached.rate)
+      fxMemoryCache.set(cacheKey, { rate: rateVal, timestamp: now })
+      return rateVal
     }
 
     // 2. Fetch fresh from Frankfurter
     const url = `https://api.frankfurter.app/latest?from=${base}&to=${target}`
-    const fetchOptions: RequestInit & { next?: { revalidate?: number } } = { next: { revalidate: 3600 } }
+    const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(4000),
+    }
     const res = await fetch(url, fetchOptions as RequestInit)
 
     if (!res.ok) {
@@ -63,6 +68,7 @@ export async function getExchangeRate(
     const rate = data.rates?.[target]
 
     if (rate && typeof rate === 'number') {
+      fxMemoryCache.set(cacheKey, { rate, timestamp: now })
       // Cache in DB asynchronously
       prisma.exchangeRateHistory
         .upsert({
@@ -100,4 +106,59 @@ export async function getExchangeRate(
       return null
     }
   }
+}
+
+/**
+ * Sum cash balances across multi-currency investment accounts into baseCurrency.
+ */
+export async function sumAccountCashInBaseCurrency(
+  accounts: Array<{ cashBalance: unknown; currency?: string | null }>,
+  baseCurrency = 'THB',
+  preloadedUsdThbRate?: number
+): Promise<number> {
+  if (!accounts || accounts.length === 0) return 0
+
+  const target = baseCurrency.toUpperCase()
+  const uniqueCurrencies = Array.from(
+    new Set(
+      accounts
+        .map((acc) => (acc.currency || 'THB').toUpperCase())
+        .filter((curr) => curr !== target)
+    )
+  )
+
+  const rateMap = new Map<string, number>()
+  await Promise.all(
+    uniqueCurrencies.map(async (curr) => {
+      if (curr === 'USD' && target === 'THB' && preloadedUsdThbRate && preloadedUsdThbRate > 0) {
+        rateMap.set(curr, preloadedUsdThbRate)
+        return
+      }
+      if (curr === 'THB' && target === 'USD' && preloadedUsdThbRate && preloadedUsdThbRate > 0) {
+        rateMap.set(curr, 1 / preloadedUsdThbRate)
+        return
+      }
+
+      const rate = await getExchangeRate(curr, target)
+      if (rate && rate > 0) {
+        rateMap.set(curr, rate)
+      } else if (curr === 'USD' && target === 'THB') {
+        rateMap.set(curr, preloadedUsdThbRate ?? 35.5)
+      } else if (curr === 'THB' && target === 'USD') {
+        rateMap.set(curr, 1 / (preloadedUsdThbRate ?? 35.5))
+      } else {
+        rateMap.set(curr, 1.0)
+      }
+    })
+  )
+
+  let totalCash = 0
+  for (const acc of accounts) {
+    const bal = Number(acc.cashBalance) || 0
+    if (bal === 0) continue
+    const curr = (acc.currency || 'THB').toUpperCase()
+    const fx = curr === target ? 1.0 : (rateMap.get(curr) ?? 1.0)
+    totalCash += bal * fx
+  }
+  return totalCash
 }

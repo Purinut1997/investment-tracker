@@ -82,18 +82,25 @@ export async function syncAssetLivePrice(
   }
 }
 
-async function fetchLiveAssetQuote(
+export async function fetchLiveAssetQuote(
   asset: { id: string; ticker: string; market: string; assetType: string },
   forceRefresh = false
 ): Promise<MarketQuote | null> {
+  const tickerUpper = asset.ticker.trim().toUpperCase()
+  const isCommodityGold =
+    tickerUpper === 'XAU' ||
+    tickerUpper === 'GC.F' ||
+    tickerUpper === 'GC=F' ||
+    (asset.assetType === 'gold' && (tickerUpper === 'GOLD' || asset.market !== 'US'))
+
   if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
     return coinGeckoProvider.getQuote(asset.ticker, 'CRYPTO', forceRefresh)
   }
-  if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
+  if (asset.market === 'TH' || tickerUpper.endsWith('.BK')) {
     const q = await yahooFinanceProvider.getQuote(asset.ticker, 'TH', forceRefresh)
     return q ?? stooqProvider.getQuote(asset.ticker, 'TH', forceRefresh)
   }
-  if (asset.assetType === 'gold' || asset.ticker === 'GOLD' || asset.ticker === 'XAU') {
+  if (isCommodityGold) {
     const q = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', forceRefresh)
     return q ?? stooqProvider.getQuote('GC.F', 'COMMODITY', forceRefresh)
   }
@@ -176,6 +183,7 @@ export async function getBatchCachedOrFetchPrices(
         closePrice: { gt: 0 },
       },
       orderBy: { priceDate: 'desc' },
+      distinct: ['assetId'],
     })
 
     for (const row of historicalPrices) {
@@ -303,29 +311,7 @@ export async function getCachedOrFetchPrice(
     const asset = await prisma.asset.findUnique({ where: { id: assetId } })
     if (!asset) return null
 
-    let quote: MarketQuote | null = null
-
-    if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
-      quote = await coinGeckoProvider.getQuote(asset.ticker, 'CRYPTO', forceRefresh)
-    } else if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
-      quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH', forceRefresh)
-      if (!quote) {
-        quote = await stooqProvider.getQuote(asset.ticker, 'TH', forceRefresh)
-      }
-    } else if (asset.assetType === 'gold' || asset.ticker === 'GOLD' || asset.ticker === 'XAU') {
-      quote = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', forceRefresh)
-      if (!quote) {
-        quote = await stooqProvider.getQuote('GC.F', 'COMMODITY', forceRefresh)
-      }
-    } else {
-      quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US', forceRefresh)
-      if (!quote) {
-        quote = await finnhubProvider.getQuote(asset.ticker, 'US', forceRefresh)
-      }
-      if (!quote) {
-        quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US', forceRefresh)
-      }
-    }
+    const quote = await fetchLiveAssetQuote(asset, forceRefresh)
 
     // Save to PriceHistory and update Memory Cache if fetched successfully
     if (quote && quote.price > 0) {
@@ -376,7 +362,7 @@ export async function getCachedOrFetchPrice(
       return result
     }
 
-    // Last resort: latest transaction price
+    // Last resort: latest transaction price (do NOT cache cross-tenant in global priceMemoryCache)
     const latestTxn = await prisma.transaction.findFirst({
       where: {
         assetId,
@@ -387,13 +373,11 @@ export async function getCachedOrFetchPrice(
     })
 
     if (latestTxn && Number(latestTxn.pricePerUnit) > 0) {
-      const result = {
+      return {
         price: Number(latestTxn.pricePerUnit),
         sourceProvider: 'last_transaction',
         isStale: true,
       }
-      priceMemoryCache.set(assetId, { ...result, timestamp: now })
-      return result
     }
 
     return null

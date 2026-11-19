@@ -84,14 +84,21 @@ function LoginForm() {
       return
     }
 
-    window.location.href = params.get('callbackUrl') ?? '/dashboard'
+    const rawCallback = params.get('callbackUrl') ?? '/dashboard'
+    const safeCallbackUrl =
+      rawCallback.startsWith('/') && !rawCallback.startsWith('//') ? rawCallback : '/dashboard'
+
+    window.location.href = safeCallbackUrl
   }
 
   async function handleGoogleLogin() {
     setError('')
     setGoogleLoading(true)
+    const rawCallback = params.get('callbackUrl') ?? '/dashboard'
+    const safeCallbackUrl =
+      rawCallback.startsWith('/') && !rawCallback.startsWith('//') ? rawCallback : '/dashboard'
     await signIn('google', {
-      callbackUrl: params.get('callbackUrl') ?? '/dashboard',
+      callbackUrl: safeCallbackUrl,
     })
   }
 

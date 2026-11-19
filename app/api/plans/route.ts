@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings, invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
+import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 import { z } from 'zod'
 
 const PresetSchema = z.object({
@@ -34,31 +35,30 @@ export async function GET(req: NextRequest) {
     })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
 
-    // Fetch cash balances across user accounts
+    // Fetch cash balances across user accounts converted to baseCurrency
     const accounts = await prisma.investmentAccount.findMany({
       where: { userId },
       select: { cashBalance: true, currency: true },
     })
-    let totalCash = 0
-    for (const acc of accounts) {
-      totalCash += Number(acc.cashBalance) || 0
-    }
+    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
 
-    // Calculate actual holdings to provide rebalancing feedback
+    // Calculate actual holdings to provide rebalancing feedback (scaled to totalPortfolioValue including cash)
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
     const actualAllocation: Record<string, number> = {}
     const actualByTicker: Record<string, number> = {}
+    const totalPortfolioValue = holdingsResult.totalValueBase + totalCash
 
     for (const h of holdingsResult.holdings) {
+      const weightOfTotal =
+        totalPortfolioValue > 0 ? (h.currentValueBase / totalPortfolioValue) * 100 : 0
       const key = (h.market || h.assetType || 'OTHER').toUpperCase()
-      actualAllocation[key] = (actualAllocation[key] || 0) + h.allocationPercent
+      actualAllocation[key] = (actualAllocation[key] || 0) + weightOfTotal
 
       const tKey = h.ticker.toUpperCase()
-      actualByTicker[tKey] = (actualByTicker[tKey] || 0) + h.allocationPercent
+      actualByTicker[tKey] = (actualByTicker[tKey] || 0) + weightOfTotal
     }
 
     // Add cash allocation
-    const totalPortfolioValue = holdingsResult.totalValueBase + totalCash
     if (totalPortfolioValue > 0) {
       const cashPct = (totalCash / totalPortfolioValue) * 100
       actualAllocation['CASH'] = cashPct

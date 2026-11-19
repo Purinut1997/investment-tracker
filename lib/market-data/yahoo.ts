@@ -70,7 +70,12 @@ export class YahooFinanceProvider implements MarketDataProvider {
       yfTicker = '%5EIXIC'
     } else if (rawSymbol === 'DOW' || rawSymbol === '^DJI') {
       yfTicker = '%5EDJI'
-    } else if (rawSymbol === 'GOLD' || rawSymbol === 'XAU' || rawSymbol === 'GC.F' || rawSymbol === 'GC=F') {
+    } else if (
+      (rawSymbol === 'GOLD' && market !== 'US') ||
+      rawSymbol === 'XAU' ||
+      rawSymbol === 'GC.F' ||
+      rawSymbol === 'GC=F'
+    ) {
       yfTicker = 'GC%3DF'
     } else if (rawSymbol === 'US10Y' || rawSymbol === 'TNX' || rawSymbol === '^TNX') {
       yfTicker = '%5ETNX'

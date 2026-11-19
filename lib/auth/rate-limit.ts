@@ -23,20 +23,29 @@ export async function checkLoginRateLimit(
   email: string,
   ipAddress: string
 ): Promise<RateLimitResult> {
+  const normalizedEmail = email.toLowerCase().trim()
   const windowStart = new Date(Date.now() - WINDOW_MINUTES * 60 * 1000)
+  const hasRealIp = Boolean(ipAddress && ipAddress !== 'unknown' && ipAddress !== 'client')
+  const whereFilter = hasRealIp
+    ? {
+        OR: [{ email: normalizedEmail }, { ipAddress }],
+        success: false,
+        attemptedAt: { gte: windowStart },
+      }
+    : {
+        email: normalizedEmail,
+        success: false,
+        attemptedAt: { gte: windowStart },
+      }
 
   const recentFailures = await prisma.loginAttempt.count({
-    where: {
-      email,
-      success: false,
-      attemptedAt: { gte: windowStart },
-    },
+    where: whereFilter,
   })
 
   if (recentFailures >= MAX_ATTEMPTS) {
     // Find the most recent failure to calculate lockout end time
     const lastFailure = await prisma.loginAttempt.findFirst({
-      where: { email, success: false, attemptedAt: { gte: windowStart } },
+      where: whereFilter,
       orderBy: { attemptedAt: 'desc' },
     })
 
@@ -66,7 +75,8 @@ export async function recordLoginAttempt(
   ipAddress: string,
   success: boolean
 ): Promise<void> {
+  const normalizedEmail = email.toLowerCase().trim()
   await prisma.loginAttempt.create({
-    data: { email, ipAddress, success },
+    data: { email: normalizedEmail, ipAddress, success },
   })
 }

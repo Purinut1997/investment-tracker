@@ -6,10 +6,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
-import { coinGeckoProvider } from '@/lib/market-data/coingecko'
-import { stooqProvider } from '@/lib/market-data/stooq'
-import { invalidatePriceCache, syncAssetLivePrice } from '@/lib/market-data/cache-layer'
+import {
+  fetchLiveAssetQuote,
+  invalidatePriceCache,
+  syncAssetLivePrice,
+} from '@/lib/market-data/cache-layer'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
 export async function POST(req: NextRequest) {
@@ -46,9 +47,6 @@ export async function POST(req: NextRequest) {
       .filter((i) => i.qty > 0.00001)
       .map((i) => i.asset)
 
-    const dateKey = new Date()
-    dateKey.setUTCHours(0, 0, 0, 0)
-
     // Parallelize external fetches for all active assets
     const updatedPrices: Array<{
       ticker: string
@@ -66,21 +64,7 @@ export async function POST(req: NextRequest) {
     await Promise.all(
       activeAssets.map(async (asset) => {
         try {
-          let quote: any = null
-
-          if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
-            quote = await coinGeckoProvider.getQuote(asset.ticker, 'CRYPTO', true)
-          } else if (asset.market === 'TH' || asset.ticker.endsWith('.BK')) {
-            quote = await yahooFinanceProvider.getQuote(asset.ticker, 'TH', true)
-            if (!quote) quote = await stooqProvider.getQuote(asset.ticker, 'TH', true)
-          } else if (asset.assetType === 'gold' || asset.ticker === 'GOLD' || asset.ticker === 'XAU') {
-            quote = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', true)
-            if (!quote) quote = await stooqProvider.getQuote('GC.F', 'COMMODITY', true)
-          } else {
-            // US / Global
-            quote = await yahooFinanceProvider.getQuote(asset.ticker, 'US', true)
-            if (!quote) quote = await stooqProvider.getQuote(`${asset.ticker}.US`, 'US', true)
-          }
+          const quote = await fetchLiveAssetQuote(asset, true)
 
           if (quote && quote.price > 0) {
             await syncAssetLivePrice(asset.id, quote.price, quote.provider || 'yahoo')
@@ -109,8 +93,8 @@ export async function POST(req: NextRequest) {
       })
     )
 
-    // Clear portfolio/holdings/performance caches so downstream APIs immediately reflect latest prices
-    invalidateUserHoldingsCache()
+    // Clear this user's portfolio/holdings/performance caches so downstream APIs immediately reflect latest prices
+    invalidateUserHoldingsCache(session.user.id)
 
     return NextResponse.json({
       success: true,

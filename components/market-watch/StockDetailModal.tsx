@@ -181,6 +181,11 @@ function AiStructuredDashboardView({
   stock: any
   rawFallback: string
 }) {
+  const isEnglishAnalysis = useMemo(() => {
+    const textToCheck = (aiData?.summary || '') + (aiData?.businessOverview || '') + rawFallback
+    return textToCheck.length > 50 && !/[ก-๙]/.test(textToCheck)
+  }, [aiData, rawFallback])
+
   if (!aiData) {
     return (
       <div className="space-y-4">
@@ -194,11 +199,6 @@ function AiStructuredDashboardView({
 
   const currencySymbol = stock?.currency === 'THB' ? '฿' : '$'
   const isPositive = (stock?.changePercent ?? 0) >= 0
-
-  const isEnglishAnalysis = useMemo(() => {
-    const textToCheck = (aiData?.summary || '') + (aiData?.businessOverview || '') + rawFallback
-    return textToCheck.length > 50 && !/[ก-๙]/.test(textToCheck)
-  }, [aiData, rawFallback])
 
   return (
     <div className="space-y-5 animate-fade-in text-slate-200">

@@ -5,6 +5,20 @@
  */
 
 import type { TaxReportSummary } from '@/lib/analytics/tax-fifo'
+import {
+  EXCEL_COLORS as C,
+  borderThin,
+  borderAccountingTotal,
+  makeTitleCell,
+  makeMetaCell,
+  makeSectionHeaderCell,
+  makeThCell,
+  makeTextCell,
+  roundForExcelFormat,
+  makePctCell,
+  makeBlankCell,
+  calculateColWidths,
+} from './excel-styles'
 
 export interface TaxExportOptions {
   selectedYear: number
@@ -20,122 +34,6 @@ export interface TaxExportOptions {
   includeAiAdvice?: boolean
 }
 
-// ─── Color Palette & Styling Tokens ─────────────────────────
-const C = {
-  navyDark: '0F172A',      // Slate 900
-  navyMedium: '1E293B',    // Slate 800
-  indigoDark: '1E1B4B',    // Indigo 950
-  indigoSoft: 'EEF2FF',    // Indigo 50
-  slateLight: 'F8FAFC',    // Slate 50
-  slateZebra: 'F1F5F9',    // Slate 100
-  slateBorder: 'CBD5E1',   // Slate 300
-  borderSoft: 'E2E8F0',    // Slate 200
-  emeraldBg: 'D1FAE5',     // Green 100
-  emeraldText: '065F46',   // Green 800
-  emeraldBorder: 'A7F3D0', // Green 200
-  roseBg: 'FFE4E6',        // Rose 100
-  roseText: '9F1239',       // Rose 800
-  amberBg: 'FEF3C7',       // Amber 100
-  amberText: '92400E',      // Amber 800
-  blueBg: 'E0E7FF',        // Blue 100
-  blueText: '3730A3',       // Blue 800
-  textDark: '0F172A',      // Primary Text
-  textMuted: '475569',     // Secondary Text
-  white: 'FFFFFF',
-}
-
-// ─── Style Factory Helpers ──────────────────────────────────
-const borderThin = {
-  top: { style: 'thin', color: { rgb: C.slateBorder } },
-  bottom: { style: 'thin', color: { rgb: C.slateBorder } },
-  left: { style: 'thin', color: { rgb: C.slateBorder } },
-  right: { style: 'thin', color: { rgb: C.slateBorder } },
-}
-
-const borderAccountingTotal = {
-  top: { style: 'thin', color: { rgb: C.navyMedium } },
-  bottom: { style: 'double', color: { rgb: C.navyDark } }, // Accounting double underline
-  left: { style: 'thin', color: { rgb: C.slateBorder } },
-  right: { style: 'thin', color: { rgb: C.slateBorder } },
-}
-
-// Title banner cell (Sheet Main Title)
-function makeTitleCell(text: string) {
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 14, bold: true, color: { rgb: C.white } },
-      fill: { fgColor: { rgb: C.navyDark } },
-      alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
-    },
-  }
-}
-
-// Subtitle / Metadata cell
-function makeMetaCell(text: string) {
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 9.5, italic: true, color: { rgb: C.textMuted } },
-      fill: { fgColor: { rgb: C.slateLight } },
-      alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
-      border: {
-        bottom: { style: 'thin', color: { rgb: C.slateBorder } },
-      },
-    },
-  }
-}
-
-// Section Header Banner
-function makeSectionHeaderCell(text: string) {
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 11, bold: true, color: { rgb: C.white } },
-      fill: { fgColor: { rgb: C.indigoDark } },
-      alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
-    },
-  }
-}
-
-// Table Header Column
-function makeThCell(text: string, align: 'left' | 'center' | 'right' = 'center') {
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 10, bold: true, color: { rgb: C.white } },
-      fill: { fgColor: { rgb: C.navyMedium } },
-      alignment: { horizontal: align, vertical: 'center', wrapText: true },
-      border: {
-        top: { style: 'medium', color: { rgb: C.navyDark } },
-        bottom: { style: 'medium', color: { rgb: C.navyDark } },
-        left: { style: 'thin', color: { rgb: '475569' } },
-        right: { style: 'thin', color: { rgb: '475569' } },
-      },
-    },
-  }
-}
-
-// Data Text Cell with zebra striping
-function makeTextCell(text: string, rowIndex: number, align: 'left' | 'center' | 'right' = 'left') {
-  const isEven = rowIndex % 2 === 0
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 9.5, color: { rgb: C.textDark } },
-      fill: { fgColor: { rgb: isEven ? C.white : C.slateZebra } },
-      alignment: { horizontal: align, vertical: 'center' },
-      border: borderThin,
-    },
-  }
-}
-
-// Data Number Cell with currency/accounting format
 function makeNumCell(
   val: number,
   rowIndex: number,
@@ -144,7 +42,7 @@ function makeNumCell(
 ) {
   const isEven = rowIndex % 2 === 0
   return {
-    v: Math.round(val * 100) / 100,
+    v: roundForExcelFormat(val, format),
     t: 'n',
     z: format,
     s: {
@@ -161,23 +59,6 @@ function makeNumCell(
   }
 }
 
-// Percentage Cell
-function makePctCell(val: number, rowIndex: number) {
-  const isEven = rowIndex % 2 === 0
-  return {
-    v: Math.round(val * 100) / 10000,
-    t: 'n',
-    z: '0.00%',
-    s: {
-      font: { name: 'Segoe UI', sz: 9.5, color: { rgb: C.textDark } },
-      fill: { fgColor: { rgb: isEven ? C.white : C.slateZebra } },
-      alignment: { horizontal: 'right', vertical: 'center' },
-      border: borderThin,
-    },
-  }
-}
-
-// Status / Badge Cell
 function makeBadgeCell(
   text: string,
   rowIndex: number,
@@ -218,7 +99,7 @@ function makeTotalCell(
 ) {
   if (type === 'number' && typeof val === 'number') {
     return {
-      v: Math.round(val * 100) / 100,
+      v: roundForExcelFormat(val, format),
       t: 'n',
       z: format,
       s: {
@@ -256,35 +137,6 @@ function makeTotalCell(
   }
 }
 
-// Blank spacing cell
-function makeBlankCell(bg = C.white) {
-  return {
-    v: '',
-    t: 's',
-    s: { fill: { fgColor: { rgb: bg } } },
-  }
-}
-
-// Auto-fit column widths calculator
-function calculateColWidths(rows: any[][], minWidth = 11, maxWidth = 55) {
-  const widths: number[] = []
-  rows.forEach((row) => {
-    if (!Array.isArray(row)) return
-    row.forEach((cell, i) => {
-      let str = ''
-      if (cell && typeof cell === 'object') {
-        str = cell.v !== undefined && cell.v !== null ? String(cell.v) : ''
-      } else if (cell !== undefined && cell !== null) {
-        str = String(cell)
-      }
-      // Calculate visual width considering Thai glyphs
-      const len = Math.ceil(str.length * 1.15)
-      widths[i] = Math.max(widths[i] || minWidth, len)
-    })
-  })
-  return widths.map((w) => ({ wch: Math.min(Math.max(w, minWidth), maxWidth) }))
-}
-
 // ─── Main Export Function ───────────────────────────────────
 export async function exportTaxReportToExcel(
   report: TaxReportSummary,
@@ -309,7 +161,7 @@ export async function exportTaxReportToExcel(
   } = options
 
   const isNewRuleYear = selectedYear >= 2024
-  const isTaxableInThailand = isNewRuleYear || repatriated
+  const isTaxableInThailand = Boolean(repatriated)
   const exportedAtStr = new Date().toLocaleDateString('th-TH', {
     year: 'numeric',
     month: 'long',

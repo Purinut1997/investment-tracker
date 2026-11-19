@@ -5,7 +5,9 @@ import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
+import { getBatchTechnicalSignals } from '@/lib/market-data/technical-signals'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 
 export const maxDuration = 45
 
@@ -742,17 +744,44 @@ export async function runTacticalAnalysis(
     select: { cashBalance: true, currency: true },
   })
 
-  let totalCash = 0
-  for (const acc of accounts) {
-    totalCash += Number(acc.cashBalance) || 0
-  }
+  const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
 
   const totalPortfolioValue = holdingsResult.totalValueBase + totalCash
   const currentCashPercent =
     totalPortfolioValue > 0 ? Number(((totalCash / totalPortfolioValue) * 100).toFixed(1)) : 0
 
-  // 2. Gather External Market Signals
-  const market = await gatherMarketData()
+  // 2. Gather External Market Signals, Technical Signals, and Recent News in parallel
+  const topHoldings = holdingsResult.holdings.slice(0, 15)
+  const heldTickersUpper = topHoldings.map((h) => h.ticker.toUpperCase())
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+  const [market, technicalSignals, recentNews] = await Promise.all([
+    gatherMarketData(),
+    topHoldings.length > 0
+      ? getBatchTechnicalSignals(
+          topHoldings.map((h) => ({
+            ticker: h.ticker,
+            market:
+              h.market ||
+              (h.ticker.endsWith('.BK') || h.currency === 'THB' ? 'TH' : 'US'),
+          }))
+        ).catch(() => ({} as Record<string, any>))
+      : Promise.resolve({} as Record<string, any>),
+    prisma.newsItem
+      .findMany({
+        where: {
+          publishedAt: { gte: sevenDaysAgo },
+          OR:
+            heldTickersUpper.length > 0
+              ? [{ symbol: { in: heldTickersUpper } }, { symbol: null }]
+              : [{ symbol: null }],
+        },
+        orderBy: { publishedAt: 'desc' },
+        take: 12,
+        select: { symbol: true, headline: true, sentiment: true, publishedAt: true },
+      })
+      .catch(() => []),
+  ])
 
   // Real numeric values for 4 Pillars
   const spxPrice = market.spx?.price ?? 7561.67
@@ -795,6 +824,10 @@ export async function runTacticalAnalysis(
     select: { response: true, createdAt: true },
   })
 
+  const livePriceMap = new Map(
+    holdingsResult.holdings.map((h) => [h.ticker.toUpperCase(), Number(h.currentPrice || 0)])
+  )
+
   const pastContextSummaries = pastLogs
     .map((log) => {
       try {
@@ -802,7 +835,18 @@ export async function runTacticalAnalysis(
         const dateStr = formatThaiDate(new Date(log.createdAt))
         const actionsSummary = (parsed.tacticalActions || [])
           .slice(0, 3)
-          .map((a: any) => `${a.ticker} (${a.actionLabel})`)
+          .map((a: any) => {
+            const sym = String(a.ticker || '').toUpperCase()
+            const recPrice = Number(a.currentPrice || 0)
+            const nowPrice = livePriceMap.get(sym) || 0
+            const currSym = a.currency || '$'
+            if (recPrice > 0 && nowPrice > 0) {
+              const pctDiff = (((nowPrice - recPrice) / recPrice) * 100).toFixed(2)
+              const sign = Number(pctDiff) >= 0 ? '+' : ''
+              return `${sym} (${a.actionLabel} | ราคาตอนแนะนำ ${currSym}${recPrice.toFixed(2)} -> ปัจจุบัน ${currSym}${nowPrice.toFixed(2)} [${sign}${pctDiff}%])`
+            }
+            return `${sym} (${a.actionLabel})`
+          })
           .join(', ')
         return `• วันที่ ${dateStr}: แนะนำ ${actionsSummary}`
       } catch {
@@ -811,6 +855,13 @@ export async function runTacticalAnalysis(
     })
     .filter(Boolean)
     .join('\n')
+
+  const recentNewsLines =
+    recentNews.length > 0
+      ? recentNews
+          .map((n) => `     * [${n.symbol || 'MACRO'}] ${n.headline} (${n.sentiment || 'neutral'})`)
+          .join('\n')
+      : '     * ไม่มีหัวข้อข่าวเฉพาะในฐานข้อมูล 7 วันล่าสุด'
 
   // 4. Construct high-fidelity system prompt & user prompt for Gemini
   const prompt = `
@@ -836,7 +887,8 @@ export async function runTacticalAnalysis(
 4. ปัจจัยเร่งและกระแสเงินทุน (Catalysts & Fund Flows):
    - Safe-Haven Demand: ทองคำ ($${goldPrice.toLocaleString()}), ดัชนีดอลลาร์ DXY (${dxyPrice.toFixed(2)}), น้ำมันดิบ ($${oilPrice.toFixed(2)}), Bitcoin ($${btcPrice.toLocaleString()})
    - เงินทุนกำลังไหลเข้าสินทรัพย์เสี่ยง (Risk-On) หรือหมุนเข้าสินทรัพย์ปลอดภัย (Safe-Haven / Cash)
-   - 3 ข่าว/Event Drivers สำคัญ: ผลประกอบการกลุ่ม AI/Tech, ทิศทาง Bond Yield/เงินเฟ้อ, ภูมิรัฐศาสตร์
+   - ข่าวล่าสุดในรอบ 7 วันจากคลังข่าวจริงของระบบ (ใช้เป็น Event Drivers หลัก):
+${recentNewsLines}
 
 💡 สูตรลัดสรุปผล (Market Climate Formula):
 แนวโน้มดัชนี + ระดับความกลัว (Fear & Greed / VIX) + แรงกดดันดอกเบี้ย (10Y Yield) = ระดับความเสี่ยงตลาด (${deterministicClimate.riskScore}/5) และกลยุทธ์ที่ควรใช้ (${deterministicClimate.postureLabelTh})
@@ -846,12 +898,15 @@ export async function runTacticalAnalysis(
 - มูลค่าสินทรัพย์หุ้น/คริปโต: ${holdingsResult.totalValueBase.toLocaleString()} ${baseCurrency} (คิดเป็น ${(100 - currentCashPercent).toFixed(1)}%)
 - เงินสดสำรองพร้อมใช้ (Dry Powder): ${totalCash.toLocaleString()} ${baseCurrency} (คิดเป็น ${currentCashPercent}%)
 - กำไร/ขาดทุนรวมที่ยังไม่รับรู้ (Unrealized P&L): ${holdingsResult.unrealizedPnLBase.toLocaleString()} ${baseCurrency} (${holdingsResult.unrealizedPnLPercent.toFixed(2)}%)
-- รายการสินทรัพย์ที่ถือครองในพอร์ต (${holdingsResult.holdings.length} ตัว):
+- รายการสินทรัพย์ที่ถือครองในพอร์ต พร้อมสัญญาณเทคนิคจริง (${holdingsResult.holdings.length} ตัว):
 ${holdingsResult.holdings
-  .map(
-    (h, idx) =>
-      `  ${idx + 1}. [${h.ticker}] ${h.assetName} (${h.market}) | สัดส่วน: ${h.allocationPercent.toFixed(1)}% | ราคาปัจจุบัน: ${h.currentPrice} ${h.currency} | ต้นทุนเฉลี่ย: ${h.avgCost} | กำไร/ขาดทุน: ${h.unrealizedPnLPercent.toFixed(2)}% | มูลค่า: ${h.currentValueBase.toLocaleString()} ${baseCurrency}`
-  )
+  .map((h, idx) => {
+    const sig = technicalSignals[h.ticker.toUpperCase()]
+    const techNote = sig
+      ? ` | RSI(14): ${sig.rsi14 ?? 'N/A'} | SMA50: ${sig.sma50 ?? 'N/A'} | SMA200: ${sig.sma200 ?? 'N/A'} | S1: ${sig.supportS1 ?? 'N/A'} | S2: ${sig.supportS2 ?? 'N/A'} | R1: ${sig.resistanceR1 ?? 'N/A'} | ย่อจาก 52W High: ${sig.pullbackFromHigh}%`
+      : ''
+    return `  ${idx + 1}. [${h.ticker}] ${h.assetName} (${h.market}) | สัดส่วน: ${h.allocationPercent.toFixed(1)}% | ราคาปัจจุบัน: ${h.currentPrice} ${h.currency} | ต้นทุนเฉลี่ย: ${h.avgCost} | กำไร/ขาดทุน: ${h.unrealizedPnLPercent.toFixed(2)}% | มูลค่า: ${h.currentValueBase.toLocaleString()} ${baseCurrency}${techNote}`
+  })
   .join('\n')}
 
 === ประวัติคำแนะนำในรอบที่ผ่านๆ มา (เพื่อตรวจการบ้าน Track Record) ===

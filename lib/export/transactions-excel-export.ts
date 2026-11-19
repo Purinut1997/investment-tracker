@@ -4,6 +4,20 @@
  * Powered by xlsx-js-style for complete cell styling, borders, colors, and freeze panes
  */
 
+import {
+  EXCEL_COLORS as C,
+  borderThin,
+  borderAccountingTotal,
+  makeTitleCell,
+  makeMetaCell,
+  makeSectionHeaderCell,
+  makeThCell,
+  makeTextCell,
+  roundForExcelFormat,
+  makeBlankCell,
+  calculateColWidths,
+} from './excel-styles'
+
 export interface TransactionExportItem {
   id: string
   txnDate: string | Date
@@ -34,116 +48,10 @@ export interface TransactionsExportOptions {
   filterSummary?: string
 }
 
-// ─── Color Palette & Styling Tokens ─────────────────────────
-const C = {
-  navyDark: '0F172A',
-  navyMedium: '1E293B',
-  indigoDark: '1E1B4B',
-  slateLight: 'F8FAFC',
-  slateZebra: 'F1F5F9',
-  slateBorder: 'CBD5E1',
-  emeraldBg: 'D1FAE5',
-  emeraldText: '065F46',
-  roseBg: 'FFE4E6',
-  roseText: '9F1239',
-  cyanBg: 'CFFAFE',
-  cyanText: '155E75',
-  amberBg: 'FEF3C7',
-  amberText: '92400E',
-  indigoBg: 'E0E7FF',
-  indigoText: '3730A3',
-  textDark: '0F172A',
-  textMuted: '475569',
-  white: 'FFFFFF',
-}
-
-const borderThin = {
-  top: { style: 'thin', color: { rgb: C.slateBorder } },
-  bottom: { style: 'thin', color: { rgb: C.slateBorder } },
-  left: { style: 'thin', color: { rgb: C.slateBorder } },
-  right: { style: 'thin', color: { rgb: C.slateBorder } },
-}
-
-const borderAccountingTotal = {
-  top: { style: 'thin', color: { rgb: C.navyMedium } },
-  bottom: { style: 'double', color: { rgb: C.navyDark } },
-  left: { style: 'thin', color: { rgb: C.slateBorder } },
-  right: { style: 'thin', color: { rgb: C.slateBorder } },
-}
-
-function makeTitleCell(text: string) {
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 14, bold: true, color: { rgb: C.white } },
-      fill: { fgColor: { rgb: C.navyDark } },
-      alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
-    },
-  }
-}
-
-function makeMetaCell(text: string) {
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 9.5, italic: true, color: { rgb: C.textMuted } },
-      fill: { fgColor: { rgb: C.slateLight } },
-      alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
-      border: { bottom: { style: 'thin', color: { rgb: C.slateBorder } } },
-    },
-  }
-}
-
-function makeSectionHeaderCell(text: string) {
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 11, bold: true, color: { rgb: C.white } },
-      fill: { fgColor: { rgb: C.indigoDark } },
-      alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
-    },
-  }
-}
-
-function makeThCell(text: string, align: 'left' | 'center' | 'right' = 'center') {
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 10, bold: true, color: { rgb: C.white } },
-      fill: { fgColor: { rgb: C.navyMedium } },
-      alignment: { horizontal: align, vertical: 'center', wrapText: true },
-      border: {
-        top: { style: 'medium', color: { rgb: C.navyDark } },
-        bottom: { style: 'medium', color: { rgb: C.navyDark } },
-        left: { style: 'thin', color: { rgb: '475569' } },
-        right: { style: 'thin', color: { rgb: '475569' } },
-      },
-    },
-  }
-}
-
-function makeTextCell(text: string, rowIndex: number, align: 'left' | 'center' | 'right' = 'left') {
-  const isEven = rowIndex % 2 === 0
-  return {
-    v: text,
-    t: 's',
-    s: {
-      font: { name: 'Segoe UI', sz: 9.5, color: { rgb: C.textDark } },
-      fill: { fgColor: { rgb: isEven ? C.white : C.slateZebra } },
-      alignment: { horizontal: align, vertical: 'center' },
-      border: borderThin,
-    },
-  }
-}
-
 function makeNumCell(val: number, rowIndex: number, format = '#,##0.00', bold = false) {
   const isEven = rowIndex % 2 === 0
   return {
-    v: Math.round(val * 100) / 100,
+    v: roundForExcelFormat(val, format),
     t: 'n',
     z: format,
     s: {
@@ -191,7 +99,7 @@ function makeTypeBadgeCell(type: string, rowIndex: number) {
 function makeTotalCell(val: string | number, format = '#,##0.00', align: 'left' | 'center' | 'right' = 'right') {
   if (typeof val === 'number') {
     return {
-      v: Math.round(val * 100) / 100,
+      v: roundForExcelFormat(val, format),
       t: 'n',
       z: format,
       s: {
@@ -213,28 +121,6 @@ function makeTotalCell(val: string | number, format = '#,##0.00', align: 'left' 
       border: borderAccountingTotal,
     },
   }
-}
-
-function makeBlankCell() {
-  return { v: '', t: 's', s: { fill: { fgColor: { rgb: C.white } } } }
-}
-
-function calculateColWidths(rows: any[][], minWidth = 11, maxWidth = 55) {
-  const widths: number[] = []
-  rows.forEach((row) => {
-    if (!Array.isArray(row)) return
-    row.forEach((cell, i) => {
-      let str = ''
-      if (cell && typeof cell === 'object') {
-        str = cell.v !== undefined && cell.v !== null ? String(cell.v) : ''
-      } else if (cell !== undefined && cell !== null) {
-        str = String(cell)
-      }
-      const len = Math.ceil(str.length * 1.15)
-      widths[i] = Math.max(widths[i] || minWidth, len)
-    })
-  })
-  return widths.map((w) => ({ wch: Math.min(Math.max(w, minWidth), maxWidth) }))
 }
 
 export async function exportTransactionsToExcel(

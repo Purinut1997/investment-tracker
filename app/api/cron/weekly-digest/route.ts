@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if ((process.env.NODE_ENV === 'production' && !cronSecret) || (cronSecret && authHeader !== `Bearer ${cronSecret}`)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -42,9 +42,27 @@ export async function GET(req: NextRequest) {
     for (const setting of usersWithDigest) {
       const user = setting.user
       try {
-        // 1. Calculate holdings
-        const holdingsResult = await calculateUserHoldings(user.id, setting.baseCurrency)
-        const healthScore = calculatePortfolioHealthScore(holdingsResult.holdings)
+        // 1. Calculate holdings & health score with user's default preset targets
+        const [holdingsResult, defaultPreset] = await Promise.all([
+          calculateUserHoldings(user.id, setting.baseCurrency),
+          prisma.investmentPreset.findFirst({
+            where: { userId: user.id },
+            orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+            select: { targetAllocation: true },
+          }),
+        ])
+        const rawTargetAlloc = (defaultPreset?.targetAllocation as Record<string, unknown>) || undefined
+        const cleanTargetAlloc = rawTargetAlloc
+          ? (Object.fromEntries(
+              Object.entries(rawTargetAlloc).filter(
+                ([k, v]) => !k.startsWith('_') && typeof v === 'number'
+              )
+            ) as Record<string, number>)
+          : undefined
+        const healthScore = calculatePortfolioHealthScore(
+          holdingsResult.holdings,
+          cleanTargetAlloc && Object.keys(cleanTargetAlloc).length > 0 ? cleanTargetAlloc : undefined
+        )
 
         // 2. Gather news for user's tickers in the past 7 days
         const userTickers = holdingsResult.holdings.map((h) => h.ticker)
@@ -133,6 +151,15 @@ ${newsHeadlines || 'ไม่มีข่าวเด่น'}
             `${parsedAi.portfolioSummary}\n\n${parsedAi.newsSummary}`,
             weekOfStr
           )
+          await prisma.weeklyDigest.update({
+            where: {
+              userId_weekOf: {
+                userId: user.id,
+                weekOf: monday,
+              },
+            },
+            data: { deliveredAt: new Date() },
+          })
           results.emailsSent++
         }
 

@@ -125,6 +125,7 @@ export function runMonteCarloSimulation(params: SimulationParams): SimulationRes
     const nominalP50 = valuesAtMonth[p50Index] ?? 0
     const inflationFactor = Math.pow(1 + inflationRate, y)
     const realP50Val = adjustInflation ? nominalP50 / inflationFactor : nominalP50
+    const effectiveStepP50 = adjustInflation ? realP50Val : nominalP50
     const contributions = initialAmount + monthlyContribution * monthIdx
 
     steps.push({
@@ -134,8 +135,8 @@ export function runMonteCarloSimulation(params: SimulationParams): SimulationRes
       p90: Math.round(valuesAtMonth[p90Index] ?? 0),
       contributions: Math.round(contributions),
       realP50: Math.round(realP50Val),
-      dividendAnnualP50: Math.round(nominalP50 * expectedDividendYield),
-      safeWithdrawalMonthlyP50: Math.round((nominalP50 * 0.04) / 12),
+      dividendAnnualP50: Math.round(effectiveStepP50 * expectedDividendYield),
+      safeWithdrawalMonthlyP50: Math.round((effectiveStepP50 * 0.04) / 12),
     })
   }
 
@@ -146,17 +147,20 @@ export function runMonteCarloSimulation(params: SimulationParams): SimulationRes
 
   const finalInflationFactor = Math.pow(1 + inflationRate, years)
   const finalRealP50 = Math.round(finalP50 / finalInflationFactor)
+  const effectiveFinalP50 = adjustInflation ? finalRealP50 : finalP50
 
   let probabilityOfReachingTarget = 0
   if (targetAmount > 0) {
-    const successCount = finalValues.filter((v) => v >= targetAmount).length
+    const successCount = finalValues.filter((v) =>
+      (adjustInflation ? v / finalInflationFactor : v) >= targetAmount
+    ).length
     probabilityOfReachingTarget = Math.round((successCount / numSimulations) * 100)
   }
 
   const totalContributed = initialAmount + monthlyContribution * totalMonths
-  const totalGainP50 = Math.max(0, finalP50 - totalContributed)
-  const retirementMonthlyIncome = Math.round((finalP50 * 0.04) / 12)
-  const dividendMonthlyIncome = Math.round((finalP50 * expectedDividendYield) / 12)
+  const totalGainP50 = effectiveFinalP50 - totalContributed
+  const retirementMonthlyIncome = Math.round((effectiveFinalP50 * 0.04) / 12)
+  const dividendMonthlyIncome = Math.round((effectiveFinalP50 * expectedDividendYield) / 12)
 
   // 4. Milestone Timeline Roadmap
   const standardMilestoneTargets = [
@@ -184,8 +188,8 @@ export function runMonteCarloSimulation(params: SimulationParams): SimulationRes
     if (alreadyAchieved) {
       reachedYearStep = 0
     } else {
-      // Find the earliest year in steps where p50 >= target
-      const foundStep = steps.find((s) => s.p50 >= target)
+      // Find the earliest year in steps where P50 (nominal or real) >= target
+      const foundStep = steps.find((s) => (adjustInflation ? s.realP50 : s.p50) >= target)
       if (foundStep) {
         reachedYearStep = foundStep.year
       }
@@ -345,31 +349,60 @@ export function runCrisisStressTest({
   ]
 
   const r = annualReturn / 12
-  const totalMonths = years * 12
+  const totalMonths = Math.max(1, Math.round(years * 12))
+  const crashMonth = Math.min(24, Math.max(1, Math.floor(totalMonths * 0.2)))
 
   return scenarios.map((sc) => {
-    // Simulate with DCA
+    const recoveryMonths = Math.max(1, Math.round(sc.recoveryYears * 12))
+    const shockMultiplier = Math.max(0.05, 1 + sc.dropPercent / 100)
+    const rRecovery = Math.pow(1 / shockMultiplier, 1 / recoveryMonths) - 1
+
     let valWithDCA = initialAmount
     let valNoDCA = initialAmount
+    let preCrashPeakWithDCA = initialAmount
+    let preCrashPeakNoDCA = initialAmount
+    let recoveredMonthWithDCA = crashMonth + recoveryMonths
+    let recoveredMonthNoDCA = crashMonth + recoveryMonths
+    let hasRecoveredWithDCA = false
+    let hasRecoveredNoDCA = false
 
     for (let m = 1; m <= totalMonths; m++) {
       valWithDCA += monthlyContribution
 
-      // Apply shock at month 24 (Year 2)
-      if (m === 24) {
-        valWithDCA *= 1 + sc.dropPercent / 100
-        valNoDCA *= 1 + sc.dropPercent / 100
+      if (m === crashMonth) {
+        preCrashPeakWithDCA = valWithDCA
+        preCrashPeakNoDCA = valNoDCA
+        valWithDCA *= shockMultiplier
+        valNoDCA *= shockMultiplier
       } else {
-        valWithDCA *= 1 + r
-        valNoDCA *= 1 + r
+        const stepRate =
+          m > crashMonth && m <= crashMonth + recoveryMonths ? rRecovery : r
+        valWithDCA *= 1 + stepRate
+        valNoDCA *= 1 + stepRate
+
+        if (m > crashMonth) {
+          if (!hasRecoveredWithDCA && valWithDCA >= preCrashPeakWithDCA) {
+            recoveredMonthWithDCA = m
+            hasRecoveredWithDCA = true
+          }
+          if (!hasRecoveredNoDCA && valNoDCA >= preCrashPeakNoDCA) {
+            recoveredMonthNoDCA = m
+            hasRecoveredNoDCA = true
+          }
+        }
       }
     }
+
+    const speedupYearsFromDCA =
+      monthlyContribution > 0
+        ? Math.max(0, Number(((recoveredMonthNoDCA - recoveredMonthWithDCA) / 12).toFixed(1)))
+        : 0
 
     return {
       ...sc,
       finalValueWithDCA: Math.round(valWithDCA),
       finalValueWithoutDCA: Math.round(valNoDCA),
-      speedupYearsFromDCA: sc.recoveryYears >= 2 ? 1.5 : 0.8,
+      speedupYearsFromDCA,
     }
   })
 }

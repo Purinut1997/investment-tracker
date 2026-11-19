@@ -258,7 +258,7 @@ export function StockDcaBreakdownTable({
           } | สัดส่วนใหม่: ${i.postWeight}%`
       ),
       `---------------------------------`,
-      `*คำนวณอัตโนมัติโดย ClassCare 360 Investment Tracker`,
+      `*คำนวณอัตโนมัติโดย Investment Pro`,
     ].filter(Boolean)
     navigator.clipboard.writeText(lines.join('\n'))
     setCopied(true)

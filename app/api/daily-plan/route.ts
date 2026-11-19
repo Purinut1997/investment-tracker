@@ -5,7 +5,7 @@ import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { fetchSingleTickerTechnicalSignal, TechnicalSignal } from '@/lib/market-data/technical-signals'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
-import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { getExchangeRate, sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 
 export const maxDuration = 45
@@ -80,10 +80,7 @@ export async function GET(req: NextRequest) {
       select: { cashBalance: true, currency: true },
     })
 
-    let totalCash = 0
-    for (const acc of accounts) {
-      totalCash += Number(acc.cashBalance) || 0
-    }
+    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
 
     // 2. Fetch key market benchmarks and real human sentiment in parallel
     const [
@@ -562,7 +559,10 @@ export async function GET(req: NextRequest) {
           },
         },
         benchmarks,
-        usdThbRate: typeof usdThbRate === 'number' ? usdThbRate : 33.5,
+        usdThbRate:
+          usdThbRate.status === 'fulfilled' && typeof usdThbRate.value === 'number'
+            ? usdThbRate.value
+            : 35.5,
         macro: {
           dxy: {
             price: dxyRes.status === 'fulfilled' && dxyRes.value ? dxyRes.value.price : 104.18,

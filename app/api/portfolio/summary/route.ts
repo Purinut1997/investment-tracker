@@ -13,7 +13,7 @@ import {
 import { invalidatePriceCache, syncAssetLivePrice } from '@/lib/market-data/cache-layer'
 import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
 import { calculatePortfolioPerformance } from '@/lib/analytics/performance'
-import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { getExchangeRate, sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 
@@ -83,54 +83,79 @@ export async function GET(req: NextRequest) {
       const usdThbRate = usdThbRateRaw ?? 35.5
       const txns = holdingsResult.txns || []
 
-      // 4. Calculate health score
-      const healthScore = calculatePortfolioHealthScore(holdingsResult.holdings)
+      // 4. In-Memory: Calculate true FIFO REALIZED GAIN from preloaded transactions (0 DB queries)
+      const sortedTxns = [...txns].sort(
+        (a: any, b: any) => new Date(a.txnDate).getTime() - new Date(b.txnDate).getTime()
+      )
+      const fifoLots = new Map<string, Array<{ qty: number; unitCost: number }>>()
+      let totalRealizedGainBase = 0
+      let totalRealizedGainUSD = 0
 
-      // 5. In-Memory: Calculate total REALIZED GAIN from preloaded SELL transactions (0 DB queries)
-      const sellTxns = txns.filter((t: any) => t.txnType === 'SELL')
-      const totalRealizedProceedsBase = sellTxns.reduce((sum: number, t: any) => {
-        const isUSD = t.asset?.currency === 'USD' || t.asset?.market === 'US'
-        const fx = isUSD ? usdThbRate : 1.0
-        return sum + Number(t.totalAmount || 0) * fx
-      }, 0)
+      for (const t of sortedTxns) {
+        const assetId = t.assetId
+        if (!fifoLots.has(assetId)) {
+          fifoLots.set(assetId, [])
+        }
+        const lots = fifoLots.get(assetId)!
+        const qty = Number(t.quantity || 0)
+        const price = Number(t.pricePerUnit || 0)
+        const fee = Number(t.fee || 0)
 
-      const totalRealizedProceedsUSD = sellTxns.reduce((sum: number, t: any) => {
-        const isUSD = t.asset?.currency === 'USD' || t.asset?.market === 'US'
-        return sum + (isUSD ? Number(t.totalAmount || 0) : 0)
-      }, 0)
+        if (t.txnType === 'BUY' && qty > 0) {
+          const unitCost = (qty * price + fee) / qty
+          lots.push({ qty, unitCost })
+        } else if (t.txnType === 'SELL' && qty > 0) {
+          let qtyToSell = qty
+          let costBasis = 0
+          while (qtyToSell > 0.0000001 && lots.length > 0) {
+            const lot = lots[0]
+            if (lot.qty <= qtyToSell) {
+              costBasis += lot.qty * lot.unitCost
+              qtyToSell -= lot.qty
+              lots.shift()
+            } else {
+              costBasis += qtyToSell * lot.unitCost
+              lot.qty -= qtyToSell
+              qtyToSell = 0
+            }
+          }
+          const proceeds = Number(t.totalAmount || qty * price - fee)
+          const realizedGain = proceeds - costBasis
+          const isUSD =
+            t.asset?.currency === 'USD' ||
+            t.asset?.market === 'US' ||
+            t.asset?.market === 'CRYPTO'
+          const fx = isUSD ? usdThbRate : 1.0
+          totalRealizedGainBase += realizedGain * fx
+          if (isUSD) {
+            totalRealizedGainUSD += realizedGain
+          }
+        }
+      }
 
-      // 6. In-Memory: Total dividends received from preloaded DIVIDEND transactions (0 DB queries)
+      // 5. In-Memory: Total dividends received from preloaded DIVIDEND transactions (0 DB queries)
       const divTxns = txns.filter((t: any) => t.txnType === 'DIVIDEND')
       const totalDividendsBase = divTxns.reduce((sum: number, t: any) => {
-        const isUSD = t.asset?.currency === 'USD' || t.asset?.market === 'US'
+        const isUSD =
+          t.asset?.currency === 'USD' ||
+          t.asset?.market === 'US' ||
+          t.asset?.market === 'CRYPTO'
         const fx = isUSD ? usdThbRate : 1.0
         return sum + Number(t.totalAmount || 0) * fx
       }, 0)
 
       const totalDividendsUSD = divTxns.reduce((sum: number, t: any) => {
-        const isUSD = t.asset?.currency === 'USD' || t.asset?.market === 'US'
+        const isUSD =
+          t.asset?.currency === 'USD' ||
+          t.asset?.market === 'US' ||
+          t.asset?.market === 'CRYPTO'
         return sum + (isUSD ? Number(t.totalAmount || 0) : 0)
       }, 0)
 
-      // 7. Calculate historical portfolio growth milestones reusing preloaded txns (0 DB queries)
-      const performanceData = await calculatePortfolioPerformance(
-        userId,
-        holdingsResult.totalValueBase,
-        baseCurrency,
-        txns
-      )
+      // 6. Calculate total cash & net worth across user accounts
+      const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency, usdThbRate)
 
-      // 8. Calculate total cash & net worth across user accounts
-      let totalCash = 0
-      for (const acc of accounts) {
-        const bal = Number(acc.cashBalance) || 0
-        const isUSD = acc.currency === 'USD'
-        const fx = isUSD ? usdThbRate : 1.0
-        totalCash += bal * fx
-      }
-      const netWorth = holdingsResult.totalValueBase + totalCash
-
-      // 9. Calculate Today's P&L and synchronize individual live prices
+      // 7. Calculate Today's P&L and synchronize individual live prices
       let todayPnLBase = 0
       const holdingsWithDaily = await Promise.all(
         holdingsResult.holdings.map(async (h) => {
@@ -152,7 +177,10 @@ export async function GET(req: NextRequest) {
           }
 
           const changePercent = quote?.changePercent ?? 0
-          const holdingTodayPnLBase = reconciled.currentValueBase * (changePercent / 100)
+          const holdingTodayPnLBase =
+            changePercent > -100
+              ? reconciled.currentValueBase - reconciled.currentValueBase / (1 + changePercent / 100)
+              : 0
           todayPnLBase += holdingTodayPnLBase
 
           return {
@@ -181,10 +209,32 @@ export async function GET(req: NextRequest) {
           : 0
       const reconciledNetWorth = reconciledTotalValueBase + totalCash
 
+      const prevTotalValueBase = reconciledTotalValueBase - todayPnLBase
       const todayPnLPercent =
-        holdingsResult.totalValueBase > 0
-          ? (todayPnLBase / holdingsResult.totalValueBase) * 100
-          : 0
+        prevTotalValueBase > 0 ? (todayPnLBase / prevTotalValueBase) * 100 : 0
+
+      // 8. Calculate health score after live price reconciliation using default preset targets
+      const defaultPreset = presets.find((p: any) => p.isDefault) || presets[0] || null
+      const rawTargetAlloc = (defaultPreset?.targetAllocation as Record<string, unknown>) || undefined
+      const cleanTargetAlloc = rawTargetAlloc
+        ? (Object.fromEntries(
+            Object.entries(rawTargetAlloc).filter(
+              ([k, v]) => !k.startsWith('_') && typeof v === 'number'
+            )
+          ) as Record<string, number>)
+        : undefined
+      const healthScore = calculatePortfolioHealthScore(
+        holdingsWithDaily,
+        cleanTargetAlloc && Object.keys(cleanTargetAlloc).length > 0 ? cleanTargetAlloc : undefined
+      )
+
+      // 9. Calculate historical portfolio growth milestones reusing preloaded txns (0 DB queries)
+      const performanceData = await calculatePortfolioPerformance(
+        userId,
+        reconciledTotalValueBase,
+        baseCurrency,
+        txns
+      )
 
       // 10. Group by Asset Class (Macro Allocation)
       const classMap: Record<string, { label: string; value: number; color: string }> = {
@@ -286,8 +336,6 @@ export async function GET(req: NextRequest) {
           }
         : null
 
-      const defaultPreset = presets.find((p: any) => p.isDefault) || presets[0] || null
-
       const summaryPayload = {
         baseCurrency,
         usdThbRate,
@@ -299,8 +347,8 @@ export async function GET(req: NextRequest) {
         todayPnLPercent,
         unrealizedPnL: holdingsResult.unrealizedPnLBase,
         unrealizedPnLPercent: holdingsResult.unrealizedPnLPercent,
-        totalRealizedGain: totalRealizedProceedsBase,
-        totalRealizedGainUSD: totalRealizedProceedsUSD,
+        totalRealizedGain: totalRealizedGainBase,
+        totalRealizedGainUSD: totalRealizedGainUSD,
         totalDividends: totalDividendsBase,
         totalDividendsUSD,
         assetCount: holdingsResult.holdings.length,

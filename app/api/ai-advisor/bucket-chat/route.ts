@@ -5,6 +5,7 @@ import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { getBatchTechnicalSignals, TechnicalSignal } from '@/lib/market-data/technical-signals'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { BucketStrategyType, STRATEGY_TYPE_META } from '@/lib/analytics/strategy-buckets'
+import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 
 export const maxDuration = 45
 
@@ -174,10 +175,7 @@ export async function POST(req: NextRequest) {
       }),
     ])
 
-    let totalCash = 0
-    for (const acc of accounts) {
-      totalCash += Number(acc.cashBalance) || 0
-    }
+    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
 
     const bucketTickerSet = new Set(
       (bucket.tickers || []).map((t) => String(t).trim().toUpperCase()).filter(Boolean)

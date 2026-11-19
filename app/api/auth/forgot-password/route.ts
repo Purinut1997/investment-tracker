@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'อีเมลไม่ถูกต้อง' }, { status: 400 })
     }
 
-    const { email } = parsed.data
+    const email = parsed.data.email.toLowerCase().trim()
 
     // Always return success to prevent email enumeration
     const user = await prisma.user.findUnique({ where: { email } })

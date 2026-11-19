@@ -136,6 +136,53 @@ export function reconcileHoldingPrice(
   }
 }
 
+export function calculateSingleAssetFifoPosition(
+  txns: Array<{ txnType: string; quantity: unknown; pricePerUnit: unknown }>,
+  currentPrice: number
+): {
+  shares: number
+  avgCost: number
+  totalCost: number
+  currentValue: number
+  unrealizedGain: number
+  unrealizedGainPercent: number
+} | null {
+  const lots: Array<{ qty: number; price: number }> = []
+  for (const t of txns) {
+    const qty = Number(t.quantity || 0)
+    const price = Number(t.pricePerUnit || 0)
+    if (t.txnType === 'BUY' && qty > 0) {
+      lots.push({ qty, price })
+    } else if (t.txnType === 'SELL' && qty > 0) {
+      let rem = qty
+      while (rem > 0.000001 && lots.length > 0) {
+        if (lots[0].qty <= rem) {
+          rem -= lots[0].qty
+          lots.shift()
+        } else {
+          lots[0].qty -= rem
+          rem = 0
+        }
+      }
+    }
+  }
+  const totalShares = lots.reduce((acc, l) => acc + l.qty, 0)
+  const totalCostBasis = lots.reduce((acc, l) => acc + l.qty * l.price, 0)
+  if (totalShares <= 0.00001) return null
+  const avg = totalCostBasis / totalShares
+  const curVal = totalShares * currentPrice
+  const gain = curVal - totalCostBasis
+  const gainPct = totalCostBasis > 0 ? (gain / totalCostBasis) * 100 : 0
+  return {
+    shares: Number(totalShares.toFixed(4)),
+    avgCost: Number(avg.toFixed(2)),
+    totalCost: Number(totalCostBasis.toFixed(2)),
+    currentValue: Number(curVal.toFixed(2)),
+    unrealizedGain: Number(gain.toFixed(2)),
+    unrealizedGainPercent: Number(gainPct.toFixed(2)),
+  }
+}
+
 export async function calculateUserHoldings(
   userId: string,
   baseCurrency = 'THB',
@@ -154,7 +201,7 @@ export async function calculateUserHoldings(
   }
 
   // Deduplicate concurrent in-flight requests for the same user
-  if (!preloadedTxns && inFlightHoldings.has(cacheKey)) {
+  if (!forceRefresh && !preloadedTxns && inFlightHoldings.has(cacheKey)) {
     return inFlightHoldings.get(cacheKey)!
   }
 
@@ -247,7 +294,10 @@ export async function calculateUserHoldings(
     const unrealizedPnLPercent = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0
 
     // Convert to base currency
-    const isUsd = data.asset.currency === 'USD' || data.asset.market === 'US'
+    const isUsd =
+      data.asset.currency === 'USD' ||
+      data.asset.market === 'US' ||
+      data.asset.market === 'CRYPTO'
     const fx = isUsd ? usdThbRate : 1.0
     const currentValueBase = currentValue * fx
     const costBase = totalCost * fx

@@ -22,11 +22,11 @@ function getTodayBangkokDateString(): string {
 }
 
 export async function GET(req: NextRequest) {
-  // 1. Verify CRON_SECRET if configured
+  // 1. Verify CRON_SECRET (fail-closed in production)
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if ((process.env.NODE_ENV === 'production' && !cronSecret) || (cronSecret && authHeader !== `Bearer ${cronSecret}`)) {
     return NextResponse.json({ error: 'Unauthorized cron request' }, { status: 401 })
   }
 
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
       try {
         const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
         const baseCurrency = userSettings?.baseCurrency ?? 'THB'
-        const startOfTodayBangkok = new Date(new Date().setHours(0, 0, 0, 0))
+        const startOfTodayBangkok = new Date(`${todayStr}T00:00:00+07:00`)
 
         // 1. Daily Morning Briefing
         const existingBriefLog = await prisma.aiAdviceLog.findFirst({

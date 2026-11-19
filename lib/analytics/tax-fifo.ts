@@ -155,9 +155,15 @@ export function calculateTaxReportFIFO(
 
   for (const txn of sorted) {
     const txnDate = new Date(txn.txnDate)
-    const year = txnDate.getUTCFullYear()
+    const year = Number(
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric' }).format(
+        txnDate
+      )
+    )
     const assetId = txn.assetId
-    const isUSD = txn.currency === 'USD' || txn.market === 'US' || txn.market === 'CRYPTO'
+    const isUSD = txn.currency
+      ? txn.currency.toUpperCase() === 'USD'
+      : txn.market === 'US' || txn.market === 'CRYPTO'
     const fxRate = isUSD ? usdThbRate : 1.0  // THB assets don't need conversion
 
     if (!buyLots.has(assetId)) {

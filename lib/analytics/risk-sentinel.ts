@@ -117,6 +117,29 @@ const KNOWN_SECTORS: Record<string, { detail: string; broad: string }> = {
   DELTA: { detail: 'Technology / Power & Electronics', broad: 'Technology' },
   HANA: { detail: 'Technology / Electronics Manufacturing', broad: 'Technology' },
   KCE: { detail: 'Technology / PCB Electronics', broad: 'Technology' },
+  QQQM: { detail: 'Technology / Invesco Nasdaq 100 ETF', broad: 'Technology' },
+  WDC: { detail: 'Technology / Data Storage & Memory', broad: 'Technology' },
+  SNDK: { detail: 'Technology / Flash Storage & Memory', broad: 'Technology' },
+  NFLX: { detail: 'Technology / Streaming & Entertainment', broad: 'Technology' },
+  ORCL: { detail: 'Technology / Enterprise Cloud & Database', broad: 'Technology' },
+  CRM: { detail: 'Technology / Enterprise Cloud Software', broad: 'Technology' },
+  PLTR: { detail: 'Technology / AI Data & Analytics', broad: 'Technology' },
+  SMCI: { detail: 'Technology / AI Server Infrastructure', broad: 'Technology' },
+  ARM: { detail: 'Technology / Semiconductor Architecture', broad: 'Technology' },
+  XLK: { detail: 'Technology / Technology Select Sector ETF', broad: 'Technology' },
+  SOXX: { detail: 'Technology / iShares Semiconductor ETF', broad: 'Technology' },
+  SMH: { detail: 'Technology / VanEck Semiconductor ETF', broad: 'Technology' },
+  CHPY: { detail: 'Technology / Semiconductor Option Income ETF', broad: 'Technology' },
+  ADVANC: { detail: 'Technology / Telecom & Digital Infra (TH)', broad: 'Technology' },
+  TRUE: { detail: 'Technology / Telecom & Digital (TH)', broad: 'Technology' },
+
+  // Consumer Discretionary / Growth / Thai Commerce & Tourism
+  TSLA: { detail: 'Consumer Discretionary / EV & Energy AI', broad: 'Consumer & Growth' },
+  CRC: { detail: 'Consumer Discretionary / Retail (TH)', broad: 'Consumer & Growth' },
+  CPN: { detail: 'Real Estate & Retail / Shopping Centers (TH)', broad: 'Consumer & Growth' },
+  MINT: { detail: 'Consumer Discretionary / Hospitality & Food (TH)', broad: 'Consumer & Growth' },
+  AOT: { detail: 'Industrials / Airports & Aviation (TH)', broad: 'Consumer & Growth' },
+  OR: { detail: 'Consumer & Energy / Mobility & Retail (TH)', broad: 'Consumer & Growth' },
 
   // Financials
   JPM: { detail: 'Financials / Diversified Banking', broad: 'Financials' },
@@ -167,13 +190,25 @@ const KNOWN_SECTORS: Record<string, { detail: string; broad: string }> = {
   QQQ: { detail: 'Technology / Invesco QQQ Trust ETF', broad: 'Technology' },
   VT: { detail: 'Global Equities / Vanguard Total World ETF', broad: 'Core Index' },
   VTI: { detail: 'Broad Index / Vanguard Total Stock Market ETF', broad: 'Core Index' },
+  VXUS: { detail: 'Global Equities / Vanguard Total International ETF', broad: 'Core Index' },
+  VEA: { detail: 'Developed Markets / Vanguard FTSE Developed ETF', broad: 'Core Index' },
+  VWO: { detail: 'Emerging Markets / Vanguard FTSE Emerging ETF', broad: 'Core Index' },
 
-  // Real Assets & Hedging
+  // Real Assets, Fixed Income & Industrials
   GOLD: { detail: 'Commodities / Physical Gold', broad: 'Gold & Commodities' },
   XAU: { detail: 'Commodities / Gold Spot', broad: 'Gold & Commodities' },
   GLD: { detail: 'Commodities / SPDR Gold Shares ETF', broad: 'Gold & Commodities' },
+  IAU: { detail: 'Commodities / iShares Gold Trust ETF', broad: 'Gold & Commodities' },
+  DBC: { detail: 'Commodities / Invesco Commodity Index ETF', broad: 'Gold & Commodities' },
   TLT: { detail: 'Fixed Income / 20+ Year Treasury Bond ETF', broad: 'Bonds & Fixed Income' },
+  IEF: { detail: 'Fixed Income / 7-10 Year Treasury Bond ETF', broad: 'Bonds & Fixed Income' },
+  SHY: { detail: 'Fixed Income / 1-3 Year Treasury Bond ETF', broad: 'Bonds & Fixed Income' },
   BND: { detail: 'Fixed Income / Total Bond Market ETF', broad: 'Bonds & Fixed Income' },
+  AGG: { detail: 'Fixed Income / iShares Core US Aggregate Bond ETF', broad: 'Bonds & Fixed Income' },
+  SCC: { detail: 'Industrials & Materials / Siam Cement (TH)', broad: 'Energy & Utilities' },
+  IVL: { detail: 'Materials / Petrochemicals (TH)', broad: 'Energy & Utilities' },
+  CEG: { detail: 'Utilities / Nuclear & Clean Energy', broad: 'Energy & Utilities' },
+  SMR: { detail: 'Utilities / Next-Gen Nuclear Energy', broad: 'Energy & Utilities' },
 
   // Cryptocurrencies
   BTC: { detail: 'Cryptocurrency / Store of Value', broad: 'Crypto' },
@@ -416,7 +451,17 @@ export function analyzePortfolioRisks(
  */
 export function scanPortfolioOpportunities(
   holdings: HoldingItem[],
-  watchlists: Array<{ symbol: string; displayName: string; itemType: string }>,
+  watchlists: Array<{
+    symbol: string
+    displayName: string
+    itemType: string
+    market?: string
+    currentPrice?: number
+    currency?: string
+    changePercent?: number
+    pullbackFromHigh?: number
+    rsi14?: number | null
+  }>,
   cashTotalBase: number,
   targetAllocation?: Record<string, number>,
   baseCurrency = 'THB'
@@ -508,6 +553,7 @@ export function scanPortfolioOpportunities(
     }
 
     for (const [key, targetPct] of Object.entries(targetAllocation)) {
+      if (key.startsWith('_') || typeof targetPct !== 'number' || isNaN(targetPct)) continue
       const currentPct = actualGrouped[key] || 0
       const gap = targetPct - currentPct
       if (gap >= 5) {
@@ -536,26 +582,74 @@ export function scanPortfolioOpportunities(
   }
 
   // ── 3. Watchlist High-Conviction Dip ────────────────────────
-  for (const w of watchlists.slice(0, 4)) {
-    const isAlreadyHeld = holdings.some((h) => h.ticker.toUpperCase() === w.symbol.toUpperCase())
-    if (!isAlreadyHeld) {
-      opportunities.push({
-        id: `watch_${w.symbol}`,
-        ticker: w.symbol,
-        assetName: w.displayName,
-        market: w.itemType === 'crypto' ? 'CRYPTO' : 'US',
-        assetType: w.itemType,
-        currentPrice: 0,
-        currency: 'USD',
-        opportunityType: 'WATCHLIST_DIP',
-        opportunityScore: 78,
-        title: `สินทรัพย์ใน Watchlist น่าจับตา: ${w.symbol}`,
-        description: `คุณกำลังติดตาม ${w.symbol} อยู่ หากมีกระสุนเงินสดสำรองเพียงพอ เป็นจังหวะดีในการศึกษาแนวรับเพื่อเริ่มไม้แรก (Initial Position)`,
-        metricLabel: 'สถานะ',
-        metricValue: 'ใน Watchlist',
-        suggestedAction: `วางแผนจุดเข้าซื้อไม้แรกใน ${w.symbol}`,
-      })
+  const unheldWatchlist = watchlists.filter(
+    (w) => !holdings.some((h) => h.ticker.toUpperCase() === w.symbol.toUpperCase())
+  )
+  const prioritizedWatchlist = [...unheldWatchlist].sort((a, b) => {
+    const aDip = Math.abs(Math.min(0, a.pullbackFromHigh ?? 0)) + ((a.rsi14 ?? 50) <= 35 ? 10 : 0)
+    const bDip = Math.abs(Math.min(0, b.pullbackFromHigh ?? 0)) + ((b.rsi14 ?? 50) <= 35 ? 10 : 0)
+    return bDip - aDip
+  })
+
+  for (const w of prioritizedWatchlist.slice(0, 4)) {
+    const inferredMarket =
+      w.market ||
+      (w.itemType === 'crypto' ? 'CRYPTO' : w.symbol.toUpperCase().endsWith('.BK') ? 'TH' : 'US')
+    const inferredCurrency =
+      w.currency || (inferredMarket === 'TH' ? 'THB' : 'USD')
+    const hasLiveSignal =
+      w.pullbackFromHigh !== undefined || w.changePercent !== undefined || w.rsi14 !== undefined
+    const pullback = w.pullbackFromHigh ?? 0
+    const chg = w.changePercent ?? 0
+    const isDipOrOversold = pullback <= -3 || chg <= -1.5 || (w.rsi14 != null && w.rsi14 <= 40)
+
+    if (hasLiveSignal && !isDipOrOversold && w.currentPrice && w.currentPrice > 0) {
+      // Only surface non-dipping watchlist items if no dipped candidates exist, with lower priority
     }
+
+    const dynamicScore = hasLiveSignal
+      ? isDipOrOversold
+        ? Math.min(
+            95,
+            Math.round(
+              74 +
+                Math.abs(Math.min(0, pullback) || Math.min(0, chg)) * 1.2 +
+                (w.rsi14 != null && w.rsi14 <= 35 ? 8 : 0)
+            )
+          )
+        : 65
+      : 78
+
+    const currSymbol = inferredCurrency === 'THB' ? '฿' : '$'
+    const metricVal =
+      w.currentPrice && w.currentPrice > 0
+        ? `${currSymbol}${w.currentPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}${
+            pullback < 0 ? ` (${pullback.toFixed(1)}% จาก High)` : chg !== 0 ? ` (${chg >= 0 ? '+' : ''}${chg.toFixed(1)}%)` : ''
+          }`
+        : 'ใน Watchlist'
+
+    opportunities.push({
+      id: `watch_${w.symbol}`,
+      ticker: w.symbol,
+      assetName: w.displayName,
+      market: inferredMarket,
+      assetType: w.itemType,
+      currentPrice: w.currentPrice ?? 0,
+      currency: inferredCurrency,
+      opportunityType: 'WATCHLIST_DIP',
+      opportunityScore: dynamicScore,
+      title: isDipOrOversold
+        ? `Watchlist ย่อตัวน่าสะสม: ${w.symbol}`
+        : `สินทรัพย์ใน Watchlist น่าจับตา: ${w.symbol}`,
+      description: isDipOrOversold
+        ? `${w.symbol} กำลังย่อตัว ${pullback < 0 ? `${pullback.toFixed(1)}% จาก 52W High` : `${chg.toFixed(1)}%`}${
+            w.rsi14 != null ? ` (RSI ${w.rsi14.toFixed(1)})` : ''
+          } เหมาะสำหรับวางแผนทยอยเปิดไม้แรกตามแนวรับ`
+        : `คุณกำลังติดตาม ${w.symbol} อยู่ หากมีกระสุนเงินสดสำรองเพียงพอ เป็นจังหวะดีในการศึกษาแนวรับเพื่อเริ่มไม้แรก (Initial Position)`,
+      metricLabel: w.currentPrice && w.currentPrice > 0 ? 'ราคาล่าสุด / ย่อตัว' : 'สถานะ',
+      metricValue: metricVal,
+      suggestedAction: `วางแผนจุดเข้าซื้อไม้แรกใน ${w.symbol}`,
+    })
   }
 
   // Sort opportunities by score descending

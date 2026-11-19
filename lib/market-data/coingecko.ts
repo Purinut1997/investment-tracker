@@ -23,7 +23,17 @@ const COIN_ID_MAP: Record<string, string> = {
   LINK: 'chainlink',
   USDT: 'tether',
   USDC: 'usd-coin',
+  MATIC: 'matic-network',
+  POL: 'polygon-ecosystem-token',
+  NEAR: 'near',
+  SUI: 'sui',
+  PEPE: 'pepe',
+  SHIB: 'shiba-inu',
+  LTC: 'litecoin',
+  BCH: 'bitcoin-cash',
 }
+
+export const SUPPORTED_CRYPTO_SYMBOLS = new Set(Object.keys(COIN_ID_MAP))
 
 const COIN_NAME_MAP: Record<string, string> = {
   BTC: 'Bitcoin',
@@ -38,6 +48,14 @@ const COIN_NAME_MAP: Record<string, string> = {
   LINK: 'Chainlink',
   USDT: 'Tether USD',
   USDC: 'USD Coin',
+  MATIC: 'Polygon (MATIC)',
+  POL: 'Polygon (POL)',
+  NEAR: 'NEAR Protocol',
+  SUI: 'Sui',
+  PEPE: 'Pepe',
+  SHIB: 'Shiba Inu',
+  LTC: 'Litecoin',
+  BCH: 'Bitcoin Cash',
 }
 
 interface CryptoCacheEntry {

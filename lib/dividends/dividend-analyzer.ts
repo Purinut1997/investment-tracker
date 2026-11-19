@@ -16,6 +16,7 @@ export interface HistoricalPayout {
   xdOpen?: number
   xdClose?: number
   dropPercent?: number // % price drop on XD morning
+  dropClosePercent?: number // % price drop at XD close vs prevClose
   recoveryDays?: number | null // trading days to recover to pre-XD price
 }
 
@@ -234,6 +235,7 @@ export async function getDividendIntelligence(
           let xdOpen: number | undefined
           let xdClose: number | undefined
           let dropPercent: number | undefined
+          let dropClosePercent: number | undefined
           let recoveryDays: number | null = null
 
           const idx = findNearestTimestampIndex(timestamps, divTimestamp)
@@ -244,6 +246,9 @@ export async function getDividendIntelligence(
 
             if (prevClose && xdOpen && prevClose > 0) {
               dropPercent = ((xdOpen - prevClose) / prevClose) * 100
+              if (xdClose && xdClose > 0) {
+                dropClosePercent = ((xdClose - prevClose) / prevClose) * 100
+              }
 
               // Measure how many trading days until price returned to pre-XD close
               for (let k = 1; k <= 45 && idx + k < closes.length; k++) {
@@ -266,6 +271,7 @@ export async function getDividendIntelligence(
             xdOpen,
             xdClose,
             dropPercent,
+            dropClosePercent,
             recoveryDays,
           }
         })
@@ -329,7 +335,18 @@ export async function getDividendIntelligence(
       }
     }
 
-    const dividendStreakYears = yearSummaries.filter((y) => y.payoutCount > 0).length
+    let dividendStreakYears = 0
+    for (let idx = yearSummaries.length - 1; idx >= 0; idx--) {
+      const y = yearSummaries[idx]
+      if (y.payoutCount > 0) {
+        dividendStreakYears++
+      } else if (y.year === currentYear && dividendStreakYears === 0) {
+        // Current year may still be in progress before first payout
+        continue
+      } else {
+        break
+      }
+    }
 
     // 4. Frequency Analysis (ปีละกี่ครั้ง ครั้งละเท่าไหร่)
     const counts = yearSummaries.filter((y) => y.year < currentYear && y.payoutCount > 0).map((y) => y.payoutCount)
@@ -384,18 +401,28 @@ export async function getDividendIntelligence(
 
     // 5. Ex-Dividend Price Drop & Recovery Statistics (สถิติหุ้นร่วงหลังประกาศ/วัน XD)
     const validDrops = payoutList.filter((p) => p.dropPercent !== undefined && !isNaN(p.dropPercent))
+    const validCloseDrops = payoutList.filter(
+      (p) => p.dropClosePercent !== undefined && !isNaN(p.dropClosePercent)
+    )
     const validRecoveries = payoutList.filter((p) => p.recoveryDays !== null && p.recoveryDays !== undefined)
 
-    let avgDropPercent = -1.85
-    let avgDropClosePercent = -1.50
-    let avgYieldAtXd = latestYield || 2.0
-    let dropToDividendRatio = 92.5
-    let avgRecoveryDays = 8.5
-    let recoveryRatePercent = 85.0
+    let avgDropPercent = 0
+    let avgDropClosePercent = 0
+    let avgYieldAtXd = latestYield || 0
+    let dropToDividendRatio = 0
+    let avgRecoveryDays = 0
+    let recoveryRatePercent = 0
 
     if (validDrops.length > 0) {
       const sumDrop = validDrops.reduce((acc, p) => acc + (p.dropPercent || 0), 0)
       avgDropPercent = Number((sumDrop / validDrops.length).toFixed(2))
+
+      if (validCloseDrops.length > 0) {
+        const sumCloseDrop = validCloseDrops.reduce((acc, p) => acc + (p.dropClosePercent || 0), 0)
+        avgDropClosePercent = Number((sumCloseDrop / validCloseDrops.length).toFixed(2))
+      } else {
+        avgDropClosePercent = avgDropPercent
+      }
 
       const validYields = validDrops.filter((p) => p.yieldAtDate && p.yieldAtDate > 0)
       if (validYields.length > 0) {
@@ -404,21 +431,30 @@ export async function getDividendIntelligence(
           dropToDividendRatio = Math.min(130, Math.max(60, Number(((Math.abs(avgDropPercent) / avgYieldAtXd) * 100).toFixed(1))))
         }
       }
+
+      if (validRecoveries.length > 0) {
+        const sumDays = validRecoveries.reduce((acc, p) => acc + (p.recoveryDays || 0), 0)
+        avgRecoveryDays = Number((sumDays / validRecoveries.length).toFixed(1))
+        recoveryRatePercent = Number(((validRecoveries.length / validDrops.length) * 100).toFixed(1))
+      } else {
+        avgRecoveryDays = 0
+        recoveryRatePercent = 0
+      }
     }
 
-    if (validRecoveries.length > 0) {
-      const sumDays = validRecoveries.reduce((acc, p) => acc + (p.recoveryDays || 0), 0)
-      avgRecoveryDays = Number((sumDays / validRecoveries.length).toFixed(1))
-      recoveryRatePercent = Number(((validRecoveries.length / validDrops.length) * 100).toFixed(1))
-    }
-
-    let strategyTip = 'หุ้นตัวนี้ราคาในวันขึ้น XD มักลดลงใกล้เคียงกับเงินปันผลที่จ่าย และมีอัตราการฟื้นตัวกลับสู่ราคาก่อน XD ภายใน 1-2 สัปดาห์'
-    if (avgRecoveryDays <= 7 && recoveryRatePercent >= 80) {
-      strategyTip = `⚡ หุ้นตัวนี้ฟื้นตัวหลัง XD เร็วมาก (เฉลี่ยเพียง ${avgRecoveryDays} วัน อัตราสำเร็จ ${recoveryRatePercent}%) เหมาะสำหรับการถือข้าม XD เพื่อรับปันผลเต็มจำนวน`
-    } else if (Math.abs(avgDropPercent) > avgYieldAtXd * 1.1) {
-      strategyTip = `💡 ในวันขึ้น XD ราคามักปรับลงมากกว่าเงินปันผลเล็กน้อย การดักรอซื้อหลังขึ้นเครื่องหมาย XD (Buy on XD Dip) มักได้เปรียบต้นทุน`
-    } else {
-      strategyTip = `📊 ราคาปรับลงเฉลี่ย ${Math.abs(avgDropPercent)}% ในวัน XD และฟื้นตัวกลับสู่ราคาเดิมในเวลาเฉลี่ย ${avgRecoveryDays} วันทำการ`
+    let strategyTip = 'สินทรัพย์นี้ไม่มีประวัติการจ่ายเงินปันผลในรอบ 5 ปีที่ผ่านมา'
+    if (payoutList.length > 0) {
+      if (validDrops.length === 0) {
+        strategyTip = 'มีประวัติจ่ายเงินปันผลสม่ำเสมอ แต่ข้อมูลแท่งเทียนราคาวัน XD ยังไม่เพียงพอสำหรับคำนวณระยะเวลาฟื้นตัว'
+      } else if (avgRecoveryDays > 0 && avgRecoveryDays <= 7 && recoveryRatePercent >= 80) {
+        strategyTip = `⚡ หุ้นตัวนี้ฟื้นตัวหลัง XD เร็วมาก (เฉลี่ยเพียง ${avgRecoveryDays} วัน อัตราสำเร็จ ${recoveryRatePercent}%) เหมาะสำหรับการถือข้าม XD เพื่อรับปันผลเต็มจำนวน`
+      } else if (avgYieldAtXd > 0 && Math.abs(avgDropPercent) > avgYieldAtXd * 1.1) {
+        strategyTip = `💡 ในวันขึ้น XD ราคามักปรับลงมากกว่าเงินปันผลเล็กน้อย การดักรอซื้อหลังขึ้นเครื่องหมาย XD (Buy on XD Dip) มักได้เปรียบต้นทุน`
+      } else if (avgRecoveryDays > 0) {
+        strategyTip = `📊 ราคาปรับลงเฉลี่ย ${Math.abs(avgDropPercent)}% ในวัน XD และฟื้นตัวกลับสู่ราคาเดิมในเวลาเฉลี่ย ${avgRecoveryDays} วันทำการ`
+      } else {
+        strategyTip = `📊 ราคาปรับลงเฉลี่ย ${Math.abs(avgDropPercent)}% ในวัน XD (ยังฟื้นตัวไม่ครบช่วงสังเกต 45 วันทำการ)`
+      }
     }
 
     const xdDropAnalysis: XdDropStatistics = {

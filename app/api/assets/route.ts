@@ -4,8 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+
+const CreateAssetSchema = z.object({
+  ticker: z.string().trim().min(1).max(30),
+  assetName: z.string().trim().min(1).max(120),
+  assetType: z.enum(['stock', 'fund', 'crypto', 'bond', 'gold']),
+  market: z.enum(['US', 'TH', 'CRYPTO']),
+  exchange: z.string().trim().max(50).optional().nullable(),
+  currency: z.string().trim().max(10).optional(),
+})
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -47,22 +57,37 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { ticker, assetName, assetType, market, exchange, currency } = body
-
-    if (!ticker || !assetName || !assetType || !market) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    const parsed = CreateAssetSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || 'Invalid asset payload' },
+        { status: 400 }
+      )
     }
 
+    const { ticker, assetName, assetType, market, exchange, currency } = parsed.data
+    const normalizedTicker = ticker.toUpperCase()
+    const defaultCurrency =
+      currency || (market === 'US' || market === 'CRYPTO' ? 'USD' : 'THB')
+    const role = (session.user as { role?: string }).role
+    const isAdmin = role === 'admin' || role === 'superadmin'
+
     const asset = await prisma.asset.upsert({
-      where: { ticker_market: { ticker: ticker.toUpperCase(), market } },
-      update: { assetName, exchange, currency },
+      where: { ticker_market: { ticker: normalizedTicker, market } },
+      update: isAdmin
+        ? {
+            assetName,
+            ...(exchange !== undefined ? { exchange } : {}),
+            ...(currency ? { currency } : {}),
+          }
+        : {},
       create: {
-        ticker: ticker.toUpperCase(),
+        ticker: normalizedTicker,
         assetName,
         assetType,
         market,
-        exchange,
-        currency: currency ?? 'USD',
+        exchange: exchange ?? null,
+        currency: defaultCurrency,
       },
     })
 

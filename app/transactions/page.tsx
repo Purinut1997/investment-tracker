@@ -133,30 +133,42 @@ export default function TransactionsPage() {
     return ticker.includes(q) || assetName.includes(q) || note.includes(q) || accountName.includes(q)
   })
 
-  // Group totals by currency (USD vs THB)
-  const usdOutflow = filteredTransactions
-    .filter((t: any) => t.txnType === 'BUY' && (t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
-    .reduce((sum: number, t: any) => sum + Number(t.totalAmount || 0), 0)
+  // Group totals across all matching transactions (fallback to current page if summary unavailable)
+  const usdOutflow =
+    txnData?.summary?.usdOutflow ??
+    filteredTransactions
+      .filter((t: any) => t.txnType === 'BUY' && (t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
+      .reduce((sum: number, t: any) => sum + Number(t.totalAmount || 0), 0)
 
-  const thbOutflow = filteredTransactions
-    .filter((t: any) => t.txnType === 'BUY' && !(t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
-    .reduce((sum: number, t: any) => sum + Number(t.totalAmount || 0), 0)
+  const thbOutflow =
+    txnData?.summary?.thbOutflow ??
+    filteredTransactions
+      .filter((t: any) => t.txnType === 'BUY' && !(t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
+      .reduce((sum: number, t: any) => sum + Number(t.totalAmount || 0), 0)
 
-  const usdInflow = filteredTransactions
-    .filter((t: any) => (t.txnType === 'SELL' || t.txnType === 'DIVIDEND') && (t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
-    .reduce((sum: number, t: any) => sum + Number(t.totalAmount || 0), 0)
+  const usdInflow =
+    txnData?.summary?.usdInflow ??
+    filteredTransactions
+      .filter((t: any) => (t.txnType === 'SELL' || t.txnType === 'DIVIDEND') && (t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
+      .reduce((sum: number, t: any) => sum + Number(t.totalAmount || 0), 0)
 
-  const thbInflow = filteredTransactions
-    .filter((t: any) => (t.txnType === 'SELL' || t.txnType === 'DIVIDEND') && !(t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
-    .reduce((sum: number, t: any) => sum + Number(t.totalAmount || 0), 0)
+  const thbInflow =
+    txnData?.summary?.thbInflow ??
+    filteredTransactions
+      .filter((t: any) => (t.txnType === 'SELL' || t.txnType === 'DIVIDEND') && !(t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
+      .reduce((sum: number, t: any) => sum + Number(t.totalAmount || 0), 0)
 
-  const usdFees = filteredTransactions
-    .filter((t: any) => (t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
-    .reduce((sum: number, t: any) => sum + Number(t.fee || 0), 0)
+  const usdFees =
+    txnData?.summary?.usdFees ??
+    filteredTransactions
+      .filter((t: any) => (t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
+      .reduce((sum: number, t: any) => sum + Number(t.fee || 0), 0)
 
-  const thbFees = filteredTransactions
-    .filter((t: any) => !(t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
-    .reduce((sum: number, t: any) => sum + Number(t.fee || 0), 0)
+  const thbFees =
+    txnData?.summary?.thbFees ??
+    filteredTransactions
+      .filter((t: any) => !(t.account?.currency === 'USD' || t.asset?.currency === 'USD' || t.asset?.market === 'US'))
+      .reduce((sum: number, t: any) => sum + Number(t.fee || 0), 0)
 
   // Single delete
   async function handleDelete(id: string) {
@@ -168,7 +180,6 @@ export default function TransactionsPage() {
       setSelectedTxnIds((prev) => prev.filter((item) => item !== id))
       mutate((key) => typeof key === 'string' && key.startsWith('/api/transactions'))
       mutate('/api/portfolio/summary')
-      mutate('/api/portfolio/holdings')
       mutate('/api/accounts')
     } catch (err: any) {
       alert(err.message || 'ลบรายการไม่สำเร็จ')
@@ -195,7 +206,6 @@ export default function TransactionsPage() {
       setSelectedTxnIds([])
       mutate((key) => typeof key === 'string' && key.startsWith('/api/transactions'))
       mutate('/api/portfolio/summary')
-      mutate('/api/portfolio/holdings')
       mutate('/api/accounts')
 
       setStatusModal({
@@ -758,7 +768,6 @@ export default function TransactionsPage() {
           onSuccess={() => {
             mutate(`/api/transactions?${queryParams.toString()}`)
             mutate('/api/portfolio/summary')
-            mutate('/api/portfolio/holdings')
             mutate('/api/accounts')
           }}
         />
@@ -773,7 +782,6 @@ export default function TransactionsPage() {
             setSelectedTxnIds([])
             mutate(`/api/transactions?${queryParams.toString()}`)
             mutate('/api/portfolio/summary')
-            mutate('/api/portfolio/holdings')
             mutate('/api/accounts')
           }}
         />

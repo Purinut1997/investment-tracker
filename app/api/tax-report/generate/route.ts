@@ -47,7 +47,9 @@ export async function GET(req: NextRequest) {
       assetName: t.asset.assetName,
       market: t.asset.market,
       assetType: t.asset.assetType,
-      currency: t.asset.currency || (t.asset.market === 'US' ? 'USD' : 'THB'),
+      currency:
+        t.asset.currency ||
+        (t.asset.market === 'US' || t.asset.market === 'CRYPTO' ? 'USD' : 'THB'),
       txnDate: t.txnDate,
       txnType: t.txnType,
       quantity: Number(t.quantity),

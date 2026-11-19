@@ -6,7 +6,10 @@ import { parseHistoricalStats, HistoricalStockStats } from '@/lib/market-data/hi
 import { syncAssetLivePrice } from '@/lib/market-data/cache-layer'
 import { syncYahooQuoteCache } from '@/lib/market-data/yahoo'
 import { invalidateResolverCache } from '@/lib/market-data/resolver'
-import { invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
+import {
+  calculateSingleAssetFifoPosition,
+  invalidateUserPortfolioCache,
+} from '@/lib/analytics/holdings'
 import { getEarningsIntelligence } from '@/lib/earnings/earnings-analyzer'
 
 export interface ChartPoint {
@@ -453,7 +456,8 @@ async function fetchFundamentalsData(
   if (pending) return (await pending) || ({} as CachedFundamentalsResult)
 
   const fetchPromise = (async () => {
-    const yfTicker = formatTicker(rawSymbol, market)
+    try {
+      const yfTicker = formatTicker(rawSymbol, market)
     const finnhubKey = process.env.FINNHUB_API_KEY
     const shouldFetchFinnhub =
       Boolean(finnhubKey) && market === 'US' && !rawSymbol.includes('-') && !rawSymbol.includes('=')
@@ -531,8 +535,10 @@ async function fetchFundamentalsData(
     let pe: number | null = finnhubMetric?.metric?.peBasicExclExtraItemsTTM ?? ySummary?.pe ?? null
     let dividendYield: number | null =
       finnhubMetric?.metric?.dividendYieldIndicatedAnnual ?? ySummary?.dividendYield ?? null
-    let marketCap: number | null =
-      finnhubMetric?.metric?.marketCapitalization ?? ySummary?.marketCap ?? null
+    const finnhubMarketCapRaw = finnhubMetric?.metric?.marketCapitalization
+      ? Number(finnhubMetric.metric.marketCapitalization) * 1_000_000
+      : null
+    let marketCap: number | null = ySummary?.marketCap ?? finnhubMarketCapRaw ?? null
 
     let analystTarget: any = null
     if (finnhubTarget && finnhubTarget.targetMean) {
@@ -588,6 +594,9 @@ async function fetchFundamentalsData(
 
     fundamentalsCache.set(cacheKey, { data: result, timestamp: Date.now() })
     return result
+    } finally {
+      inFlightFundamentals.delete(cacheKey)
+    }
   })()
 
   inFlightFundamentals.set(cacheKey, fetchPromise)
@@ -642,57 +651,9 @@ export async function GET(req: NextRequest) {
         .catch(() => {})
     }
 
-    // User Position Summary (Using FIFO)
-    let userPosition: {
-      shares: number
-      avgCost: number
-      totalCost: number
-      currentValue: number
-      unrealizedGain: number
-      unrealizedGainPercent: number
-    } | null = null
-
-    if (userTxns.length > 0) {
-      const lots: { qty: number; price: number }[] = []
-
-      for (const t of userTxns) {
-        const qty = Number(t.quantity || 0)
-        const price = Number(t.pricePerUnit || 0)
-        if (t.txnType === 'BUY') {
-          lots.push({ qty, price })
-        } else if (t.txnType === 'SELL') {
-          let rem = qty
-          while (rem > 0.000001 && lots.length > 0) {
-            if (lots[0].qty <= rem) {
-              rem -= lots[0].qty
-              lots.shift()
-            } else {
-              lots[0].qty -= rem
-              rem = 0
-            }
-          }
-        }
-      }
-
-      const totalShares = lots.reduce((acc, l) => acc + l.qty, 0)
-      const totalCostBasis = lots.reduce((acc, l) => acc + l.qty * l.price, 0)
-
-      if (totalShares > 0.00001) {
-        const avg = totalCostBasis / totalShares
-        const curVal = totalShares * currentPrice
-        const gain = curVal - totalCostBasis
-        const gainPct = totalCostBasis > 0 ? (gain / totalCostBasis) * 100 : 0
-
-        userPosition = {
-          shares: Number(totalShares.toFixed(4)),
-          avgCost: Number(avg.toFixed(2)),
-          totalCost: Number(totalCostBasis.toFixed(2)),
-          currentValue: Number(curVal.toFixed(2)),
-          unrealizedGain: Number(gain.toFixed(2)),
-          unrealizedGainPercent: Number(gainPct.toFixed(2)),
-        }
-      }
-    }
+    // User Position Summary (Using shared FIFO engine)
+    const userPosition =
+      userTxns.length > 0 ? calculateSingleAssetFifoPosition(userTxns, currentPrice) : null
 
     // Historical Dividends, Splits & Return Performance Matrix
     const historicalStats = parseHistoricalStats(

@@ -122,7 +122,10 @@ export default function AiAdvisorPage() {
   )
 
   // 2. Fetch Live External News Feed
-  const { data: newsApiResponse } = useSWR<{ news: ExternalNewsItem[] }>(
+  const { data: newsApiResponse } = useSWR<{
+    items?: ExternalNewsItem[]
+    news?: ExternalNewsItem[]
+  }>(
     '/api/news?category=portfolio',
     {
       revalidateOnFocus: false,
@@ -132,7 +135,7 @@ export default function AiAdvisorPage() {
 
   const payload = responseData?.data
   const pillars = payload?.marketRegime?.pillars
-  const externalNewsList = newsApiResponse?.news || []
+  const externalNewsList = newsApiResponse?.items || newsApiResponse?.news || []
 
   // Scroll to bottom when messages change
   const scrollToBottom = () => {

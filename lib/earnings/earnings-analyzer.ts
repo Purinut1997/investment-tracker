@@ -472,7 +472,7 @@ export function generateQuarterDrivers(params: {
     }
   }
 
-  if (clean === 'NVDA') {
+  if (clean === 'NVDA' && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} ผลการดำเนินงานทุบสถิติประวัติศาสตร์ ชนะคาดการณ์อย่างท่วมท้น (+${surprisePercent ?? 0}%) จากอุปสงค์ชิปประมวลผล AI สำหรับ Data Center ของกลุ่ม Big Tech ที่ล้นหลาม`,
       primaryProfitDrivers: [
@@ -488,7 +488,7 @@ export function generateQuarterDrivers(params: {
     }
   }
 
-  if (clean === 'AAPL') {
+  if (clean === 'AAPL' && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} กำไรได้รับแรงขับเคลื่อนหลักจากธุรกิจบริการ (Services) ที่ทำสถิติสูงสุดใหม่ ผสานยอดขาย iPhone ที่แข็งแกร่งในตลาดเกิดใหม่ แม้ตลาดจีนจะมีความท้าทาย`,
       primaryProfitDrivers: [
@@ -504,7 +504,7 @@ export function generateQuarterDrivers(params: {
     }
   }
 
-  if (clean === 'MSFT') {
+  if (clean === 'MSFT' && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} กำไรและรายได้ขยายตัวโดดเด่นจาก Microsoft Cloud นำโดย Azure AI Services ที่องค์กรทั่วโลกนำไปประยุกต์ใช้งานเชิงพาณิชย์จริง`,
       primaryProfitDrivers: [
@@ -520,7 +520,7 @@ export function generateQuarterDrivers(params: {
     }
   }
 
-  if (clean === 'META') {
+  if (clean === 'META' && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} ผลงานยอดเยี่ยม ชนะคาดการณ์อย่างมีนัยสำคัญจากประสิทธิภาพการยิงโฆษณาที่ขับเคลื่อนด้วย AI บน Instagram Reels และการปรับปรุงประสิทธิภาพพนักงาน`,
       primaryProfitDrivers: [
@@ -552,7 +552,7 @@ export function generateQuarterDrivers(params: {
     }
   }
 
-  if (clean === 'AMZN') {
+  if (clean === 'AMZN' && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} กำไรสุทธิเติบโตก้าวกระโดด นำโดยกำไรจากการดำเนินงานของ AWS Cloud, ยอดขายโฆษณาบนมาร์เก็ตเพลส และการปรับระบบคลังสินค้าแบบภูมิภาค (Regional fulfillment)`,
       primaryProfitDrivers: [
@@ -569,7 +569,7 @@ export function generateQuarterDrivers(params: {
   }
 
   // --- 2. Thai Big Cap Stocks ---
-  if (clean === 'PTT' || clean === 'PTT.BK') {
+  if ((clean === 'PTT' || clean === 'PTT.BK') && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} ผลการดำเนินงานได้รับแรงหนุนจากปริมาณการจำหน่ายก๊าซธรรมชาติที่มั่นคง และการรับรู้ส่วนแบ่งกำไรจาก PTTEP ควบคู่กับการควบคุมค่าใช้จ่ายดำเนินงาน`,
       primaryProfitDrivers: [
@@ -584,7 +584,7 @@ export function generateQuarterDrivers(params: {
     }
   }
 
-  if (clean === 'SCB' || clean === 'SCB.BK') {
+  if ((clean === 'SCB' || clean === 'SCB.BK') && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} กำไรสุทธิเติบโตจากรายได้ดอกเบี้ยสุทธิ (NII) ที่ทรงตัวในระดับสูง และการขยายตัวของรายได้ค่าธรรมเนียมธุรกรรมและการบริหารความมั่งคั่ง (Wealth Management)`,
       primaryProfitDrivers: [
@@ -599,7 +599,7 @@ export function generateQuarterDrivers(params: {
     }
   }
 
-  if (clean === 'CPALL' || clean === 'CPALL.BK') {
+  if ((clean === 'CPALL' || clean === 'CPALL.BK') && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} ผลการดำเนินงานโดดเด่น ยอดขายสาขาเดิม (SSSG) ของ 7-Eleven เติบโตต่อเนื่องตามการฟื้นตัวของการท่องเที่ยวและการบริโภค พร้อมแรงหนุนจาก CPAXT`,
       primaryProfitDrivers: [
@@ -614,7 +614,7 @@ export function generateQuarterDrivers(params: {
     }
   }
 
-  if (clean === 'DELTA' || clean === 'DELTA.BK') {
+  if ((clean === 'DELTA' || clean === 'DELTA.BK') && !isMiss) {
     return {
       summary: `ไตรมาส ${quarter} กำไรสุทธิเติบโตอย่างร้อนแรง นำโดยยอดคำสั่งซื้อชิ้นส่วน Power Supply สำหรับ AI Data Center และโซลูชันระบบระบายความร้อน (Cooling Systems)`,
       primaryProfitDrivers: [
@@ -1127,8 +1127,8 @@ export async function getEarningsIntelligence(
           })
         }
       } else if (historyItems.length > 0) {
-        // Fallback to history items if chartQuarterly is empty
-        for (let i = historyItems.length - 1; i >= 0; i--) {
+        // Fallback to history items if chartQuarterly is empty (Yahoo history is oldest-to-newest)
+        for (let i = 0; i < historyItems.length; i++) {
           const h = historyItems[i]
           const qDate = h.quarter?.fmt || h.period || `Q${i + 1}`
           const actualEps = h.epsActual?.raw != null ? Number(h.epsActual.raw) : null
@@ -1341,8 +1341,9 @@ export async function getEarningsIntelligence(
       }
 
       const totalQuartersAnalyzed = historicalQuarters.length
-      const beatRatePercent = totalQuartersAnalyzed > 0
-        ? Number(((beatsCount / totalQuartersAnalyzed) * 100).toFixed(1))
+      const quartersWithEstimate = beatsCount + missesCount + inLineCount
+      const beatRatePercent = quartersWithEstimate > 0
+        ? Number(((beatsCount / quartersWithEstimate) * 100).toFixed(1))
         : 0
       const averageSurprisePercent = surpriseCount > 0
         ? Number((totalSurpriseSum / surpriseCount).toFixed(2))

@@ -80,7 +80,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = CredentialsSchema.safeParse(credentials)
         if (!parsed.success) return null
 
-        const { email, password } = parsed.data
+        const email = parsed.data.email.toLowerCase().trim()
+        const { password } = parsed.data
         const ipAddress = (credentials?.ipAddress as string) ?? 'unknown'
 
         // Rate limit check
@@ -91,7 +92,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           )
         }
 
-        const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
+        const user = await prisma.user.findUnique({ where: { email } })
         if (!user || !user.passwordHash) {
           await recordLoginAttempt(email, ipAddress, false)
           await prisma.auditLog.create({

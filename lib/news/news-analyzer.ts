@@ -10,6 +10,8 @@
 import { NewsSentiment } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
+import type { HoldingItem } from '@/lib/analytics/holdings'
 
 export interface SynthesizedTakeaways {
   thaiHeadline: string
@@ -110,6 +112,42 @@ export interface UserHoldingContext {
   isNearSupport?: boolean
   isOversold?: boolean
   technicalSummary?: string
+}
+
+export async function buildUserHoldingTechnicalContexts(
+  activeHoldings: HoldingItem[]
+): Promise<UserHoldingContext[]> {
+  return Promise.all(
+    activeHoldings.map(async (h) => {
+      const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
+      let sig = null
+      try {
+        sig = await fetchSingleTickerTechnicalSignal(h.ticker, marketHint)
+      } catch {
+        // ignore error and proceed
+      }
+      const price = h.currentPrice && h.currentPrice > 0 ? h.currentPrice : (sig?.currentPrice || 0)
+
+      return {
+        ticker: h.ticker.toUpperCase(),
+        assetName: h.assetName,
+        assetType: h.assetType,
+        allocationPercent: Math.round(h.allocationPercent * 10) / 10,
+        unrealizedPnLPercent: Math.round(h.unrealizedPnLPercent * 10) / 10,
+        currentPrice: price,
+        currency: h.currency,
+        supportS1: sig?.supportS1 ?? (price > 0 ? Number((price * 0.975).toFixed(2)) : null),
+        supportS2: sig?.supportS2 ?? (price > 0 ? Number((price * 0.95).toFixed(2)) : null),
+        resistanceR1: sig?.resistanceR1 ?? (price > 0 ? Number((price * 1.03).toFixed(2)) : null),
+        sma50: sig?.sma50 ?? null,
+        sma200: sig?.sma200 ?? null,
+        rsi14: sig?.rsi14 ?? null,
+        isNearSupport: sig?.isNearSupport ?? false,
+        isOversold: sig?.isOversold ?? false,
+        technicalSummary: sig?.metricSummary ?? '',
+      }
+    })
+  )
 }
 
 export interface MacroShockAlert {
@@ -245,14 +283,16 @@ const POSITIVE_PATTERNS = [
   /\b(buyback|dividend hike|growth|outperform|strong demand|accelerat(e|es|ing))\b/i,
   /\b(profit rise|revenue jump|guidance raised|partnership|breakthrough|positive)\b/i,
   /\b(soar|soars|soared|skyrocket|top estimates)\b/i,
+  /(กำไรพุ่ง|กำไรโต|นิวไฮ|ทุบสถิติ|ปันผลสูง|ดีกว่าคาด|ฟื้นตัว|ทะลุ|ขาขึ้น|แรงซื้อ|เติบโตแกร่ง|บวกแรง)/i,
 ]
 
 const NEGATIVE_PATTERNS = [
   /\b(drop|drops|dropped|fall|falls|fallen|plunge|plunges|plunged|slump|slumps|slumped)\b/i,
   /\b(miss|misses|missed|warning|warns|downgrade|downgrades|downgraded|bearish)\b/i,
-  /\b(sell-off|crash|investigation|lawsuit|probe|probe|risk|risks|threat|loss|losses)\b/i,
+  /\b(sell-off|crash|investigation|lawsuit|probe|risk|risks|threat|loss|losses)\b/i,
   /\b(inflation fears|recession|rate hike|layoffs|cut forecast|weak demand|headwind)\b/i,
   /\b(plummet|plummeted|stumble|stumbles|retreat|tumble)\b/i,
+  /(กำไรหด|ขาดทุน|ร่วงหนัก|ดิ่ง|ต่ำกว่าคาด|กังวล|วิกฤต|เทขาย|ชะลอตัว|หนี้เสีย|ฟองสบู่|ลบแรง|หั่นเป้า)/i,
 ]
 
 export function detectSentiment(headline: string, summary?: string | null): NewsSentiment {
@@ -586,7 +626,7 @@ export async function generateDailyBrief(
   }
 
   const total = positive + negative + neutral || 1
-  const sentimentScore = Math.round((positive / total) * 100)
+  const sentimentScore = Math.round(((positive + neutral * 0.5) / total) * 100)
   const overallSentiment = sentimentScore >= 60 ? 'bullish' : sentimentScore <= 35 ? 'bearish' : 'neutral'
 
   // Generate baseline / heuristic brief first
@@ -1317,7 +1357,12 @@ function generateHeuristicDailyBrief(
     timeframeStrategy,
     actionPlan,
     interestingStocks,
-    decisionFramework: buildDefaultMarketDecisionFramework(overallSentiment, sentimentScore, topTickers),
+    decisionFramework: buildDefaultMarketDecisionFramework(
+      overallSentiment,
+      sentimentScore,
+      topTickers,
+      holdings
+    ),
     tailwinds,
     headwinds,
     strategicTakeaway,
@@ -1328,7 +1373,8 @@ function generateHeuristicDailyBrief(
 export function buildDefaultMarketDecisionFramework(
   overallSentiment: 'bullish' | 'bearish' | 'neutral',
   sentimentScore: number,
-  userTickers: string[] = []
+  userTickers: string[] = [],
+  holdings: UserHoldingContext[] = []
 ): MarketDecisionFramework {
   const isBull = overallSentiment === 'bullish'
   const isBear = overallSentiment === 'bearish'
@@ -1357,15 +1403,46 @@ export function buildDefaultMarketDecisionFramework(
     ? 'ตลาดอยู่ในภาวะความเสี่ยงสูงหรือเผชิญแรงกดดันมหภาค ควรชะลอการไล่ราคาและสำรองสภาพคล่องเงินสด'
     : 'ตลาดอยู่ในกรอบแกว่งตัวรอความชัดเจน ถือครองสินทรัพย์หลักตามสัดส่วนเดิม และตั้ง Limit Order รอซื้อเมื่อย่อตัว'
 
+  const topHeld = holdings.slice(0, 3)
+  const oversoldOrDipHeld = holdings.filter((h) => h.isOversold || h.isNearSupport)
+  const heldSummaryMetric =
+    topHeld.length > 0
+      ? topHeld
+          .map((h) => {
+            const sym = h.currency === 'THB' ? '฿' : '$'
+            const p = h.currentPrice ? `${sym}${h.currentPrice.toLocaleString()}` : ''
+            const r = h.rsi14 != null ? ` RSI ${h.rsi14}` : ''
+            return `${h.ticker}${p ? ` ${p}` : ''}${r}`
+          })
+          .join(' | ')
+      : userTickers.slice(0, 3).join(', ') || 'พอร์ตปัจจุบัน'
+
+  const supportMetric =
+    oversoldOrDipHeld.length > 0
+      ? oversoldOrDipHeld
+          .slice(0, 3)
+          .map((h) => {
+            const sym = h.currency === 'THB' ? '฿' : '$'
+            return `${h.ticker}${h.supportS1 ? ` S1 ${sym}${h.supportS1}` : ' ใกล้แนวรับ'}`
+          })
+          .join(' | ')
+      : topHeld.length > 0
+      ? topHeld
+          .filter((h) => h.supportS1)
+          .slice(0, 2)
+          .map((h) => `${h.ticker} S1 ${h.currency === 'THB' ? '฿' : '$'}${h.supportS1}`)
+          .join(' | ') || 'ติดตามแนวรับ S1 / SMA50'
+      : 'Support Levels Tracking'
+
   return {
     overallStance,
     stanceLabel,
     stanceBadgeColor,
     summaryHeadline,
     threeCoreQuestions: {
-      marketFacing: 'ตลาดกำลังซึมซับทิศทางดอกเบี้ย Fed และตัวเลขเงินเฟ้อที่ยังคงมีความไม่แน่นอน แต่มีแรงพยุงจากสภาพคล่องของกลุ่มเทคโนโลยีขนาดใหญ่และกระแส AI',
-      earningsTrend: 'ผลกำไรของบริษัทผู้นำ (Big Tech / Market Leaders) ยังคงเติบโตระดับสูงและงบลงทุน AI ยังเพิ่มขึ้นอย่างมีนัยสำคัญ',
-      valuationRiskReward: 'Valuation ดัชนีหลักค่อนข้างตึงตัว (Forward P/E ~20-22x) จึงไม่ควรไล่ราคาที่จุดสูงสุด แต่คุ้มค่าหากดักซื้อเมื่อย่อตัวแตะแนวรับ',
+      marketFacing: 'ตลาดกำลังซึมซับทิศทางดอกเบี้ยนโยบาย อัตราเงินเฟ้อ และกระแสเงินทุนระหว่างหุ้นเติบโตกับสินทรัพย์ป้องกันความเสี่ยง',
+      earningsTrend: 'ผลประกอบการของบริษัทแกนนำและกระแสเงินสดอิสระ (FCF) เป็นตัวแปรชี้วัดความแข็งแกร่งระยะกลาง-ยาว',
+      valuationRiskReward: 'ควรพิจารณา Valuation เทียบกับการเติบโตจริงและจุดแนวรับทางเทคนิค แทนการไล่ราคาที่จุดสูงสุด',
     },
     tier1Regular: [
       {
@@ -1374,28 +1451,28 @@ export function buildDefaultMarketDecisionFramework(
         subTitle: 'ดัชนีชี้นำภาพรวมตลาดและโมเมนตัมหลัก',
         status: isBull ? 'bullish' : 'neutral',
         statusLabel: isBull ? 'โมเมนตัมบวก' : 'แกว่งตัวทดสอบแนวต้าน',
-        keyMetric: 'SPX ~5,850+ | NDX ~20,400+',
-        insight: 'ดัชนีหลักยังคงอยู่ในโครงสร้างแนวโน้มขาขึ้นระยะยาว แต่อาจเผชิญแรงขายทำกำไรระยะสั้นในรอบการประกาศตัวเลขเศรษฐกิจ',
-        actionGuidance: 'เน้นถือหุ้นพื้นฐานดีตามรอบ ไม่ไล่ราคาช่วง New High รอจังหวะย่อตัว 2-3% ค่อยสะสม',
+        keyMetric: 'ตรวจสอบแนวโน้มสดในหน้าสรุปสภาวะตลาด',
+        insight: 'ดัชนีหลักมักเคลื่อนไหวตามสภาพคล่องและคาดการณ์กำไรระยะข้างหน้า อาจเผชิญแรงขายทำกำไรระยะสั้นรอบประกาศตัวเลขเศรษฐกิจ',
+        actionGuidance: 'เน้นถือหุ้นพื้นฐานดีตามรอบ ไม่ไล่ราคาช่วง New High รอจังหวะย่อตัวแตะแนวรับค่อยสะสม',
       },
       {
         id: 't1-2',
         title: 'US 10Y Yield และแนวโน้ม Fed',
         subTitle: 'อัตราผลตอบแทนพันธบัตร 10 ปี & ทิศทางดอกเบี้ย',
         status: 'watch',
-        statusLabel: 'จับตาระดับ 4.0% - 4.3%',
-        keyMetric: 'US 10Y Yield: 4.15%',
-        insight: 'เมื่อ Bond Yield พุ่งขึ้น จะกดดัน Valuation ของหุ้นกลุ่มเทคโนโลยี High-PE แต่หาก Yield เริ่มชะลอตัวจะส่งผลบวกต่อสินทรัพย์เสี่ยง',
-        actionGuidance: 'หาก Yield ขยับขึ้นเหนือ 4.25% ให้เตรียมกระสุนดักซื้อหุ้นเทคโนโลยีชั้นนำที่โดนเทขายเกินจริง',
+        statusLabel: 'จับตาต้นทุนทางการเงิน (10Y Yield)',
+        keyMetric: 'US 10Y Yield & Fed Policy',
+        insight: 'เมื่อ Bond Yield พุ่งขึ้น มักกดดัน Valuation ของหุ้นกลุ่มเติบโต High-PE แต่หาก Yield เริ่มชะลอตัวจะส่งผลบวกต่อสินทรัพย์เสี่ยง',
+        actionGuidance: 'หาก Yield เร่งตัวจนกดดันหุ้นคุณภาพดีลงเกินจริง ให้เตรียมเงินสดสำรองรอซื้อที่แนวรับสำคัญ',
       },
       {
         id: 't1-3',
         title: 'เงินเฟ้อและตลาดแรงงาน',
         subTitle: 'US CPI, Core PCE & Non-Farm Payrolls',
         status: 'neutral',
-        statusLabel: 'เงินเฟ้อชะลอช้าแต่ตลาดแรงงานยังแกร่ง',
-        keyMetric: 'CPI Target: 2.0% | Non-Farm ~150k-200k',
-        insight: 'ตลาดให้ความสำคัญสูงสุดกับตัวเลขเงินเฟ้อและอัตราการว่างงานเพื่อคาดการณ์จังหวะการลดดอกเบี้ยของ Fed',
+        statusLabel: 'ตัวแปรกำหนดทิศทางดอกเบี้ย',
+        keyMetric: 'US CPI Target: 2.0% | Labor Data',
+        insight: 'ตลาดให้ความสำคัญสูงสุดกับตัวเลขเงินเฟ้อและอัตราการว่างงานเพื่อประเมินจังหวะการดำเนินนโยบายของ Fed',
         actionGuidance: 'หลีกเลี่ยงการเปิดสถานะเก็งกำไรขนาดใหญ่ก่อนวันประกาศตัวเลข CPI หรือการประชุม FOMC',
       },
       {
@@ -1403,9 +1480,9 @@ export function buildDefaultMarketDecisionFramework(
         title: 'ผลประกอบการและประมาณการกำไร',
         subTitle: 'Corporate Earnings & Forward EPS Guidance',
         status: 'bullish',
-        statusLabel: 'EPS เติบโตแข็งแกร่งกว่าคาด',
-        keyMetric: 'S&P 500 Q3/Q4 EPS Growth ~9.5%',
-        insight: 'ผลประกอบการจริงเป็นเสาหลักที่ค้ำยันดัชนี แม้ Valuation จะตึงตัว แต่กำไรที่เติบโตจริงจะช่วยลดระดับ P/E ลงได้',
+        statusLabel: 'กำไรบริษัทจดทะเบียน & Guidance',
+        keyMetric: 'ดูปฏิทินงบรายตัวในเมนูปฏิทินงบ',
+        insight: 'ผลประกอบการจริงเป็นเสาหลักที่ค้ำยันราคาสินทรัพย์ในระยะยาว บริษัทที่ทำกำไรและกระแสเงินสดเติบโตจริงจะฟื้นตัวได้เร็วที่สุด',
         actionGuidance: 'เลือกลงทุนในบริษัทที่มี Pricing Power, Free Cash Flow สม่ำเสมอ และหนี้สินต่ำ',
       },
       {
@@ -1414,7 +1491,7 @@ export function buildDefaultMarketDecisionFramework(
         subTitle: 'Macro Breaking News & Broad Market Drivers',
         status: 'watch',
         statusLabel: 'เฝ้าระวังปัจจัยนโยบายรัฐ',
-        keyMetric: 'Broad Market Shocks',
+        keyMetric: 'Sentiment Score: ' + sentimentScore + '/100',
         insight: 'การประกาศนโยบายการค้า มาตรการภาษี และความตึงเครียดทางภูมิรัฐศาสตร์มักสร้างแรงกระแทกระยะสั้น',
         actionGuidance: 'แยกแยะระหว่างความตระหนกชั่วคราว (Sentiment Noise) กับการเปลี่ยนแปลงพื้นฐานธุรกิจ (Structural)',
       },
@@ -1422,53 +1499,53 @@ export function buildDefaultMarketDecisionFramework(
     tier2BuyTiming: [
       {
         id: 't2-1',
-        title: 'Valuation ของ VOO และ QQQM',
-        subTitle: 'Forward P/E & 5-Year Historical Percentile',
-        status: 'neutral',
-        statusLabel: 'Valuation ค่อนข้างตึงตัว',
-        keyMetric: 'VOO Fwd P/E ~21.5x | QQQM ~26.2x',
-        insight: 'ระดับ Valuation สูงกว่าค่าเฉลี่ย 5 ปีเล็กน้อย สะท้อนว่าตลาดอยู่ในโซน Fair-to-Rich Valuation',
-        actionGuidance: 'เน้นวิธีทยอยซื้อตามรอบ DCA หรือรอซื้อไม้ใหญ่เมื่อมีรอบปรับฐาน (Correction) 5-7%',
+        title: 'สถานะทางเทคนิคและ Valuation ของพอร์ต',
+        subTitle: 'ราคาตลาดล่าสุด & โมเมนตัม RSI(14) ของสินทรัพย์ที่ถือ',
+        status: oversoldOrDipHeld.length > 0 ? 'bullish' : 'neutral',
+        statusLabel: oversoldOrDipHeld.length > 0 ? 'มีสินทรัพย์ย่อตัวใกล้แนวรับ' : 'เคลื่อนไหวตามรอบปกติ',
+        keyMetric: heldSummaryMetric,
+        insight: 'ประเมินจังหวะเข้าซื้อจากค่า RSI(14) และสัดส่วนพอร์ตจริง เพื่อลดความเสี่ยงการซื้อแพงเกินพื้นฐาน',
+        actionGuidance: 'เน้นวิธีทยอยซื้อตามรอบ DCA หรือแบ่งไม้เพิ่มเมื่อราคาสินทรัพย์เป้าหมายย่อตัวลงใกล้โซน RSI ต่ำ',
       },
       {
         id: 't2-2',
-        title: 'VIX และความกว้างของตลาด',
-        subTitle: 'Fear Index & % Stocks Above 50/200 DMA',
+        title: 'VIX และความผันผวนของตลาด',
+        subTitle: 'Fear Index & Sentiment Regime',
         status: isBear ? 'bearish' : 'bullish',
-        statusLabel: 'ความผันผวนอยู่ในกรอบปกติ',
-        keyMetric: 'VIX: 15-18 | Market Breadth: 62%',
-        insight: 'VIX ต่ำกว่า 20 บ่งชี้ความเสี่ยงต่ำ แต่หาก VIX พุ่งทะลุ 25-30 จะเป็นจุดเกิด Panic Buy Opportunity ที่ได้ราคาดีที่สุด',
-        actionGuidance: 'สำรองเงินสด 10-15% ไว้เสมอ เพื่อพร้อมซื้อเมื่อ VIX ดีดตัวสูงผิดปกติ',
+        statusLabel: isBear ? 'ความผันผวนสูงขึ้น ระวังแรงขาย' : 'ติดตามค่า VIX สดในแผนประจำวัน',
+        keyMetric: `News Sentiment: ${overallSentiment.toUpperCase()} (${sentimentScore}/100)`,
+        insight: 'เมื่อ VIX ต่ำกว่า 20 ตลาดมักเสถียรภาพสูง แต่หาก VIX พุ่งทะลุ 25-30 มักเป็นจังหวะเกิด Panic Dip สำหรับทยอยสะสมของดี',
+        actionGuidance: 'สำรองเงินสด 10-15% ไว้เสมอ เพื่อพร้อมซื้อเมื่อความผันผวนดีดตัวสูงผิดปกติ',
       },
       {
         id: 't2-3',
-        title: 'DXY และ USD/THB',
-        subTitle: 'ดัชนีดอลลาร์ & อัตราแลกเปลี่ยนเงินบาท',
+        title: 'DXY และอัตราแลกเปลี่ยน USD/THB',
+        subTitle: 'ดัชนีดอลลาร์ & ต้นทุนแลกเปลี่ยนเงินบาท',
         status: 'neutral',
-        statusLabel: 'บาททรงตัวแข็งค่าปานกลาง',
-        keyMetric: 'DXY ~102 | USD/THB ~33.5 - 34.5',
-        insight: 'ช่วงที่ค่าเงินบาทแข็งค่าคือช่วงเวลาที่ได้เปรียบในการแลกเงินบาทไปเป็น USD เพื่อเตรียมซื้อหุ้นต่างประเทศ',
-        actionGuidance: 'ทยอยแลกเงิน USD สะสมไว้ในบัญชีลงทุนเมื่อ USD/THB ย่อลงมาใกล้แนวรับ',
+        statusLabel: 'บริหารต้นทุนอัตราแลกเปลี่ยน',
+        keyMetric: 'ติดตามเรตสดในหน้าจับตาตลาด',
+        insight: 'ช่วงที่เงินบาทแข็งค่าช่วยลดต้นทุนการแลกเงินไปลงทุนสินทรัพย์สกุลดอลลาร์สหรัฐ (USD)',
+        actionGuidance: 'ทยอยแลกเงิน USD สะสมเมื่ออัตราแลกเปลี่ยน USD/THB ย่อตัวลงแทนการแลกครั้งเดียวก้อนใหญ่',
       },
       {
         id: 't2-4',
-        title: 'แนวโน้มรายได้และการลงทุน AI',
-        subTitle: 'AI Capex & Monetization Momentum',
+        title: 'แนวโน้มการเติบโตของกลุ่มผู้นำตลาด',
+        subTitle: 'Structural Growth & Capex Cycle',
         status: 'bullish',
-        statusLabel: 'งบลงทุน Hyperscalers ยังเร่งตัว',
-        keyMetric: 'Big Tech AI Capex > $200B/yr',
-        insight: 'เม็ดเงินลงทุน AI ยังคงเป็นธีมเมกะเทรนด์หลักที่ขับเคลื่อนเศรษฐกิจ โดยเฉพาะกลุ่ม Semi, Cloud และ Data Centers',
-        actionGuidance: 'คงสัดส่วนหุ้นแกนนำเทคโนโลยีและโครงสร้างพื้นฐาน AI ไว้เป็นเสาหลักของพอร์ต',
+        statusLabel: 'ติดตามแนวโน้มอุตสาหกรรมหลัก',
+        keyMetric: userTickers.slice(0, 4).join(', ') || 'Core Holdings',
+        insight: 'เม็ดเงินลงทุนด้าน AI, Cloud และโครงสร้างพื้นฐานยังเป็นธีมระยะยาว แต่ต้องคุมสัดส่วนไม่ให้กระจุกตัวในกลุ่มเดียวมากเกินไป',
+        actionGuidance: 'คงสัดส่วนสินทรัพย์แกนหลักควบคู่กับการกระจายเข้าสินทรัพย์ปันผลหรือ Defensive ตามเป้าหมาย',
       },
       {
         id: 't2-5',
-        title: 'ราคาปัจจุบันเทียบกับแผนทยอยซื้อ',
+        title: 'ราคาปัจจุบันเทียบกับแนวรับสำคัญ (S1 / SMA50)',
         subTitle: 'DCA Execution & Key Support Zones',
-        status: 'watch',
-        statusLabel: 'จับตาแนวรับสำคัญ S1 / SMA50',
-        keyMetric: 'Support Levels Tracking',
-        insight: 'การซื้อหุ้นที่แตะแนวรับเส้นค่าเฉลี่ย 50 วัน (SMA50) หรือ 200 วัน (SMA200) ให้ Risk/Reward Ratio ที่คุ้มค่าที่สุด',
-        actionGuidance: 'ตั้ง Order รับซื้อตามกรอบแนวรับ S1 ในแผนประจำวัน แทนการไล่ซื้อตามราคาตลาด',
+        status: oversoldOrDipHeld.length > 0 ? 'bullish' : 'watch',
+        statusLabel: oversoldOrDipHeld.length > 0 ? 'พบหุ้นใกล้แนวรับ S1/Oversold' : 'จับตาแนวรับสำคัญ S1 / SMA50',
+        keyMetric: supportMetric,
+        insight: 'การซื้อหุ้นที่แตะแนวรับ Pivot S1 หรือเส้นค่าเฉลี่ย 50/200 วัน ช่วยให้ได้ Risk/Reward Ratio ที่คุ้มค่ากว่าการซื้อไล่ราคา',
+        actionGuidance: 'ตั้ง Limit Order รับซื้อตามกรอบแนวรับ S1 แทนการซื้อตามราคาตลาดในช่วงที่ราคาตึงตัว',
       },
     ],
     tier3EventDriven: [
@@ -1487,18 +1564,18 @@ export function buildDefaultMarketDecisionFramework(
         title: 'น้ำมัน ทองคำ และสินค้าโภคภัณฑ์',
         subTitle: 'WTI Crude Oil & Gold Safe Haven',
         status: 'neutral',
-        statusLabel: 'ทองคำแข็งแกร่ง น้ำมันทรงตัว',
-        keyMetric: 'WTI Oil ~$72 | Gold ~$2,650+',
+        statusLabel: 'ติดตามราคาสินค้าโภคภัณฑ์สด',
+        keyMetric: 'Commodities & Safe-Haven Hedge',
         insight: 'ราคาน้ำมันส่งผลต่อเงินเฟ้อทางตรง ขณะที่ทองคำเป็นสินทรัพย์ประกันความเสี่ยงจากความไม่แน่นอนของระบบเงินตรา',
-        actionGuidance: 'ควรถือทองคำในพอร์ต 5-10% เพื่อเป็นกันชนลดความผันผวนรวมของพอร์ต',
+        actionGuidance: 'พิจารณาถือทองคำหรือสินทรัพย์หลบภัยในสัดส่วนที่เหมาะสม (5-10%) เพื่อลดความผันผวนรวมของพอร์ต',
       },
       {
         id: 't3-3',
         title: 'ปัญหาธนาคาร สินเชื่อ และสภาพคล่อง',
         subTitle: 'Credit Spreads & Systemic Liquidity',
         status: 'bullish',
-        statusLabel: 'สภาพคล่องระบบยังมั่นคง',
-        keyMetric: 'High Yield Credit Spreads: Low',
+        statusLabel: 'ติดตามสภาพคล่องและ Credit Spreads',
+        keyMetric: 'Systemic Liquidity Monitoring',
         insight: 'Credit Spreads ที่แคบสะท้อนว่าตลาดยังไม่มีความกังวลเรื่องการล้มละลายหรือการตึงตัวของระบบสินเชื่อ',
         actionGuidance: 'ติดตามสุขภาพของธนาคารพาณิชย์และระดับดอกเบี้ยเงินกู้ภาคเอกชน',
       },
@@ -1510,7 +1587,7 @@ export function buildDefaultMarketDecisionFramework(
         statusLabel: 'ตรวจสอบผลกระทบรายตัว',
         keyMetric: userTickers.slice(0, 4).join(', ') || 'หุ้นในพอร์ต',
         insight: 'การประกาศผลงาน วงเงินซื้อหุ้นคืน (Buyback) หรือการเพิ่มเงินปันผล ช่วยดันราคาเฉพาะตัวได้ดีกว่าตลาดรวม',
-        actionGuidance: 'คลิกดูบทวิเคราะห์เจาะลึก 3 บรรทัดและแบบจำลองสถานการณ์ (Deep Dive) ในส่วนคลังข่าวด้านล่าง',
+        actionGuidance: 'คลิกดูบทวิเคราะห์เจาะลึกและแบบจำลองสถานการณ์ (Deep Dive) ในรายการข่าวด้านล่าง',
       },
     ],
     officialSources: [

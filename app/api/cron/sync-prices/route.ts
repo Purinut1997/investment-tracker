@@ -9,11 +9,11 @@ import { invalidateDailyBriefCache } from '@/lib/news/news-analyzer'
 export const maxDuration = 60 // Allow 60 seconds on Vercel
 
 export async function GET(req: NextRequest) {
-  // 1. Verify CRON_SECRET authorization header
+  // 1. Verify CRON_SECRET authorization header (fail-closed in production)
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if ((process.env.NODE_ENV === 'production' && !cronSecret) || (cronSecret && authHeader !== `Bearer ${cronSecret}`)) {
     return NextResponse.json({ error: 'Unauthorized cron request' }, { status: 401 })
   }
 

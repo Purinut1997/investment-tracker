@@ -145,9 +145,9 @@ export async function callGemini({
             ? logType
             : 'advisor'
 
-        // 4. Log to AiAdviceLog asynchronously
-        prisma.aiAdviceLog
-          .create({
+        // 4. Log to AiAdviceLog before returning so subsequent DB lookups never race
+        try {
+          await prisma.aiAdviceLog.create({
             data: {
               userId,
               logType: validDbLogType,
@@ -156,7 +156,9 @@ export async function callGemini({
               modelUsed: modelId,
             },
           })
-          .catch((err) => console.error('[AiAdviceLog Error]', err))
+        } catch (err) {
+          console.error('[AiAdviceLog Error]', err)
+        }
 
         return {
           text,

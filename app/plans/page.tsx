@@ -157,45 +157,6 @@ export default function PlansPage() {
   const [rebalanceViewMode, setRebalanceViewMode] = useState<'stocks' | 'buckets'>('stocks')
   const [toleranceBand, setToleranceBand] = useState<number>(3.0)
   const [copied, setCopied] = useState(false)
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({ US: true })
-
-  function toggleExpandCategory(catKey: string) {
-    setExpandedCategories((prev) => ({
-      ...prev,
-      [catKey]: !prev[catKey],
-    }))
-  }
-
-  async function handleSaveSubTargets(categoryKey: string, newSubTargets: Record<string, number>) {
-    if (!activePreset?.id) return
-    const key = categoryKey.toUpperCase()
-    const updatedSubTargets = {
-      ...(activePreset.subTargets || {}),
-      [key]: newSubTargets,
-    }
-    const updatedAllocation = {
-      ...(activePreset.rawTargetAllocation || {}),
-      ...activePreset.targetAllocation,
-      _subTargets: updatedSubTargets,
-    }
-
-    try {
-      const res = await fetch(`/api/plans/${activePreset.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetAllocation: updatedAllocation,
-        }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Failed to update sub-targets')
-      }
-      await revalidate()
-    } catch (err: any) {
-      console.error('[save sub-targets]', err)
-    }
-  }
 
   const strategyBuckets = useMemo(
     () => extractStrategyBuckets(activePreset?.rawTargetAllocation, holdings),
@@ -531,7 +492,7 @@ export default function PlansPage() {
             } | ดึงสัดส่วนจาก ${i.currentWeight}% ➔ ${i.postWeight}%`
         ),
         `---------------------------------`,
-        `*คำนวณอัตโนมัติโดย ClassCare 360 Investment Tracker`,
+        `*คำนวณอัตโนมัติโดย Investment Pro`,
       ].filter(Boolean)
       navigator.clipboard.writeText(lines.join('\n'))
       setCopied(true)

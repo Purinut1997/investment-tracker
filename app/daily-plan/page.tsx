@@ -426,6 +426,7 @@ export default function DailyPlanPage() {
           totalPortfolioValue: data.totalPortfolioValue,
           totalCash: data.totalCash,
           baseCurrency: data.baseCurrency,
+          forceRefresh: true,
         }),
       })
       const result = await res.json()

@@ -5,6 +5,7 @@ import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { getBatchTechnicalSignals } from '@/lib/market-data/technical-signals'
 import { createFallbackPillars, MarketPillarsData } from '@/app/api/tactical-advisor/route'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 
 export const maxDuration = 45
 
@@ -46,10 +47,7 @@ export async function POST(req: NextRequest) {
       select: { cashBalance: true, currency: true },
     })
 
-    let totalCash = 0
-    accounts.forEach((acc) => {
-      totalCash += Number(acc.cashBalance) || 0
-    })
+    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
 
     const totalPortfolioValue = holdingsResult.totalValueBase
     const totalWealth = totalPortfolioValue + totalCash
@@ -316,7 +314,7 @@ ${previousHistoryText}
    - อธิบายว่ากราฟตัวไหนมีสัญญาณกลับตัวหรือน่าช้อนซื้อ (Dip Buy) ตัวไหนตึงตัว หรือตัวไหนเสี่ยงหลุดแนวรับ
 3. เชื่อมโยงเข้ากับพอร์ตและเงินสดจริงของผู้ใช้:
    - แนะนำการแบ่งไม้เข้าซื้อ (Tranche Plan เช่น ไม้ 1 ที่ S1, ไม้ 2 ที่ SMA 200) และต้องระบุจุดหนีไฟ (Stop Loss) เสมอ
-   - สื่อสารเรื่องการกระจุกตัว 80.9% ใน Tech/AI และแนวทางบริหารความเสี่ยงหรือภาษีต่างประเทศอย่างรอบคอบ
+   - ${techAiAllocationPercent >= 35 ? `สื่อสารเรื่องการกระจุกตัว ${techAiAllocationPercent.toFixed(1)}% ในกลุ่ม Tech/AI` : 'วิเคราะห์การกระจายความเสี่ยงของพอร์ตตามสัดส่วนจริง'} และแนวทางบริหารความเสี่ยงหรือภาษีต่างประเทศอย่างรอบคอบ
 4. กฎการจัดหน้า (Clean Formatting):
    - แบ่งหัวข้อให้ชัดเจน สบายตา มีลำดับขั้นตอน
    - ห้ามใส่เครื่องหมายดอกจัน (**) ซ้ำซ้อนหรือพร่ำเพรื่อในประโยค ให้เน้นเฉพาะตัวเลขสำคัญหรือชื่อหุ้นเท่านั้น

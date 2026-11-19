@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     ]
   }
 
-  const [transactions, total] = await prisma.$transaction([
+  const [transactions, total, allMatchingForSummary] = await prisma.$transaction([
     prisma.transaction.findMany({
       where,
       include: {
@@ -73,12 +73,50 @@ export async function GET(req: NextRequest) {
       take: limit,
     }),
     prisma.transaction.count({ where }),
+    prisma.transaction.findMany({
+      where,
+      select: {
+        txnType: true,
+        totalAmount: true,
+        fee: true,
+        asset: { select: { currency: true, market: true } },
+        account: { select: { currency: true } },
+      },
+    }),
   ])
+
+  let usdOutflow = 0
+  let thbOutflow = 0
+  let usdInflow = 0
+  let thbInflow = 0
+  let usdFees = 0
+  let thbFees = 0
+
+  for (const t of allMatchingForSummary) {
+    const isUSD =
+      t.account?.currency === 'USD' ||
+      t.asset?.currency === 'USD' ||
+      t.asset?.market === 'US'
+    const amount = Number(t.totalAmount || 0)
+    const feeVal = Number(t.fee || 0)
+
+    if (t.txnType === 'BUY') {
+      if (isUSD) usdOutflow += amount
+      else thbOutflow += amount
+    } else if (t.txnType === 'SELL' || t.txnType === 'DIVIDEND') {
+      if (isUSD) usdInflow += amount
+      else thbInflow += amount
+    }
+
+    if (isUSD) usdFees += feeVal
+    else thbFees += feeVal
+  }
 
   return NextResponse.json({
     data: transactions,
     transactions,
     pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    summary: { usdOutflow, thbOutflow, usdInflow, thbInflow, usdFees, thbFees },
   })
 }
 

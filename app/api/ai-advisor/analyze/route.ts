@@ -5,6 +5,7 @@ import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
 import { calculatePortfolioRebalance } from '@/lib/analytics/rebalancing'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 
 export const maxDuration = 45
 
@@ -33,6 +34,8 @@ export async function GET(req: NextRequest) {
           { prompt: { contains: 'AI Daily Investment Strategist' } },
           { prompt: { contains: 'Executive Daily Portfolio Intelligence' } },
           { prompt: { contains: '[AI Stock Deep Dive Analysis' } },
+          { prompt: { contains: 'AI Risk Sentinel' } },
+          { prompt: { contains: '(Risk Sentinel)' } },
         ],
       },
       orderBy: { createdAt: 'desc' },
@@ -65,17 +68,25 @@ export async function POST(req: NextRequest) {
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
-    const healthScore = calculatePortfolioHealthScore(holdingsResult.holdings)
+    const cleanTargetAlloc =
+      targetAllocation && typeof targetAllocation === 'object'
+        ? (Object.fromEntries(
+            Object.entries(targetAllocation).filter(
+              ([k, v]) => !k.startsWith('_') && typeof v === 'number'
+            )
+          ) as Record<string, number>)
+        : undefined
+    const healthScore = calculatePortfolioHealthScore(
+      holdingsResult.holdings,
+      cleanTargetAlloc && Object.keys(cleanTargetAlloc).length > 0 ? cleanTargetAlloc : undefined
+    )
 
-    // Fetch cash balances across user accounts
+    // Fetch cash balances across user accounts converted to baseCurrency
     const accounts = await prisma.investmentAccount.findMany({
       where: { userId },
       select: { cashBalance: true, accountName: true, currency: true },
     })
-    let totalCash = 0
-    accounts.forEach((acc) => {
-      totalCash += Number(acc.cashBalance) || 0
-    })
+    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
 
     if (holdingsResult.holdings.length === 0 && totalCash === 0) {
       return NextResponse.json({

@@ -15,7 +15,9 @@ const PUBLIC_PATHS = [
   '/register',
   '/forgot-password',
   '/reset-password',
+  '/verify-email',
   '/api/auth',
+  '/api/cron',
   '/api/market-data',
   '/api/market-watch',
 ]
@@ -31,23 +33,27 @@ export async function middleware(req: NextRequest) {
   const isSecure =
     req.nextUrl.protocol === 'https:' ||
     req.headers.get('x-forwarded-proto') === 'https'
+  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET
 
   let token = await getToken({
     req,
-    secret: process.env.NEXTAUTH_SECRET,
+    secret,
     secureCookie: isSecure,
   })
 
   if (!token) {
     token = await getToken({
       req,
-      secret: process.env.NEXTAUTH_SECRET,
+      secret,
       secureCookie: !isSecure,
     })
   }
 
-  // Redirect unauthenticated users to login
+  // Reject or redirect unauthenticated users
   if (!token || !token.id) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const loginUrl = new URL('/login', req.url)
     loginUrl.searchParams.set('callbackUrl', pathname)
     return NextResponse.redirect(loginUrl)
@@ -55,9 +61,12 @@ export async function middleware(req: NextRequest) {
 
   const role = (token.role as string) || 'user'
 
-  // /superadmin/* → superadmin only
-  if (pathname.startsWith('/superadmin')) {
+  // /superadmin/* & /api/superadmin/* → superadmin only
+  if (pathname.startsWith('/superadmin') || pathname.startsWith('/api/superadmin')) {
     if (role !== 'superadmin') {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
   }
