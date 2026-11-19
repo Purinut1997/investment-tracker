@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
+import { getTransactionCashDelta, applyCashDeltaClamped } from '@/lib/analytics/cash-ledger'
 
 const UpdateSchema = z.object({
   txnDate: z.string().datetime({ offset: true }).optional(),
@@ -65,24 +66,6 @@ export async function PUT(
     const existing = await getTransaction(id, session.user.id)
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    // Snapshot before edit
-    await prisma.transactionEditHistory.create({
-      data: {
-        transactionId: existing.id,
-        editedByUserId: session.user.id,
-        previousValues: {
-          txnDate: existing.txnDate,
-          txnType: existing.txnType,
-          quantity: existing.quantity.toString(),
-          pricePerUnit: existing.pricePerUnit.toString(),
-          fee: existing.fee.toString(),
-          taxWithheld: existing.taxWithheld.toString(),
-          totalAmount: existing.totalAmount.toString(),
-          note: existing.note,
-        },
-      },
-    })
-
     const updates = parsed.data
     const newTxnType = updates.txnType ?? existing.txnType
     const newQuantity = updates.quantity ?? Number(existing.quantity)
@@ -99,18 +82,60 @@ export async function PUT(
       newTotal = newFee
     }
 
-    const updated = await prisma.transaction.update({
-      where: { id },
-      data: {
-        ...(updates.txnDate && { txnDate: new Date(updates.txnDate) }),
-        ...(updates.txnType && { txnType: updates.txnType }),
-        ...(updates.quantity !== undefined && { quantity: updates.quantity }),
-        ...(updates.pricePerUnit !== undefined && { pricePerUnit: updates.pricePerUnit }),
-        ...(updates.fee !== undefined && { fee: updates.fee }),
-        ...(updates.taxWithheld !== undefined && { taxWithheld: updates.taxWithheld }),
-        ...(updates.note !== undefined && { note: updates.note }),
-        totalAmount: newTotal,
-      },
+    const netDelta =
+      getTransactionCashDelta(newTxnType, newTotal) -
+      getTransactionCashDelta(existing.txnType, Number(existing.totalAmount || 0))
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Snapshot before edit
+      await tx.transactionEditHistory.create({
+        data: {
+          transactionId: existing.id,
+          editedByUserId: session.user.id,
+          previousValues: {
+            txnDate: existing.txnDate,
+            txnType: existing.txnType,
+            quantity: existing.quantity.toString(),
+            pricePerUnit: existing.pricePerUnit.toString(),
+            fee: existing.fee.toString(),
+            taxWithheld: existing.taxWithheld.toString(),
+            totalAmount: existing.totalAmount.toString(),
+            note: existing.note,
+          },
+        },
+      })
+
+      const row = await tx.transaction.update({
+        where: { id },
+        data: {
+          ...(updates.txnDate && { txnDate: new Date(updates.txnDate) }),
+          ...(updates.txnType && { txnType: updates.txnType }),
+          ...(updates.quantity !== undefined && { quantity: updates.quantity }),
+          ...(updates.pricePerUnit !== undefined && { pricePerUnit: updates.pricePerUnit }),
+          ...(updates.fee !== undefined && { fee: updates.fee }),
+          ...(updates.taxWithheld !== undefined && { taxWithheld: updates.taxWithheld }),
+          ...(updates.note !== undefined && { note: updates.note }),
+          totalAmount: newTotal,
+        },
+      })
+
+      if (Math.abs(netDelta) > 0.0001) {
+        const acc = await tx.investmentAccount.findFirst({
+          where: { id: existing.accountId, userId: session.user.id },
+          select: { id: true, cashBalance: true },
+        })
+        if (acc) {
+          const currentCash = Number(acc.cashBalance || 0)
+          if (netDelta > 0 || (netDelta < 0 && currentCash > 0)) {
+            await tx.investmentAccount.update({
+              where: { id: acc.id },
+              data: { cashBalance: applyCashDeltaClamped(currentCash, netDelta) },
+            })
+          }
+        }
+      }
+
+      return row
     })
 
     invalidateUserHoldingsCache(session.user.id)
@@ -135,7 +160,29 @@ export async function DELETE(
   const existing = await getTransaction(id, session.user.id)
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  await prisma.transaction.delete({ where: { id } })
+  const reverseDelta = -getTransactionCashDelta(
+    existing.txnType,
+    Number(existing.totalAmount || 0)
+  )
+
+  await prisma.$transaction(async (tx) => {
+    await tx.transaction.delete({ where: { id } })
+    if (Math.abs(reverseDelta) > 0.0001) {
+      const acc = await tx.investmentAccount.findFirst({
+        where: { id: existing.accountId, userId: session.user.id },
+        select: { id: true, cashBalance: true },
+      })
+      if (acc) {
+        const currentCash = Number(acc.cashBalance || 0)
+        if (reverseDelta > 0 || (reverseDelta < 0 && currentCash > 0)) {
+          await tx.investmentAccount.update({
+            where: { id: acc.id },
+            data: { cashBalance: applyCashDeltaClamped(currentCash, reverseDelta) },
+          })
+        }
+      }
+    }
+  })
 
   invalidateUserHoldingsCache(session.user.id)
 

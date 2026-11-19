@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
 import { z } from 'zod'
 
 export async function GET(req: NextRequest) {
@@ -179,6 +180,8 @@ export async function POST(req: NextRequest) {
         note: note || `ปรับยอดเงินสด (${action})`,
       },
     })
+
+    invalidateUserPortfolioCache(userId)
 
     return NextResponse.json({
       success: true,

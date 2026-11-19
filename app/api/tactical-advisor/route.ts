@@ -8,6 +8,12 @@ import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 import { getBatchTechnicalSignals } from '@/lib/market-data/technical-signals'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import {
+  gatherPortfolioDeepIntelligence,
+  computeAdviceOutcomeMetrics,
+  formatOutcomeMetricsForPrompt,
+  AdviceOutcomeMetrics,
+} from '@/lib/ai/portfolio-intelligence'
 
 export const maxDuration = 45
 
@@ -130,6 +136,7 @@ export interface TacticalAdvisorPayload {
     outcomeAssessment: string
     accuracyStatus: 'ACCURATE' | 'NEUTRAL' | 'CAUTION'
   }>
+  outcomeMetrics?: AdviceOutcomeMetrics
   modelUsed?: string
   generatedAt: string
 }
@@ -678,6 +685,7 @@ export function normalizeStoredPayload(
       guidanceText: 'ถือเงินสดตามความเหมาะสม',
     },
     trackRecordReview: Array.isArray(rawJson.trackRecordReview) ? rawJson.trackRecordReview : [],
+    ...(rawJson?.outcomeMetrics ? { outcomeMetrics: rawJson.outcomeMetrics } : {}),
     modelUsed: rawJson.modelUsed || modelUsed,
     generatedAt: createdAt.toISOString(),
   }
@@ -700,7 +708,7 @@ async function gatherMarketData() {
     yahooFinanceProvider.getQuote('NASDAQ', 'US', true),
     yahooFinanceProvider.getQuote('SET INDEX', 'TH', true),
     coinGeckoProvider.getQuote('BTC'),
-    yahooFinanceProvider.getQuote('GOLD', 'US', true),
+    yahooFinanceProvider.getQuote('XAU', 'GLOBAL', true),
     yahooFinanceProvider.getQuote('VIX', 'US', true),
     fetchRealHumanSentiment(),
     yahooFinanceProvider.getQuote('DXY', 'US', true),
@@ -755,7 +763,7 @@ export async function runTacticalAnalysis(
   const heldTickersUpper = topHoldings.map((h) => h.ticker.toUpperCase())
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-  const [market, technicalSignals, recentNews] = await Promise.all([
+  const [market, technicalSignals, recentNews, deepIntel] = await Promise.all([
     gatherMarketData(),
     topHoldings.length > 0
       ? getBatchTechnicalSignals(
@@ -781,6 +789,12 @@ export async function runTacticalAnalysis(
         select: { symbol: true, headline: true, sentiment: true, publishedAt: true },
       })
       .catch(() => []),
+    gatherPortfolioDeepIntelligence({
+      userId,
+      baseCurrency,
+      holdings: holdingsResult.holdings,
+      txns: holdingsResult.txns,
+    }).catch(() => null),
   ])
 
   // Real numeric values for 4 Pillars
@@ -812,7 +826,7 @@ export async function runTacticalAnalysis(
     us10yYield,
   })
 
-  // 3. Gather past advice logs for Track Record verification
+  // 3. Gather past advice logs for quantitative Closed-Loop Track Record verification
   const pastLogs = await prisma.aiAdviceLog.findMany({
     where: {
       userId,
@@ -820,7 +834,7 @@ export async function runTacticalAnalysis(
       prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
     },
     orderBy: { createdAt: 'desc' },
-    take: 3,
+    take: 15,
     select: { response: true, createdAt: true },
   })
 
@@ -828,33 +842,8 @@ export async function runTacticalAnalysis(
     holdingsResult.holdings.map((h) => [h.ticker.toUpperCase(), Number(h.currentPrice || 0)])
   )
 
-  const pastContextSummaries = pastLogs
-    .map((log) => {
-      try {
-        const parsed = JSON.parse(log.response)
-        const dateStr = formatThaiDate(new Date(log.createdAt))
-        const actionsSummary = (parsed.tacticalActions || [])
-          .slice(0, 3)
-          .map((a: any) => {
-            const sym = String(a.ticker || '').toUpperCase()
-            const recPrice = Number(a.currentPrice || 0)
-            const nowPrice = livePriceMap.get(sym) || 0
-            const currSym = a.currency || '$'
-            if (recPrice > 0 && nowPrice > 0) {
-              const pctDiff = (((nowPrice - recPrice) / recPrice) * 100).toFixed(2)
-              const sign = Number(pctDiff) >= 0 ? '+' : ''
-              return `${sym} (${a.actionLabel} | ราคาตอนแนะนำ ${currSym}${recPrice.toFixed(2)} -> ปัจจุบัน ${currSym}${nowPrice.toFixed(2)} [${sign}${pctDiff}%])`
-            }
-            return `${sym} (${a.actionLabel})`
-          })
-          .join(', ')
-        return `• วันที่ ${dateStr}: แนะนำ ${actionsSummary}`
-      } catch {
-        return null
-      }
-    })
-    .filter(Boolean)
-    .join('\n')
+  const outcomeMetrics = computeAdviceOutcomeMetrics(pastLogs, livePriceMap)
+  const pastContextSummaries = formatOutcomeMetricsForPrompt(outcomeMetrics)
 
   const recentNewsLines =
     recentNews.length > 0
@@ -866,7 +855,7 @@ export async function runTacticalAnalysis(
   // 4. Construct high-fidelity system prompt & user prompt for Gemini
   const prompt = `
 [AI Tactical Regime & Portfolio Advisor]
-คุณคือ "หัวหน้านักกลยุทธ์การลงทุนอาวุโส (Chief Tactical Investment Strategist)" หน้าที่ของคุณคือการรวบรวมและวิเคราะห์ข้อมูล "4 เสาหลักสภาวะตลาด (4 Pillars of Market Climate)" ผสานเข้ากับพอร์ตจริงของผู้ใช้ เพื่อสังเคราะห์เป็นแผนกลยุทธ์เฉพาะตัวที่แม่นยำ ปฏิบัติได้จริงในห้วงเวลานี้ (Institutional Regime Playbook)
+คุณคือ "หัวหน้านักกลยุทธ์การลงทุนอาวุโส (Chief Tactical Investment Strategist)" หน้าที่ของคุณคือการรวบรวมและวิเคราะห์ข้อมูล "4 เสาหลักสภาวะตลาด (4 Pillars of Market Climate)" ผสานเข้ากับพอร์ตจริง, ปัจจัยพื้นฐาน Valuation, ปฏิทินงบ/ปันผล, ภาษี และกฎส่วนตัวของผู้ใช้ เพื่อสังเคราะห์เป็นแผนกลยุทธ์เฉพาะตัวที่แม่นยำ ปฏิบัติได้จริงในห้วงเวลานี้ (Institutional Regime Playbook)
 
 === ข้อมูล 4 เสาหลักสภาวะตลาดจริง ณ วินาทีนี้ (THE 4 PILLARS OF MARKET CLIMATE) ===
 1. ดัชนีอารมณ์และความกลัว (Sentiment & Volatility):
@@ -909,15 +898,28 @@ ${holdingsResult.holdings
   })
   .join('\n')}
 
-=== ประวัติคำแนะนำในรอบที่ผ่านๆ มา (เพื่อตรวจการบ้าน Track Record) ===
-${pastContextSummaries || 'ยังไม่มีประวัติคำแนะนำก่อนหน้า (เป็นการวิเคราะห์รอบแรก)'}
+=== ปัจจัยพื้นฐาน & Valuation Guardrails (FUNDAMENTAL QUALITY & VALUE-TRAP CHECK) ===
+${deepIntel?.fundamentalsPrompt || 'ยังไม่มีข้อมูลพื้นฐานรายตัว'}
 
-=== กฎเหล็ก 5 มิติที่ต้องคำนึงถึงในการวิเคราะห์ (MANDATORY 5 DIMENSIONS) ===
-1. กำหนดขนาดไม้และวงเงินเสมอ (Position Sizing & Tranches): หากแนะนำให้สะสม (ACCUMULATE) ต้องระบุว่าใช้เงินสดกี่ % หรือกี่บาท/ดอลลาร์ และแบ่งเป็นกี่ไม้ชัดเจน (เช่น ไม้แรก 25% ที่ราคา..., ไม้สอง 35% ที่แนวรับ S1...)
+=== ปฏิทินงบการเงิน (Earnings) & ปันผล (XD) ที่กำลังจะมาถึง ===
+${deepIntel?.catalystsPrompt || 'ไม่มีกำหนดการงบ/ปันผลใกล้ถึง'}
+
+=== เป้าหมายแผนลงทุน & ความจำกฎส่วนตัวของนักลงทุน (GOALS & USER MEMORY) ===
+${deepIntel?.goalsAndMemoryPrompt || 'ยังไม่ได้ตั้งเป้าหมายเฉพาะ'}
+
+=== บริบทภาษี FIFO & อายุการถือครอง (TAX LOT CONTEXT) ===
+${deepIntel?.taxContextPrompt || 'ไม่มีข้อมูลภาษี'}
+
+=== สถิติผลลัพธ์คำแนะนำในรอบที่ผ่านๆ มา (CLOSED-LOOP TRACK RECORD) ===
+${pastContextSummaries}
+
+=== กฎเหล็ก 6 มิติที่ต้องคำนึงถึงในการวิเคราะห์ (MANDATORY GUARDRAILS) ===
+1. กำหนดขนาดไม้และวงเงินเสมอ (Position Sizing & Tranches): หากแนะนำให้สะสม (ACCUMULATE) ต้องระบุว่าใช้เงินสดกี่ % หรือกี่บาท/ดอลลาร์ และแบ่งเป็นกี่ไม้ชัดเจน (เช่น ไม้แรก 25% ที่ราคา..., ไม้สอง 35% ที่แนวรับ S1...) และห้ามขัดเพดาน Max Position ใน User Memory
 2. มีจุดหนีไฟหรือจุดตัดขาดทุนเสมอ (Stop Loss / Invalidation Point): ต้องระบุราคาที่หากหลุด ต้องหยุดซื้อถัวหรือพิจารณาตัดขาดทุน
-3. ตรวจสอบความเสี่ยงเชิงธีมซ้ำซ้อน (Thematic Correlation Risk): วิเคราะห์ว่าถือหุ้นคนละตัวแต่อยู่ในธีมเดียวกันมากเกินไปไหม (เช่น Tech/AI เกิน 50-60%) หากพบให้ระบุใน thematicRiskAlert
-4. คำนึงถึงภาษีเงินได้จากการขาย (Tax Sensitivity): หากแนะนำให้ขายทำกำไร (TRIM_PROFIT) ให้ระบุเตือนภาษีสั้นๆ เสมอ
-5. สรุปผลการบ้านคำแนะนำรอบก่อนหน้า (Track Record Review): ประเมินว่าผลลัพธ์ตลาดสอดคล้องกับคำแนะนำรอบก่อนไหม
+3. Value-Trap & Catalyst Guardrail: ห้ามแนะนำซื้อ (ACCUMULATE) หุ้นที่ติดธง VALUE_TRAP_RISK หรือมีวันประกาศงบ (Earnings) ภายใน ≤ 5 วัน โดยไม่ระบุคำเตือนความเสี่ยงด้านงบ/พื้นฐานอย่างชัดเจนใน rationale
+4. ตรวจสอบความเสี่ยงเชิงธีมซ้ำซ้อน (Thematic Correlation Risk): วิเคราะห์ว่าถือหุ้นคนละตัวแต่อยู่ในธีมเดียวกันมากเกินไปไหม (เช่น Tech/AI เกิน 50-60%) หากพบให้ระบุใน thematicRiskAlert
+5. คำนึงถึงภาษีเงินได้จากการขาย (Tax Sensitivity): หากแนะนำให้ขายทำกำไร (TRIM_PROFIT) ให้ระบุเตือนภาษีจริงตามตลาด (หุ้นไทย SET ยกเว้น / หุ้นนอก+คริปโตตาม ป.161/2566)
+6. สรุปผลการบ้านคำแนะนำรอบก่อนหน้า (Track Record Review): ประเมินจากสถิติ Win Rate จริงข้างบนอย่างซื่อตรงว่าอะไรได้ผลและอะไรต้องปรับปรุง
 
 กรุณาสังเคราะห์และตอบกลับมาเป็น JSON ตามรูปแบบนี้เท่านั้น ห้ามใส่ข้อความอื่นนอกเหนือจาก JSON:
 {
@@ -1009,7 +1011,7 @@ ${pastContextSummaries || 'ยังไม่มีประวัติคำ�
     systemInstruction:
       'คุณคือนักวางแผนกลยุทธ์การลงทุน Tactical Asset Allocation ผู้เชี่ยวชาญระดับโลก ตอบเป็น JSON ภาษาไทยที่ถูกต้อง 100% สื่อสารอย่างตรงไปตรงมา ชัดเจน มีตัวเลขกำกับทุกแอ็กชัน และไม่คลุมเครือ',
     responseMimeType: 'application/json',
-    thinkingBudget: 0,
+    thinkingBudget: 1024,
   })
 
   let parsed: any = null
@@ -1075,6 +1077,7 @@ ${pastContextSummaries || 'ยังไม่มีประวัติคำ�
     tacticalActions: reconciledActions,
     cashStrategy: parsed.cashStrategy,
     trackRecordReview: parsed.trackRecordReview || [],
+    outcomeMetrics,
     modelUsed: aiResult.modelUsed,
     generatedAt: now.toISOString(),
   }
@@ -1153,6 +1156,18 @@ export async function GET(req: NextRequest) {
       }
     })
 
+    const computeCachedOutcomeMetrics = async () => {
+      try {
+        const holdingsRes = await calculateUserHoldings(userId, baseCurrency, false)
+        const liveMap = new Map(
+          holdingsRes.holdings.map((h) => [h.ticker.toUpperCase(), Number(h.currentPrice || 0)])
+        )
+        return computeAdviceOutcomeMetrics(pastLogs.slice(0, 15), liveMap)
+      } catch {
+        return undefined
+      }
+    }
+
     // 2. If a specific historical date is requested
     if (requestedDate && requestedDate !== todayBangkok) {
       const targetLog = dayMap.get(requestedDate)
@@ -1160,6 +1175,10 @@ export async function GET(req: NextRequest) {
         try {
           const parsed = parseAdviceResponse(targetLog.response)
           const normalized = normalizeStoredPayload(parsed, targetLog.createdAt, targetLog.modelUsed)
+          const liveMetrics = await computeCachedOutcomeMetrics()
+          if (liveMetrics && liveMetrics.totalTrackedCalls > 0) {
+            normalized.outcomeMetrics = liveMetrics
+          }
           return NextResponse.json({
             success: true,
             data: normalized,
@@ -1186,6 +1205,10 @@ export async function GET(req: NextRequest) {
       try {
         const parsed = parseAdviceResponse(todayLog.response)
         const normalized = normalizeStoredPayload(parsed, todayLog.createdAt, todayLog.modelUsed)
+        const liveMetrics = await computeCachedOutcomeMetrics()
+        if (liveMetrics && liveMetrics.totalTrackedCalls > 0) {
+          normalized.outcomeMetrics = liveMetrics
+        }
         return NextResponse.json({
           success: true,
           data: normalized,

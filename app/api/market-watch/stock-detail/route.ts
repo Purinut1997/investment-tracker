@@ -92,7 +92,16 @@ const inFlightFundamentals = new Map<string, Promise<CachedFundamentalsResult | 
 const FUNDAMENTALS_CACHE_TTL_MS = 20 * 60 * 1000 // 20 minutes
 
 function formatTicker(rawSymbol: string, market: string): string {
-  if (rawSymbol === 'GOLD' || rawSymbol === 'XAU') return 'GC=F'
+  if (
+    rawSymbol === 'GOLD' ||
+    rawSymbol === 'XAU' ||
+    rawSymbol === 'XAUUSD' ||
+    rawSymbol === 'GOLD9999' ||
+    rawSymbol === 'GOLD965' ||
+    rawSymbol === 'DIME-GOLD'
+  ) {
+    return 'GC=F'
+  }
   if (rawSymbol === 'BTC') return 'BTC-USD'
   if (rawSymbol === 'ETH') return 'ETH-USD'
   if (rawSymbol === 'SOL') return 'SOL-USD'

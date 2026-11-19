@@ -168,13 +168,13 @@ export function calculateSingleAssetFifoPosition(
   }
   const totalShares = lots.reduce((acc, l) => acc + l.qty, 0)
   const totalCostBasis = lots.reduce((acc, l) => acc + l.qty * l.price, 0)
-  if (totalShares <= 0.00001) return null
+  if (totalShares <= 0.0000001) return null
   const avg = totalCostBasis / totalShares
   const curVal = totalShares * currentPrice
   const gain = curVal - totalCostBasis
   const gainPct = totalCostBasis > 0 ? (gain / totalCostBasis) * 100 : 0
   return {
-    shares: Number(totalShares.toFixed(4)),
+    shares: Number(totalShares.toFixed(6)),
     avgCost: Number(avg.toFixed(2)),
     totalCost: Number(totalCostBasis.toFixed(2)),
     currentValue: Number(curVal.toFixed(2)),
@@ -268,10 +268,10 @@ export async function calculateUserHoldings(
   // 3. Fetch FX exchange rate if asset currency differs from baseCurrency
   const usdThbRate = (await getExchangeRate('USD', baseCurrency)) ?? 35.5
 
-  // 4. Filter active holdings with remaining quantity > 0
+  // 4. Filter active holdings with remaining quantity > 0 (micro-precision for gold/crypto)
   const activeEntries = Array.from(assetMap.entries()).filter(([_, data]) => {
     const remainingQty = data.lots.reduce((acc, lot) => acc + lot.quantity, 0)
-    return remainingQty > 0.00001
+    return remainingQty > 0.0000001
   })
 
   // Batch price lookup: 1 DB query instead of N individual queries (<5ms)

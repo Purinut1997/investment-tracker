@@ -33,6 +33,7 @@ import Papa from 'papaparse'
 import { parseAccountsPayload } from '@/lib/accounts'
 import { StatusModal, type StatusDetailItem } from '@/components/ui/StatusModal'
 import { exportTransactionsToExcel } from '@/lib/export/transactions-excel-export'
+import { formatGoldWeightSublabel, getAssetUnitLabel } from '@/lib/market-data/gold'
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   BUY: { label: 'BUY', color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' },
@@ -608,6 +609,11 @@ export default function TransactionsPage() {
                                   N/A
                                 </span>
                               )}
+                              {txn.asset?.assetType === 'gold' && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded uppercase font-mono border bg-amber-500/15 text-amber-300 border-amber-500/30">
+                                  GOLD
+                                </span>
+                              )}
                               {txn.asset?.market && (
                                 <span className={`text-[9px] px-1.5 py-0.2 rounded uppercase font-mono border ${isUsd ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'}`}>
                                   {txn.asset.market}
@@ -621,7 +627,29 @@ export default function TransactionsPage() {
                             )}
                           </td>
                           <td className="text-right font-mono text-xs text-slate-200">
-                            {Number(txn.quantity).toLocaleString()}
+                            <div>
+                              {Number(txn.quantity).toLocaleString('en-US', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits:
+                                  txn.asset?.assetType === 'gold' || txn.asset?.assetType === 'crypto'
+                                    ? 6
+                                    : 4,
+                              })}
+                              {txn.asset?.assetType === 'gold' && (
+                                <span className="text-[10px] text-amber-300 ml-1">
+                                  {getAssetUnitLabel(txn.asset?.ticker, txn.asset?.assetType)}
+                                </span>
+                              )}
+                            </div>
+                            {txn.asset?.assetType === 'gold' && (
+                              <div className="text-[10px] text-amber-300/75 font-sans">
+                                {formatGoldWeightSublabel(
+                                  Number(txn.quantity),
+                                  txn.asset?.ticker,
+                                  txn.asset?.assetType
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="text-right font-mono text-xs text-slate-300">
                             {currSym}

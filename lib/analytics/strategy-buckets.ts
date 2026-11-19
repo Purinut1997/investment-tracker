@@ -1,4 +1,5 @@
 import { HoldingItem } from './holdings'
+import { isGoldTicker } from '../market-data/gold'
 
 export type BucketStrategyType =
   | 'LONG_TERM'
@@ -171,6 +172,7 @@ const KNOWN_SHORT_TERM_TICKERS = new Set([
 export function inferStrategyTypeForTicker(ticker: string, assetType?: string): BucketStrategyType {
   const sym = ticker.trim().toUpperCase().replace(/\.BK$/, '')
   if (sym === 'CASH') return 'CASH'
+  if (assetType?.toLowerCase() === 'gold' || isGoldTicker(sym, assetType)) return 'LONG_TERM'
   if (assetType?.toLowerCase() === 'crypto') return 'SHORT_TERM'
   if (KNOWN_DIVIDEND_TICKERS.has(sym)) return 'DIVIDEND'
   if (KNOWN_SHORT_TERM_TICKERS.has(sym)) return 'SHORT_TERM'
@@ -441,7 +443,7 @@ export function calculateBucketRebalancePlan(
 
     if (mode === 'CASH_FLOW') {
       if (effectiveInflow > 0) {
-        if (totalDeficit > 0) {
+        if (totalDeficit > 0 && effectiveInflow <= totalDeficit) {
           const deficit = deficits[b.id] || 0
           if (deficit > 0) {
             // Allocate cash proportional to deficit
@@ -450,6 +452,16 @@ export function calculateBucketRebalancePlan(
               action = 'BUY'
               totalBuyAmount += recommendedAmountBase
             }
+          }
+        } else if (totalDeficit > 0 && effectiveInflow > totalDeficit) {
+          // Fill exact deficit without overshooting, then spread remaining surplus by target weights
+          const deficit = deficits[b.id] || 0
+          const surplus = effectiveInflow - totalDeficit
+          const extra = surplus * (b.targetPercent / 100)
+          recommendedAmountBase = Math.round(deficit + extra)
+          if (recommendedAmountBase > 0) {
+            action = 'BUY'
+            totalBuyAmount += recommendedAmountBase
           }
         } else {
           // If all buckets balanced, allocate cash according to target weight
@@ -461,8 +473,8 @@ export function calculateBucketRebalancePlan(
         }
       }
     } else {
-      // FULL_REBALANCE mode
-      if (b.actualValueBase < targetValue) {
+      // FULL_REBALANCE mode (symmetric tolerance band check on both BUY and TRIM)
+      if (b.actualValueBase < targetValue && status === 'UNDERWEIGHT') {
         action = 'BUY'
         recommendedAmountBase = Math.round(targetValue - b.actualValueBase)
         totalBuyAmount += recommendedAmountBase

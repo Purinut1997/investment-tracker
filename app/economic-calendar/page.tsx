@@ -45,7 +45,7 @@ const REGION_OPTIONS: RegionOption[] = [
 ]
 
 export default function EconomicCalendarPage() {
-  const [viewMode, setViewMode] = useState<'native' | 'tradingview'>('native')
+  const [viewMode, setViewMode] = useState<'native' | 'tradingview'>('tradingview')
   const [importance, setImportance] = useState<CalendarImportance>('high_medium')
   const [region, setRegion] = useState<CalendarRegion>('ALL')
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -141,19 +141,6 @@ export default function EconomicCalendarPage() {
             <div className="flex items-center bg-[#090B10] border border-white/[0.1] rounded-xl p-1 text-xs">
               <button
                 type="button"
-                onClick={() => setViewMode('native')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  viewMode === 'native'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>ปฏิทินในระบบ (100% เสถียร)</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setViewMode('tradingview')}
                 className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   viewMode === 'tradingview'
@@ -162,7 +149,20 @@ export default function EconomicCalendarPage() {
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
-                <span>TradingView สตรีมสด</span>
+                <span>TradingView สตรีมสด (Real-Time)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('native')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'native'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>คู่มือตัวเลขมหภาค (Reference Guide)</span>
               </button>
             </div>
 

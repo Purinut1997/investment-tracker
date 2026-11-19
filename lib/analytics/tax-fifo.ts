@@ -265,11 +265,12 @@ export function calculateTaxReportFIFO(
           returnPercent: returnPct,
         }
 
-        if (txn.market === 'TH') {
+        if (txn.market === 'TH' || txn.assetType === 'gold') {
           summary.thaiSetCapitalGains.trades.push(trade)
-          summary.thaiSetCapitalGains.totalRealizedGain += realizedGain  // THB already
-          summary.thaiSetCapitalGains.totalVolume += proceeds             // THB already
-          summary.thaiSetCapitalGains.totalCost += totalCostBasis         // THB already
+          // For THB assets fxRate=1.0; for USD gold (e.g. Dime! Gold 99.99%), sum THB equivalents consistently
+          summary.thaiSetCapitalGains.totalRealizedGain += realizedGainTHB
+          summary.thaiSetCapitalGains.totalVolume += proceedsTHB
+          summary.thaiSetCapitalGains.totalCost += costBasisTHB
         } else {
           // US Stocks, Crypto, Foreign
           summary.foreignAndCryptoGains.trades.push(trade)

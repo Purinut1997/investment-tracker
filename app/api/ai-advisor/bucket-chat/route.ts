@@ -6,6 +6,10 @@ import { getBatchTechnicalSignals, TechnicalSignal } from '@/lib/market-data/tec
 import { callGemini } from '@/lib/ai/gemini-client'
 import { BucketStrategyType, STRATEGY_TYPE_META } from '@/lib/analytics/strategy-buckets'
 import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import {
+  parseUserInvestmentMemory,
+  formatInvestmentMemoryForPrompt,
+} from '@/lib/ai/portfolio-intelligence'
 
 export const maxDuration = 45
 
@@ -166,6 +170,7 @@ export async function POST(req: NextRequest) {
 
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+    const memory = parseUserInvestmentMemory(userSettings?.defaultRiskProfile)
 
     const [holdingsResult, accounts] = await Promise.all([
       calculateUserHoldings(userId, baseCurrency),
@@ -265,6 +270,9 @@ export async function POST(req: NextRequest) {
 - ข้อมูลหุ้นในตะกร้านี้พร้อมต้นทุนจริงและสัญญาณกราฟเทคนิคสด (RSI 14, แนวรับ S1, แนวต้าน R1, SMA50/200):
 ${JSON.stringify(detailedAssets, null, 2)}
 
+[กฎส่วนตัวและขอบเขตความเสี่ยงของผู้ใช้ (AI Memory)]:
+${formatInvestmentMemoryForPrompt(memory)}
+
 [แนวทางการวิเคราะห์เฉพาะตะกร้านี้]:
 ${roleSpecificInstruction}
 
@@ -281,11 +289,12 @@ ${roleSpecificInstruction}
 `
 
     try {
-      const { text, modelUsed } = await callGemini({
+      const { text, modelUsed, groundingSources } = await callGemini({
         userId,
         prompt,
         logType: 'bucket_chat',
-        thinkingBudget: 0,
+        thinkingBudget: 1024,
+        enableGoogleSearch: true,
         systemInstruction:
           'คุณเป็น AI Strategist ประจำพอร์ตการลงทุน ตอบสั้น กระชับ ฟันธงชัดเจน อิงตัวเลขต้นทุนและแนวรับแนวต้านจริงของผู้ใช้',
       })
@@ -293,6 +302,7 @@ ${roleSpecificInstruction}
       return NextResponse.json({
         answer: text,
         modelUsed,
+        groundingSources: groundingSources || [],
         updatedAt: new Date().toISOString(),
         isFallback: false,
       })

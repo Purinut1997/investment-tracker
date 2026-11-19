@@ -50,6 +50,41 @@ import {
   ReferenceLine,
 } from 'recharts'
 
+function estimatePortfolioReturnAndVol(
+  assetClassAllocation?: Array<{ key: string; percent: number }>
+): { annualReturn: number; annualVolatility: number } | null {
+  if (!Array.isArray(assetClassAllocation) || assetClassAllocation.length === 0) {
+    return null
+  }
+  const BENCHMARKS: Record<string, { ret: number; vol: number }> = {
+    stock: { ret: 10.5, vol: 17.0 },
+    fund: { ret: 8.5, vol: 13.0 },
+    crypto: { ret: 18.0, vol: 55.0 },
+    bond: { ret: 4.0, vol: 5.0 },
+    gold: { ret: 6.5, vol: 14.0 },
+    cash: { ret: 2.0, vol: 1.0 },
+  }
+
+  let totalWeight = 0
+  let weightedRet = 0
+  let weightedVol = 0
+
+  for (const item of assetClassAllocation) {
+    const pct = Number(item.percent || 0)
+    if (pct <= 0) continue
+    const bm = BENCHMARKS[item.key] || BENCHMARKS.stock
+    totalWeight += pct
+    weightedRet += pct * bm.ret
+    weightedVol += pct * bm.vol
+  }
+
+  if (totalWeight <= 0) return null
+  return {
+    annualReturn: Number((weightedRet / totalWeight).toFixed(1)),
+    annualVolatility: Number((weightedVol / totalWeight).toFixed(1)),
+  }
+}
+
 export default function ForecastPage() {
   const { data: summary } = useSWR('/api/portfolio/summary')
   const { data: plansData } = useSWR('/api/plans')
@@ -88,12 +123,20 @@ export default function ForecastPage() {
   const currentModel = modelUsed || aiForecastData?.modelUsed
   const currentUpdatedAt = aiForecastData?.updatedAt
 
-  // Auto-seed initial amount from live portfolio if available
+  // Auto-seed initial amount & portfolio-derived return/volatility from live portfolio if available
+  const [hasSeededFromSummary, setHasSeededFromSummary] = useState(false)
   useEffect(() => {
+    if (hasSeededFromSummary) return
     if (summary?.totalValue && summary.totalValue > 0) {
       setInitialAmount(Math.round(summary.totalValue))
+      const derived = estimatePortfolioReturnAndVol(summary?.assetClassAllocation)
+      if (derived) {
+        setAnnualReturn(derived.annualReturn)
+        setAnnualVolatility(derived.annualVolatility)
+      }
+      setHasSeededFromSummary(true)
     }
-  }, [summary?.totalValue])
+  }, [summary, hasSeededFromSummary])
 
   // Auto-seed target and monthly contribution from default active preset if available
   useEffect(() => {
@@ -126,30 +169,49 @@ export default function ForecastPage() {
   }
 
   useEffect(() => {
-    handleRunSimulation()
-  }, [adjustInflation, inflationRate, expectedDividendYield])
+    const timer = setTimeout(() => {
+      handleRunSimulation()
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [
+    initialAmount,
+    monthlyContribution,
+    years,
+    annualReturn,
+    annualVolatility,
+    targetAmount,
+    adjustInflation,
+    inflationRate,
+    expectedDividendYield,
+  ])
 
   // Sync from Real Portfolio & Active Plan
   function handleSyncFromPortfolio() {
     if (summary?.totalValue && summary.totalValue > 0) {
       setInitialAmount(Math.round(summary.totalValue))
     }
+    const derived = estimatePortfolioReturnAndVol(summary?.assetClassAllocation)
+    if (derived) {
+      setAnnualReturn(derived.annualReturn)
+      setAnnualVolatility(derived.annualVolatility)
+    }
     if (plansData?.presets && plansData.presets.length > 0) {
       const def = plansData.presets.find((p: any) => p.isDefault) || plansData.presets[0]
       if (def?.monthlyContribution) setMonthlyContribution(Number(def.monthlyContribution))
       if (def?.targetAmount) setTargetAmount(Number(def.targetAmount))
-      if (def?.riskProfile === 'conservative') {
-        setAnnualReturn(7.0)
-        setAnnualVolatility(10.0)
-      } else if (def?.riskProfile === 'aggressive') {
-        setAnnualReturn(12.0)
-        setAnnualVolatility(18.0)
-      } else {
-        setAnnualReturn(9.5)
-        setAnnualVolatility(14.0)
+      if (!derived) {
+        if (def?.riskProfile === 'conservative') {
+          setAnnualReturn(7.0)
+          setAnnualVolatility(10.0)
+        } else if (def?.riskProfile === 'aggressive') {
+          setAnnualReturn(12.0)
+          setAnnualVolatility(18.0)
+        } else {
+          setAnnualReturn(9.5)
+          setAnnualVolatility(14.0)
+        }
       }
     }
-    handleRunSimulation()
   }
 
   // Reverse Goal-Seek Computations

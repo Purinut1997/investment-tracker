@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { normalizeGoldTicker } from '@/lib/market-data/gold'
 
 export const maxDuration = 60 // Allow longer processing for extensive reports
 
@@ -52,6 +53,10 @@ export async function POST(req: NextRequest) {
    - Ticker: สัญลักษณ์ย่อตัวพิมพ์ใหญ่ เช่น AAPL, NVDA, GOOGL, PTT, BTC
    - Market: "US" สำหรับหุ้นสหรัฐ, "TH" สำหรับหุ้นไทย, "CRYPTO" สำหรับคริปโต
    - Currency: "USD" สำหรับหุ้น US, "THB" สำหรับหุ้นไทย
+   - ทองคำ Dime! (ทอง 99.99% / ซื้อทองใน Dime / XAU / ออนซ์):
+     * ให้ใส่ ticker: "XAU", assetName: "Dime! Gold 99.99% (USD/oz)", assetType: "gold", market: "US", currency: "USD", fee: 0 (ถ้าไม่ระบุ), quantity ในหน่วย "oz" (หากผู้ใช้ระบุเป็นกรัมให้แปลงเป็น oz = กรัม / 31.1034768)
+   - ทองคำแท่งไทย 96.5% (บาททองคำ / Gold NOW / ฮั่วเซ่งเฮง):
+     * ให้ใส่ ticker: "GOLD965", assetName: "ทองคำแท่งไทย 96.5% (THB/บาททอง)", assetType: "gold", market: "TH", currency: "THB", fee: 0 (ถ้าไม่ระบุ), quantity ในหน่วย "บาททองคำ"
 6. ยอดเงินและค่าธรรมเนียม:
    - กรณีระบุยอดเงินรวม (เช่น 'ซื้อ MU 690.00 USD' หรือ 'ขาย EOSE 94.66 USD') แต่ไม่ได้ระบุจำนวนหุ้นหรือราคาต่อหุ้น:
      * ให้ใส่ totalAmount เท่ากับยอดเงินนั้น (เช่น 690.00 หรือ 94.66)
@@ -196,6 +201,14 @@ ${accountsListStr}
       parsed.transactions = []
     } else {
       parsed.transactions.forEach((txn: any) => {
+        const normalizedGold = normalizeGoldTicker(txn.ticker, txn.assetType, txn.currency)
+        if (normalizedGold) {
+          txn.ticker = normalizedGold.ticker
+          txn.assetName = normalizedGold.assetName
+          txn.assetType = 'gold'
+          txn.market = normalizedGold.market
+          txn.currency = normalizedGold.currency
+        }
         const q = Number(txn.quantity || 0)
         const p = Number(txn.pricePerUnit || 0)
         const f = Number(txn.fee || 0)

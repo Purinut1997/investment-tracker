@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { normalizeGoldTicker, GRAMS_PER_TROY_OZ, GRAMS_PER_THAI_BAHT_BAR } from '@/lib/market-data/gold'
 
 export const maxDuration = 60 // Allow longer processing for multiple images
 
@@ -71,6 +72,9 @@ export async function POST(req: NextRequest) {
      * สลิปซื้อ: รวม ค่าคอมมิชชั่น + VAT 7% เข้าด้วยกันเป็น fee (ยอดรวมสุทธิ = มูลค่าซื้อ + fee)
      * สลิปขาย: รวม ค่าคอมมิชชั่น + VAT 7% + ค่าธรรมเนียมรอจ่าย (ค่าธรรมเนียมตลาดหลักทรัพย์ / SEC Fee) + ค่าธรรมเนียมการขาย (TAF Fee) เข้าด้วยกันเป็น fee (ยอดรวมสุทธิที่ได้รับ = มูลค่าขาย - fee)
    - สลิปเงินปันผล (DIVIDEND): เงินปันผลก่อนหักภาษีเป็นมูลค่า, ภาษีหัก ณ ที่จ่าย (Withholding Tax) ใส่ใน taxWithheld
+   - สลิปซื้อขายทองคำ (Dime! Gold 99.99%, Gold 99.99%, MTS, YLG หรือทองคำแท่งไทย 96.5%):
+     * ทอง 99.99% อิง USD/oz (แอป Dime!): ticker: "XAU", assetName: "Dime! Gold 99.99% (USD/oz)", assetType: "gold", market: "US", currency: "USD", รักษาน้ำหนักเป็น oz ทศนิยมสูงสุด 6 ตำแหน่ง (หากระบุเป็นกรัมให้หารด้วย 31.1034768), fee: 0 (ถ้าไม่มีค่าธรรมเนียมแยก)
+     * ทองแท่งไทย 96.5%: ticker: "GOLD965", assetName: "ทองคำแท่งไทย 96.5% (THB/บาททอง)", assetType: "gold", market: "TH", currency: "THB", quantity เป็นหน่วยบาททองคำ (1 สลึง = 0.25 บาททอง)
 4. การแปลงวันที่ พ.ศ. เป็น ค.ศ. อย่างเคร่งครัด:
    - ในสลิปภาษาไทยระบุปี พ.ศ. เช่น "69" หรือ "2569" หมายถึง ค.ศ. 2026 (ลบ 543)
    - "9 ก.ย. 69 - 22:29 น." -> "2026-09-09T22:29:00+07:00"
@@ -157,10 +161,18 @@ ${accountsListStr}
       throw new Error('AI ส่งผลลัพธ์ที่ไม่ใช่ JSON ที่ถูกต้อง กรุณาลองใหม่อีกครั้ง')
     }
 
-    // Enhance matching with user accounts if not matched
+    // Enhance matching with user accounts and canonicalize gold tickers
     if (Array.isArray(parsedResult.transactions)) {
       parsedResult.transactions.forEach((txn: any, idx: number) => {
         txn.id = txn.id || `txn_${idx + 1}`
+        const normalizedGold = normalizeGoldTicker(txn.ticker, txn.assetType, txn.currency)
+        if (normalizedGold) {
+          txn.ticker = normalizedGold.ticker
+          txn.assetName = normalizedGold.assetName
+          txn.assetType = 'gold'
+          txn.market = normalizedGold.market
+          txn.currency = normalizedGold.currency
+        }
         if (!txn.matchedAccountId && txn.accountName) {
           const match = userAccounts.find(
             (a) =>

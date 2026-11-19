@@ -6,6 +6,10 @@ import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
 import { calculatePortfolioRebalance } from '@/lib/analytics/rebalancing'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import {
+  parseUserInvestmentMemory,
+  formatInvestmentMemoryForPrompt,
+} from '@/lib/ai/portfolio-intelligence'
 
 export const maxDuration = 45
 
@@ -36,6 +40,7 @@ export async function GET(req: NextRequest) {
           { prompt: { contains: '[AI Stock Deep Dive Analysis' } },
           { prompt: { contains: 'AI Risk Sentinel' } },
           { prompt: { contains: '(Risk Sentinel)' } },
+          { prompt: { contains: '[AI_COPILOT_THREAD]' } },
         ],
       },
       orderBy: { createdAt: 'desc' },
@@ -67,6 +72,7 @@ export async function POST(req: NextRequest) {
     // 1. Gather context
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+    const memory = parseUserInvestmentMemory(userSettings?.defaultRiskProfile)
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
     const cleanTargetAlloc =
       targetAllocation && typeof targetAllocation === 'object'
@@ -183,6 +189,9 @@ ${subAllocations ? `- สัดส่วนเป้าหมายย่อย�
 ${JSON.stringify(holdingsSummary, null, 2)}
 ${mathRebalanceSummary}
 
+[ความจำกลยุทธ์และกฎความเสี่ยงของผู้ลงทุน (AI Memory)]:
+${formatInvestmentMemoryForPrompt(memory)}
+
 [ข้อกำหนดสำคัญในการเขียนคำตอบ - ต้องปฏิบัติตามอย่างเคร่งครัด]:
 1. ห้ามมีคำทักทายเกริ่นนำใดๆ ทั้งสิ้น (ห้ามเขียน "เรียน ท่านนักลงทุน", "สวัสดีครับ", "ในฐานะ Investment Advisor...") ให้เริ่มเข้าสู่หัวข้อที่ 1 ทันที!
 2. จัดโครงสร้างเป็น 5 หมวดหมู่อย่างเคร่งครัด โดยใช้ Markdown Header '###' ดังนี้:
@@ -208,11 +217,12 @@ ${mathRebalanceSummary}
     const systemInstruction =
       'คุณเป็น AI ที่ปรึกษาการลงทุนระดับมืออาชีพ ตอบเป็นภาษาไทยที่กระชับ ทรงพลัง ตรงประเด็น ไม่มีน้ำหรือคำทักทายเยิ่นเย้อ เน้นยุทธศาสตร์ที่ปฏิบัติได้จริง อ้างอิงตัวเลขคณิตศาสตร์ Rebalance ที่กำหนดให้อย่างแม่นยำ'
 
-    const { text, modelUsed } = await callGemini({
+    const { text, modelUsed, groundingSources } = await callGemini({
       userId,
       prompt,
       logType: 'advisor',
       systemInstruction,
+      enableGoogleSearch: true,
     })
 
     const disclaimer =
@@ -222,6 +232,7 @@ ${mathRebalanceSummary}
       advice: text,
       disclaimer,
       modelUsed,
+      groundingSources: groundingSources || [],
       updatedAt: new Date().toISOString(),
       healthScore,
     })

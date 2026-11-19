@@ -1,13 +1,221 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { getBatchTechnicalSignals } from '@/lib/market-data/technical-signals'
 import { createFallbackPillars, MarketPillarsData } from '@/app/api/tactical-advisor/route'
-import { callGemini } from '@/lib/ai/gemini-client'
+import { callGemini, GroundingSource } from '@/lib/ai/gemini-client'
 import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import {
+  gatherPortfolioDeepIntelligence,
+  computeAdviceOutcomeMetrics,
+  formatOutcomeMetricsForPrompt,
+  parseUserInvestmentMemory,
+  serializeUserInvestmentMemory,
+} from '@/lib/ai/portfolio-intelligence'
 
 export const maxDuration = 45
+
+const COPILOT_THREAD_TAG = '[AI_COPILOT_THREAD]'
+
+export interface PersistedCopilotMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+  modelUsed?: string
+  groundingSources?: GroundingSource[]
+}
+
+const MemoryUpdateSchema = z.object({
+  riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']).optional(),
+  horizonYears: z.number().int().min(1).max(50).optional(),
+  maxSinglePositionPercent: z.number().min(5).max(100).optional(),
+  maxDrawdownTolerancePercent: z.number().min(5).max(80).optional(),
+  preferredStyle: z.string().min(2).max(120).optional(),
+  personalRules: z.string().min(2).max(500).optional(),
+})
+
+async function loadSavedCopilotThread(userId: string): Promise<{
+  logId: string | null
+  messages: PersistedCopilotMessage[]
+}> {
+  const existingLog = await prisma.aiAdviceLog.findFirst({
+    where: {
+      userId,
+      logType: 'advisor',
+      prompt: COPILOT_THREAD_TAG,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, response: true },
+  })
+
+  if (!existingLog) {
+    return { logId: null, messages: [] }
+  }
+
+  try {
+    const parsed = JSON.parse(existingLog.response)
+    if (Array.isArray(parsed)) {
+      const valid = parsed.filter(
+        (m: any) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'
+      )
+      return { logId: existingLog.id, messages: valid }
+    }
+  } catch {
+    // Ignore malformed thread JSON
+  }
+
+  return { logId: existingLog.id, messages: [] }
+}
+
+async function saveCopilotThread(
+  userId: string,
+  messages: PersistedCopilotMessage[],
+  modelUsed: string,
+  existingLogId?: string | null
+) {
+  const trimmed = messages.slice(-30)
+  const payload = JSON.stringify(trimmed)
+
+  if (existingLogId) {
+    await prisma.aiAdviceLog.update({
+      where: { id: existingLogId },
+      data: { response: payload, modelUsed },
+    })
+    return
+  }
+
+  await prisma.aiAdviceLog.create({
+    data: {
+      userId,
+      logType: 'advisor',
+      prompt: COPILOT_THREAD_TAG,
+      response: payload,
+      modelUsed,
+    },
+  })
+}
+
+export async function GET() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const userId = session.user.id
+
+  try {
+    const [thread, userSettings, holdingsRes, pastLogs] = await Promise.all([
+      loadSavedCopilotThread(userId),
+      prisma.userSettings.findUnique({
+        where: { userId },
+        select: { baseCurrency: true, defaultRiskProfile: true },
+      }),
+      calculateUserHoldings(userId, 'THB', false).catch(() => null),
+      prisma.aiAdviceLog.findMany({
+        where: {
+          userId,
+          logType: 'advisor',
+          prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 15,
+        select: { createdAt: true, response: true },
+      }),
+    ])
+
+    const memory = parseUserInvestmentMemory(userSettings?.defaultRiskProfile)
+    const livePriceMap = new Map(
+      (holdingsRes?.holdings || []).map((h) => [h.ticker.toUpperCase(), Number(h.currentPrice || 0)])
+    )
+    const outcomeMetrics = computeAdviceOutcomeMetrics(pastLogs, livePriceMap)
+
+    return NextResponse.json({
+      messages: thread.messages,
+      memory,
+      outcomeMetrics,
+    })
+  } catch (error: any) {
+    console.error('[tactical-advisor chat GET]', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to load chat history' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const userId = session.user.id
+
+  try {
+    const body = await req.json().catch(() => ({}))
+    const parsed = MemoryUpdateSchema.safeParse(body?.memory ?? body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || 'Invalid memory profile' },
+        { status: 400 }
+      )
+    }
+
+    const currentSettings = await prisma.userSettings.findUnique({
+      where: { userId },
+      select: { defaultRiskProfile: true },
+    })
+    const merged = {
+      ...parseUserInvestmentMemory(currentSettings?.defaultRiskProfile),
+      ...parsed.data,
+    }
+    const serialized = serializeUserInvestmentMemory(merged)
+
+    await prisma.userSettings.upsert({
+      where: { userId },
+      update: { defaultRiskProfile: serialized },
+      create: { userId, defaultRiskProfile: serialized },
+    })
+
+    return NextResponse.json({
+      success: true,
+      memory: parseUserInvestmentMemory(serialized),
+    })
+  } catch (error: any) {
+    console.error('[tactical-advisor chat PATCH]', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to save memory profile' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    await prisma.aiAdviceLog.deleteMany({
+      where: {
+        userId: session.user.id,
+        logType: 'advisor',
+        prompt: COPILOT_THREAD_TAG,
+      },
+    })
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('[tactical-advisor chat DELETE]', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to reset chat history' },
+      { status: 500 }
+    )
+  }
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -19,7 +227,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}))
-    const { question, messages, tacticalContext } = body
+    const { question, messages, tacticalContext, skipPersist } = body
 
     let activeQuestion = ''
     let messageHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
@@ -53,7 +261,7 @@ export async function POST(req: NextRequest) {
     const totalWealth = totalPortfolioValue + totalCash
     const cashPercent = totalWealth > 0 ? (totalCash / totalWealth) * 100 : 0
 
-    // Compute Thematic & Sector Concentration (e.g. US Tech & AI)
+    // Compute Thematic & Sector Concentration dynamically
     const techAiTickers = new Set([
       'QQQ',
       'QQQM',
@@ -84,22 +292,28 @@ export async function POST(req: NextRequest) {
     const holdingsToAnalyze = holdingsResult.holdings.slice(0, 15)
     const userSymbols = holdingsToAnalyze.map((h) => h.ticker.toUpperCase())
 
-    // 2. Fetch Live Technical Signals & Chart Levels for all holdings in parallel
-    const technicalSignals = await getBatchTechnicalSignals(
-      holdingsToAnalyze.map((h) => ({
-        ticker: h.ticker,
-        market:
-          h.market ||
-          (h.ticker.endsWith('.BK') ||
-          ['SCB', 'PTT', 'KBANK', 'CPALL', 'AOT', 'BDMS', 'DELTA'].includes(h.ticker.toUpperCase())
-            ? 'TH'
-            : 'US'),
-      }))
-    )
-
-    // 3. Fetch Real External News & Catalysts from Database (Finnhub / Yahoo / Google News RSS)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    let [portfolioNews, generalMarketNews] = await Promise.all([
+
+    // 2. Fetch Technicals, News, Deep Portfolio Intelligence, Past Advice, and Existing Thread in parallel
+    const [
+      technicalSignals,
+      portfolioNews,
+      generalMarketNews,
+      deepIntel,
+      pastAdvisorLogs,
+      savedThread,
+    ] = await Promise.all([
+      getBatchTechnicalSignals(
+        holdingsToAnalyze.map((h) => ({
+          ticker: h.ticker,
+          market:
+            h.market ||
+            (h.ticker.endsWith('.BK') ||
+            ['SCB', 'PTT', 'KBANK', 'CPALL', 'AOT', 'BDMS', 'DELTA'].includes(h.ticker.toUpperCase())
+              ? 'TH'
+              : 'US'),
+        }))
+      ),
       prisma.newsItem.findMany({
         where: {
           symbol: { in: userSymbols },
@@ -116,6 +330,23 @@ export async function POST(req: NextRequest) {
         orderBy: { publishedAt: 'desc' },
         take: 8,
       }),
+      gatherPortfolioDeepIntelligence({
+        userId,
+        baseCurrency,
+        holdings: holdingsResult.holdings,
+        txns: holdingsResult.txns,
+      }).catch(() => null),
+      prisma.aiAdviceLog.findMany({
+        where: {
+          userId,
+          logType: 'advisor',
+          prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 15,
+        select: { createdAt: true, response: true },
+      }),
+      loadSavedCopilotThread(userId),
     ])
 
     // Fallback if recent 7-day filter yields too few items
@@ -150,7 +381,7 @@ export async function POST(req: NextRequest) {
             .join('\n')
         : 'ไม่มีข่าวล่าสุดในระบบ'
 
-    // 4. Compile Detailed Technical Chart Profiles & Support/Resistance Levels
+    // Compile Detailed Technical Chart Profiles & Support/Resistance Levels
     const detailedHoldingsText = holdingsToAnalyze
       .map((h) => {
         const sig = technicalSignals[h.ticker.toUpperCase()]
@@ -220,7 +451,7 @@ export async function POST(req: NextRequest) {
       })
       .join('\n')
 
-    // 5. Resolve 4 Pillars Macro Climate Data
+    // Resolve 4 Pillars Macro Climate Data
     const pillars: MarketPillarsData =
       tacticalContext?.marketRegime?.pillars || createFallbackPillars(tacticalContext || {})
 
@@ -261,13 +492,26 @@ export async function POST(req: NextRequest) {
     } | ปัจจัยเร่งตลาด: ${(pillars.catalystsAndFlows.keyCatalysts || []).join('; ')}
 `
 
-    // 6. Multi-Turn Conversation Thread
-    const previousHistoryText =
+    const livePriceMap = new Map(
+      holdingsResult.holdings.map((h) => [h.ticker.toUpperCase(), Number(h.currentPrice || 0)])
+    )
+    const outcomeMetrics = computeAdviceOutcomeMetrics(pastAdvisorLogs, livePriceMap)
+
+    // Multi-Turn Conversation Thread (merge client history with DB history if caller only sent 1 turn)
+    const effectiveHistory =
       messageHistory.length > 1
+        ? messageHistory
+        : [
+            ...savedThread.messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
+            ...messageHistory,
+          ]
+
+    const previousHistoryText =
+      effectiveHistory.length > 1
         ? `
 === ประวัติการสนทนาก่อนหน้า ===
-${messageHistory
-  .slice(0, -1)
+${effectiveHistory
+  .slice(-9, -1)
   .map((m) => `${m.role === 'user' ? 'ผู้ใช้' : 'ที่ปรึกษา AI'}: ${m.content}`)
   .join('\n\n')}
 `
@@ -275,10 +519,11 @@ ${messageHistory
 
     const prompt = `
 [AI Tactical Wealth Advisor Copilot]
-ผู้ใช้ต้องการให้คุณวิเคราะห์และให้คำปรึกษาการลงทุนแบบ "ครอบคลุมรอบด้าน 360 องศา" โดยต้องดึงข้อมูลทั้งจากภายนอก (ข่าวสารตลาดโลก ข่าวรายตัว กราฟราคา สัญญาณเทคนิค) และข้อมูลภายใน (พอร์ต เงินสด ต้นทุน) มาประมวลผลร่วมกัน
+ผู้ใช้ต้องการให้คุณวิเคราะห์และให้คำปรึกษาการลงทุนแบบ "ครอบคลุมรอบด้าน 360 องศา" โดยผสานข้อมูลจากภายนอก (ข่าวล่าสุด + Google Search Grounding + มหภาค + ปัจจัยพื้นฐาน Valuation + ปฏิทินงบ/ปันผล + กราฟเทคนิค) และข้อมูลภายใน (พอร์ต, ต้นทุน FIFO, ภาษี, เป้าหมาย และกฎส่วนตัวของนักลงทุน)
 
 === 1. ข้อมูลข่าวสารและความเคลื่อนไหวภายนอกล่าสุด (EXTERNAL LIVE NEWS & CATALYSTS) ===
 ${externalNewsText}
+(หมายเหตุ: คุณมี Google Search Grounding เปิดใช้งานอยู่ หากคำถามเกี่ยวข้องกับเหตุการณ์วันนี้ งบการเงินล่าสุด หรือข่าวด่วนรายหุ้น ให้ค้นหาและอ้างอิงข้อเท็จจริงล่าสุดร่วมด้วยเสมอ)
 
 === 2. ข้อมูลสภาวะตลาดโลก 4 เสาหลัก (EXTERNAL MACRO CLIMATE & SENTIMENT) ===
 ${macroSummary}
@@ -286,19 +531,31 @@ ${macroSummary}
 === 3. ข้อมูลกราฟเทคนิคและกรอบราคาภายนอกรายตัว (EXTERNAL TECHNICAL CHART PROFILES) ===
 ${detailedHoldingsText || 'ไม่มีหุ้นในพอร์ต'}
 
-=== 4. ข้อมูลพอร์ตโฟลิโอภายในของนักลงทุน (INTERNAL PORTFOLIO DNA) ===
+=== 4. ปัจจัยพื้นฐาน Valuation & ปฏิทินงบ/ปันผล (FUNDAMENTALS & CATALYSTS) ===
+[Valuation Guardrails]
+${deepIntel?.fundamentalsPrompt || 'ยังไม่มีข้อมูล Valuation รายตัว'}
+
+[Upcoming Earnings & XD Catalysts]
+${deepIntel?.catalystsPrompt || 'ไม่มีกำหนดการงบ/ปันผลใกล้ถึง'}
+
+=== 5. ข้อมูลพอร์ต, ภาษี FIFO และความจำกฎส่วนตัวของผู้ใช้ (INTERNAL PORTFOLIO, TAX & MEMORY) ===
 - สกุลเงินหลัก: ${baseCurrency}
 - มูลค่าสินทรัพย์รวมในพอร์ต: ${totalPortfolioValue.toLocaleString()} ${baseCurrency}
-- เงินสดสำรองรวม (Dry Powder): ${totalCash.toLocaleString()} ${baseCurrency} (${cashPercent.toFixed(
-      1
-    )}% ของความมั่งคั่งรวม | สภาวะนี้แนะนำถือเงินสดประมาณ 25%)
+- เงินสดสำรองรวม (Dry Powder): ${totalCash.toLocaleString()} ${baseCurrency} (${cashPercent.toFixed(1)}% ของความมั่งคั่งรวม)
 - การกระจุกตัว: ${
       techAiAllocationPercent > 50
-        ? `🚨 พอร์ตมีความเสี่ยงกระจุกตัวสูงมากในกลุ่ม US Tech & AI (${techAiAllocationPercent.toFixed(
-            1
-          )}% ของพอร์ต)`
+        ? `🚨 พอร์ตมีความเสี่ยงกระจุกตัวสูงมากในกลุ่ม US Tech & AI (${techAiAllocationPercent.toFixed(1)}% ของพอร์ต)`
         : `กระจายตัวปกติ (Tech & AI: ${techAiAllocationPercent.toFixed(1)}%)`
     }
+
+[เป้าหมายแผนลงทุน & กฎส่วนตัวใน AI Memory]
+${deepIntel?.goalsAndMemoryPrompt || 'ยังไม่ได้ตั้งเป้าหมายเฉพาะ'}
+
+[บริบทภาษี FIFO]
+${deepIntel?.taxContextPrompt || 'ไม่มีข้อมูลภาษี'}
+
+[Track Record คำแนะนำที่ปรึกษา AI ในรอบที่ผ่านมา]
+${formatOutcomeMetricsForPrompt(outcomeMetrics)}
 
 ${previousHistoryText}
 
@@ -306,19 +563,10 @@ ${previousHistoryText}
 "${activeQuestion}"
 
 === กฎเหล็กการวิเคราะห์แบบรอบด้าน (360° INSTITUTIONAL ADVISORY STANDARDS) ===
-1. ต้องดึง "ข่าวสารภายนอกล่าสุด (External News & Catalysts)" มาอ้างอิงเสมอ:
-   - ห้ามตอบโดยอิงแค่ตัวเลขสัดส่วนในพอร์ตเท่านั้น! ผู้ใช้ต้องการรู้ว่าโลกภายนอก ข่าวในตลาด Wall Street และข่าวของหุ้นแต่ละตัวกำลังเกิดอะไรขึ้น
-   - คุณต้องหยิบยกประเด็นข่าวจริงที่ให้ไว้ข้างบน (เช่น ข่าว AI Chips ของ Google/Nvidia, ข่าวเม็ดเงิน ETF ไหลเข้า, ข่าว Bond Yield พุ่งแรง, นโยบาย Fed, หรือคดีผูกขาด) มาอธิบายว่าข่าวนี้ส่งผลเชิงบวกหรือเชิงลบต่อราคาและพื้นฐานหุ้นอย่างไร
-2. ต้องวิเคราะห์ "โครงสร้างกราฟราคาภายนอก (Technical Chart Analysis)" อย่างชัดเจน:
-   - ต้องอ้างอิงตัวเลขทางเทคนิคจริง: ระดับราคา, ระยะย่อตัวจากจุดสูงสุด 52 สัปดาห์ (% Drawdown), ค่าโมเมนตัม Wilder's RSI(14), ตำแหน่งราคาเทียบกับเส้นค่าเฉลี่ย SMA 50 / SMA 200 วัน, และจุดแนวรับ Pivot S1/S2 กับแนวต้าน R1
-   - อธิบายว่ากราฟตัวไหนมีสัญญาณกลับตัวหรือน่าช้อนซื้อ (Dip Buy) ตัวไหนตึงตัว หรือตัวไหนเสี่ยงหลุดแนวรับ
-3. เชื่อมโยงเข้ากับพอร์ตและเงินสดจริงของผู้ใช้:
-   - แนะนำการแบ่งไม้เข้าซื้อ (Tranche Plan เช่น ไม้ 1 ที่ S1, ไม้ 2 ที่ SMA 200) และต้องระบุจุดหนีไฟ (Stop Loss) เสมอ
-   - ${techAiAllocationPercent >= 35 ? `สื่อสารเรื่องการกระจุกตัว ${techAiAllocationPercent.toFixed(1)}% ในกลุ่ม Tech/AI` : 'วิเคราะห์การกระจายความเสี่ยงของพอร์ตตามสัดส่วนจริง'} และแนวทางบริหารความเสี่ยงหรือภาษีต่างประเทศอย่างรอบคอบ
-4. กฎการจัดหน้า (Clean Formatting):
-   - แบ่งหัวข้อให้ชัดเจน สบายตา มีลำดับขั้นตอน
-   - ห้ามใส่เครื่องหมายดอกจัน (**) ซ้ำซ้อนหรือพร่ำเพรื่อในประโยค ให้เน้นเฉพาะตัวเลขสำคัญหรือชื่อหุ้นเท่านั้น
-   - ใช้เครื่องหมายขีด (-) นำหน้ารายการ
+1. ดึงข่าวสารภายนอกล่าสุด + ปฏิทินงบ/XD และ Valuation มาประกอบการตัดสินใจเสมอ: เตือนหากหุ้นติดธง VALUE_TRAP_RISK หรือใกล้วันประกาศงบภายใน 5 วัน
+2. วิเคราะห์กราฟเทคนิคจริงครบถ้วน: ระบุราคา, % Drawdown จาก 52W High, RSI(14), SMA 50/200 และ Pivot S1/S2/R1
+3. เชื่อมโยงเข้ากับพอร์ต เงินสด ภาษี และกฎส่วนตัวใน AI Memory (เช่น Max Position Cap): ระบุแผนแบ่งไม้ (Tranche Plan), Stop Loss และผลกระทบด้านภาษีให้ชัด
+4. จัดหน้าให้อ่านง่าย: แบ่งหัวข้อชัดเจน ใช้ขีด (-) นำหน้ารายการ และหลีกเลี่ยงดอกจัน (**) ซ้ำซ้อนพร่ำเพรื่อ
 `
 
     const aiResult = await callGemini({
@@ -326,17 +574,74 @@ ${previousHistoryText}
       prompt,
       logType: 'bucket_chat',
       systemInstruction:
-        'คุณคือ Senior Chief Investment Officer (CIO) & Chartered Market Technician (CMT) ผู้เชี่ยวชาญด้านกลยุทธ์การลงทุนระดับสากล วิเคราะห์รอบด้าน 360 องศา ทั้งข่าวสารภายนอกล่าสุด (Finnhub, Bloomberg, CNBC) กราฟเทคนิคเชิงปริมาณ (RSI, SMA, Pivots, 52W Range) และโครงสร้างพอร์ตภายใน ตอบด้วยข้อมูลเชิงลึก ตัวเลขชัดเจน มีเหตุผล ตรงไปตรงมา และจัดหน้าอย่างสะอาดตา',
-      thinkingBudget: 0,
+        'คุณคือ Senior Chief Investment Officer (CIO) & Chartered Market Technician (CMT) ผู้เชี่ยวชาญด้านกลยุทธ์การลงทุนระดับสากล วิเคราะห์รอบด้าน 360 องศา ทั้งข่าวสด Google Search + Finnhub/Yahoo ปัจจัยพื้นฐาน (P/E, ROE, D/E, FCF) กราฟเทคนิค (RSI, SMA, Pivots) ปฏิทินงบ/XD และภาษี/กฎส่วนตัวของนักลงทุน ตอบด้วยตัวเลขชัดเจน ตรงไปตรงมา ไม่เดาข้อมูลที่ไม่มี',
+      thinkingBudget: 1024,
+      enableGoogleSearch: true,
+      skipLog: true,
     })
 
     const cleanedAnswer = (aiResult.text || '')
       .replace(/\*\*\s*\*\*/g, ' ')
       .replace(/\*{3,}/g, '**')
 
+    // Persist thread in AiAdviceLog unless caller explicitly asks to skip
+    if (!skipPersist) {
+      const nowTimeLabel = new Date().toLocaleTimeString('th-TH', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Bangkok',
+      })
+      const baseHistory: PersistedCopilotMessage[] =
+        Array.isArray(messages) && messages.length > 0
+          ? messages
+              .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && m.content)
+              .map((m: any, idx: number) => ({
+                id: String(m.id || `msg-${Date.now()}-${idx}`),
+                role: m.role,
+                content: String(m.content),
+                timestamp: String(m.timestamp || nowTimeLabel),
+                ...(m.modelUsed ? { modelUsed: String(m.modelUsed) } : {}),
+                ...(Array.isArray(m.groundingSources) ? { groundingSources: m.groundingSources } : {}),
+              }))
+          : [
+              ...savedThread.messages,
+              {
+                id: `user-${Date.now()}`,
+                role: 'user',
+                content: activeQuestion,
+                timestamp: nowTimeLabel,
+              },
+            ]
+
+      const assistantReply: PersistedCopilotMessage = {
+        id: `bot-${Date.now()}`,
+        role: 'assistant',
+        content: cleanedAnswer,
+        timestamp: nowTimeLabel,
+        modelUsed: aiResult.modelUsed,
+        ...(aiResult.groundingSources && aiResult.groundingSources.length > 0
+          ? { groundingSources: aiResult.groundingSources }
+          : {}),
+      }
+
+      try {
+        await saveCopilotThread(
+          userId,
+          [...baseHistory, assistantReply],
+          aiResult.modelUsed,
+          savedThread.logId
+        )
+      } catch (persistErr) {
+        console.warn('[tactical-advisor chat] Failed to persist thread:', persistErr)
+      }
+    }
+
     return NextResponse.json({
       answer: cleanedAnswer,
       modelUsed: aiResult.modelUsed,
+      groundingSources: aiResult.groundingSources || [],
+      memory: deepIntel?.memory,
+      outcomeMetrics,
       portfolioSummary: {
         totalPortfolioValue,
         totalCash,

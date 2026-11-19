@@ -35,6 +35,14 @@ import {
   type AccountTypeValue,
 } from '@/lib/accounts'
 import { StatusModal, type StatusDetailItem } from '@/components/ui/StatusModal'
+import {
+  GRAMS_PER_THAI_BAHT_BAR,
+  formatGoldWeightSublabel,
+  getAssetUnitLabel,
+  gramsToOz,
+  isThai965GoldTicker,
+  normalizeGoldTicker,
+} from '@/lib/market-data/gold'
 
 type TransactionType = 'BUY' | 'SELL' | 'DIVIDEND' | 'DEPOSIT' | 'WITHDRAW' | 'FEE'
 type Market = 'US' | 'TH' | 'CRYPTO'
@@ -294,6 +302,160 @@ export function QuickAddModal({
 
   const isThaiMarket = formData.market === 'TH'
   const isSellTxn = formData.txnType === 'SELL'
+  const isGoldMode = formData.assetType === 'gold'
+
+  // Live Gold Price & Weight/Spend Calculator State (for Dime! Gold 99.99% & Thai Gold 96.5%)
+  const [goldLiveQuote, setGoldLiveQuote] = useState<{
+    xauUsdPerOz: number
+    usdThbRate: number
+    thai965ThbPerBaht: number
+  } | null>(null)
+  const [fetchingGoldPrice, setFetchingGoldPrice] = useState(false)
+  const [goldInputMode, setGoldInputMode] = useState<
+    'amount_usd' | 'amount_thb' | 'weight_oz' | 'weight_grams'
+  >('amount_usd')
+  const [goldCalcInput, setGoldCalcInput] = useState('')
+
+  async function fetchLiveGoldPrice(applyToPriceField = true, targetTicker?: string) {
+    setFetchingGoldPrice(true)
+    try {
+      const res = await fetch('/api/market-data/gold')
+      if (!res.ok) return
+      const json = await res.json()
+      const quoteData = {
+        xauUsdPerOz: Number(json.xauUsdPerOz || 0),
+        usdThbRate: Number(json.usdThbRate || 35.5),
+        thai965ThbPerBaht: Number(json.thai965ThbPerBaht || 0),
+      }
+      setGoldLiveQuote(quoteData)
+
+      if (applyToPriceField) {
+        const sym = (targetTicker || formData.ticker).toUpperCase()
+        if (isThai965GoldTicker(sym) && quoteData.thai965ThbPerBaht > 0) {
+          setFormData((prev) => ({
+            ...prev,
+            pricePerUnit: String(quoteData.thai965ThbPerBaht),
+          }))
+        } else if (quoteData.xauUsdPerOz > 0) {
+          setFormData((prev) => ({
+            ...prev,
+            pricePerUnit: quoteData.xauUsdPerOz.toFixed(2),
+          }))
+        }
+      }
+    } catch {
+      // ignore gold live price fetch error cleanly
+    } finally {
+      setFetchingGoldPrice(false)
+    }
+  }
+
+  function selectManualCategory(category: 'US' | 'TH' | 'DIME_GOLD' | 'THAI_GOLD' | 'CRYPTO') {
+    const findAccountByCurrency = (curr: string, keyword?: string) => {
+      if (keyword) {
+        const byKw = accounts.find((a) =>
+          a.accountName.toLowerCase().includes(keyword.toLowerCase())
+        )
+        if (byKw) return byKw.id
+      }
+      return accounts.find((a) => a.currency?.toUpperCase() === curr)?.id || accounts[0]?.id || ''
+    }
+
+    if (category === 'DIME_GOLD') {
+      const targetAcc = findAccountByCurrency('USD', 'dime')
+      setGoldInputMode('amount_usd')
+      setGoldCalcInput('')
+      setFormData((prev) => ({
+        ...prev,
+        accountId: targetAcc || prev.accountId,
+        market: 'US',
+        assetType: 'gold',
+        ticker: 'XAU',
+        assetName: 'Dime! Gold 99.99% (USD/oz)',
+        fee: '0',
+        taxWithheld: '0',
+      }))
+      fetchLiveGoldPrice(true, 'XAU')
+    } else if (category === 'THAI_GOLD') {
+      const targetAcc = findAccountByCurrency('THB')
+      setGoldInputMode('weight_oz')
+      setGoldCalcInput('')
+      setFormData((prev) => ({
+        ...prev,
+        accountId: targetAcc || prev.accountId,
+        market: 'TH',
+        assetType: 'gold',
+        ticker: 'GOLD965',
+        assetName: 'ทองคำแท่งไทย 96.5% (THB/บาททอง)',
+        fee: '0',
+        taxWithheld: '0',
+      }))
+      fetchLiveGoldPrice(true, 'GOLD965')
+    } else if (category === 'TH') {
+      const targetAcc = findAccountByCurrency('THB')
+      setFormData((prev) => ({
+        ...prev,
+        accountId: targetAcc || prev.accountId,
+        market: 'TH',
+        assetType: prev.assetType === 'gold' || prev.assetType === 'crypto' ? 'stock' : prev.assetType,
+        ticker: prev.assetType === 'gold' ? '' : prev.ticker,
+        assetName: prev.assetType === 'gold' ? '' : prev.assetName,
+      }))
+    } else if (category === 'CRYPTO') {
+      setFormData((prev) => ({
+        ...prev,
+        market: 'CRYPTO',
+        assetType: 'crypto',
+        ticker: prev.assetType === 'gold' ? '' : prev.ticker,
+        assetName: prev.assetType === 'gold' ? '' : prev.assetName,
+      }))
+    } else {
+      const targetAcc = findAccountByCurrency('USD')
+      setFormData((prev) => ({
+        ...prev,
+        accountId: targetAcc || prev.accountId,
+        market: 'US',
+        assetType: 'stock',
+        ticker: prev.assetType === 'gold' ? '' : prev.ticker,
+        assetName: prev.assetType === 'gold' ? '' : prev.assetName,
+      }))
+    }
+  }
+
+  useEffect(() => {
+    if (formData.assetType !== 'gold' || goldInputMode === 'weight_oz') return
+    const val = parseFloat(goldCalcInput)
+    const p = parseFloat(formData.pricePerUnit)
+    if (!Number.isFinite(val) || val <= 0) return
+
+    let computedQty: number | null = null
+    const isThai965 = isThai965GoldTicker(formData.ticker)
+
+    if (goldInputMode === 'weight_grams') {
+      computedQty = isThai965 ? val / GRAMS_PER_THAI_BAHT_BAR : gramsToOz(val)
+    } else if (goldInputMode === 'amount_usd' && Number.isFinite(p) && p > 0) {
+      computedQty = val / p
+    } else if (goldInputMode === 'amount_thb' && Number.isFinite(p) && p > 0) {
+      if (isThai965) {
+        computedQty = val / p
+      } else {
+        const fx = goldLiveQuote?.usdThbRate || 35.5
+        computedQty = val / fx / p
+      }
+    }
+
+    if (computedQty !== null && Number.isFinite(computedQty) && computedQty > 0) {
+      const nextStr = computedQty.toFixed(isThai965 ? 4 : 6)
+      setFormData((prev) => (prev.quantity === nextStr ? prev : { ...prev, quantity: nextStr }))
+    }
+  }, [
+    goldCalcInput,
+    goldInputMode,
+    formData.assetType,
+    formData.ticker,
+    formData.pricePerUnit,
+    goldLiveQuote?.usdThbRate,
+  ])
   const commNum = parseFloat(feeBreakdown.commission) || 0
   const otherFeesNum = parseFloat(feeBreakdown.otherFees) || 0
   const secFeeNum = parseFloat(feeBreakdown.secFee) || 0
@@ -574,23 +736,23 @@ export function QuickAddModal({
       const fee = Number(t.fee) || 0
       const tax = Number(t.taxWithheld) || 0
 
-      // Auto-correct if quantity was 0 but totalAmount is known (e.g. Dime! dollar orders)
-      if (q <= 0) {
-        if (total > 0) {
-          const grossAmount = t.txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
-          if (p > 0) {
-            q = Number((grossAmount / p).toFixed(4))
+        if (q <= 0) {
+          if (total > 0) {
+            const grossAmount = t.txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
+            if (p > 0) {
+              const dec = t.assetType === 'gold' || t.assetType === 'crypto' ? 6 : 4
+              q = Number((grossAmount / p).toFixed(dec))
+            } else {
+              q = 1
+              p = grossAmount
+            }
           } else {
-            q = 1
-            p = grossAmount
+            throw new Error(`รายการ "${t.ticker}": กรุณาระบุจำนวนหรือมูลค่ารวม`)
           }
-        } else {
-          throw new Error(`รายการ "${t.ticker}": กรุณาระบุจำนวนหุ้นหรือมูลค่ารวม`)
+        } else if (p <= 0 && total > 0) {
+          const grossAmount = t.txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
+          p = Math.max(0, Number((grossAmount / q).toFixed(4)))
         }
-      } else if (p <= 0 && total > 0) {
-        const grossAmount = t.txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
-        p = Math.max(0, Number((grossAmount / q).toFixed(4)))
-      }
 
       if (p < 0) {
         throw new Error(`รายการ "${t.ticker}": ราคาต่อหน่วยต้องไม่ติดลบ`)
@@ -875,7 +1037,8 @@ export function QuickAddModal({
         const grossAmount = txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
         if (q <= 0 && total > 0) {
           if (p > 0) {
-            q = Number((grossAmount / p).toFixed(4))
+            const dec = t.assetType === 'gold' || t.assetType === 'crypto' ? 6 : 4
+            q = Number((grossAmount / p).toFixed(dec))
           } else {
             q = 1
             p = grossAmount
@@ -883,6 +1046,8 @@ export function QuickAddModal({
         } else if (p <= 0 && total > 0 && q > 0) {
           p = Math.max(0, Number((grossAmount / q).toFixed(4)))
         }
+
+        const goldNorm = normalizeGoldTicker(t.ticker || '', t.assetType, t.currency)
 
         let calculatedTotal = total
         if (txnType === 'SELL' && q > 0 && p > 0 && fee > 0) {
@@ -898,16 +1063,16 @@ export function QuickAddModal({
           id: t.id || `txn_nlp_${Date.now()}_${i + 1}`,
           selected: true,
           txnType: (t.txnType as TransactionType) || 'BUY',
-          ticker: (t.ticker || '').toUpperCase(),
-          assetName: t.assetName || t.ticker || 'Asset',
-          market: (t.market as Market) || (t.currency === 'THB' ? 'TH' : 'US'),
-          assetType: (t.assetType as AssetType) || 'stock',
+          ticker: goldNorm ? goldNorm.ticker : (t.ticker || '').toUpperCase(),
+          assetName: goldNorm ? goldNorm.assetName : t.assetName || t.ticker || 'Asset',
+          market: goldNorm ? goldNorm.market : (t.market as Market) || (t.currency === 'THB' ? 'TH' : 'US'),
+          assetType: goldNorm ? 'gold' : (t.assetType as AssetType) || 'stock',
           quantity: q,
           pricePerUnit: p,
           fee,
           taxWithheld: tax,
           totalAmount: calculatedTotal,
-          currency: t.currency || (t.market === 'TH' ? 'THB' : 'USD'),
+          currency: goldNorm ? goldNorm.currency : t.currency || (t.market === 'TH' ? 'THB' : 'USD'),
           txnDate: t.txnDate || new Date().toISOString(),
           matchedAccountId: t.matchedAccountId || accounts[0]?.id || '',
           accountName: t.accountName || accounts[0]?.accountName || 'Dime! USD',
@@ -967,15 +1132,36 @@ export function QuickAddModal({
     setError('')
 
     try {
+      const normalizedGold =
+        formData.assetType === 'gold'
+          ? normalizeGoldTicker(
+              formData.ticker,
+              formData.assetType,
+              formData.market === 'TH' ? 'THB' : 'USD'
+            )
+          : null
+      const submitTicker = normalizedGold
+        ? normalizedGold.ticker
+        : formData.ticker.trim().toUpperCase()
+      const submitMarket = normalizedGold ? normalizedGold.market : formData.market
+      const submitCurrency = normalizedGold
+        ? normalizedGold.currency
+        : formData.market === 'TH'
+        ? 'THB'
+        : 'USD'
+      const submitName = normalizedGold
+        ? normalizedGold.assetName
+        : formData.assetName.trim() || submitTicker
+
       const assetRes = await fetch('/api/assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ticker: formData.ticker.trim().toUpperCase(),
-          market: formData.market,
-          assetName: formData.assetName.trim() || formData.ticker.trim().toUpperCase(),
+          ticker: submitTicker,
+          market: submitMarket,
+          assetName: submitName,
           assetType: formData.assetType,
-          currency: formData.market === 'US' ? 'USD' : 'THB',
+          currency: submitCurrency,
         }),
       })
 
@@ -1013,17 +1199,20 @@ export function QuickAddModal({
       mutate((key) => typeof key === 'string' && key.startsWith('/api/cash-wallet'))
       mutate((key) => typeof key === 'string' && key.startsWith('/api/portfolio'))
 
+      const unitWord = getAssetUnitLabel(formData.ticker, formData.assetType)
+      const currSymPopup = formData.market === 'TH' ? '฿' : '$'
+
       setStatusModal({
         isOpen: true,
         type: 'success',
         title: 'บันทึกธุรกรรมเรียบร้อยแล้ว!',
-        description: `บันทึกรายการ ${formData.txnType} หุ้น ${formData.ticker.toUpperCase()} จำนวน ${formData.quantity} หุ้น เข้าสู่ระบบเรียบร้อยแล้ว`,
+        description: `บันทึกรายการ ${formData.txnType} ${formData.ticker.toUpperCase()} จำนวน ${formData.quantity} ${unitWord} เข้าสู่ระบบเรียบร้อยแล้ว`,
         details: [
           { label: 'ประเภท', value: formData.txnType, color: 'text-indigo-400' },
-          { label: 'หุ้น', value: formData.ticker.toUpperCase(), color: 'text-emerald-400' },
+          { label: 'สินทรัพย์', value: formData.ticker.toUpperCase(), color: 'text-emerald-400' },
           {
             label: 'ยอดรวม',
-            value: `$${Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+            value: `${currSymPopup}${Number(totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
             color: 'text-white',
           },
         ],
@@ -1294,7 +1483,39 @@ export function QuickAddModal({
                                 />
                               </div>
 
-                              {/* Asset Name */}
+                              {/* Asset Type Badge & Name */}
+                              <select
+                                value={txn.assetType}
+                                onChange={(e) => {
+                                  const nextType = e.target.value as AssetType
+                                  if (nextType === 'gold') {
+                                    const norm = normalizeGoldTicker(txn.ticker || 'XAU', 'gold', txn.currency)
+                                    handleUpdateTxn(idx, {
+                                      assetType: 'gold',
+                                      ticker: norm?.ticker || 'XAU',
+                                      assetName: norm?.assetName || 'Dime! Gold 99.99% (USD/oz)',
+                                      market: norm?.market || 'US',
+                                      currency: norm?.currency || 'USD',
+                                    })
+                                  } else {
+                                    handleUpdateTxn(idx, { assetType: nextType })
+                                  }
+                                }}
+                                className={`text-[10px] font-bold px-1.5 py-1 rounded-lg border focus:outline-none cursor-pointer ${
+                                  txn.assetType === 'gold'
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                    : txn.assetType === 'crypto'
+                                    ? 'bg-orange-500/15 text-orange-300 border-orange-500/30'
+                                    : 'bg-[#12151C] text-zinc-400 border-white/10'
+                                }`}
+                              >
+                                <option value="stock">STOCK</option>
+                                <option value="fund">ETF/FUND</option>
+                                <option value="gold">🪙 GOLD</option>
+                                <option value="crypto">CRYPTO</option>
+                                <option value="bond">BOND</option>
+                              </select>
+
                               <span className="text-[11px] text-zinc-400 truncate hidden md:inline max-w-[140px]">
                                 {txn.assetName}
                               </span>
@@ -1337,7 +1558,9 @@ export function QuickAddModal({
                           {/* Bottom Row: Quantity, Price, Fee, Date, Calculated Total */}
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-white/[0.04] text-xs">
                             <div>
-                              <label className="text-[10px] text-zinc-400 block mb-0.5">จำนวนหุ้น</label>
+                              <label className="text-[10px] text-zinc-400 block mb-0.5">
+                                จำนวน ({getAssetUnitLabel(txn.ticker, txn.assetType)})
+                              </label>
                               <input
                                 type="number"
                                 step="any"
@@ -1632,7 +1855,7 @@ export function QuickAddModal({
                     </div>
                     <textarea
                       className={`${inputClass} min-h-[140px] resize-none font-mono text-xs`}
-                      placeholder="วางข้อความรายงานสรุป หรือพิมพ์หลายรายการ เช่น:&#10;• ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2&#10;• ขาย MU 0.319 หุ้น ราคา 1034 USD&#10;• รับปันผล GOOGL 0.44 USD วันที่ 15 ก.ย. 69 บัญชี Dime! USD&#10;• หรือคัดลอกข้อความสรุปจาก Statement มาวางได้เลย AI จะดึงทุกหุ้นให้ทันที"
+                      placeholder="วางข้อความรายงานสรุป หรือพิมพ์หลายรายการ เช่น:&#10;• ซื้อ NVDA 10 หุ้น 120 USD ค่าคอม 2&#10;• ซื้อทอง Dime 100 USD ราคา 3,850 หรือ ออมทองใน Dime 0.025 oz&#10;• ขาย MU 0.319 หุ้น ราคา 1034 USD&#10;• รับปันผล GOOGL 0.44 USD วันที่ 15 ก.ย. 69 บัญชี Dime! USD"
                       value={nlText}
                       onChange={(e) => setNlText(e.target.value)}
                       disabled={parsing}
@@ -1699,6 +1922,57 @@ export function QuickAddModal({
                   </div>
 
                   <form onSubmit={handleManualSubmit} id="manual-form" className="space-y-4">
+                    {/* Quick Asset Category Selector (Supports Dime! Gold 99.99% & Thai Gold 96.5%) */}
+                    <div>
+                      <label className={labelClass}>ประเภทสินทรัพย์ที่ต้องการบันทึก</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                        {[
+                          {
+                            id: 'US' as const,
+                            label: '🇺🇸 หุ้นสหรัฐฯ',
+                            active: formData.market === 'US' && formData.assetType !== 'gold',
+                          },
+                          {
+                            id: 'TH' as const,
+                            label: '🇹🇭 หุ้นไทย / กองทุน',
+                            active: formData.market === 'TH' && formData.assetType !== 'gold',
+                          },
+                          {
+                            id: 'DIME_GOLD' as const,
+                            label: '🪙 ทอง Dime! 99.99%',
+                            active:
+                              formData.assetType === 'gold' && !isThai965GoldTicker(formData.ticker),
+                          },
+                          {
+                            id: 'THAI_GOLD' as const,
+                            label: '🥇 ทองไทย 96.5%',
+                            active:
+                              formData.assetType === 'gold' && isThai965GoldTicker(formData.ticker),
+                          },
+                          {
+                            id: 'CRYPTO' as const,
+                            label: '₿ คริปโต',
+                            active: formData.market === 'CRYPTO' || formData.assetType === 'crypto',
+                          },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => selectManualCategory(opt.id)}
+                            className={`px-2.5 py-2 rounded-xl text-[11px] font-bold border transition-all cursor-pointer text-center ${
+                              opt.active
+                                ? opt.id === 'DIME_GOLD' || opt.id === 'THAI_GOLD'
+                                  ? 'bg-amber-500/20 text-amber-200 border-amber-400/50 shadow-sm'
+                                  : 'bg-indigo-600/25 text-indigo-200 border-indigo-400/50 shadow-sm'
+                                : 'bg-[#181C25] text-zinc-400 hover:text-white border-white/[0.08]'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Account Selection */}
                     <div>
                       <label className={labelClass}>บัญชีการเงิน *</label>
@@ -1748,23 +2022,45 @@ export function QuickAddModal({
               {/* Ticker & Market */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div className="col-span-1">
-                  <label className={labelClass}>ตลาด</label>
-                  <select
-                    className={inputClass}
-                    value={formData.market}
-                    onChange={(e) => setFormData({ ...formData, market: e.target.value as Market })}
-                  >
-                    <option value="US">หุ้นสหรัฐ</option>
-                    <option value="TH">หุ้นไทย / กองทุน</option>
-                    <option value="CRYPTO">คริปโต</option>
-                  </select>
+                  <label className={labelClass}>{isGoldMode ? 'ประเภทสินทรัพย์' : 'ตลาด'}</label>
+                  {isGoldMode ? (
+                    <select
+                      className={inputClass}
+                      value={isThai965GoldTicker(formData.ticker) ? 'GOLD965' : 'XAU'}
+                      onChange={(e) =>
+                        selectManualCategory(e.target.value === 'GOLD965' ? 'THAI_GOLD' : 'DIME_GOLD')
+                      }
+                    >
+                      <option value="XAU">🪙 ทอง Dime! 99.99% (USD/oz)</option>
+                      <option value="GOLD965">🥇 ทองไทย 96.5% (THB/บาททอง)</option>
+                    </select>
+                  ) : (
+                    <select
+                      className={inputClass}
+                      value={formData.market}
+                      onChange={(e) => {
+                        const nextMkt = e.target.value as Market
+                        setFormData({
+                          ...formData,
+                          market: nextMkt,
+                          assetType: nextMkt === 'CRYPTO' ? 'crypto' : 'stock',
+                        })
+                      }}
+                    >
+                      <option value="US">หุ้นสหรัฐ</option>
+                      <option value="TH">หุ้นไทย / กองทุน</option>
+                      <option value="CRYPTO">คริปโต</option>
+                    </select>
+                  )}
                 </div>
                 <div className="col-span-1 sm:col-span-2">
-                  <label className={labelClass}>ชื่อย่อสินทรัพย์ *</label>
+                  <label className={labelClass}>
+                    {isGoldMode ? 'รหัสอ้างอิงทองคำ *' : 'ชื่อย่อสินทรัพย์ *'}
+                  </label>
                   <input
                     type="text"
                     className={`${inputClass} font-mono uppercase font-semibold`}
-                    placeholder="GOOGL, MU, AAPL, BTC"
+                    placeholder={isGoldMode ? 'XAU หรือ GOLD965' : 'GOOGL, MU, AAPL, BTC'}
                     value={formData.ticker}
                     onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase() })}
                     required
@@ -1772,22 +2068,144 @@ export function QuickAddModal({
                 </div>
               </div>
 
+              {/* Dime! Gold Live Price & Smart Unit/Spend Calculator */}
+              {isGoldMode && (
+                <div className="p-3.5 rounded-xl bg-amber-500/[0.07] border border-amber-500/25 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                        🪙 ตัวช่วยคำนวณทองคำ ({isThai965GoldTicker(formData.ticker) ? 'ไทย 96.5%' : 'Dime! Gold 99.99%'})
+                      </span>
+                      {goldLiveQuote && goldLiveQuote.xauUsdPerOz > 0 && (
+                        <p className="text-[11px] text-amber-200/80 font-mono mt-0.5">
+                          Spot โลก: ${goldLiveQuote.xauUsdPerOz.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/oz
+                          {' • '}USD/THB ฿{goldLiveQuote.usdThbRate.toFixed(2)}
+                          {' • '}96.5% ≈ ฿{goldLiveQuote.thai965ThbPerBaht.toLocaleString()}/บาททอง
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => fetchLiveGoldPrice(true)}
+                      disabled={fetchingGoldPrice}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      {fetchingGoldPrice ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <TrendingUp className="w-3 h-3" />
+                      )}
+                      <span>ดึงราคาทองสด</span>
+                    </button>
+                  </div>
+
+                  {/* Mode Pills */}
+                  <div className="flex flex-wrap gap-1.5 text-[11px]">
+                    {(isThai965GoldTicker(formData.ticker)
+                      ? [
+                          { id: 'weight_oz' as const, label: '⚖️ กรอกเป็นบาททอง' },
+                          { id: 'amount_thb' as const, label: '฿ กรอกยอดเงินบาท' },
+                          { id: 'weight_grams' as const, label: '📏 กรอกเป็นกรัม' },
+                        ]
+                      : [
+                          { id: 'amount_usd' as const, label: '$ กรอกยอดเงิน USD' },
+                          { id: 'amount_thb' as const, label: '฿ กรอกยอดเงินบาท (THB)' },
+                          { id: 'weight_oz' as const, label: '⚖️ กรอกน้ำหนัก (oz)' },
+                          { id: 'weight_grams' as const, label: '📏 กรอกน้ำหนัก (กรัม)' },
+                        ]
+                    ).map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setGoldInputMode(m.id)
+                          setGoldCalcInput('')
+                        }}
+                        className={`px-2.5 py-1 rounded-lg font-semibold border transition-all cursor-pointer ${
+                          goldInputMode === m.id
+                            ? 'bg-amber-400/25 text-amber-100 border-amber-300/50'
+                            : 'bg-black/30 text-zinc-400 hover:text-white border-white/[0.06]'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {goldInputMode !== 'weight_oz' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-end">
+                      <div>
+                        <label className="text-[11px] text-amber-200/90 block mb-1">
+                          {goldInputMode === 'amount_usd'
+                            ? 'จำนวนเงินที่ซื้อ/ขาย (USD)'
+                            : goldInputMode === 'amount_thb'
+                            ? 'จำนวนเงินที่ซื้อ/ขาย (THB)'
+                            : 'น้ำหนักทองคำ (กรัม)'}
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={goldCalcInput}
+                          onChange={(e) => setGoldCalcInput(e.target.value)}
+                          placeholder={
+                            goldInputMode === 'amount_usd'
+                              ? 'เช่น 100.00'
+                              : goldInputMode === 'amount_thb'
+                              ? 'เช่น 3500'
+                              : 'เช่น 1.55'
+                          }
+                          className="w-full bg-[#12151C] border border-amber-400/30 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                      <div className="text-[11px] text-amber-200/80 font-mono pb-2">
+                        {quantityNum > 0
+                          ? `➔ น้ำหนักที่บันทึก: ${quantityNum} ${getAssetUnitLabel(
+                              formData.ticker,
+                              formData.assetType
+                            )} (${formatGoldWeightSublabel(
+                              quantityNum,
+                              formData.ticker,
+                              formData.assetType
+                            )})`
+                          : 'ใส่จำนวนเงิน/น้ำหนัก + ราคาต่อหน่วย เพื่อคำนวณอัตโนมัติ'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Quantity & Price */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className={labelClass}>จำนวนหุ้น/หน่วย *</label>
+                  <label className={labelClass}>
+                    จำนวน ({getAssetUnitLabel(formData.ticker, formData.assetType)}) *
+                  </label>
                   <input
                     type="number"
                     step="any"
                     className={`${inputClass} font-mono`}
-                    placeholder="0.00"
+                    placeholder={isGoldMode ? '0.000000' : '0.00'}
                     value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                    onChange={(e) => {
+                      if (isGoldMode) setGoldInputMode('weight_oz')
+                      setFormData({ ...formData, quantity: e.target.value })
+                    }}
                     required
                   />
+                  {isGoldMode && quantityNum > 0 && (
+                    <p className="text-[11px] text-amber-300/80 font-mono mt-1">
+                      {formatGoldWeightSublabel(quantityNum, formData.ticker, formData.assetType)}
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <label className={labelClass}>ราคาต่อหน่วย *</label>
+                  <label className={labelClass}>
+                    {isGoldMode
+                      ? isThai965GoldTicker(formData.ticker)
+                        ? 'ราคาต่อบาททอง (THB) *'
+                        : 'ราคาทองต่อออนซ์ (USD/oz) *'
+                      : 'ราคาต่อหน่วย *'}
+                  </label>
                   <input
                     type="number"
                     step="any"

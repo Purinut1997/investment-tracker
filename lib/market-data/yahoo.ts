@@ -73,6 +73,10 @@ export class YahooFinanceProvider implements MarketDataProvider {
     } else if (
       (rawSymbol === 'GOLD' && market !== 'US') ||
       rawSymbol === 'XAU' ||
+      rawSymbol === 'XAUUSD' ||
+      rawSymbol === 'XAU/USD' ||
+      rawSymbol === 'GOLD9999' ||
+      rawSymbol === 'DIME-GOLD' ||
       rawSymbol === 'GC.F' ||
       rawSymbol === 'GC=F'
     ) {

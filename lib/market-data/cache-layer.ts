@@ -11,6 +11,12 @@ import { yahooFinanceProvider, invalidateYahooCache } from './yahoo'
 import { finnhubProvider } from './finnhub'
 import { coinGeckoProvider, invalidateCoinGeckoCache } from './coingecko'
 import { stooqProvider } from './stooq'
+import { getExchangeRate } from './frankfurter'
+import {
+  isGoldTicker,
+  isThai965GoldTicker,
+  calculateThai965PricePerBaht,
+} from './gold'
 import { invalidateTechnicalCache } from './technical-signals'
 import { invalidateResolverCache } from './resolver'
 import { invalidateDividendCache } from '../dividends/dividend-analyzer'
@@ -88,21 +94,40 @@ export async function fetchLiveAssetQuote(
 ): Promise<MarketQuote | null> {
   const tickerUpper = asset.ticker.trim().toUpperCase()
   const isCommodityGold =
-    tickerUpper === 'XAU' ||
-    tickerUpper === 'GC.F' ||
-    tickerUpper === 'GC=F' ||
-    (asset.assetType === 'gold' && (tickerUpper === 'GOLD' || asset.market !== 'US'))
+    isGoldTicker(tickerUpper, asset.assetType) &&
+    !(tickerUpper === 'GOLD' && asset.assetType !== 'gold' && asset.market === 'US')
 
   if (asset.market === 'CRYPTO' || asset.assetType === 'crypto') {
     return coinGeckoProvider.getQuote(asset.ticker, 'CRYPTO', forceRefresh)
   }
+  if (isThai965GoldTicker(tickerUpper)) {
+    const [xauYahoo, usdThbRaw] = await Promise.all([
+      yahooFinanceProvider.getQuote('XAU', 'GLOBAL', forceRefresh),
+      getExchangeRate('USD', 'THB').catch(() => 35.5),
+    ])
+    const xauQuote =
+      xauYahoo ?? (await stooqProvider.getQuote('GC.F', 'COMMODITY', forceRefresh))
+    if (xauQuote && xauQuote.price > 0) {
+      const thbPrice = calculateThai965PricePerBaht(xauQuote.price, usdThbRaw ?? 35.5)
+      if (thbPrice > 0) {
+        return {
+          ...xauQuote,
+          symbol: tickerUpper,
+          price: thbPrice,
+          currency: 'THB',
+          provider: 'yahoo-gold965',
+        }
+      }
+    }
+    return null
+  }
+  if (isCommodityGold) {
+    const q = await yahooFinanceProvider.getQuote('XAU', 'GLOBAL', forceRefresh)
+    return q ?? stooqProvider.getQuote('GC.F', 'COMMODITY', forceRefresh)
+  }
   if (asset.market === 'TH' || tickerUpper.endsWith('.BK')) {
     const q = await yahooFinanceProvider.getQuote(asset.ticker, 'TH', forceRefresh)
     return q ?? stooqProvider.getQuote(asset.ticker, 'TH', forceRefresh)
-  }
-  if (isCommodityGold) {
-    const q = await yahooFinanceProvider.getQuote('GOLD', 'GLOBAL', forceRefresh)
-    return q ?? stooqProvider.getQuote('GC.F', 'COMMODITY', forceRefresh)
   }
   let q = await yahooFinanceProvider.getQuote(asset.ticker, 'US', forceRefresh)
   if (!q) {

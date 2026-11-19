@@ -10,12 +10,13 @@ import {
   getInFlightSummary,
   setInFlightSummary,
 } from '@/lib/analytics/holdings'
-import { invalidatePriceCache, syncAssetLivePrice } from '@/lib/market-data/cache-layer'
+import { invalidatePriceCache, syncAssetLivePrice, fetchLiveAssetQuote } from '@/lib/market-data/cache-layer'
 import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
-import { calculatePortfolioPerformance } from '@/lib/analytics/performance'
+import {
+  calculatePortfolioPerformance,
+  calculatePortfolioRiskMetrics,
+} from '@/lib/analytics/performance'
 import { getExchangeRate, sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
-import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
-import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -90,6 +91,7 @@ export async function GET(req: NextRequest) {
       const fifoLots = new Map<string, Array<{ qty: number; unitCost: number }>>()
       let totalRealizedGainBase = 0
       let totalRealizedGainUSD = 0
+      const xirrCashFlows: Array<{ amount: number; date: Date }> = []
 
       for (const t of sortedTxns) {
         const assetId = t.assetId
@@ -100,10 +102,20 @@ export async function GET(req: NextRequest) {
         const qty = Number(t.quantity || 0)
         const price = Number(t.pricePerUnit || 0)
         const fee = Number(t.fee || 0)
+        const isUSD =
+          t.asset?.currency === 'USD' ||
+          t.asset?.market === 'US' ||
+          t.asset?.market === 'CRYPTO'
+        const fx = isUSD ? usdThbRate : 1.0
+        const txnDate = new Date(t.txnDate)
 
         if (t.txnType === 'BUY' && qty > 0) {
           const unitCost = (qty * price + fee) / qty
           lots.push({ qty, unitCost })
+          const outflowBase = Math.abs(Number(t.totalAmount || qty * price + fee) * fx)
+          if (outflowBase > 0) {
+            xirrCashFlows.push({ amount: -outflowBase, date: txnDate })
+          }
         } else if (t.txnType === 'SELL' && qty > 0) {
           let qtyToSell = qty
           let costBasis = 0
@@ -121,14 +133,18 @@ export async function GET(req: NextRequest) {
           }
           const proceeds = Number(t.totalAmount || qty * price - fee)
           const realizedGain = proceeds - costBasis
-          const isUSD =
-            t.asset?.currency === 'USD' ||
-            t.asset?.market === 'US' ||
-            t.asset?.market === 'CRYPTO'
-          const fx = isUSD ? usdThbRate : 1.0
           totalRealizedGainBase += realizedGain * fx
           if (isUSD) {
             totalRealizedGainUSD += realizedGain
+          }
+          const inflowBase = Math.abs(proceeds * fx)
+          if (inflowBase > 0) {
+            xirrCashFlows.push({ amount: inflowBase, date: txnDate })
+          }
+        } else if (t.txnType === 'DIVIDEND') {
+          const divInflowBase = Math.abs(Number(t.totalAmount || 0) * fx)
+          if (divInflowBase > 0) {
+            xirrCashFlows.push({ amount: divInflowBase, date: txnDate })
           }
         }
       }
@@ -161,11 +177,15 @@ export async function GET(req: NextRequest) {
         holdingsResult.holdings.map(async (h) => {
           let quote = null
           try {
-            if (h.assetType === 'crypto' || h.market === 'CRYPTO') {
-              quote = await coinGeckoProvider.getQuote(h.ticker, 'CRYPTO', forceRefresh)
-            } else {
-              quote = await yahooFinanceProvider.getQuote(h.ticker, h.market, forceRefresh)
-            }
+            quote = await fetchLiveAssetQuote(
+              {
+                id: h.assetId,
+                ticker: h.ticker,
+                market: h.market,
+                assetType: h.assetType,
+              },
+              forceRefresh
+            )
           } catch {}
 
           let reconciled = h
@@ -228,13 +248,21 @@ export async function GET(req: NextRequest) {
         cleanTargetAlloc && Object.keys(cleanTargetAlloc).length > 0 ? cleanTargetAlloc : undefined
       )
 
-      // 9. Calculate historical portfolio growth milestones reusing preloaded txns (0 DB queries)
+      // 9. Calculate historical portfolio growth milestones & risk metrics reusing preloaded txns (0 DB queries)
       const performanceData = await calculatePortfolioPerformance(
         userId,
         reconciledTotalValueBase,
         baseCurrency,
         txns
       )
+
+      if (reconciledTotalValueBase > 0 && xirrCashFlows.length > 0) {
+        xirrCashFlows.push({ amount: reconciledTotalValueBase, date: new Date() })
+      }
+      const quantMetrics = calculatePortfolioRiskMetrics(performanceData, {
+        baseCurrency,
+        cashFlows: xirrCashFlows,
+      })
 
       // 10. Group by Asset Class (Macro Allocation)
       const classMap: Record<string, { label: string; value: number; color: string }> = {
@@ -354,6 +382,7 @@ export async function GET(req: NextRequest) {
         assetCount: holdingsResult.holdings.length,
         healthScore,
         performanceData,
+        quantMetrics,
         holdings: holdingsWithDaily,
         assetClassAllocation,
         upcomingCatalysts,

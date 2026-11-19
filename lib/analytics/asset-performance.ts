@@ -265,7 +265,7 @@ export async function calculateAssetPerformance(
       const assetEntries = Array.from(assetMap.entries())
       const activeEntries = assetEntries.filter(([_, data]) => {
         const remainingQty = data.buyLots.reduce((acc, lot) => acc + lot.remainingQty, 0)
-        return remainingQty > 0.00001
+        return remainingQty > 0.0000001
       })
 
       const activeAssetIds = activeEntries.map(([assetId]) => assetId)
@@ -305,7 +305,7 @@ export async function calculateAssetPerformance(
           (acc, lot) => acc + lot.remainingQty * lot.pricePerUnit,
           0
         )
-        const avgCost = remainingQty > 0.00001 ? activeCost / remainingQty : 0
+        const avgCost = remainingQty > 0.0000001 ? activeCost / remainingQty : 0
 
         const priceObj = priceMap.get(assetId)
         const currentPrice = priceObj?.price ?? avgCost
@@ -329,9 +329,9 @@ export async function calculateAssetPerformance(
 
         // Status determination
         let status: AssetTradeStatus = 'HOLDING'
-        if (remainingQty <= 0.00001 && data.realizedTrades.length > 0) {
+        if (remainingQty <= 0.0000001 && data.realizedTrades.length > 0) {
           status = 'CLOSED'
-        } else if (remainingQty > 0.00001 && data.realizedTrades.length > 0) {
+        } else if (remainingQty > 0.0000001 && data.realizedTrades.length > 0) {
           status = 'PARTIALLY_SOLD'
         } else {
           status = 'HOLDING'
@@ -422,7 +422,7 @@ export async function calculateAssetPerformance(
             }
           : null
 
-      const activeCount = assetPerformanceList.filter((a) => a.currentQuantity > 0.00001).length
+      const activeCount = assetPerformanceList.filter((a) => a.currentQuantity > 0.0000001).length
       const closedCount = assetPerformanceList.filter((a) => a.status === 'CLOSED').length
 
       const summaryResult: PortfolioPerformanceSummary = {

@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
+import { getTransactionCashDelta, applyCashDeltaClamped } from '@/lib/analytics/cash-ledger'
 
 // ─── Zod Schemas ──────────────────────────────────────────
 const CreateTransactionSchema = z.object({
@@ -21,6 +22,7 @@ const CreateTransactionSchema = z.object({
   taxWithheld: z.number().nonnegative().default(0),
   note: z.string().max(500).optional(),
   source: z.enum(['manual', 'quick_add', 'quick_add_photo', 'csv_import']).default('manual'),
+  syncCashBalance: z.boolean().optional(),
 })
 
 export async function GET(req: NextRequest) {
@@ -162,25 +164,42 @@ export async function POST(req: NextRequest) {
       totalAmount = data.fee
     }
 
-    const transaction = await prisma.transaction.create({
-      data: {
-        userId: session.user.id,
-        accountId: data.accountId,
-        assetId: data.assetId,
-        txnDate: new Date(data.txnDate),
-        txnType: data.txnType,
-        quantity: data.quantity,
-        pricePerUnit: data.pricePerUnit,
-        fee: data.fee,
-        taxWithheld: data.taxWithheld,
-        totalAmount,
-        note: data.note,
-        source: data.source,
-      },
-      include: {
-        asset: { select: { ticker: true, assetName: true, currency: true } },
-        account: { select: { accountName: true, currency: true } },
-      },
+    const shouldSync = data.syncCashBalance ?? data.source !== 'csv_import'
+    const delta = shouldSync ? getTransactionCashDelta(data.txnType, totalAmount) : 0
+
+    const transaction = await prisma.$transaction(async (tx) => {
+      const created = await tx.transaction.create({
+        data: {
+          userId: session.user.id,
+          accountId: data.accountId,
+          assetId: data.assetId,
+          txnDate: new Date(data.txnDate),
+          txnType: data.txnType,
+          quantity: data.quantity,
+          pricePerUnit: data.pricePerUnit,
+          fee: data.fee,
+          taxWithheld: data.taxWithheld,
+          totalAmount,
+          note: data.note,
+          source: data.source,
+        },
+        include: {
+          asset: { select: { ticker: true, assetName: true, currency: true } },
+          account: { select: { accountName: true, currency: true } },
+        },
+      })
+
+      if (shouldSync && delta !== 0) {
+        const currentCash = Number(account.cashBalance || 0)
+        if (delta > 0 || (delta < 0 && currentCash > 0)) {
+          await tx.investmentAccount.update({
+            where: { id: data.accountId },
+            data: { cashBalance: applyCashDeltaClamped(currentCash, delta) },
+          })
+        }
+      }
+
+      return created
     })
 
     invalidateUserHoldingsCache(session.user.id)
@@ -207,16 +226,69 @@ export async function DELETE(req: NextRequest) {
       resetCashBalance?: boolean
     }
 
-    // 1. Batch delete specific transaction IDs
+    // 1. Batch delete specific transaction IDs with atomic cash ledger reversal
     if (Array.isArray(ids) && ids.length > 0) {
-      const result = await prisma.transaction.deleteMany({
-        where: {
-          id: { in: ids },
-          userId: session.user.id,
-        },
+      const deletedCount = await prisma.$transaction(async (tx) => {
+        const toDelete = await tx.transaction.findMany({
+          where: {
+            id: { in: ids },
+            userId: session.user.id,
+          },
+          select: {
+            id: true,
+            accountId: true,
+            txnType: true,
+            totalAmount: true,
+          },
+        })
+
+        if (toDelete.length === 0) return 0
+
+        const result = await tx.transaction.deleteMany({
+          where: {
+            id: { in: toDelete.map((t) => t.id) },
+            userId: session.user.id,
+          },
+        })
+
+        const reverseDeltaByAccount = new Map<string, number>()
+        for (const t of toDelete) {
+          const reverseDelta = -getTransactionCashDelta(t.txnType, Number(t.totalAmount || 0))
+          if (reverseDelta !== 0) {
+            reverseDeltaByAccount.set(
+              t.accountId,
+              (reverseDeltaByAccount.get(t.accountId) || 0) + reverseDelta
+            )
+          }
+        }
+
+        if (reverseDeltaByAccount.size > 0) {
+          const accounts = await tx.investmentAccount.findMany({
+            where: {
+              id: { in: Array.from(reverseDeltaByAccount.keys()) },
+              userId: session.user.id,
+            },
+            select: { id: true, cashBalance: true },
+          })
+          for (const acc of accounts) {
+            const delta = reverseDeltaByAccount.get(acc.id) || 0
+            if (Math.abs(delta) > 0.0001) {
+              const currentCash = Number(acc.cashBalance || 0)
+              if (delta > 0 || (delta < 0 && currentCash > 0)) {
+                await tx.investmentAccount.update({
+                  where: { id: acc.id },
+                  data: { cashBalance: applyCashDeltaClamped(currentCash, delta) },
+                })
+              }
+            }
+          }
+        }
+
+        return result.count
       })
+
       invalidateUserHoldingsCache(session.user.id)
-      return NextResponse.json({ success: true, count: result.count })
+      return NextResponse.json({ success: true, count: deletedCount })
     }
 
     // 2. Clear all transactions (scoped or global for user)

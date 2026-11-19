@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { calculateUserHoldings } from '@/lib/analytics/holdings'
+import { calculateUserHoldings, invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
 import {
   analyzePortfolioRisks,
   scanPortfolioOpportunities,
@@ -250,5 +250,38 @@ ${opportunityReport.opportunities.slice(0, 4).map((o) => `- [${o.opportunityType
   } catch (error: any) {
     console.error('[POST /api/radar error]', error)
     return NextResponse.json({ error: error.message || 'Failed to execute radar scan' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const body = await req.json().catch(() => ({}))
+    const alertId = typeof body?.alertId === 'string' ? body.alertId.trim() : ''
+    if (!alertId) {
+      return NextResponse.json({ error: 'Missing alertId' }, { status: 400 })
+    }
+
+    await prisma.allocationAlert.updateMany({
+      where: {
+        id: alertId,
+        userId: session.user.id,
+      },
+      data: {
+        acknowledged: true,
+        acknowledgedAt: new Date(),
+      },
+    })
+
+    invalidateUserPortfolioCache(session.user.id)
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('[PATCH /api/radar error]', error)
+    return NextResponse.json({ error: error.message || 'Failed to acknowledge alert' }, { status: 500 })
   }
 }

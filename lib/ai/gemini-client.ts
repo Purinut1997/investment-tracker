@@ -1,11 +1,17 @@
 /**
  * lib/ai/gemini-client.ts
- * Multi-model Gemini client with Auto-fallback chain and AiAdviceLog auditing.
+ * Multi-model Gemini client with Auto-fallback chain, reasoning (thinkingBudget),
+ * optional Google Search Grounding, request timeout, and AiAdviceLog auditing.
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@/lib/prisma'
 import { decrypt } from '@/lib/crypto'
+
+export interface GroundingSource {
+  title: string
+  url: string
+}
 
 export interface CallGeminiOptions {
   userId: string
@@ -29,11 +35,53 @@ export interface CallGeminiOptions {
   systemInstruction?: string
   responseMimeType?: 'application/json' | 'text/plain'
   thinkingBudget?: number
+  enableGoogleSearch?: boolean
+  timeoutMs?: number
+  skipLog?: boolean
 }
 
 export interface CallGeminiResult {
   text: string
   modelUsed: string
+  groundingSources?: GroundingSource[]
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`Gemini timeout (${ms}ms) on ${label}`))
+    }, ms)
+  })
+  try {
+    return await Promise.race([promise, timeoutPromise])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+function extractGroundingSources(response: any): GroundingSource[] {
+  const chunks: any[] = response?.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+  const seen = new Set<string>()
+  const sources: GroundingSource[] = []
+
+  for (const chunk of chunks) {
+    const url = String(chunk?.web?.uri || '').trim()
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    const rawTitle = String(chunk?.web?.title || '').trim()
+    let hostname = url
+    try {
+      hostname = new URL(url).hostname.replace(/^www\./, '')
+    } catch {}
+    sources.push({
+      title: rawTitle || hostname,
+      url,
+    })
+    if (sources.length >= 6) break
+  }
+
+  return sources
 }
 
 export async function callGemini({
@@ -44,6 +92,9 @@ export async function callGemini({
   systemInstruction,
   responseMimeType,
   thinkingBudget,
+  enableGoogleSearch = false,
+  timeoutMs = 28000,
+  skipLog = false,
 }: CallGeminiOptions): Promise<CallGeminiResult> {
   // 1. Get user settings and prepare candidate API keys (User key first, then System key fallback)
   const userSettings = await prisma.userSettings.findUnique({
@@ -80,29 +131,41 @@ export async function callGemini({
   if (userSettings?.aiModelMode === 'manual' && userSettings.selectedAiModel?.modelId) {
     modelsToTry = [userSettings.selectedAiModel.modelId]
   } else {
-    // Auto Mode: get active models ordered by default, then sortOrder
+    // Auto Mode: prioritize non-billing models first, keep billing models only as last-resort fallback
     const dbModels = await prisma.aiModelOption.findMany({
       where: { isActive: true },
       orderBy: [{ isDefaultForAuto: 'desc' }, { sortOrder: 'asc' }],
     })
 
-    if (dbModels.length > 0) {
-      modelsToTry = dbModels.map((m) => m.modelId).filter((id) => !deprecatedModels.has(id))
-    }
+    const activeModels = dbModels.filter((m) => !deprecatedModels.has(m.modelId))
+    const standardModels = activeModels.filter((m) => m.tier !== 'requires_billing').map((m) => m.modelId)
+    const billingModels = activeModels.filter((m) => m.tier === 'requires_billing').map((m) => m.modelId)
+    modelsToTry = [...standardModels, ...billingModels]
 
     if (modelsToTry.length === 0) {
       modelsToTry = ['gemini-2.5-flash', 'gemini-3-flash']
     }
   }
 
-  // Determine optimal thinking budget:
-  // For fast responses (<4s), default to 0 for operational endpoints unless explicitly specified or forecast
+  // Enable structured reasoning budget for advisory/analysis endpoints; 0 for fast extraction
+  const deepReasoningTypes = new Set<CallGeminiOptions['logType']>([
+    'advisor',
+    'bucket_chat',
+    'forecast_explain',
+    'tax_explain',
+    'weekly_digest',
+    'daily_brief',
+  ])
+
   const effectiveThinkingBudget =
     thinkingBudget !== undefined
       ? thinkingBudget
-      : logType === 'forecast_explain'
-      ? 512
+      : deepReasoningTypes.has(logType)
+      ? 1024
       : 0
+
+  // Google Search Grounding cannot be paired with application/json responseMimeType on Gemini API
+  const shouldUseSearch = Boolean(enableGoogleSearch && responseMimeType !== 'application/json')
 
   let lastError: any = null
 
@@ -113,27 +176,69 @@ export async function callGemini({
     const ai = new GoogleGenerativeAI(currentApiKey)
 
     for (const modelId of modelsToTry) {
-      try {
+      const contentPayload = images && images.length > 0 ? [prompt, ...images] : prompt
+
+      const invokeModel = async (useSearch: boolean, useThinking: boolean) => {
+        const generationConfig: Record<string, any> = {}
+        if (responseMimeType) {
+          generationConfig.responseMimeType = responseMimeType
+        }
+        if (useThinking && effectiveThinkingBudget > 0) {
+          generationConfig.thinkingConfig = { thinkingBudget: effectiveThinkingBudget }
+        }
+
         const model = ai.getGenerativeModel({
           model: modelId,
           ...(systemInstruction ? { systemInstruction } : {}),
-          generationConfig: {
-            ...(responseMimeType ? { responseMimeType } : {}),
-            ...(effectiveThinkingBudget !== undefined
-              ? { thinkingConfig: { thinkingBudget: effectiveThinkingBudget } }
-              : {}),
-          } as any,
+          ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
+          ...(useSearch ? { tools: [{ googleSearch: {} } as any] } : {}),
         })
 
-        const contentPayload = images && images.length > 0 ? [prompt, ...images] : prompt
-
-        const result = await model.generateContent(contentPayload as any)
-        const response = await result.response
+        const result = await withTimeout(
+          model.generateContent(contentPayload as any),
+          timeoutMs,
+          modelId
+        )
+        const response = result.response
         const text = response.text()
-
         if (!text) {
           throw new Error('Empty response from model')
         }
+        const groundingSources = useSearch ? extractGroundingSources(response) : []
+        return { text, groundingSources }
+      }
+
+      try {
+        let generated: { text: string; groundingSources: GroundingSource[] }
+        try {
+          generated = await invokeModel(shouldUseSearch, effectiveThinkingBudget > 0)
+        } catch (primaryErr: any) {
+          const msg = String(primaryErr?.message || '')
+          const isAuthKeyInvalid =
+            msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')
+          const isFeatureRejected =
+            !isAuthKeyInvalid &&
+            (shouldUseSearch || effectiveThinkingBudget > 0) &&
+            (msg.includes('google_search') ||
+              msg.includes('Search') ||
+              msg.includes('tools') ||
+              msg.includes('thinking') ||
+              msg.includes('thinkingConfig') ||
+              msg.includes('INVALID_ARGUMENT') ||
+              msg.includes('400'))
+
+          if (!isFeatureRejected) {
+            throw primaryErr
+          }
+
+          console.warn(
+            `[Gemini] Retrying ${modelId} without optional search/thinking features after:`,
+            msg
+          )
+          generated = await invokeModel(false, false)
+        }
+
+        const { text, groundingSources } = generated
 
         // Map logType safely to Prisma enum (advisor, weekly_digest, forecast_explain, tax_explain, csv_mapping, quick_add_multimodal)
         const validDbLogType =
@@ -145,39 +250,42 @@ export async function callGemini({
             ? logType
             : 'advisor'
 
-        // 4. Log to AiAdviceLog before returning so subsequent DB lookups never race
-        try {
-          await prisma.aiAdviceLog.create({
-            data: {
-              userId,
-              logType: validDbLogType,
-              prompt,
-              response: text,
-              modelUsed: modelId,
-            },
-          })
-        } catch (err) {
-          console.error('[AiAdviceLog Error]', err)
+        // 4. Log to AiAdviceLog before returning unless caller manages persistence itself
+        if (!skipLog) {
+          try {
+            await prisma.aiAdviceLog.create({
+              data: {
+                userId,
+                logType: validDbLogType,
+                prompt,
+                response: text,
+                modelUsed: modelId,
+              },
+            })
+          } catch (err) {
+            console.error('[AiAdviceLog Error]', err)
+          }
         }
 
         return {
           text,
           modelUsed: modelId,
+          ...(groundingSources.length > 0 ? { groundingSources } : {}),
         }
       } catch (err: any) {
         lastError = err
-        const errMsg = err?.message || ''
+        const errMsg = String(err?.message || '')
         console.warn(`[Gemini] Model ${modelId} with key #${keyIdx + 1} failed:`, errMsg)
 
-        // If rate limit (429) or quota exceeded, or invalid key on user key:
-        // Try next model, or let loop fall through to system key fallback
-        const isQuotaOrAuth =
+        const isRetryable =
           errMsg.includes('429') ||
           errMsg.includes('Quota') ||
           errMsg.includes('ResourceExhausted') ||
-          errMsg.includes('API_KEY_INVALID')
+          errMsg.includes('API_KEY_INVALID') ||
+          errMsg.includes('API key not valid') ||
+          errMsg.includes('timeout')
 
-        if (userSettings?.aiModelMode === 'manual' && !isQuotaOrAuth) {
+        if (userSettings?.aiModelMode === 'manual' && !isRetryable) {
           break
         }
       }
@@ -189,8 +297,8 @@ export async function callGemini({
   }
 
   // If all failed, format user-friendly message
-  const errString = lastError?.message || 'Unknown error'
-  if (errString.includes('API_KEY_INVALID') || errString.includes('400')) {
+  const errString = String(lastError?.message || 'Unknown error')
+  if (errString.includes('API_KEY_INVALID') || errString.includes('API key not valid')) {
     throw new Error('Gemini API Key ไม่ถูกต้อง กรุณาตรวจสอบคีย์ในหน้าตั้งค่า')
   } else if (errString.includes('429') || errString.includes('Quota')) {
     throw new Error('โควตาการเรียกใช้งาน Gemini API เต็มชั่วคราว กรุณารอสักครู่แล้วลองใหม่')

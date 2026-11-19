@@ -38,6 +38,7 @@ import {
   STRATEGY_TYPE_META,
 } from '@/lib/analytics/strategy-buckets'
 import { TechnicalSignal } from '@/lib/market-data/technical-signals'
+import { formatGoldWeightSublabel, getAssetUnitLabel } from '@/lib/market-data/gold'
 import {
   ResponsiveContainer,
   PieChart,
@@ -139,7 +140,7 @@ function DashboardErrorState() {
 }
 
 export default function DashboardPage() {
-  const [timeframe, setTimeframe] = useState('1M')
+  const [timeframe, setTimeframe] = useState('ALL')
   const [selectedStock, setSelectedStock] = useState<{
     symbol: string
     name?: string
@@ -237,7 +238,30 @@ export default function DashboardPage() {
   const hasFatalError = Boolean(summaryError && !summary)
 
   const [refreshingPrices, setRefreshingPrices] = useState(false)
+  const [acknowledgingAlert, setAcknowledgingAlert] = useState(false)
   const [refreshToast, setRefreshToast] = useState<{ title: string; desc: string } | null>(null)
+
+  async function handleAcknowledgeAlert(alertId: string) {
+    if (!alertId || acknowledgingAlert) return
+    setAcknowledgingAlert(true)
+    try {
+      const res = await fetch('/api/radar', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alertId }),
+      })
+      if (res.ok) {
+        if (typeof window !== 'undefined') {
+          try {
+            sessionStorage.removeItem('port_summary_cache_v1')
+          } catch {}
+        }
+        await mutate('/api/portfolio/summary')
+      }
+    } finally {
+      setAcknowledgingAlert(false)
+    }
+  }
 
   async function handleRefreshPrices() {
     setRefreshingPrices(true)
@@ -464,11 +488,10 @@ export default function DashboardPage() {
     Array.isArray(summary?.performanceData) ? summary.performanceData : []
 
   const monthLimits: Record<string, number> = {
-    '1D': 2,
-    '1W': 2,
-    '1M': 3,
+    '3M': 3,
     '6M': 6,
     '1Y': 12,
+    '2Y': 24,
     ALL: Infinity,
   }
   const limit = monthLimits[timeframe] ?? Infinity
@@ -576,12 +599,22 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            <Link
-              href="/plans"
-              className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-semibold hover:bg-amber-500/30 transition-colors shrink-0"
-            >
-              ตรวจสอบแผน
-            </Link>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleAcknowledgeAlert(summary.unackAlert.id)}
+                disabled={acknowledgingAlert}
+                className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {acknowledgingAlert ? 'กำลังบันทึก...' : 'รับทราบแล้ว'}
+              </button>
+              <Link
+                href="/plans"
+                className="px-3 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-semibold hover:bg-amber-500/30 transition-colors"
+              >
+                ตรวจสอบแผน
+              </Link>
+            </div>
           </div>
         )}
 
@@ -855,6 +888,89 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* ── 1.5 QUANTITATIVE PERFORMANCE METRICS STRIP ─────────────────── */}
+        {summary?.quantMetrics && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.08] flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  XIRR (ทบต้นเฉลี่ย/ปี)
+                </span>
+                <p
+                  className={`text-xl sm:text-2xl font-black font-mono tabular-nums mt-0.5 ${
+                    (summary.quantMetrics.xirrPercent ?? 0) >= 0
+                      ? 'text-emerald-400'
+                      : 'text-rose-400'
+                  }`}
+                >
+                  {(summary.quantMetrics.xirrPercent ?? 0) >= 0 ? '+' : ''}
+                  {Number(summary.quantMetrics.xirrPercent ?? 0).toFixed(2)}%
+                </p>
+                <span className="text-[10px] text-slate-500">Money-Weighted Cash Flow</span>
+              </div>
+              <TrendingUp className="w-5 h-5 text-indigo-400 shrink-0" />
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.08] flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Alpha vs S&amp;P 500 (PME)
+                </span>
+                <p
+                  className={`text-xl sm:text-2xl font-black font-mono tabular-nums mt-0.5 ${
+                    (summary.quantMetrics.pmeExcessPercent ?? 0) >= 0
+                      ? 'text-emerald-400'
+                      : 'text-amber-300'
+                  }`}
+                >
+                  {(summary.quantMetrics.pmeExcessPercent ?? 0) >= 0 ? '+' : ''}
+                  {Number(summary.quantMetrics.pmeExcessPercent ?? 0).toFixed(2)}%
+                </p>
+                <span className="text-[10px] text-slate-500">เทียบเงินต้นเดียวกันลง S&amp;P</span>
+              </div>
+              <Target className="w-5 h-5 text-emerald-400 shrink-0" />
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.08] flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Max Drawdown (พอร์ต)
+                </span>
+                <p className="text-xl sm:text-2xl font-black font-mono tabular-nums text-rose-400 mt-0.5">
+                  {Number(summary.quantMetrics.maxDrawdownPercent ?? 0).toFixed(2)}%
+                </p>
+                <span className="text-[10px] text-slate-500">
+                  Vol {Number(summary.quantMetrics.annualizedVolatilityPercent ?? 0).toFixed(1)}%/ปี
+                </span>
+              </div>
+              <Activity className="w-5 h-5 text-rose-400 shrink-0" />
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#121620] border border-white/[0.08] flex items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Sharpe Ratio
+                </span>
+                <p
+                  className={`text-xl sm:text-2xl font-black font-mono tabular-nums mt-0.5 ${
+                    (summary.quantMetrics.sharpeRatio ?? 0) >= 1
+                      ? 'text-emerald-400'
+                      : (summary.quantMetrics.sharpeRatio ?? 0) >= 0
+                      ? 'text-indigo-300'
+                      : 'text-rose-400'
+                  }`}
+                >
+                  {Number(summary.quantMetrics.sharpeRatio ?? 0).toFixed(2)}
+                </p>
+                <span className="text-[10px] text-slate-500">
+                  ผลตอบแทนต่อความเสี่ยง ({summary.quantMetrics.monthsMeasured ?? 0} เดือน)
+                </span>
+              </div>
+              <ShieldCheck className="w-5 h-5 text-cyan-400 shrink-0" />
+            </div>
+          </div>
+        )}
 
         {/* ── 2. 30-SECOND COMMAND CENTER: DIME! BUCKETS & TODAY'S SIGNALS ───── */}
         <div className="rounded-3xl bg-gradient-to-b from-[#141824] to-[#11141D] border border-white/[0.09] p-5 sm:p-6 space-y-5 shadow-2xl shadow-black/30">
@@ -1150,7 +1266,7 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex items-center gap-1 bg-[#171C28] p-1 rounded-xl border border-white/[0.07] self-start sm:self-auto">
-                {['1D', '1W', '1M', '6M', '1Y', 'ALL'].map((tf) => (
+                {['3M', '6M', '1Y', '2Y', 'ALL'].map((tf) => (
                   <button
                     key={tf}
                     onClick={() => setTimeframe(tf)}
@@ -1609,10 +1725,23 @@ export default function DashboardPage() {
                         </td>
 
                         <td className="text-right font-mono text-sm font-semibold text-slate-200">
-                          {Number(h.quantity).toLocaleString('en-US', {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 4,
-                          })}
+                          <div>
+                            {Number(h.quantity).toLocaleString('en-US', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits:
+                                h.assetType === 'gold' || h.assetType === 'crypto' ? 6 : 4,
+                            })}{' '}
+                            {h.assetType === 'gold' && (
+                              <span className="text-[11px] text-amber-300 font-normal">
+                                {getAssetUnitLabel(h.ticker, h.assetType)}
+                              </span>
+                            )}
+                          </div>
+                          {h.assetType === 'gold' && (
+                            <div className="text-[10px] text-amber-300/75 font-sans font-normal mt-0.5">
+                              {formatGoldWeightSublabel(Number(h.quantity), h.ticker, h.assetType)}
+                            </div>
+                          )}
                         </td>
 
                         <td className="text-right font-mono text-sm font-semibold text-slate-300 hidden lg:table-cell">

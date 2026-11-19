@@ -90,6 +90,8 @@ export default function AccountsPage() {
       const resJson = await res.json() as { error?: string }
       if (!res.ok) throw new Error(resJson.error || 'บันทึกบัญชีไม่สำเร็จ')
       mutate('/api/accounts')
+      mutate('/api/cash-wallet')
+      mutate('/api/portfolio/summary')
       setModalOpen(false)
     } catch (err: unknown) {
       setFormError(getErrorMessage(err, 'เกิดข้อผิดพลาด'))
@@ -111,6 +113,8 @@ export default function AccountsPage() {
       const resJson = await res.json() as { error?: string }
       if (!res.ok) throw new Error(resJson.error || 'ลบบัญชีไม่สำเร็จ')
       mutate('/api/accounts')
+      mutate('/api/cash-wallet')
+      mutate('/api/portfolio/summary')
     } catch (err: unknown) {
       alert(getErrorMessage(err, 'ลบบัญชีไม่สำเร็จ'))
     } finally {

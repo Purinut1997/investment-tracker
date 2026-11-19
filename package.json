@@ -13,7 +13,9 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "test:tax": "ts-node lib/analytics/tax-fifo.test.ts",
-    "test:price-sync": "ts-node lib/market-data/price-sync.test.ts"
+    "test:price-sync": "ts-node lib/market-data/price-sync.test.ts",
+    "test:quant": "ts-node lib/analytics/quant-engine.test.ts",
+    "test:all": "npm run test:tax && npm run test:price-sync && npm run test:quant"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

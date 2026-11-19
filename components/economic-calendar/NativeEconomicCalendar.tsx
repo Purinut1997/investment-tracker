@@ -529,17 +529,17 @@ export function NativeEconomicCalendar({
             <ShieldAlert className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-white font-bold text-xs tracking-tight">
-                ปฏิทินเหตุการณ์เศรษฐกิจโลกในระบบ (Built-in Macro Intelligence)
+                คู่มือรอบประกาศตัวเลขมหภาค & Playbook ผลกระทบ (Reference Guide)
               </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                100% เสถียร ไม่โดนบล็อก
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                ตารางรอบประกาศโดยประมาณ — ดูวันและตัวเลขจริงได้ที่ TradingView สด
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
-              <span>แสดงวันที่ เวลาประเทศไทย (GMT+7) ตัวเลขคาดการณ์ และคู่มือวิเคราะห์ผลกระทบต่อพอร์ตลงทุน</span>
-              <span className="text-emerald-400 font-medium">• ปรับเทียบเวลาอัตโนมัติ</span>
+              <span>สรุปเวลาประกาศมาตรฐาน (GMT+7), ตัวเลขคาดการณ์อ้างอิง และสถานการณ์กระทบสินทรัพย์</span>
+              <span className="text-indigo-400 font-medium">• ใช้ประกอบการวางแผนล่วงหน้า</span>
             </p>
           </div>
         </div>

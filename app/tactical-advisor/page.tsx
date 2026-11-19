@@ -1043,6 +1043,95 @@ export default function TacticalAdvisorPage() {
                 <span className="text-xs text-slate-400 font-mono">Accountability</span>
               </div>
 
+              {payload.outcomeMetrics && payload.outcomeMetrics.totalTrackedCalls > 0 && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06]">
+                      <span className="text-[11px] text-slate-400 block">Win Rate จริง</span>
+                      <span className="text-lg font-bold font-mono text-emerald-400">
+                        {payload.outcomeMetrics.winRatePercent !== null
+                          ? `${payload.outcomeMetrics.winRatePercent}%`
+                          : 'รอประเมิน'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">
+                        ถูก {payload.outcomeMetrics.hits} / พลาด {payload.outcomeMetrics.misses}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06]">
+                      <span className="text-[11px] text-slate-400 block">คำแนะนำที่ติดตามผล</span>
+                      <span className="text-lg font-bold font-mono text-white">
+                        {payload.outcomeMetrics.totalTrackedCalls}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">รายการย้อนหลัง (&gt;12 ชม.)</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06]">
+                      <span className="text-[11px] text-slate-400 block">ผลตอบแทนเฉลี่ยฝั่งซื้อ</span>
+                      <span
+                        className={`text-lg font-bold font-mono ${
+                          (payload.outcomeMetrics.avgAccumulateReturnPercent ?? 0) >= 0
+                            ? 'text-emerald-400'
+                            : 'text-rose-400'
+                        }`}
+                      >
+                        {payload.outcomeMetrics.avgAccumulateReturnPercent !== null
+                          ? `${payload.outcomeMetrics.avgAccumulateReturnPercent >= 0 ? '+' : ''}${payload.outcomeMetrics.avgAccumulateReturnPercent}%`
+                          : '—'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">หลังแนะนำ ACCUMULATE</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06]">
+                      <span className="text-[11px] text-slate-400 block">ความเสี่ยงที่หลบได้ฝั่งขาย</span>
+                      <span
+                        className={`text-lg font-bold font-mono ${
+                          (payload.outcomeMetrics.avgTrimAvoidedDropPercent ?? 0) >= 0
+                            ? 'text-cyan-300'
+                            : 'text-amber-300'
+                        }`}
+                      >
+                        {payload.outcomeMetrics.avgTrimAvoidedDropPercent !== null
+                          ? `${payload.outcomeMetrics.avgTrimAvoidedDropPercent >= 0 ? '+' : ''}${payload.outcomeMetrics.avgTrimAvoidedDropPercent}%`
+                          : '—'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">หลังแนะนำ TRIM_PROFIT</span>
+                    </div>
+                  </div>
+
+                  {payload.outcomeMetrics.recentCalls.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {payload.outcomeMetrics.recentCalls.slice(0, 8).map((c, cIdx) => (
+                        <div
+                          key={`${c.dateKey}-${c.ticker}-${cIdx}`}
+                          className="px-2.5 py-1.5 rounded-lg bg-[#0A0D14] border border-white/[0.06] text-[11px] font-mono flex items-center gap-2"
+                        >
+                          <span className="font-bold text-white">{c.ticker}</span>
+                          <span className="text-slate-400">
+                            {c.currency}{c.recPrice} → {c.currency}{c.currentPrice}
+                          </span>
+                          <span className={c.returnPercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                            {c.returnPercent >= 0 ? '+' : ''}
+                            {c.returnPercent}%
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              c.verdict === 'HIT'
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : c.verdict === 'MISS'
+                                ? 'bg-rose-500/20 text-rose-300'
+                                : 'bg-slate-700/60 text-slate-300'
+                            }`}
+                          >
+                            {c.verdict}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {payload.trackRecordReview.length === 0 ? (
                 <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] text-xs sm:text-sm text-slate-400 text-center">
                   เป็นการวิเคราะห์รอบแรก ระบบจะเริ่มบันทึกและตรวจการบ้านในรอบถัดไป

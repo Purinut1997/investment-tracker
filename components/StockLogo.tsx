@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { isGoldTicker } from '@/lib/market-data/gold'
 
 interface StockLogoProps {
   ticker: string
@@ -37,6 +38,22 @@ export function StockLogo({
   const [error, setError] = useState(false)
   const cleanTicker = (ticker || '').trim().toUpperCase()
   const dim = typeof size === 'number' ? `${size}px` : size
+
+  // Special golden bullion emblem for Gold assets (XAU / GOLD965 / etc.)
+  if (isGoldTicker(cleanTicker)) {
+    return (
+      <div
+        className={`rounded-xl flex flex-col items-center justify-center font-black bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 text-amber-950 shadow-md shadow-amber-500/20 shrink-0 border border-amber-300/60 select-none ${className}`}
+        style={{ width: dim, height: dim, minWidth: dim, minHeight: dim }}
+        title={name || cleanTicker}
+      >
+        <span className="text-[11px] leading-none tracking-tight">Au</span>
+        <span className="text-[8px] font-bold opacity-80 leading-none mt-0.5">
+          {cleanTicker === 'GOLD965' ? '96.5' : '99.99'}
+        </span>
+      </div>
+    )
+  }
 
   // Parqet symbol logo CDN - high quality crisp SVG/PNG logos
   const logoUrl = `https://assets.parqet.com/logos/symbol/${encodeURIComponent(cleanTicker)}?format=png`

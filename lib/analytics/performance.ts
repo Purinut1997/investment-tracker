@@ -6,12 +6,9 @@
 
 import { prisma } from '@/lib/prisma'
 import { getExchangeRate } from '../market-data/frankfurter'
+import type { PerformancePoint } from './quant-metrics'
 
-export interface PerformancePoint {
-  month: string
-  value: number
-  benchmark: number
-}
+export * from './quant-metrics'
 
 const spxMonthlyCache = new Map<string, { closes: Map<string, number>; timestamp: number }>()
 const SPX_CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
@@ -60,95 +57,6 @@ async function fetchSpxMonthlyCloses(): Promise<Map<string, number>> {
   }
 
   return closesMap
-}
-
-/**
- * Calculates Money-Weighted Annualized Return (XIRR) using Newton-Raphson with bisection fallback.
- * Cash flows: negative for outflows (investments/buys), positive for inflows (sells/dividends/ending value).
- */
-export function calculatePortfolioXIRR(
-  cashFlows: Array<{ amount: number; date: Date }>
-): number {
-  if (!cashFlows || cashFlows.length < 2) return 0
-
-  const valid = cashFlows
-    .filter((cf) => Number.isFinite(cf.amount) && cf.amount !== 0 && !isNaN(cf.date.getTime()))
-    .sort((a, b) => a.date.getTime() - b.date.getTime())
-
-  if (valid.length < 2) return 0
-  const hasPos = valid.some((c) => c.amount > 0)
-  const hasNeg = valid.some((c) => c.amount < 0)
-  if (!hasPos || !hasNeg) return 0
-
-  const t0 = valid[0].date.getTime()
-  const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000
-  const points = valid.map((cf) => ({
-    amount: cf.amount,
-    years: (cf.date.getTime() - t0) / MS_PER_YEAR,
-  }))
-
-  const npv = (rate: number) => {
-    const base = 1 + rate
-    if (base <= 0) return Number.POSITIVE_INFINITY
-    let sum = 0
-    for (const p of points) {
-      sum += p.amount / Math.pow(base, p.years)
-    }
-    return sum
-  }
-
-  const dnpv = (rate: number) => {
-    const base = 1 + rate
-    if (base <= 0) return 0
-    let sum = 0
-    for (const p of points) {
-      if (p.years !== 0) {
-        sum -= (p.years * p.amount) / Math.pow(base, p.years + 1)
-      }
-    }
-    return sum
-  }
-
-  let rate = 0.1
-  for (let i = 0; i < 50; i++) {
-    const f = npv(rate)
-    if (Math.abs(f) < 1e-6) {
-      return Number((rate * 100).toFixed(2))
-    }
-    const df = dnpv(rate)
-    if (!Number.isFinite(df) || Math.abs(df) < 1e-10) break
-    const nextRate = rate - f / df
-    if (!Number.isFinite(nextRate) || nextRate <= -0.95 || nextRate > 10) break
-    if (Math.abs(nextRate - rate) < 1e-7) {
-      return Number((nextRate * 100).toFixed(2))
-    }
-    rate = nextRate
-  }
-
-  // Bisection fallback over [-0.95, 5.0]
-  let low = -0.95
-  let high = 5.0
-  let fLow = npv(low)
-  const fHigh = npv(high)
-  if (!Number.isFinite(fLow) || !Number.isFinite(fHigh) || fLow * fHigh > 0) {
-    return 0
-  }
-
-  for (let i = 0; i < 60; i++) {
-    const mid = (low + high) / 2
-    const fMid = npv(mid)
-    if (Math.abs(fMid) < 1e-5 || (high - low) < 1e-6) {
-      return Number((mid * 100).toFixed(2))
-    }
-    if (fLow * fMid <= 0) {
-      high = mid
-    } else {
-      low = mid
-      fLow = fMid
-    }
-  }
-
-  return Number((((low + high) / 2) * 100).toFixed(2))
 }
 
 function getMonthKey(d: Date): string {
@@ -343,7 +251,7 @@ export async function calculatePortfolioPerformance(
     let monthVal = 0
     for (const [assetId, lots] of fifoLots.entries()) {
       const remQty = lots.reduce((sum, l) => sum + l.qty, 0)
-      if (remQty <= 0.00001) continue
+      if (remQty <= 0.0000001) continue
       const costSum = lots.reduce((sum, l) => sum + l.qty * l.unitCostBase, 0)
       const knownPrice = lastKnownPriceBase.get(assetId)
       monthVal += knownPrice && knownPrice > 0 ? remQty * knownPrice : costSum

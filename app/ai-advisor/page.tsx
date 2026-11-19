@@ -21,17 +21,27 @@ import {
   ArrowRight,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Info,
   CheckCircle2,
   Newspaper,
   Globe,
   LineChart,
+  Brain,
+  Save,
 } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
 import { StockLogo } from '@/components/StockLogo'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import { FormattedCopilotMessage } from '@/components/FormattedCopilotMessage'
 import type { TacticalAdvisorApiResponse } from '@/app/tactical-advisor/page'
+import type { UserInvestmentMemory } from '@/lib/ai/outcome-evaluator'
+
+interface GroundingSource {
+  title: string
+  url: string
+}
 
 interface ChatMessage {
   id: string
@@ -39,6 +49,7 @@ interface ChatMessage {
   content: string
   timestamp: string
   modelUsed?: string
+  groundingSources?: GroundingSource[]
 }
 
 interface ExternalNewsItem {
@@ -105,21 +116,41 @@ const QUICK_STRATEGY_QUESTIONS = [
 
 export default function AiAdvisorPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [hasHydratedThread, setHasHydratedThread] = useState(false)
   const [inputQuestion, setInputQuestion] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; market: string } | null>(null)
   const [activeLeftTab, setActiveLeftTab] = useState<'charts' | 'news'>('charts')
+  const [memoryOpen, setMemoryOpen] = useState(false)
+  const [savingMemory, setSavingMemory] = useState(false)
+  const [memorySavedNotice, setMemorySavedNotice] = useState(false)
+  const [memoryDraft, setMemoryDraft] = useState<UserInvestmentMemory>({
+    riskTolerance: 'moderate',
+    horizonYears: 10,
+    maxSinglePositionPercent: 20,
+    maxDrawdownTolerancePercent: 20,
+    preferredStyle: 'Core-Satellite Growth + Dividend',
+    personalRules: '',
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // 1. Fetch 360° Tactical & Market Context
-  const { data: responseData, isLoading: isContextLoading } = useSWR<TacticalAdvisorApiResponse>(
+  const { data: responseData } = useSWR<TacticalAdvisorApiResponse>(
     '/api/tactical-advisor',
     {
       revalidateOnFocus: false,
       dedupingInterval: 60000,
     }
   )
+
+  // 1.5 Fetch Persistent Copilot Thread & User AI Memory
+  const { data: persistedChatData, isLoading: isChatHistoryLoading, mutate: mutateChatHistory } = useSWR<{
+    messages?: ChatMessage[]
+    memory?: UserInvestmentMemory
+  }>('/api/tactical-advisor/chat', {
+    revalidateOnFocus: false,
+  })
 
   // 2. Fetch Live External News Feed
   const { data: newsApiResponse } = useSWR<{
@@ -146,9 +177,24 @@ export default function AiAdvisorPage() {
     scrollToBottom()
   }, [messages, isLoading])
 
-  // Initialize Welcome Message once context is loaded
+  // Hydrate Memory Draft from DB
   useEffect(() => {
-    if (messages.length === 0 && payload) {
+    if (persistedChatData?.memory) {
+      setMemoryDraft(persistedChatData.memory)
+    }
+  }, [persistedChatData?.memory])
+
+  // Restore Persistent Chat History or Initialize Welcome Message once loaded
+  useEffect(() => {
+    if (isChatHistoryLoading || hasHydratedThread) return
+
+    if (persistedChatData?.messages && persistedChatData.messages.length > 0) {
+      setMessages(persistedChatData.messages)
+      setHasHydratedThread(true)
+      return
+    }
+
+    if (payload) {
       const regimeName = payload.marketRegime?.statusLabelTh || 'ผันผวนและควรระมัดระวัง'
       const riskScore = pillars?.formula?.calculatedRiskScore || payload.marketRegime?.riskLevel || 4
       const posture = pillars?.formula?.postureLabelTh || '🛡️ ตั้งรับรอจังหวะ (Defensive Tactical)'
@@ -156,12 +202,12 @@ export default function AiAdvisorPage() {
       const welcomeText = `สวัสดีครับ ผมคือ **AI ที่ปรึกษาการลงทุน 360° (Senior Wealth Copilot)** ประจำตัวคุณ
 
 ผมได้ประมวลผลข้อมูลรอบด้านครบทุกมิติ พร้อมให้คำปรึกษาแล้วครับ:
-- **ข้อมูลภายในพอร์ต:** มูลค่าสินทรัพย์รวม, เงินสดสำรอง (Dry Powder), สัดส่วนการถือครองรายตัว, ต้นทุน และกำไร/ขาดทุนจริง
-- **ข้อมูลกราฟเทคนิคภายนอก:** วิเคราะห์แท่งเทียน, Wilder's RSI(14), เส้นค่าเฉลี่ย SMA 50/200, และแนวรับ/แนวต้าน Pivot S1/S2/R1
-- **ข่าวสารภายนอกสด (Live News):** เชื่อมต่อข่าวเศรษฐกิจโลกและข่าวรายบริษัทจาก Finnhub, Yahoo Finance, Google News
+- **ข้อมูลภายในพอร์ต & ภาษี FIFO:** มูลค่าสินทรัพย์รวม, เงินสดสำรอง (Dry Powder), ต้นทุน FIFO และเกณฑ์ภาษี ป.161/2566
+- **พื้นฐาน Valuation & ตัวเร่งราคา:** P/E, ROE, D/E, Free Cash Flow และปฏิทินงบ (Earnings) / ขึ้น XD ที่ใกล้ถึง
+- **กราฟเทคนิค & ข่าวสด:** Wilder's RSI(14), เส้น SMA 50/200, Pivot S1/S2/R1 พร้อมค้นหาข่าวสดผ่าน Google Search Grounding
 - **สภาวะมหภาค 4 เสาหลัก:** สภาวะตลาดขณะนี้คือ **${regimeName}** (ความเสี่ยง **${riskScore}/5**) กลยุทธ์หลัก: **${posture}**
 
-💡 คุณสามารถเลือกหัวข้อด่วนจากปุ่มแนะนำด้านบน คลิกดูกราฟสด/ข่าวสารจากแถบซ้าย หรือพิมพ์คำถามเจาะลึกได้ทันทีครับ`
+💡 คุณสามารถเลือกหัวข้อด่วนจากปุ่มแนะนำด้านบน ตั้งค่า "ความจำกลยุทธ์ส่วนตัว" ทางซ้าย หรือพิมพ์คำถามเจาะลึกได้ทันทีครับ`
 
       setMessages([
         {
@@ -169,11 +215,12 @@ export default function AiAdvisorPage() {
           role: 'assistant',
           content: welcomeText,
           timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
-          modelUsed: 'Gemini 2.5 Pro (CMT & Macro Engine)',
+          modelUsed: payload.modelUsed || 'Wealth Copilot Engine',
         },
       ])
+      setHasHydratedThread(true)
     }
-  }, [payload, pillars, messages.length])
+  }, [isChatHistoryLoading, hasHydratedThread, persistedChatData, payload, pillars])
 
   // Handle Send Question
   const handleSendMessage = async (textToSend?: string) => {
@@ -199,7 +246,14 @@ export default function AiAdvisorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: question.trim(),
-          messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
+          messages: updatedMessages.map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp,
+            ...(m.modelUsed ? { modelUsed: m.modelUsed } : {}),
+            ...(m.groundingSources ? { groundingSources: m.groundingSources } : {}),
+          })),
           tacticalContext: payload,
         }),
       })
@@ -212,13 +266,18 @@ export default function AiAdvisorPage() {
           content: json.answer || 'ไม่มีคำตอบจากระบบ',
           timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
           modelUsed: json.modelUsed,
+          groundingSources: Array.isArray(json.groundingSources) ? json.groundingSources : [],
         }
         setMessages((prev) => [...prev, botMsg])
+        mutateChatHistory()
       } else {
+        const errJson = await res.json().catch(() => ({}))
         const errorMsg: ChatMessage = {
           id: `bot-err-${Date.now()}`,
           role: 'assistant',
-          content: 'ขออภัยครับ ระบบไม่สามารถเชื่อมต่อและประมวลผลคำตอบได้ในขณะนี้ กรุณาลองส่งใหม่อีกครั้ง',
+          content:
+            errJson?.error ||
+            'ขออภัยครับ ระบบไม่สามารถเชื่อมต่อและประมวลผลคำตอบได้ในขณะนี้ กรุณาลองส่งใหม่อีกครั้ง',
           timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
         }
         setMessages((prev) => [...prev, errorMsg])
@@ -243,10 +302,36 @@ export default function AiAdvisorPage() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  // Reset Chat
-  const handleResetChat = () => {
-    if (confirm('คุณต้องการล้างประวัติการสนทนานี้และเริ่มรอบใหม่หรือไม่?')) {
-      setMessages([])
+  // Reset Chat (clears DB persisted thread cleanly)
+  const handleResetChat = async () => {
+    if (!confirm('คุณต้องการล้างประวัติการสนทนานี้และเริ่มรอบใหม่หรือไม่?')) return
+    try {
+      await fetch('/api/tactical-advisor/chat', { method: 'DELETE' })
+      await mutateChatHistory({ messages: [], memory: memoryDraft }, false)
+    } catch {}
+    setMessages([])
+    setHasHydratedThread(false)
+  }
+
+  // Save User Strategy Memory
+  const handleSaveMemory = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingMemory(true)
+    setMemorySavedNotice(false)
+    try {
+      const res = await fetch('/api/tactical-advisor/chat', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memory: memoryDraft }),
+      })
+      if (res.ok) {
+        const json = await res.json()
+        if (json.memory) setMemoryDraft(json.memory)
+        setMemorySavedNotice(true)
+        setTimeout(() => setMemorySavedNotice(false), 3000)
+      }
+    } finally {
+      setSavingMemory(false)
     }
   }
 
@@ -612,13 +697,161 @@ export default function AiAdvisorPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-300 pl-4 font-mono">
                     <span>✓ พอร์ต & เงินสดจริง</span>
-                    <span>✓ ข่าว Finnhub/Yahoo</span>
-                    <span>✓ Wilder's RSI(14)</span>
-                    <span>✓ แท่งเทียน & Pivot S1/R1</span>
+                    <span>✓ ข่าว + Google Search</span>
+                    <span>✓ P/E, ROE, FCF & งบ/XD</span>
+                    <span>✓ RSI, SMA & กฎส่วนตัว</span>
                   </div>
                 </div>
               </div>
             )}
+
+            {/* 4. User Strategy Memory Card */}
+            <div className="p-4 rounded-2xl bg-[#0D1019] border border-white/[0.08] shadow-lg space-y-3">
+              <button
+                type="button"
+                onClick={() => setMemoryOpen((prev) => !prev)}
+                className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-purple-400" />
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
+                      ความจำกลยุทธ์ส่วนตัว (AI Memory)
+                    </h3>
+                    <span className="text-[11px] text-slate-400">
+                      {memoryDraft.riskTolerance.toUpperCase()} • Max {memoryDraft.maxSinglePositionPercent}%/ตัว •{' '}
+                      {memoryDraft.horizonYears} ปี
+                    </span>
+                  </div>
+                </div>
+                {memoryOpen ? (
+                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
+
+              {memoryOpen && (
+                <form onSubmit={handleSaveMemory} className="space-y-2.5 pt-2 border-t border-white/[0.06] text-xs">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">ความเสี่ยงที่รับได้</label>
+                      <select
+                        value={memoryDraft.riskTolerance}
+                        onChange={(e) =>
+                          setMemoryDraft((m) => ({
+                            ...m,
+                            riskTolerance: e.target.value as UserInvestmentMemory['riskTolerance'],
+                          }))
+                        }
+                        className="w-full bg-black/50 border border-white/[0.1] rounded-lg px-2 py-1.5 text-white"
+                      >
+                        <option value="conservative">Conservative</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="aggressive">Aggressive</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">กรอบลงทุน (ปี)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={memoryDraft.horizonYears}
+                        onChange={(e) =>
+                          setMemoryDraft((m) => ({
+                            ...m,
+                            horizonYears: Math.max(1, Number(e.target.value) || 1),
+                          }))
+                        }
+                        className="w-full bg-black/50 border border-white/[0.1] rounded-lg px-2 py-1.5 text-white font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">เพดานต่อหุ้น 1 ตัว (%)</label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={100}
+                        value={memoryDraft.maxSinglePositionPercent}
+                        onChange={(e) =>
+                          setMemoryDraft((m) => ({
+                            ...m,
+                            maxSinglePositionPercent: Math.max(5, Number(e.target.value) || 20),
+                          }))
+                        }
+                        className="w-full bg-black/50 border border-white/[0.1] rounded-lg px-2 py-1.5 text-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">Drawdown สูงสุด (%)</label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={80}
+                        value={memoryDraft.maxDrawdownTolerancePercent}
+                        onChange={(e) =>
+                          setMemoryDraft((m) => ({
+                            ...m,
+                            maxDrawdownTolerancePercent: Math.max(5, Number(e.target.value) || 20),
+                          }))
+                        }
+                        className="w-full bg-black/50 border border-white/[0.1] rounded-lg px-2 py-1.5 text-white font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">สไตล์การลงทุนหลัก</label>
+                    <input
+                      type="text"
+                      value={memoryDraft.preferredStyle}
+                      onChange={(e) =>
+                        setMemoryDraft((m) => ({ ...m, preferredStyle: e.target.value }))
+                      }
+                      className="w-full bg-black/50 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">กฎเหล็กส่วนตัวที่ AI ต้องยึด</label>
+                    <textarea
+                      rows={3}
+                      value={memoryDraft.personalRules}
+                      onChange={(e) =>
+                        setMemoryDraft((m) => ({ ...m, personalRules: e.target.value }))
+                      }
+                      className="w-full bg-black/50 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-white leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    {memorySavedNotice ? (
+                      <span className="text-[11px] text-emerald-400 font-semibold">
+                        ✓ บันทึกความจำกลยุทธ์แล้ว
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500">AI จะอ้างอิงกฎนี้ทุกครั้ง</span>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={savingMemory}
+                      className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {savingMemory ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      <span>บันทึก</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
 
           {/* ── RIGHT COLUMN (LG: 8 COLUMNS): FULL INTERACTIVE AI CHAT SUITE ── */}
@@ -742,6 +975,30 @@ export default function AiAdvisorPage() {
                       ) : (
                         <div className="text-xs sm:text-sm text-slate-100 leading-relaxed font-sans">
                           <FormattedCopilotMessage content={msg.content} />
+                        </div>
+                      )}
+
+                      {/* Google Search Grounding Sources */}
+                      {!isUser && msg.groundingSources && msg.groundingSources.length > 0 && (
+                        <div className="pt-2 border-t border-white/[0.06] space-y-1.5">
+                          <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider flex items-center gap-1">
+                            <Globe className="w-3 h-3" />
+                            แหล่งข้อมูลอ้างอิงสด (Live Grounding):
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {msg.groundingSources.map((src, sIdx) => (
+                              <a
+                                key={`${msg.id}-src-${sIdx}`}
+                                href={src.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.04] hover:bg-indigo-500/20 border border-white/[0.08] text-[10px] text-indigo-300 transition-colors max-w-[220px] truncate"
+                              >
+                                <span className="truncate">{src.title}</span>
+                                <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                              </a>
+                            ))}
+                          </div>
                         </div>
                       )}
 

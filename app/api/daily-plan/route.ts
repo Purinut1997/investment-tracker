@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
       yahooFinanceProvider.getQuote('NASDAQ'),
       yahooFinanceProvider.getQuote('SET INDEX', 'TH'),
       coinGeckoProvider.getQuote('BTC'),
-      yahooFinanceProvider.getQuote('GOLD'),
+      yahooFinanceProvider.getQuote('XAU', 'GLOBAL'),
       yahooFinanceProvider.getQuote('VIX'),
       getExchangeRate('USD', 'THB'),
       fetchRealHumanSentiment(),

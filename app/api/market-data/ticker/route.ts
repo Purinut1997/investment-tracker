@@ -59,7 +59,7 @@ export async function GET() {
       yahooFinanceProvider.getQuote('TSLA'),
       yahooFinanceProvider.getQuote('PTT', 'TH'),
       yahooFinanceProvider.getQuote('DELTA', 'TH'),
-      yahooFinanceProvider.getQuote('GOLD'),
+      yahooFinanceProvider.getQuote('XAU', 'GLOBAL'),
       getExchangeRate('USD', 'THB'),
       getExchangeRate('EUR', 'THB'),
       getExchangeRate('JPY', 'THB'),

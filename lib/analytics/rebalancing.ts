@@ -51,6 +51,21 @@ export interface RebalancePlanResult {
   }
 }
 
+export function computeEstimatedShares(
+  amountBase: number,
+  priceBase: number,
+  market?: string
+): { shares: number; boardLotAdjusted: boolean } {
+  if (!Number.isFinite(priceBase) || priceBase <= 0 || !Number.isFinite(amountBase) || amountBase <= 0) {
+    return { shares: 0, boardLotAdjusted: false }
+  }
+  const raw = amountBase / priceBase
+  if (market?.toUpperCase() === 'TH' && raw >= 100) {
+    return { shares: Math.floor(raw / 100) * 100, boardLotAdjusted: true }
+  }
+  return { shares: Number(raw.toFixed(2)), boardLotAdjusted: false }
+}
+
 export interface CalculateRebalanceOptions {
   holdings: HoldingItem[]
   totalCashBase: number
@@ -174,7 +189,8 @@ export function calculatePortfolioRebalance({
         item.postRebalanceValueBase = item.currentValueBase + item.recommendedAmountBase
         item.postRebalanceWeight = (item.postRebalanceValueBase / totalCurrentValue) * 100
         if (item.currentPriceBase && item.currentPriceBase > 0) {
-          item.estimatedShares = Number((item.recommendedAmountBase / item.currentPriceBase).toFixed(2))
+          const holdingMarket = item.ticker ? holdingsByTicker.get(item.ticker.toUpperCase())?.market : undefined
+          item.estimatedShares = computeEstimatedShares(item.recommendedAmountBase, item.currentPriceBase, holdingMarket).shares
         }
         item.explanation = `สัดส่วนปัจจุบันขาดอีก ${Math.abs(item.driftPercent).toFixed(1)}% แนะนำซื้อเพิ่ม`
         totalBuyAmount += item.recommendedAmountBase
@@ -185,7 +201,8 @@ export function calculatePortfolioRebalance({
         item.postRebalanceValueBase = Math.max(0, item.currentValueBase - item.recommendedAmountBase)
         item.postRebalanceWeight = (item.postRebalanceValueBase / totalCurrentValue) * 100
         if (item.currentPriceBase && item.currentPriceBase > 0) {
-          item.estimatedShares = Number((item.recommendedAmountBase / item.currentPriceBase).toFixed(2))
+          const holdingMarket = item.ticker ? holdingsByTicker.get(item.ticker.toUpperCase())?.market : undefined
+          item.estimatedShares = computeEstimatedShares(item.recommendedAmountBase, item.currentPriceBase, holdingMarket).shares
         }
         item.explanation = `สัดส่วนปัจจุบันเกินเป้าหมาย ${item.driftPercent.toFixed(1)}% แนะนำลดน้ำหนักทำกำไร`
         totalTrimAmount += item.recommendedAmountBase
@@ -235,7 +252,8 @@ export function calculatePortfolioRebalance({
         item.postRebalanceValueBase = item.currentValueBase + allocated
         item.postRebalanceWeight = (item.postRebalanceValueBase / totalPostValue) * 100
         if (item.currentPriceBase && item.currentPriceBase > 0) {
-          item.estimatedShares = Number((allocated / item.currentPriceBase).toFixed(2))
+          const holdingMarket = item.ticker ? holdingsByTicker.get(item.ticker.toUpperCase())?.market : undefined
+          item.estimatedShares = computeEstimatedShares(allocated, item.currentPriceBase, holdingMarket).shares
         }
         item.explanation = `จัดสรรเงินเติม ฿${allocated.toLocaleString()} เพื่อดึงสัดส่วนจาก ${item.currentWeight.toFixed(1)}% เข้าใกล้เป้า ${item.targetWeight}%`
         totalBuyAmount += allocated
@@ -267,7 +285,8 @@ export function calculatePortfolioRebalance({
           item.postRebalanceValueBase = item.currentValueBase + totalAlloc
           item.postRebalanceWeight = (item.postRebalanceValueBase / totalPostValue) * 100
           if (item.currentPriceBase && item.currentPriceBase > 0) {
-            item.estimatedShares = Number((totalAlloc / item.currentPriceBase).toFixed(2))
+            const holdingMarket = item.ticker ? holdingsByTicker.get(item.ticker.toUpperCase())?.market : undefined
+            item.estimatedShares = computeEstimatedShares(totalAlloc, item.currentPriceBase, holdingMarket).shares
           }
           item.explanation = `จัดสรรเติมเต็มสัดส่วนเป้าหมายและส่วนเกินตามน้ำหนักแผน`
           totalBuyAmount += totalAlloc
@@ -487,7 +506,7 @@ export function calculateStockDcaBreakdown({
         item.postValueBase = item.currentValueBase + allocated
         item.postWeight = Number(((item.postValueBase / totalPostValue) * 100).toFixed(1))
         if (item.currentPriceBase > 0) {
-          item.estimatedShares = Number((allocated / item.currentPriceBase).toFixed(2))
+          item.estimatedShares = computeEstimatedShares(allocated, item.currentPriceBase, item.market).shares
         }
         item.explanation = `จัดสรรเงินเติม ฿${allocated.toLocaleString()} เพื่อดึงสัดส่วนจาก ${item.currentWeight}% เข้าใกล้เป้า ${item.targetWeight}%`
         totalAllocated += allocated
@@ -515,7 +534,7 @@ export function calculateStockDcaBreakdown({
         item.postValueBase = item.currentValueBase + totalAlloc
         item.postWeight = Number(((item.postValueBase / totalPostValue) * 100).toFixed(1))
         if (item.currentPriceBase > 0) {
-          item.estimatedShares = Number((totalAlloc / item.currentPriceBase).toFixed(2))
+          item.estimatedShares = computeEstimatedShares(totalAlloc, item.currentPriceBase, item.market).shares
         }
         item.explanation = `จัดสรรเติมเต็มส่วนที่ขาดเป้า ฿${Math.round(baseDeficit).toLocaleString()} + เงินส่วนเกินตามน้ำหนักแผน ฿${extra.toLocaleString()}`
         totalAllocated += totalAlloc
@@ -528,7 +547,7 @@ export function calculateStockDcaBreakdown({
         item.postValueBase = item.currentValueBase + allocated
         item.postWeight = Number(((item.postValueBase / totalPostValue) * 100).toFixed(1))
         if (item.currentPriceBase > 0) {
-          item.estimatedShares = Number((allocated / item.currentPriceBase).toFixed(2))
+          item.estimatedShares = computeEstimatedShares(allocated, item.currentPriceBase, item.market).shares
         }
         item.explanation = `สัดส่วนพอร์ตสมดุลอยู่แล้ว เติมเงินเพิ่มตามน้ำหนักเป้าหมาย ${item.targetWeight}%`
         totalAllocated += allocated

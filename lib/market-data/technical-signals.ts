@@ -115,7 +115,14 @@ export async function fetchSingleTickerTechnicalSignal(
     cleanSymbol === 'DELTA'
 
   let candidates: string[] = []
-  if (cleanSymbol === 'GOLD' || cleanSymbol === 'XAU') {
+  if (
+    cleanSymbol === 'GOLD' ||
+    cleanSymbol === 'XAU' ||
+    cleanSymbol === 'XAUUSD' ||
+    cleanSymbol === 'GOLD9999' ||
+    cleanSymbol === 'GOLD965' ||
+    cleanSymbol === 'DIME-GOLD'
+  ) {
     candidates = ['GC=F']
   } else if (cleanSymbol === 'BTC') {
     candidates = ['BTC-USD']
