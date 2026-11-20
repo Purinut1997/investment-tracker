@@ -27,11 +27,13 @@ import {
   Zap,
   Plus,
   Sunrise,
+  Scissors,
 } from 'lucide-react'
 import { MorningBriefBanner } from '@/components/dashboard/MorningBriefBanner'
 import { AssetAllocationVisualizer } from '@/components/dashboard/AssetAllocationVisualizer'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import { QuickAddModal } from '@/components/QuickAddModal'
+import { StockSplitModal } from '@/components/splits/StockSplitModal'
 import {
   extractStrategyBuckets,
   computeBucketsWithHoldings,
@@ -151,6 +153,10 @@ export default function DashboardPage() {
     action: 'BUY' | 'SELL'
     market?: 'US' | 'TH'
     price?: number
+  } | null>(null)
+  const [splitModalAsset, setSplitModalAsset] = useState<{
+    assetId?: string
+    ticker?: string
   } | null>(null)
   const [selectedBucketFilter, setSelectedBucketFilter] = useState<string>('ALL')
   const [activePieIndex, setActivePieIndex] = useState<number | null>(null)
@@ -279,9 +285,16 @@ export default function DashboardPage() {
       // Revalidate all SWR caches across the app (summary, technical signals, plans, performance, etc.)
       await mutate(() => true, undefined, { revalidate: true })
 
+      const splitNote =
+        Array.isArray(data.detectedSplits) && data.detectedSplits.length > 0
+          ? ` • ตรวจพบและปรับแตกพาร์ใหม่: ${data.detectedSplits
+              .map((s: any) => `${s.ticker} (${s.splitRatio})`)
+              .join(', ')}`
+          : ''
+
       setRefreshToast({
         title: 'อัปเดตราคาล่าสุดเรียบร้อย!',
-        desc: `ดึงราคาตลาดล่าสุดและซิงก์ทุกหน้าของ ${data.updatedCount ?? 0} สินทรัพย์เรียบร้อยแล้ว`,
+        desc: `ดึงราคาตลาดล่าสุดและซิงก์ทุกหน้าของ ${data.updatedCount ?? 0} สินทรัพย์เรียบร้อยแล้ว${splitNote}`,
       })
       setTimeout(() => setRefreshToast(null), 4000)
     } catch (err: any) {
@@ -1553,6 +1566,15 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSplitModalAsset({})}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold text-purple-200 hover:text-white bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="จัดการแตกพาร์ / รวมพาร์ หรือซิงค์การแตกพาร์อัตโนมัติ"
+                >
+                  <Scissors className="w-3.5 h-3.5 text-purple-400" />
+                  <span>แตกพาร์ (Splits)</span>
+                </button>
                 <Link
                   href="/performance"
                   className="px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-200 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 transition-all flex items-center gap-1.5"
@@ -1670,10 +1692,23 @@ export default function DashboardPage() {
                           <div className="flex items-center gap-3">
                             <StockLogo ticker={h.ticker} name={h.assetName} size={38} />
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-extrabold text-sm sm:text-base text-white group-hover:text-indigo-300 transition-colors">
                                   {h.ticker}
                                 </span>
+                                {h.appliedSplits && h.appliedSplits.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSplitModalAsset({ assetId: h.assetId, ticker: h.ticker })
+                                    }}
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-200 bg-purple-500/20 hover:bg-purple-500/35 border border-purple-500/35 px-1.5 py-0.5 rounded-md cursor-pointer transition-colors"
+                                    title={`ดูประวัติหรือจัดการแตกพาร์ของ ${h.ticker}`}
+                                  >
+                                    ✂️ แตกพาร์ {h.appliedSplits[h.appliedSplits.length - 1].splitRatio}
+                                  </button>
+                                )}
                                 <span className="hidden group-hover:inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-300 bg-indigo-500/20 border border-indigo-500/30 px-1.5 py-0.5 rounded">
                                   พื้นฐาน <ExternalLink className="w-2.5 h-2.5" />
                                 </span>
@@ -1850,6 +1885,16 @@ export default function DashboardPage() {
                             >
                               ขาย
                             </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSplitModalAsset({ assetId: h.assetId, ticker: h.ticker })
+                              }
+                              className="p-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/25 text-purple-300 border border-purple-500/25 transition-all cursor-pointer"
+                              title={`บันทึกแตกพาร์ / รวมพาร์ ${h.ticker}`}
+                            >
+                              <Scissors className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1894,6 +1939,27 @@ export default function DashboardPage() {
             }}
           />
         )}
+
+        <StockSplitModal
+          isOpen={Boolean(splitModalAsset)}
+          onClose={() => setSplitModalAsset(null)}
+          initialAssetId={splitModalAsset?.assetId}
+          initialTicker={splitModalAsset?.ticker}
+          holdings={holdings.map((h) => ({
+            assetId: h.assetId,
+            ticker: h.ticker,
+            assetName: h.assetName,
+            market: h.market,
+            currency: h.currency,
+            quantity: h.quantity,
+            avgCost: h.avgCost,
+            totalCost: h.totalCost,
+            currentPrice: h.currentPrice,
+          }))}
+          onSuccess={() => {
+            mutate('/api/portfolio/summary')
+          }}
+        />
       </div>
     </AppShell>
   )

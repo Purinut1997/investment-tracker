@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateTaxReportFIFO } from '@/lib/analytics/tax-fifo'
+import { getUserAssetSplitsMap } from '@/lib/analytics/stock-splits'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
 
 export async function GET(req: NextRequest) {
@@ -37,8 +38,14 @@ export async function GET(req: NextRequest) {
       orderBy: { txnDate: 'asc' },
     })
 
-    // Fetch live FX rate for conversion (USD -> THB)
-    const usdThbRate = (await getExchangeRate('USD', 'THB')) ?? 35.5
+    const distinctAssetIds = Array.from(new Set(txns.map((t) => t.assetId).filter(Boolean)))
+
+    // Fetch live FX rate and effective stock splits in parallel
+    const [usdThbRateRaw, splitsByAsset] = await Promise.all([
+      getExchangeRate('USD', 'THB'),
+      getUserAssetSplitsMap(session.user.id, distinctAssetIds),
+    ])
+    const usdThbRate = usdThbRateRaw ?? 35.5
 
     const formattedTxns = txns.map((t) => ({
       id: t.id,
@@ -60,7 +67,7 @@ export async function GET(req: NextRequest) {
       accountName: t.account?.accountName || 'บัญชีหลัก',
     }))
 
-    const report = calculateTaxReportFIFO(formattedTxns, year, usdThbRate)
+    const report = calculateTaxReportFIFO(formattedTxns, year, usdThbRate, splitsByAsset)
 
     return NextResponse.json(report)
   } catch (error) {

@@ -10,6 +10,13 @@
 import { prisma } from '../prisma'
 import { getBatchCachedOrFetchPrices } from '../market-data/cache-layer'
 import { getExchangeRate } from '../market-data/frankfurter'
+import {
+  AppliedSplitBadge,
+  getSplitDateKey,
+  getSplitMultiplier,
+  getUserAssetSplitsMap,
+  mergeTxnsAndSplits,
+} from './stock-splits'
 
 export interface RealizedTradeRecord {
   tradeId: string
@@ -69,6 +76,7 @@ export interface AssetPerformanceItem {
   unrealizedPnLBase: number
   activeLots: ActiveLotRecord[]
   isStalePrice: boolean
+  appliedSplits?: AppliedSplitBadge[]
 
   // Dividends
   totalDividends: number
@@ -157,9 +165,26 @@ export async function calculateAssetPerformance(
         },
       })
 
-      const usdThbRate = (await getExchangeRate('USD', baseCurrency)) ?? 35.5
+      const distinctAssetIds = Array.from(
+        new Set(txns.map((t) => t.assetId).filter(Boolean))
+      )
+      const [usdThbRateRaw, splitsByAsset] = await Promise.all([
+        getExchangeRate('USD', baseCurrency),
+        getUserAssetSplitsMap(userId, distinctAssetIds),
+      ])
+      const usdThbRate = usdThbRateRaw ?? 35.5
 
-      // 2. Group transactions per asset
+      // Group raw transactions per asset first
+      const rawTxnsByAsset = new Map<string, { asset: any; txns: typeof txns }>()
+      for (const txn of txns) {
+        if (!txn.assetId) continue
+        if (!rawTxnsByAsset.has(txn.assetId)) {
+          rawTxnsByAsset.set(txn.assetId, { asset: txn.asset, txns: [] })
+        }
+        rawTxnsByAsset.get(txn.assetId)!.txns.push(txn)
+      }
+
+      // 2. Replay chronological transaction + split timeline per asset
       interface AssetAccumulator {
         asset: any
         buyLots: BuyLotFIFO[]
@@ -167,97 +192,121 @@ export async function calculateAssetPerformance(
         totalDividends: number
         totalDividendsBase: number
         dividendCount: number
+        appliedSplits: AppliedSplitBadge[]
       }
 
       const assetMap = new Map<string, AssetAccumulator>()
 
-      for (const txn of txns) {
-        const assetId = txn.assetId
-        if (!assetMap.has(assetId)) {
-          assetMap.set(assetId, {
-            asset: txn.asset,
-            buyLots: [],
-            realizedTrades: [],
-            totalDividends: 0,
-            totalDividendsBase: 0,
-            dividendCount: 0,
-          })
+      for (const [assetId, group] of rawTxnsByAsset.entries()) {
+        const state: AssetAccumulator = {
+          asset: group.asset,
+          buyLots: [],
+          realizedTrades: [],
+          totalDividends: 0,
+          totalDividendsBase: 0,
+          dividendCount: 0,
+          appliedSplits: [],
         }
+        assetMap.set(assetId, state)
 
-        const state = assetMap.get(assetId)!
         const isUsd =
           state.asset.currency === 'USD' ||
           state.asset.market === 'US' ||
           state.asset.market === 'CRYPTO'
         const fx = isUsd ? usdThbRate : 1.0
 
-        const qty = Number(txn.quantity)
-        const price = Number(txn.pricePerUnit)
-        const fee = Number(txn.fee || 0)
-        const totalAmount = Number(txn.totalAmount)
+        const assetSplits = splitsByAsset.get(assetId) ?? []
+        const timeline = mergeTxnsAndSplits(group.txns, assetSplits)
 
-        if (txn.txnType === 'BUY') {
-          const feePerUnit = qty > 0 ? fee / qty : 0
-          state.buyLots.push({
-            txnId: txn.id,
-            date: new Date(txn.txnDate),
-            remainingQty: qty,
-            pricePerUnit: price,
-            feePerUnit,
-          })
-        } else if (txn.txnType === 'SELL') {
-          let qtyToSell = qty
-          let costBasisForTrade = 0
-          let matchedWeightedDays = 0
-          let totalMatchedQty = 0
-
-          const sellDate = new Date(txn.txnDate)
-
-          while (qtyToSell > 0.0000001 && state.buyLots.length > 0) {
-            const oldestLot = state.buyLots[0]
-            const takeQty = Math.min(oldestLot.remainingQty, qtyToSell)
-
-            costBasisForTrade += takeQty * oldestLot.pricePerUnit
-            const diffDays = Math.max(
-              1,
-              Math.round((sellDate.getTime() - oldestLot.date.getTime()) / (1000 * 60 * 60 * 24))
-            )
-            matchedWeightedDays += diffDays * takeQty
-            totalMatchedQty += takeQty
-
-            oldestLot.remainingQty -= takeQty
-            qtyToSell -= takeQty
-
-            if (oldestLot.remainingQty <= 0.0000001) {
-              state.buyLots.shift()
+        for (const event of timeline) {
+          if (event.kind === 'SPLIT') {
+            const mult = getSplitMultiplier(event.split)
+            const openQty = state.buyLots.reduce((sum, lot) => sum + lot.remainingQty, 0)
+            if (mult !== 1 && openQty > 0.0000001) {
+              for (const lot of state.buyLots) {
+                lot.remainingQty *= mult
+                lot.pricePerUnit /= mult
+                lot.feePerUnit /= mult
+              }
+              state.appliedSplits.push({
+                splitDate: getSplitDateKey(event.split.splitDate),
+                splitRatio: event.split.splitRatio,
+                multiplier: mult,
+                source: event.split.source || 'auto_yahoo',
+              })
             }
+            continue
           }
 
-          const sellProceeds = totalAmount > 0 ? totalAmount : qty * price - fee
-          const realizedGain = sellProceeds - costBasisForTrade
-          const realizedGainPercent = costBasisForTrade > 0 ? (realizedGain / costBasisForTrade) * 100 : 0
-          const avgHoldingDays = totalMatchedQty > 0 ? Math.round(matchedWeightedDays / totalMatchedQty) : 1
+          const txn = event.txn
+          const qty = Number(txn.quantity)
+          const price = Number(txn.pricePerUnit)
+          const fee = Number(txn.fee || 0)
+          const totalAmount = Number(txn.totalAmount)
 
-          state.realizedTrades.push({
-            tradeId: txn.id,
-            sellDate: txn.txnDate,
-            quantity: qty,
-            sellPrice: price,
-            sellProceeds,
-            costBasis: costBasisForTrade,
-            realizedGain,
-            realizedGainPercent,
-            fee,
-            holdingDays: avgHoldingDays,
-            sellProceedsBase: sellProceeds * fx,
-            costBasisBase: costBasisForTrade * fx,
-            realizedGainBase: realizedGain * fx,
-          })
-        } else if (txn.txnType === 'DIVIDEND') {
-          const divAmount = totalAmount > 0 ? totalAmount : qty * price
-          state.totalDividends += divAmount
-          state.totalDividendsBase += divAmount * fx
-          state.dividendCount += 1
+          if (txn.txnType === 'BUY') {
+            const feePerUnit = qty > 0 ? fee / qty : 0
+            state.buyLots.push({
+              txnId: txn.id,
+              date: new Date(txn.txnDate),
+              remainingQty: qty,
+              pricePerUnit: price,
+              feePerUnit,
+            })
+          } else if (txn.txnType === 'SELL') {
+            let qtyToSell = qty
+            let costBasisForTrade = 0
+            let matchedWeightedDays = 0
+            let totalMatchedQty = 0
+
+            const sellDate = new Date(txn.txnDate)
+
+            while (qtyToSell > 0.0000001 && state.buyLots.length > 0) {
+              const oldestLot = state.buyLots[0]
+              const takeQty = Math.min(oldestLot.remainingQty, qtyToSell)
+
+              costBasisForTrade += takeQty * oldestLot.pricePerUnit
+              const diffDays = Math.max(
+                1,
+                Math.round((sellDate.getTime() - oldestLot.date.getTime()) / (1000 * 60 * 60 * 24))
+              )
+              matchedWeightedDays += diffDays * takeQty
+              totalMatchedQty += takeQty
+
+              oldestLot.remainingQty -= takeQty
+              qtyToSell -= takeQty
+
+              if (oldestLot.remainingQty <= 0.0000001) {
+                state.buyLots.shift()
+              }
+            }
+
+            const sellProceeds = totalAmount > 0 ? totalAmount : qty * price - fee
+            const realizedGain = sellProceeds - costBasisForTrade
+            const realizedGainPercent = costBasisForTrade > 0 ? (realizedGain / costBasisForTrade) * 100 : 0
+            const avgHoldingDays = totalMatchedQty > 0 ? Math.round(matchedWeightedDays / totalMatchedQty) : 1
+
+            state.realizedTrades.push({
+              tradeId: txn.id,
+              sellDate: txn.txnDate,
+              quantity: qty,
+              sellPrice: price,
+              sellProceeds,
+              costBasis: costBasisForTrade,
+              realizedGain,
+              realizedGainPercent,
+              fee,
+              holdingDays: avgHoldingDays,
+              sellProceedsBase: sellProceeds * fx,
+              costBasisBase: costBasisForTrade * fx,
+              realizedGainBase: realizedGain * fx,
+            })
+          } else if (txn.txnType === 'DIVIDEND') {
+            const divAmount = totalAmount > 0 ? totalAmount : qty * price
+            state.totalDividends += divAmount
+            state.totalDividendsBase += divAmount * fx
+            state.dividendCount += 1
+          }
         }
       }
 
@@ -382,6 +431,7 @@ export async function calculateAssetPerformance(
           unrealizedPnLBase,
           activeLots,
           isStalePrice,
+          ...(data.appliedSplits.length > 0 ? { appliedSplits: data.appliedSplits } : {}),
           totalDividends: data.totalDividends,
           totalDividendsBase: data.totalDividendsBase,
           dividendCount: data.dividendCount,

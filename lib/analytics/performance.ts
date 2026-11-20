@@ -6,6 +6,14 @@
 
 import { prisma } from '@/lib/prisma'
 import { getExchangeRate } from '../market-data/frankfurter'
+import {
+  StockSplitEvent,
+  getSplitMultiplier,
+  getUserAssetSplitsMap,
+  mergeTxnsAndSplits,
+  normalizeSplitDate,
+  toSplitsMap,
+} from './stock-splits'
 import type { PerformancePoint } from './quant-metrics'
 
 export * from './quant-metrics'
@@ -88,7 +96,8 @@ export async function calculatePortfolioPerformance(
   userId: string,
   currentPortfolioValue: number,
   baseCurrency = 'THB',
-  preloadedTxns?: any[]
+  preloadedTxns?: any[],
+  preloadedSplitsByAsset?: Map<string, StockSplitEvent[]> | Record<string, StockSplitEvent[]>
 ): Promise<PerformancePoint[]> {
   const rawTxns =
     preloadedTxns ??
@@ -110,7 +119,7 @@ export async function calculatePortfolioPerformance(
     new Set(txns.map((t: any) => t.assetId).filter(Boolean))
   ) as string[]
 
-  const [usdThbRateRaw, priceHistoryRows, spxCloses] = await Promise.all([
+  const [usdThbRateRaw, priceHistoryRows, spxCloses, loadedSplitsMap] = await Promise.all([
     getExchangeRate('USD', baseCurrency).catch(() => null),
     distinctAssetIds.length > 0
       ? prisma.priceHistory.findMany({
@@ -123,6 +132,9 @@ export async function calculatePortfolioPerformance(
         })
       : Promise.resolve([]),
     fetchSpxMonthlyCloses(),
+    preloadedSplitsByAsset
+      ? Promise.resolve(toSplitsMap(preloadedSplitsByAsset))
+      : getUserAssetSplitsMap(userId, distinctAssetIds),
   ])
 
   const usdThbRate = usdThbRateRaw ?? 35.5
@@ -137,24 +149,35 @@ export async function calculatePortfolioPerformance(
     }
   }
 
-  // Group PriceHistory by assetId -> monthKey -> closePrice in baseCurrency
-  const assetMonthlyPrices = new Map<string, Map<string, number>>()
+  // Group PriceHistory by assetId -> monthKey -> latest { priceDate, priceBase } in baseCurrency
+  const assetMonthlyPrices = new Map<string, Map<string, { priceDate: Date; priceBase: number }>>()
   for (const row of priceHistoryRows) {
-    const mKey = getMonthKey(new Date(row.priceDate))
+    const rowDate = new Date(row.priceDate)
+    const mKey = getMonthKey(rowDate)
     const isUsd = assetIsUsdMap.get(row.assetId) ?? false
     const fx = isUsd ? usdThbRate : 1.0
     if (!assetMonthlyPrices.has(row.assetId)) {
       assetMonthlyPrices.set(row.assetId, new Map())
     }
-    assetMonthlyPrices.get(row.assetId)!.set(mKey, Number(row.closePrice) * fx)
+    assetMonthlyPrices.get(row.assetId)!.set(mKey, {
+      priceDate: rowDate,
+      priceBase: Number(row.closePrice) * fx,
+    })
   }
 
-  // Group transactions by monthKey
-  const txnsByMonth = new Map<string, any[]>()
-  for (const t of txns) {
-    const mKey = getMonthKey(new Date(t.txnDate))
-    if (!txnsByMonth.has(mKey)) txnsByMonth.set(mKey, [])
-    txnsByMonth.get(mKey)!.push(t)
+  const allSplits: StockSplitEvent[] = []
+  for (const list of loadedSplitsMap.values()) {
+    allSplits.push(...list)
+  }
+
+  // Merge all transactions and split events chronologically (SPLIT before same-day TXN)
+  const timeline = mergeTxnsAndSplits(txns, allSplits)
+
+  const eventsByMonth = new Map<string, typeof timeline>()
+  for (const ev of timeline) {
+    const mKey = getMonthKey(new Date(ev.dateMs))
+    if (!eventsByMonth.has(mKey)) eventsByMonth.set(mKey, [])
+    eventsByMonth.get(mKey)!.push(ev)
   }
 
   const firstTxnMonth = getMonthKey(new Date(txns[0].txnDate))
@@ -165,10 +188,27 @@ export async function calculatePortfolioPerformance(
 
   if (allMonthKeys.length === 0) return []
 
-  // Replay pre-window transactions if user has >60 months of history
+  // Replay pre-window transactions & splits if user has >60 months of history
   const firstWindowKey = allMonthKeys[0]
   const fifoLots = new Map<string, Array<{ qty: number; unitCostBase: number }>>()
   const lastKnownPriceBase = new Map<string, number>()
+
+  const applySplitToState = (split: StockSplitEvent): number => {
+    const mult = getSplitMultiplier(split)
+    if (mult === 1) return 0
+    const lots = fifoLots.get(split.assetId)
+    if (lots && lots.length > 0) {
+      for (const lot of lots) {
+        lot.qty *= mult
+        lot.unitCostBase /= mult
+      }
+    }
+    const prevPrice = lastKnownPriceBase.get(split.assetId)
+    if (prevPrice && prevPrice > 0) {
+      lastKnownPriceBase.set(split.assetId, prevPrice / mult)
+    }
+    return 0
+  }
 
   const applyTxnToState = (t: any) => {
     const assetId = t.assetId
@@ -212,10 +252,14 @@ export async function calculatePortfolioPerformance(
     return 0
   }
 
-  for (const t of txns) {
-    const mKey = getMonthKey(new Date(t.txnDate))
+  for (const ev of timeline) {
+    const mKey = getMonthKey(new Date(ev.dateMs))
     if (mKey < firstWindowKey) {
-      applyTxnToState(t)
+      if (ev.kind === 'SPLIT') {
+        applySplitToState(ev.split)
+      } else {
+        applyTxnToState(ev.txn)
+      }
     } else {
       break
     }
@@ -233,17 +277,31 @@ export async function calculatePortfolioPerformance(
   const result: PerformancePoint[] = []
 
   allMonthKeys.forEach((key, index) => {
-    const monthTxns = txnsByMonth.get(key) || []
+    const monthEvents = eventsByMonth.get(key) || []
     let monthNetFlowBase = 0
-    for (const t of monthTxns) {
-      monthNetFlowBase += applyTxnToState(t)
+    for (const ev of monthEvents) {
+      if (ev.kind === 'SPLIT') {
+        monthNetFlowBase += applySplitToState(ev.split)
+      } else {
+        monthNetFlowBase += applyTxnToState(ev.txn)
+      }
     }
 
-    // Update last known market prices from PriceHistory for this month
+    // Update last known market prices from PriceHistory for this month, adjusting pre-split prices if a split happened after priceDate
     for (const [assetId, monthMap] of assetMonthlyPrices.entries()) {
-      const histClose = monthMap.get(key)
-      if (histClose && histClose > 0) {
-        lastKnownPriceBase.set(assetId, histClose)
+      const entry = monthMap.get(key)
+      if (entry && entry.priceBase > 0) {
+        let adjustedPriceBase = entry.priceBase
+        const assetSplits = loadedSplitsMap.get(assetId) ?? []
+        for (const s of assetSplits) {
+          const splitDt = normalizeSplitDate(s.splitDate)
+          const splitMonthKey = getMonthKey(splitDt)
+          if (splitDt.getTime() > entry.priceDate.getTime() && splitMonthKey <= key) {
+            const mult = getSplitMultiplier(s)
+            if (mult !== 1) adjustedPriceBase /= mult
+          }
+        }
+        lastKnownPriceBase.set(assetId, adjustedPriceBase)
       }
     }
 

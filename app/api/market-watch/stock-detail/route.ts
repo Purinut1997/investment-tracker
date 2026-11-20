@@ -10,6 +10,11 @@ import {
   calculateSingleAssetFifoPosition,
   invalidateUserPortfolioCache,
 } from '@/lib/analytics/holdings'
+import { getAssetSplitsForSingleAsset } from '@/lib/analytics/stock-splits'
+import {
+  extractDiscoveredSplitsFromYahooChart,
+  persistDiscoveredYahooSplits,
+} from '@/lib/market-data/split-sync'
 import { getEarningsIntelligence } from '@/lib/earnings/earnings-analyzer'
 
 export interface ChartPoint {
@@ -660,9 +665,35 @@ export async function GET(req: NextRequest) {
         .catch(() => {})
     }
 
-    // User Position Summary (Using shared FIFO engine)
+    // Opportunistically persist any Yahoo Finance split events and load user's effective splits
+    let assetSplits: Awaited<ReturnType<typeof getAssetSplitsForSingleAsset>> = []
+    if (userTxns.length > 0) {
+      const targetAssetId = userTxns[0].assetId
+      const discovered = extractDiscoveredSplitsFromYahooChart(
+        fundamentals.rawHistoryChartResult || chartData.rawChartResult,
+        market
+      )
+      if (discovered.length > 0) {
+        try {
+          const added = await persistDiscoveredYahooSplits(
+            targetAssetId,
+            rawSymbol,
+            market,
+            discovered
+          )
+          if (added.length > 0) {
+            invalidateUserPortfolioCache(session.user.id)
+          }
+        } catch {}
+      }
+      assetSplits = await getAssetSplitsForSingleAsset(session.user.id, targetAssetId)
+    }
+
+    // User Position Summary (Using shared FIFO engine with splits)
     const userPosition =
-      userTxns.length > 0 ? calculateSingleAssetFifoPosition(userTxns, currentPrice) : null
+      userTxns.length > 0
+        ? calculateSingleAssetFifoPosition(userTxns, currentPrice, assetSplits)
+        : null
 
     // Historical Dividends, Splits & Return Performance Matrix
     const historicalStats = parseHistoricalStats(

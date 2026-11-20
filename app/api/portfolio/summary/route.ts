@@ -16,6 +16,11 @@ import {
   calculatePortfolioPerformance,
   calculatePortfolioRiskMetrics,
 } from '@/lib/analytics/performance'
+import {
+  StockSplitEvent,
+  getSplitMultiplier,
+  mergeTxnsAndSplits,
+} from '@/lib/analytics/stock-splits'
 import { getExchangeRate, sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 
 export async function GET(req: NextRequest) {
@@ -83,17 +88,33 @@ export async function GET(req: NextRequest) {
 
       const usdThbRate = usdThbRateRaw ?? 35.5
       const txns = holdingsResult.txns || []
+      const splitsByAssetRecord = holdingsResult.splitsByAssetRecord || {}
+      const allSplits: StockSplitEvent[] = Object.values(splitsByAssetRecord).flat()
 
-      // 4. In-Memory: Calculate true FIFO REALIZED GAIN from preloaded transactions (0 DB queries)
+      // 4. In-Memory: Calculate true FIFO REALIZED GAIN & XIRR cash flows with stock splits (0 DB queries)
       const sortedTxns = [...txns].sort(
         (a: any, b: any) => new Date(a.txnDate).getTime() - new Date(b.txnDate).getTime()
       )
+      const timeline = mergeTxnsAndSplits(sortedTxns, allSplits)
       const fifoLots = new Map<string, Array<{ qty: number; unitCost: number }>>()
       let totalRealizedGainBase = 0
       let totalRealizedGainUSD = 0
       const xirrCashFlows: Array<{ amount: number; date: Date }> = []
 
-      for (const t of sortedTxns) {
+      for (const ev of timeline) {
+        if (ev.kind === 'SPLIT') {
+          const lots = fifoLots.get(ev.split.assetId)
+          const mult = getSplitMultiplier(ev.split)
+          if (lots && mult !== 1) {
+            for (const lot of lots) {
+              lot.qty *= mult
+              lot.unitCost /= mult
+            }
+          }
+          continue
+        }
+
+        const t = ev.txn
         const assetId = t.assetId
         if (!fifoLots.has(assetId)) {
           fifoLots.set(assetId, [])
@@ -248,12 +269,13 @@ export async function GET(req: NextRequest) {
         cleanTargetAlloc && Object.keys(cleanTargetAlloc).length > 0 ? cleanTargetAlloc : undefined
       )
 
-      // 9. Calculate historical portfolio growth milestones & risk metrics reusing preloaded txns (0 DB queries)
+      // 9. Calculate historical portfolio growth milestones & risk metrics reusing preloaded txns & splits (0 DB queries)
       const performanceData = await calculatePortfolioPerformance(
         userId,
         reconciledTotalValueBase,
         baseCurrency,
-        txns
+        txns,
+        splitsByAssetRecord
       )
 
       if (reconciledTotalValueBase > 0 && xirrCashFlows.length > 0) {

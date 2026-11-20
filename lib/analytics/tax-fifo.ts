@@ -10,6 +10,13 @@
  * so the UI can display correctly in either mode.
  */
 
+import {
+  StockSplitEvent,
+  getSplitMultiplier,
+  mergeTxnsAndSplits,
+  toSplitsMap,
+} from './stock-splits'
+
 export interface TaxTxnInput {
   id: string
   assetId: string
@@ -109,12 +116,19 @@ export interface TaxReportSummary {
 export function calculateTaxReportFIFO(
   transactions: TaxTxnInput[],
   taxYear: number,
-  usdThbRate = 35.5  // current exchange rate for conversion
+  usdThbRate = 35.5,  // current exchange rate for conversion
+  splitsByAsset?: Map<string, StockSplitEvent[]> | Record<string, StockSplitEvent[]>
 ): TaxReportSummary {
-  // Sort all transactions chronologically
+  // Sort all transactions chronologically and merge stock split events (SPLIT before same-day TXN)
   const sorted = [...transactions].sort(
     (a, b) => new Date(a.txnDate).getTime() - new Date(b.txnDate).getTime()
   )
+  const splitsMap = toSplitsMap(splitsByAsset)
+  const allSplits: StockSplitEvent[] = []
+  for (const list of splitsMap.values()) {
+    allSplits.push(...list)
+  }
+  const timeline = mergeTxnsAndSplits(sorted, allSplits)
 
   // Map of assetId -> FIFO queue of buy lots
   const buyLots = new Map<string, FifoLot[]>()
@@ -153,7 +167,22 @@ export function calculateTaxReportFIFO(
     },
   }
 
-  for (const txn of sorted) {
+  for (const event of timeline) {
+    if (event.kind === 'SPLIT') {
+      const split = event.split
+      const lots = buyLots.get(split.assetId)
+      const mult = getSplitMultiplier(split)
+      if (lots && mult !== 1) {
+        for (const lot of lots) {
+          lot.quantity *= mult
+          lot.pricePerUnit /= mult
+          // Keep lot.fee unchanged (it represents total commission paid for this lot)
+        }
+      }
+      continue
+    }
+
+    const txn = event.txn
     const txnDate = new Date(txn.txnDate)
     const year = Number(
       new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric' }).format(
@@ -219,11 +248,11 @@ export function calculateTaxReportFIFO(
       const lots = buyLots.get(assetId)!
 
       // Match against FIFO lots
-      while (qtyToSell > 0 && lots.length > 0) {
+      while (qtyToSell > 1e-9 && lots.length > 0) {
         const currentLot = lots[0]
-        if (currentLot.quantity <= qtyToSell) {
+        if (currentLot.quantity <= qtyToSell + 1e-12) {
           totalCostBasis += currentLot.quantity * currentLot.pricePerUnit + currentLot.fee
-          qtyToSell -= currentLot.quantity
+          qtyToSell = Math.max(0, qtyToSell - currentLot.quantity)
           lots.shift() // consumed lot entirely
         } else {
           // partially consume lot

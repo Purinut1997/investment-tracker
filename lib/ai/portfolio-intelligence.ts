@@ -9,6 +9,12 @@
 
 import { prisma } from '@/lib/prisma'
 import { HoldingItem } from '@/lib/analytics/holdings'
+import {
+  StockSplitEvent,
+  getSplitMultiplier,
+  getUserAssetSplitsMap,
+  mergeTxnsAndSplits,
+} from '@/lib/analytics/stock-splits'
 import { getYahooQuoteSummary, YahooQuoteSummaryData } from '@/lib/market-data/yahoo-crumb'
 import { getEarningsIntelligence, formatYahooTicker } from '@/lib/earnings/earnings-analyzer'
 import { getDividendIntelligence } from '@/lib/dividends/dividend-analyzer'
@@ -42,7 +48,12 @@ export interface PortfolioDeepIntelligence {
   taxContextPrompt: string
 }
 
-function summarizeFifoTaxContext(holdings: HoldingItem[], txns: any[] | undefined, baseCurrency: string): string {
+function summarizeFifoTaxContext(
+  holdings: HoldingItem[],
+  txns: any[] | undefined,
+  baseCurrency: string,
+  splitsByAsset?: Map<string, StockSplitEvent[]>
+): string {
   if (!txns || txns.length === 0) {
     return 'ยังไม่มีประวัติธุรกรรมเพียงพอสำหรับสรุปต้นทุน FIFO รายล็อต'
   }
@@ -51,11 +62,27 @@ function summarizeFifoTaxContext(holdings: HoldingItem[], txns: any[] | undefine
   const sorted = [...txns].sort(
     (a, b) => new Date(a.txnDate).getTime() - new Date(b.txnDate).getTime()
   )
+  const allSplits: StockSplitEvent[] = splitsByAsset ? Array.from(splitsByAsset.values()).flat() : []
+  const timeline = mergeTxnsAndSplits(sorted, allSplits)
+
   const lotsByAsset = new Map<string, Array<{ qty: number; unitCost: number; date: Date }>>()
   let ytdForeignRealizedNative = 0
   let ytdThaiSetRealizedThb = 0
 
-  for (const t of sorted) {
+  for (const ev of timeline) {
+    if (ev.kind === 'SPLIT') {
+      const lots = lotsByAsset.get(ev.split.assetId)
+      const mult = getSplitMultiplier(ev.split)
+      if (lots && mult !== 1) {
+        for (const lot of lots) {
+          lot.qty *= mult
+          lot.unitCost /= mult
+        }
+      }
+      continue
+    }
+
+    const t = ev.txn
     const assetId = t.assetId
     if (!assetId) continue
     if (!lotsByAsset.has(assetId)) lotsByAsset.set(assetId, [])
@@ -134,7 +161,14 @@ export async function gatherPortfolioDeepIntelligence(params: {
   const fundamentalTargets = equityHoldings.slice(0, 6)
   const catalystTargets = equityHoldings.slice(0, 5)
 
-  const [userSettingsRes, presetRes, fundamentalsRes, earningsRes, dividendsRes] =
+  const distinctAssetIds = Array.from(
+    new Set([
+      ...holdings.map((h) => h.assetId),
+      ...((txns || []).map((t: any) => t.assetId).filter(Boolean) as string[]),
+    ])
+  )
+
+  const [userSettingsRes, presetRes, fundamentalsRes, earningsRes, dividendsRes, splitsByAsset] =
     await Promise.all([
       prisma.userSettings
         .findUnique({
@@ -177,6 +211,7 @@ export async function gatherPortfolioDeepIntelligence(params: {
           return { ticker: h.ticker.toUpperCase(), data }
         })
       ),
+      getUserAssetSplitsMap(userId, distinctAssetIds),
     ])
 
   const memory = parseUserInvestmentMemory(userSettingsRes?.defaultRiskProfile)
@@ -315,7 +350,7 @@ export async function gatherPortfolioDeepIntelligence(params: {
   const goalsAndMemoryPrompt = `${presetLines}\n${formatInvestmentMemoryForPrompt(memory)}`
 
   // 4. Tax & Holding Context
-  const taxContextPrompt = summarizeFifoTaxContext(holdings, txns, baseCurrency)
+  const taxContextPrompt = summarizeFifoTaxContext(holdings, txns, baseCurrency, splitsByAsset)
 
   return {
     memory,

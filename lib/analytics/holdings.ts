@@ -4,8 +4,17 @@
  */
 
 import { prisma } from '../prisma'
-import { getCachedOrFetchPrice, getBatchCachedOrFetchPrices } from '../market-data/cache-layer'
+import { getBatchCachedOrFetchPrices } from '../market-data/cache-layer'
 import { getExchangeRate } from '../market-data/frankfurter'
+import { syncAssetSplitsFromYahoo } from '../market-data/split-sync'
+import {
+  AppliedSplitBadge,
+  StockSplitEvent,
+  getSplitDateKey,
+  getSplitMultiplier,
+  getUserAssetSplitsMap,
+  mergeTxnsAndSplits,
+} from './stock-splits'
 
 export interface HoldingItem {
   assetId: string
@@ -25,6 +34,7 @@ export interface HoldingItem {
   unrealizedPnLPercent: number
   allocationPercent: number
   isStale: boolean
+  appliedSplits?: AppliedSplitBadge[]
 }
 
 export interface PortfolioHoldingsResult {
@@ -35,6 +45,7 @@ export interface PortfolioHoldingsResult {
   unrealizedPnLPercent: number
   baseCurrency: string
   txns?: any[]
+  splitsByAssetRecord?: Record<string, StockSplitEvent[]>
 }
 
 // In-memory cache for computed user holdings (60-second TTL)
@@ -137,8 +148,15 @@ export function reconcileHoldingPrice(
 }
 
 export function calculateSingleAssetFifoPosition(
-  txns: Array<{ txnType: string; quantity: unknown; pricePerUnit: unknown }>,
-  currentPrice: number
+  txns: Array<{
+    txnType: string
+    quantity: unknown
+    pricePerUnit: unknown
+    txnDate?: Date | string
+    assetId?: string
+  }>,
+  currentPrice: number,
+  splits: StockSplitEvent[] = []
 ): {
   shares: number
   avgCost: number
@@ -148,7 +166,25 @@ export function calculateSingleAssetFifoPosition(
   unrealizedGainPercent: number
 } | null {
   const lots: Array<{ qty: number; price: number }> = []
-  for (const t of txns) {
+  const normalizedTxns = txns.map((t, idx) => ({
+    ...t,
+    txnDate: t.txnDate ?? new Date(idx),
+  }))
+  const timeline = mergeTxnsAndSplits(normalizedTxns, splits)
+
+  for (const event of timeline) {
+    if (event.kind === 'SPLIT') {
+      const mult = getSplitMultiplier(event.split)
+      if (mult !== 1 && lots.length > 0) {
+        for (const lot of lots) {
+          lot.qty *= mult
+          lot.price /= mult
+        }
+      }
+      continue
+    }
+
+    const t = event.txn
     const qty = Number(t.quantity || 0)
     const price = Number(t.pricePerUnit || 0)
     if (t.txnType === 'BUY' && qty > 0) {
@@ -217,7 +253,49 @@ export async function calculateUserHoldings(
         },
       }))
 
-  // 2. Aggregate quantity and cost per asset using FIFO (First-In, First-Out) matching
+      // Collect distinct assets & sync Yahoo corporate splits
+      const uniqueAssetsMap = new Map<string, { id: string; ticker: string; market: string; assetType?: string }>()
+      const txnsByAsset = new Map<string, { asset: any; txns: any[] }>()
+
+      for (const txn of txns) {
+        const assetId = txn.assetId
+        if (!assetId) continue
+        if (!txnsByAsset.has(assetId)) {
+          txnsByAsset.set(assetId, { asset: txn.asset, txns: [] })
+        }
+        txnsByAsset.get(assetId)!.txns.push(txn)
+
+        if (!uniqueAssetsMap.has(assetId) && txn.asset) {
+          uniqueAssetsMap.set(assetId, {
+            id: assetId,
+            ticker: txn.asset.ticker,
+            market: txn.asset.market,
+            assetType: txn.asset.assetType,
+          })
+        }
+      }
+
+      const uniqueAssets = Array.from(uniqueAssetsMap.values())
+      const distinctAssetIds = Array.from(txnsByAsset.keys())
+
+      if (forceRefresh && uniqueAssets.length > 0) {
+        await syncAssetSplitsFromYahoo(uniqueAssets, true).catch((err) =>
+          console.warn('[holdings split sync warning]', err)
+        )
+      } else if (uniqueAssets.length > 0) {
+        // Non-blocking background auto-discovery so normal page loads stay sub-second
+        syncAssetSplitsFromYahoo(uniqueAssets, false)
+          .then((res) => {
+            if (res.newlyAddedSplits.length > 0) {
+              invalidateUserPortfolioCache(userId)
+            }
+          })
+          .catch(() => {})
+      }
+
+      const splitsByAsset = await getUserAssetSplitsMap(userId, distinctAssetIds)
+
+  // 2. Aggregate quantity and cost per asset using chronological FIFO + Split timeline
   // Matches Dime and US brokerage cost-basis standard (without fee mixing)
   interface BuyLot {
     quantity: number
@@ -229,40 +307,64 @@ export async function calculateUserHoldings(
     {
       asset: any
       lots: BuyLot[]
+      appliedSplits: AppliedSplitBadge[]
     }
   >()
 
-  for (const txn of txns) {
-    const assetId = txn.assetId
-    if (!assetMap.has(assetId)) {
-      assetMap.set(assetId, {
-        asset: txn.asset,
-        lots: [],
-      })
-    }
+  for (const [assetId, group] of txnsByAsset.entries()) {
+    const lots: BuyLot[] = []
+    const appliedSplits: AppliedSplitBadge[] = []
+    const assetSplits = splitsByAsset.get(assetId) ?? []
+    const timeline = mergeTxnsAndSplits(group.txns, assetSplits)
 
-    const state = assetMap.get(assetId)!
-    const qty = Number(txn.quantity)
-    const price = Number(txn.pricePerUnit)
+    for (const event of timeline) {
+      if (event.kind === 'SPLIT') {
+        const mult = getSplitMultiplier(event.split)
+        const openQty = lots.reduce((sum, l) => sum + l.quantity, 0)
+        if (mult !== 1 && openQty > 0.0000001) {
+          for (const lot of lots) {
+            lot.quantity *= mult
+            lot.pricePerUnit /= mult
+          }
+          appliedSplits.push({
+            splitDate: getSplitDateKey(event.split.splitDate),
+            splitRatio: event.split.splitRatio,
+            multiplier: mult,
+            source: event.split.source || 'auto_yahoo',
+          })
+        }
+        continue
+      }
 
-    if (txn.txnType === 'BUY') {
-      state.lots.push({
-        quantity: qty,
-        pricePerUnit: price,
-      })
-    } else if (txn.txnType === 'SELL') {
-      let qtyToSell = qty
-      while (qtyToSell > 0.0000001 && state.lots.length > 0) {
-        const lot = state.lots[0]
-        if (lot.quantity <= qtyToSell) {
-          qtyToSell -= lot.quantity
-          state.lots.shift()
-        } else {
-          lot.quantity -= qtyToSell
-          qtyToSell = 0
+      const txn = event.txn
+      const qty = Number(txn.quantity)
+      const price = Number(txn.pricePerUnit)
+
+      if (txn.txnType === 'BUY') {
+        lots.push({
+          quantity: qty,
+          pricePerUnit: price,
+        })
+      } else if (txn.txnType === 'SELL') {
+        let qtyToSell = qty
+        while (qtyToSell > 0.0000001 && lots.length > 0) {
+          const lot = lots[0]
+          if (lot.quantity <= qtyToSell) {
+            qtyToSell -= lot.quantity
+            lots.shift()
+          } else {
+            lot.quantity -= qtyToSell
+            qtyToSell = 0
+          }
         }
       }
     }
+
+    assetMap.set(assetId, {
+      asset: group.asset,
+      lots,
+      appliedSplits,
+    })
   }
 
   // 3. Fetch FX exchange rate if asset currency differs from baseCurrency
@@ -324,6 +426,7 @@ export async function calculateUserHoldings(
       unrealizedPnLPercent,
       allocationPercent: 0, // calculated below
       isStale: priceData?.isStale ?? false,
+      ...(data.appliedSplits.length > 0 ? { appliedSplits: data.appliedSplits } : {}),
     })
   })
 
@@ -340,6 +443,11 @@ export async function calculateUserHoldings(
   const unrealizedPnLBase = totalValueBase - totalCostBase
   const unrealizedPnLPercent = totalCostBase > 0 ? (unrealizedPnLBase / totalCostBase) * 100 : 0
 
+  const splitsByAssetRecord: Record<string, StockSplitEvent[]> = {}
+  for (const [aid, list] of splitsByAsset.entries()) {
+    splitsByAssetRecord[aid] = list
+  }
+
   const result: PortfolioHoldingsResult = {
     holdings: activeHoldings,
     totalValueBase,
@@ -348,6 +456,7 @@ export async function calculateUserHoldings(
     unrealizedPnLPercent,
     baseCurrency,
     txns,
+    splitsByAssetRecord,
   }
 
     // Cache computed result

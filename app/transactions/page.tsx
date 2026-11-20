@@ -27,13 +27,15 @@ import {
   Square,
   ShieldAlert,
   Wallet,
-  Check
+  Check,
+  Scissors,
 } from 'lucide-react'
 import Papa from 'papaparse'
 import { parseAccountsPayload } from '@/lib/accounts'
 import { StatusModal, type StatusDetailItem } from '@/components/ui/StatusModal'
 import { exportTransactionsToExcel } from '@/lib/export/transactions-excel-export'
 import { formatGoldWeightSublabel, getAssetUnitLabel } from '@/lib/market-data/gold'
+import { StockSplitModal } from '@/components/splits/StockSplitModal'
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   BUY: { label: 'BUY', color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' },
@@ -58,6 +60,7 @@ export default function TransactionsPage() {
     market?: 'US' | 'TH'
   } | null>(null)
   const [csvModalOpen, setCsvModalOpen] = useState(false)
+  const [splitModalOpen, setSplitModalOpen] = useState(false)
   const [clearAllModalOpen, setClearAllModalOpen] = useState(false)
   const [editingTxn, setEditingTxn] = useState<any | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -274,6 +277,14 @@ export default function TransactionsPage() {
                   <span>ล้างข้อมูลธุรกรรม</span>
                 </button>
               )}
+              <button
+                onClick={() => setSplitModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-purple-200 hover:text-white bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="จัดการแตกพาร์ / รวมพาร์ หรือซิงค์จากตลาด"
+              >
+                <Scissors className="w-3.5 h-3.5 text-purple-400" />
+                <span>แตกพาร์ (Splits)</span>
+              </button>
               <button
                 onClick={() => setCsvModalOpen(true)}
                 className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-[#181C25] hover:bg-[#202532] border border-white/[0.1] transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
@@ -800,6 +811,15 @@ export default function TransactionsPage() {
           }}
         />
       )}
+
+      <StockSplitModal
+        isOpen={splitModalOpen}
+        onClose={() => setSplitModalOpen(false)}
+        onSuccess={() => {
+          mutate(`/api/transactions?${queryParams.toString()}`)
+          mutate('/api/portfolio/summary')
+        }}
+      />
 
       {clearAllModalOpen && (
         <ClearAllTransactionsModal

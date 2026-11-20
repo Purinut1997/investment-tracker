@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCachedOrFetchPrice, invalidatePriceCache } from '@/lib/market-data/cache-layer'
+import { syncAssetSplitsFromYahoo } from '@/lib/market-data/split-sync'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 import { refreshPortfolioAndMarketNews } from '@/lib/news/fetch-news'
@@ -19,6 +20,8 @@ export async function GET(req: NextRequest) {
 
   const results = {
     syncedAssets: 0,
+    syncedSplits: 0,
+    newlyDetectedSplits: 0,
     syncedFx: 0,
     prunedNews: 0,
     syncedMarketNews: 0,
@@ -45,8 +48,10 @@ export async function GET(req: NextRequest) {
         assetId: true,
         asset: {
           select: {
+            id: true,
             ticker: true,
             market: true,
+            assetType: true,
             currency: true,
           },
         },
@@ -57,7 +62,26 @@ export async function GET(req: NextRequest) {
 
     const today = new Date()
 
-    // 4. Update prices with a small delay between requests to be polite with rate limits
+    // 4. Sync corporate stock splits from Yahoo Finance
+    try {
+      const splitRes = await syncAssetSplitsFromYahoo(
+        distinctAssets
+          .filter((d) => d.asset?.id && d.asset?.ticker)
+          .map((d) => ({
+            id: d.asset.id,
+            ticker: d.asset.ticker,
+            market: d.asset.market,
+            assetType: d.asset.assetType,
+          })),
+        true
+      )
+      results.syncedSplits = splitRes.totalSplitsFound
+      results.newlyDetectedSplits = splitRes.newlyAddedSplits.length
+    } catch (err: any) {
+      results.errors.push(`Splits sync error: ${err.message}`)
+    }
+
+    // 5. Update prices with a small delay between requests to be polite with rate limits
     for (const item of distinctAssets) {
       try {
         const priceResult = await getCachedOrFetchPrice(item.assetId, today, true)
