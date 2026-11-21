@@ -50,6 +50,7 @@ import { FullscreenChartModal } from '@/components/market-watch/FullscreenChartM
 import { VolumeChartPanel } from '@/components/market-watch/VolumeChartPanel'
 import { StockHistoricalStatsTab } from '@/components/market-watch/StockHistoricalStatsTab'
 import { StockFourPillarsTab } from '@/components/market-watch/StockFourPillarsTab'
+import { StockDailyAdvisorTab } from '@/components/market-watch/StockDailyAdvisorTab'
 
 export interface StructuredAiData {
   summary?: string
@@ -592,7 +593,7 @@ export function StockDetailModal({
   market = 'US',
 }: StockDetailModalProps) {
   const [range, setRange] = useState<TimeRange>('1m')
-  const [activeTab, setActiveTab] = useState<'chart' | 'four_pillars' | 'stats'>('chart')
+  const [activeTab, setActiveTab] = useState<'chart' | 'four_pillars' | 'stats' | 'daily_ai'>('chart')
   const [chartType, setChartType] = useState<'area' | 'candle'>('area')
   const [showSR, setShowSR] = useState(true)
   const [showSMA, setShowSMA] = useState(true)
@@ -925,8 +926,11 @@ export function StockDetailModal({
                         data.userPosition.unrealizedGain >= 0 ? 'text-emerald-400' : 'text-rose-400'
                       }`}
                     >
-                      กำไร {data.userPosition.unrealizedGain >= 0 ? '+' : ''}{currencySymbol}
-                      {Math.abs(data.userPosition.unrealizedGain).toLocaleString()} ({data.userPosition.unrealizedGainPercent}%)
+                      {data.userPosition.unrealizedGain >= 0 ? 'กำไร +' : 'ขาดทุน -'}
+                      {currencySymbol}
+                      {Math.abs(data.userPosition.unrealizedGain).toLocaleString()} (
+                      {data.userPosition.unrealizedGainPercent >= 0 ? '+' : ''}
+                      {data.userPosition.unrealizedGainPercent}%)
                     </span>
                   </div>
                 )}
@@ -1045,6 +1049,25 @@ export function StockDetailModal({
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('daily_ai')}
+            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer shrink-0 ${
+              activeTab === 'daily_ai'
+                ? 'text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+            <span>AI ความเสี่ยง &amp; แผนรายวัน</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              รายวัน
+            </span>
+            {activeTab === 'daily_ai' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full" />
+            )}
+          </button>
         </div>
 
         {/* ============================================================ */}
@@ -1092,6 +1115,12 @@ export function StockDetailModal({
               stats={data?.historicalStats}
               userPosition={data?.userPosition}
               payoutRatio={data?.payoutRatio}
+            />
+          ) : activeTab === 'daily_ai' ? (
+            <StockDailyAdvisorTab
+              symbol={symbol}
+              market={market}
+              name={data?.name || initialName || symbol}
             />
           ) : (
             <>

@@ -17,7 +17,8 @@
     "test:quant": "ts-node lib/analytics/quant-engine.test.ts",
     "test:splits": "ts-node lib/analytics/stock-splits.test.ts",
     "test:analytics": "ts-node lib/analytics/portfolio-analytics.test.ts",
-    "test:all": "npm run test:tax && npm run test:price-sync && npm run test:quant && npm run test:splits && npm run test:analytics"
+    "test:daily-advisor": "ts-node lib/analytics/stock-daily-advisor.test.ts",
+    "test:all": "npm run test:tax && npm run test:price-sync && npm run test:quant && npm run test:splits && npm run test:analytics && npm run test:daily-advisor"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
