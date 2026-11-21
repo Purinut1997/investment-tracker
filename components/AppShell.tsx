@@ -32,6 +32,7 @@ import {
   Coins,
   Sunrise,
   Bot,
+  LineChart,
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
@@ -58,7 +59,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         label: 'พอร์ต & ผลงานวันนี้',
         href: '/dashboard',
-        matchPrefixes: ['/dashboard', '/daily-plan', '/performance', '/dividends'],
+        matchPrefixes: ['/dashboard', '/analytics', '/daily-plan', '/performance', '/dividends'],
         icon: LayoutDashboard,
       },
       {
@@ -95,9 +96,10 @@ const HUB_SUB_TABS: Array<{
   tabs: Array<{ label: string; href: string; icon: React.ComponentType<{ className?: string }>; badge?: string }>
 }> = [
   {
-    hubPrefixes: ['/dashboard', '/daily-plan', '/performance', '/dividends'],
+    hubPrefixes: ['/dashboard', '/analytics', '/daily-plan', '/performance', '/dividends'],
     tabs: [
       { label: 'ภาพรวมพอร์ต & สัญญาณ', href: '/dashboard', icon: LayoutDashboard },
+      { label: 'สถิติ & กราฟ Benchmark', href: '/analytics', icon: LineChart, badge: 'ใหม่' },
       { label: 'สรุปเช้า AI & แผนปฏิบัติการ', href: '/daily-plan', icon: Sunrise, badge: '06:30' },
       { label: 'กำไรรายตัว (รวมขายแล้ว)', href: '/performance', icon: BarChart3 },
       { label: 'กระแสเงินสดปันผล & สถิติ XD', href: '/dividends', icon: Coins },
@@ -614,7 +616,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {[
           {
             href: '/dashboard',
-            match: ['/dashboard', '/daily-plan', '/performance', '/dividends'],
+            match: ['/dashboard', '/analytics', '/daily-plan', '/performance', '/dividends'],
             icon: LayoutDashboard,
             label: 'พอร์ต/ผลงาน',
           },

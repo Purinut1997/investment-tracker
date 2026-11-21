@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import useSWR, { mutate } from 'swr'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
@@ -28,9 +28,18 @@ import {
   Plus,
   Sunrise,
   Scissors,
+  LineChart as LineChartIcon,
 } from 'lucide-react'
 import { MorningBriefBanner } from '@/components/dashboard/MorningBriefBanner'
 import { AssetAllocationVisualizer } from '@/components/dashboard/AssetAllocationVisualizer'
+import { PortfolioBenchmarkChart } from '@/components/analytics/PortfolioBenchmarkChart'
+import {
+  ChartMode,
+  PortfolioAnalyticsPayload,
+  ZoomRange,
+  computeWindowSeries,
+  resolveZoomIndices,
+} from '@/lib/analytics/portfolio-analytics-math'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockSplitModal } from '@/components/splits/StockSplitModal'
@@ -143,6 +152,7 @@ function DashboardErrorState() {
 
 export default function DashboardPage() {
   const [timeframe, setTimeframe] = useState('ALL')
+  const [dashChartMode, setDashChartMode] = useState<ChartMode>('return')
   const [selectedStock, setSelectedStock] = useState<{
     symbol: string
     name?: string
@@ -242,6 +252,35 @@ export default function DashboardPage() {
   const hasPlans = (summary?.presets?.length ?? 0) > 0
   const isInitialLoading = !summary && sumLoading
   const hasFatalError = Boolean(summaryError && !summary)
+
+  const { data: analyticsData } = useSWR<PortfolioAnalyticsPayload>(
+    hasHoldings ? '/api/portfolio/analytics?benchmark=SP500' : null,
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  )
+
+  const dashboardAnalyticsSeries = useMemo(
+    () => (analyticsData?.hasData ? analyticsData.series : []),
+    [analyticsData]
+  )
+
+  const dashboardWindow = useMemo(() => {
+    if (dashboardAnalyticsSeries.length < 2) return null
+    const zoomMap: Record<string, ZoomRange> = {
+      '1M': '1m',
+      '3M': '3m',
+      '6M': '6m',
+      YTD: 'ytd',
+      '1Y': '1y',
+      ALL: 'all',
+    }
+    const zoomKey = zoomMap[timeframe] ?? 'all'
+    const { startIdx, endIdx } = resolveZoomIndices(dashboardAnalyticsSeries, zoomKey)
+    return {
+      startIdx,
+      endIdx,
+      ...computeWindowSeries(dashboardAnalyticsSeries, startIdx, endIdx, 'MWR'),
+    }
+  }, [dashboardAnalyticsSeries, timeframe])
 
   const [refreshingPrices, setRefreshingPrices] = useState(false)
   const [acknowledgingAlert, setAcknowledgingAlert] = useState(false)
@@ -501,8 +540,10 @@ export default function DashboardPage() {
     Array.isArray(summary?.performanceData) ? summary.performanceData : []
 
   const monthLimits: Record<string, number> = {
+    '1M': 2,
     '3M': 3,
     '6M': 6,
+    YTD: 12,
     '1Y': 12,
     '2Y': 24,
     ALL: Infinity,
@@ -1263,39 +1304,123 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Left: Portfolio Growth Chart (7 Columns) */}
           <div className="lg:col-span-7 rounded-3xl bg-[#121620] border border-white/[0.08] p-6 flex flex-col justify-between shadow-xl shadow-black/25">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base sm:text-lg font-bold text-white">
-                    ผลการเติบโตของพอร์ตลงทุน
-                  </h2>
-                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold">
-                    vs S&amp;P 500
-                  </span>
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base sm:text-lg font-bold text-white">
+                      ผลการเติบโตของพอร์ตลงทุน
+                    </h2>
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold">
+                      vs S&amp;P 500
+                    </span>
+                    {dashboardWindow && (
+                      <span
+                        className={`text-[11px] px-2.5 py-0.5 rounded-full border font-mono font-semibold tabular-nums ${
+                          dashboardWindow.summary.alphaPct >= 0
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                        }`}
+                      >
+                        Alpha {dashboardWindow.summary.alphaPct >= 0 ? '+' : ''}
+                        {dashboardWindow.summary.alphaPct.toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
+                  {analyticsData?.hasData ? (
+                    <p className="text-xs text-slate-400 mt-0.5 font-mono tabular-nums">
+                      What if S&amp;P 500:{' '}
+                      <strong className="text-slate-200">
+                        ฿{Math.round(analyticsData.deltas.benchmark.value).toLocaleString('en-US')}
+                      </strong>{' '}
+                      <span
+                        className={
+                          dashboardWindow && dashboardWindow.summary.benchmark.percent >= 0
+                            ? 'text-emerald-400'
+                            : 'text-rose-400'
+                        }
+                      >
+                        ({dashboardWindow && dashboardWindow.summary.benchmark.percent >= 0 ? '+' : ''}
+                        {dashboardWindow?.summary.benchmark.percent.toFixed(2) ?? '0.00'}%)
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      เปรียบเทียบแนวโน้มการเติบโตของพอร์ตคุณกับดัชนีตลาดสหรัฐฯ
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  เปรียบเทียบแนวโน้มการเติบโตของพอร์ตคุณกับดัชนีตลาดสหรัฐฯ
-                </p>
+
+                <Link
+                  href="/analytics"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-500/35 text-xs font-semibold text-indigo-200 hover:text-white transition-colors shrink-0"
+                >
+                  <LineChartIcon className="w-3.5 h-3.5" />
+                  <span>เปิดสถิติเชิงลึก &amp; MWR/TWR →</span>
+                </Link>
               </div>
 
-              <div className="flex items-center gap-1 bg-[#171C28] p-1 rounded-xl border border-white/[0.07] self-start sm:self-auto">
-                {['3M', '6M', '1Y', '2Y', 'ALL'].map((tf) => (
-                  <button
-                    key={tf}
-                    onClick={() => setTimeframe(tf)}
-                    className={`text-xs px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                      tf === timeframe
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                {dashboardWindow && (
+                  <div className="inline-flex items-center gap-1 bg-[#171C28] p-1 rounded-xl border border-white/[0.07]">
+                    {(
+                      [
+                        { id: 'return', label: 'Return' },
+                        { id: 'value', label: 'Value' },
+                        { id: 'drawdown', label: '%Off High' },
+                      ] as Array<{ id: ChartMode; label: string }>
+                    ).map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setDashChartMode(m.id)}
+                        className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                          dashChartMode === m.id
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1 bg-[#171C28] p-1 rounded-xl border border-white/[0.07]">
+                  {['1M', '3M', '6M', 'YTD', '1Y', 'ALL'].map((tf) => (
+                    <button
+                      key={tf}
+                      type="button"
+                      onClick={() => setTimeframe(tf)}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                        tf === timeframe
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {performanceData.length > 1 ? (
+            {dashboardWindow && dashboardWindow.points.length > 1 ? (
+              <div className="w-full flex-1">
+                <PortfolioBenchmarkChart
+                  series={dashboardAnalyticsSeries}
+                  windowPoints={dashboardWindow.points}
+                  startIdx={dashboardWindow.startIdx}
+                  endIdx={dashboardWindow.endIdx}
+                  chartMode={dashChartMode}
+                  returnMethod="MWR"
+                  benchmarkLabel="S&P500"
+                  baseCurrency={analyticsData?.baseCurrency || 'THB'}
+                  showNavigator={false}
+                  height={290}
+                />
+              </div>
+            ) : performanceData.length > 1 ? (
               <div className="w-full flex-1 min-h-[310px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
