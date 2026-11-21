@@ -884,7 +884,7 @@ export function StockDetailModal({
       />
 
       {/* Modal Dialog (Center card on all screens with smooth entrance) */}
-      <div className="relative w-full max-w-2xl bg-[#0F1218] border border-white/[0.12] rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/95 z-10 flex flex-col max-h-[90vh] sm:max-h-[88vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-4xl bg-[#0F1218] border border-white/[0.12] rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/95 z-10 flex flex-col max-h-[90vh] sm:max-h-[88vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Glow Accent */}
         <div
           className={`absolute top-0 right-1/4 -translate-y-1/2 w-80 h-36 rounded-full blur-3xl pointer-events-none ${
@@ -986,88 +986,75 @@ export function StockDetailModal({
           </div>
         </div>
 
-        {/* Tab Navigation: Chart & Technicals vs 4 Pillars vs Historical Stats */}
-        <div className="px-5 sm:px-6 pt-3 pb-0 border-b border-white/[0.08] bg-[#12151C]/90 flex items-center gap-3 overflow-x-auto scrollbar-none shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveTab('chart')}
-            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer shrink-0 ${
-              activeTab === 'chart'
-                ? 'text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4 text-indigo-400" />
-            <span>ภาพรวม & กราฟเทคนิคอล</span>
-            {activeTab === 'chart' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full" />
-            )}
-          </button>
+        {/* Tab Navigation: All 4 tabs always visible without horizontal clipping */}
+        <div className="px-4 sm:px-6 py-2.5 border-b border-white/[0.08] bg-[#12151C]/90 shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setActiveTab('chart')}
+              className={`min-h-10 px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                activeTab === 'chart'
+                  ? 'bg-indigo-600/20 text-white border-indigo-500/45 shadow-sm'
+                  : 'bg-white/[0.02] text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.05]'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span className="truncate">กราฟ &amp; เทคนิคอล</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('four_pillars')}
-            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer shrink-0 ${
-              activeTab === 'four_pillars'
-                ? 'text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Target className="w-4 h-4 text-amber-400" />
-            <span>วิเคราะห์ 4 ด้านก่อนลงทุน</span>
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              4 เสาหลัก
-            </span>
-            {activeTab === 'four_pillars' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('four_pillars')}
+              className={`min-h-10 px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                activeTab === 'four_pillars'
+                  ? 'bg-amber-500/15 text-white border-amber-500/45 shadow-sm'
+                  : 'bg-white/[0.02] text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.05]'
+              }`}
+            >
+              <Target className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">วิเคราะห์ 4 เสาหลัก</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('stats')}
-            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer shrink-0 ${
-              activeTab === 'stats'
-                ? 'text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Calendar className="w-4 h-4 text-emerald-400" />
-            <span>สถิติ & ปันผล</span>
-            {data?.historicalStats?.dividends?.hasDividends && (
-              <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
-                {data.historicalStats.dividends.frequency === 'Quarterly'
-                  ? '4x/ปี'
-                  : data.historicalStats.dividends.frequency === 'Semi-Annual'
-                  ? '2x/ปี'
-                  : data.historicalStats.dividends.frequency === 'Monthly'
-                  ? '12x/ปี'
-                  : 'มีปันผล'}
+            <button
+              type="button"
+              onClick={() => setActiveTab('stats')}
+              className={`min-h-10 px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                activeTab === 'stats'
+                  ? 'bg-emerald-500/15 text-white border-emerald-500/45 shadow-sm'
+                  : 'bg-white/[0.02] text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.05]'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="truncate">สถิติ &amp; ปันผล</span>
+              {data?.historicalStats?.dividends?.hasDividends && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold shrink-0">
+                  {data.historicalStats.dividends.frequency === 'Quarterly'
+                    ? '4x'
+                    : data.historicalStats.dividends.frequency === 'Semi-Annual'
+                    ? '2x'
+                    : data.historicalStats.dividends.frequency === 'Monthly'
+                    ? '12x'
+                    : 'DIV'}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('daily_ai')}
+              className={`min-h-10 px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                activeTab === 'daily_ai'
+                  ? 'bg-[#6D5EF7]/25 text-white border-[#6D5EF7]/55 shadow-sm'
+                  : 'bg-white/[0.02] text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.05]'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span className="truncate">AI ความเสี่ยงรายวัน</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#6D5EF7]/25 text-indigo-200 border border-[#6D5EF7]/40 shrink-0">
+                รายวัน
               </span>
-            )}
-            {activeTab === 'stats' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('daily_ai')}
-            className={`pb-3 px-2 text-xs sm:text-sm font-bold transition-all relative flex items-center gap-2 cursor-pointer shrink-0 ${
-              activeTab === 'daily_ai'
-                ? 'text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 text-indigo-400" />
-            <span>AI ความเสี่ยง &amp; แผนรายวัน</span>
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-              รายวัน
-            </span>
-            {activeTab === 'daily_ai' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full" />
-            )}
-          </button>
+            </button>
+          </div>
         </div>
 
         {/* ============================================================ */}
