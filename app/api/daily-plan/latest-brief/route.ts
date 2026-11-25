@@ -14,7 +14,7 @@ export async function GET() {
     const latestAiLog = await prisma.aiAdviceLog.findFirst({
       where: {
         userId,
-        prompt: { contains: 'AI Daily Investment Strategist' },
+        prompt: { contains: '[daily-brief:v2]' },
       },
       orderBy: { createdAt: 'desc' },
       select: {

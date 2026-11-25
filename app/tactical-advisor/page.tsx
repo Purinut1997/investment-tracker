@@ -37,6 +37,7 @@ import {
   Bot,
 } from 'lucide-react'
 import type { TacticalAdvisorPayload, TacticalActionItem } from '@/app/api/tactical-advisor/route'
+import type { GroundingSource } from '@/lib/ai/gemini-client'
 
 export interface AvailableDateItem {
   dateKey: string
@@ -77,6 +78,7 @@ function formatLocale(val: number | null | undefined, decimals = 2, fallback = '
 export default function TacticalAdvisorPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
   const [selectedActionFilter, setSelectedActionFilter] = useState<'ALL' | 'ACCUMULATE' | 'HOLD_WATCH' | 'TRIM_PROFIT'>('ALL')
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; market: string } | null>(null)
 
@@ -84,6 +86,7 @@ export default function TacticalAdvisorPage() {
   const [chatQuestion, setChatQuestion] = useState('')
   const [isChatLoading, setIsChatLoading] = useState(false)
   const [chatAnswer, setChatAnswer] = useState<string | null>(null)
+  const [chatSources, setChatSources] = useState<GroundingSource[]>([])
 
   // Fetch Tactical Advisor Data with SWR (with selected historical date if any)
   const endpointUrl = selectedDate ? `/api/tactical-advisor?date=${selectedDate}` : '/api/tactical-advisor'
@@ -98,14 +101,16 @@ export default function TacticalAdvisorPage() {
   const handleRefresh = async () => {
     try {
       setIsRefreshing(true)
+      setRefreshError(null)
       setSelectedDate(null)
       const res = await fetch('/api/tactical-advisor?refresh=true', { method: 'GET' })
+      const json = await res.json()
       if (res.ok) {
-        const json = await res.json()
         mutate(json, false)
-      }
+      } else setRefreshError(json.error || 'วิเคราะห์ตลาดไม่สำเร็จ')
     } catch (err) {
       console.error('Failed to refresh tactical advisor', err)
+      setRefreshError('เชื่อมต่อเพื่อวิเคราะห์ตลาดไม่สำเร็จ')
     } finally {
       setIsRefreshing(false)
     }
@@ -114,23 +119,24 @@ export default function TacticalAdvisorPage() {
   // Handle Copilot Chat Submission
   const handleAskQuestion = async (qText?: string) => {
     const questionToSend = qText || chatQuestion
-    if (!questionToSend.trim()) return
+    if (!questionToSend.trim() || isChatLoading) return
 
     try {
       setIsChatLoading(true)
       setChatAnswer(null)
+      setChatSources([])
       const res = await fetch('/api/tactical-advisor/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: questionToSend,
-          tacticalContext: payload,
         }),
       })
 
       if (res.ok) {
         const json = await res.json()
         setChatAnswer(json.answer)
+        setChatSources(json.groundingSources || [])
       } else {
         setChatAnswer('เกิดข้อผิดพลาดในการประมวลผลคำตอบ กรุณาลองใหม่อีกครั้ง')
       }
@@ -272,15 +278,20 @@ export default function TacticalAdvisorPage() {
           </div>
         )}
 
-        {error && !payload && (
+        {(refreshError || (error && !payload)) && (
           <div className="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center space-y-2">
             <AlertTriangle className="w-6 h-6 text-rose-400 mx-auto" />
-            <p className="text-sm font-bold text-rose-200">ไม่สามารถโหลดข้อมูล Tactical Advisor ได้</p>
-            <p className="text-xs text-slate-400">กรุณากดปุ่ม "วิเคราะห์สดใหม่" ด้านบนเพื่อลองใหม่อีกครั้ง</p>
+            <p className="text-sm font-bold text-rose-200">{refreshError || error?.message || 'ไม่สามารถโหลดข้อมูล Tactical Advisor ได้'}</p>
+            <Link href="/ai-advisor" className="text-sm text-indigo-300 underline">เปิด Wealth Copilot</Link>
           </div>
         )}
 
-        {payload && (
+        {payload && !payload.marketEvidence && (
+          <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4 text-sm text-amber-200">
+            รายงานย้อนหลังฉบับนี้ไม่มีหลักฐานเวลาราคา จึงไม่แสดงตัวเลขตลาดและแผนจากรายงานฉบับนี้
+          </p>
+        )}
+        {payload?.marketEvidence && (
           <div className="space-y-6">
             {/* ── TOP SECTION: CARD 1 MARKET CLIMATE ENGINE (4 PILLARS & FORMULA) ── */}
             {(() => {
@@ -465,7 +476,7 @@ export default function TacticalAdvisorPage() {
                           <div className="flex items-center justify-between text-xs text-slate-300">
                             <span>CNN Fear & Greed:</span>
                             <span className="font-mono font-bold text-base sm:text-lg text-white">
-                              {pillars.sentiment.fearGreedScore}/100
+                              {pillars.sentiment.fearGreedScore >= 0 ? `${pillars.sentiment.fearGreedScore}/100` : '—'}
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-2 text-[11px] flex-wrap">
@@ -481,7 +492,7 @@ export default function TacticalAdvisorPage() {
                                   : 'text-slate-400'
                               }`}
                             >
-                              {pillars.sentiment.fearGreed1WDiff < 0
+                              {pillars.sentiment.previous1WeekScore < 0 ? 'ไม่มีข้อมูลย้อนหลัง' : pillars.sentiment.fearGreed1WDiff < 0
                                 ? `⭣ ลดลง ${Math.abs(pillars.sentiment.fearGreed1WDiff)} pts vs วีคก่อน`
                                 : pillars.sentiment.fearGreed1WDiff > 0
                                 ? `⭡ เพิ่มขึ้น ${pillars.sentiment.fearGreed1WDiff} pts vs วีคก่อน`
@@ -1177,7 +1188,9 @@ export default function TacticalAdvisorPage() {
                       6. ถาม AI เจาะลึกเฉพาะกิจ (Tactical Copilot)
                     </h3>
                     <span className="text-xs text-slate-400">
-                      ระบบป้อนข้อมูลพอร์ตจริง + สัญญาณกราฟ (RSI/SMA/Pivots) + มหภาค 4 เสาหลักให้ AI ครบถ้วน
+                      {responseData?.isHistorical
+                        ? 'แชตนี้ใช้ข้อมูลล่าสุดที่ตรวจได้ แม้กำลังเปิดรายงานย้อนหลัง'
+                        : 'ถามเกี่ยวกับพอร์ตหรือระบุหุ้นที่ต้องการให้ตรวจสอบ'}
                     </span>
                   </div>
                 </div>
@@ -1249,6 +1262,20 @@ export default function TacticalAdvisorPage() {
                     <span>คำแนะนำเฉพาะตัวจาก Tactical Copilot:</span>
                   </div>
                   <FormattedCopilotMessage content={chatAnswer} />
+                  {chatSources.length > 0 && (
+                    <div className="border-t border-white/10 pt-3">
+                      <p className="mb-2 text-sm font-semibold text-slate-300">แหล่งอ้างอิงจากการค้นเว็บ</p>
+                      <ul className="space-y-1 text-sm">
+                        {chatSources.map(({ url, title }) => (
+                          <li key={url}>
+                            <a href={url} target="_blank" rel="noreferrer" className="break-words text-indigo-300 underline underline-offset-4">
+                              {title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

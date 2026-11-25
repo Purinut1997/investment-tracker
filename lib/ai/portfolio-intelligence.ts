@@ -18,6 +18,8 @@ import {
 import { getYahooQuoteSummary, YahooQuoteSummaryData } from '@/lib/market-data/yahoo-crumb'
 import { getEarningsIntelligence, formatYahooTicker } from '@/lib/earnings/earnings-analyzer'
 import { getDividendIntelligence } from '@/lib/dividends/dividend-analyzer'
+import { prioritizeAdvisorTargets } from './advisor-evidence'
+import { FOREIGN_INCOME_TAX_RULE, FOREIGN_INCOME_TAX_SOURCE } from '../analytics/foreign-income-tax'
 import {
   UserInvestmentMemory,
   parseUserInvestmentMemory,
@@ -66,8 +68,8 @@ function summarizeFifoTaxContext(
   const timeline = mergeTxnsAndSplits(sorted, allSplits)
 
   const lotsByAsset = new Map<string, Array<{ qty: number; unitCost: number; date: Date }>>()
-  let ytdForeignRealizedNative = 0
-  let ytdThaiSetRealizedThb = 0
+  const realizedByCurrency = new Map<string, number>()
+  let salesWithoutCompleteCost = 0
 
   for (const ev of timeline) {
     if (ev.kind === 'SPLIT') {
@@ -110,13 +112,14 @@ function summarizeFifoTaxContext(
         }
       }
       if (d.getUTCFullYear() === currentYear) {
+        if (rem > 0.0000001) {
+          salesWithoutCompleteCost++
+          continue
+        }
         const proceeds = Number(t.totalAmount || qty * price - fee)
         const gain = proceeds - costBasis
-        if ((t.asset?.market === 'TH' && t.asset?.assetType !== 'crypto') || t.asset?.assetType === 'gold') {
-          ytdThaiSetRealizedThb += gain
-        } else {
-          ytdForeignRealizedNative += gain
-        }
+        const currency = String(t.asset?.currency || 'ไม่ระบุสกุลเงิน')
+        realizedByCurrency.set(currency, (realizedByCurrency.get(currency) ?? 0) + gain)
       }
     }
   }
@@ -126,20 +129,17 @@ function summarizeFifoTaxContext(
     const lots = lotsByAsset.get(h.assetId) || []
     const oldestDate = lots[0]?.date
     const heldDays = oldestDate ? Math.max(0, Math.round((nowMs - oldestDate.getTime()) / 86400000)) : null
-    const isThaiExempt = h.market === 'TH' && h.assetType !== 'crypto'
-    const taxRuleNote =
-      h.assetType === 'gold'
-        ? 'ทองคำแท่งในไทย/Dime! (สังหาริมทรัพย์ มาตรา 42(9) — ไม่รวมในรายได้หุ้นต่างประเทศ ป.161/2566)'
-        : isThaiExempt
-        ? 'หุ้นไทย SET (กำไรส่วนต่างยกเว้นภาษีบุคคลธรรมดา)'
-        : 'สินทรัพย์ต่างประเทศ/คริปโต (ภ.ง.ด. 90 เมื่อนำเงินกลับไทย ตามหลัก ป.161/2566)'
-    return `  • ${h.ticker}: P&L ${h.unrealizedPnLPercent >= 0 ? '+' : ''}${h.unrealizedPnLPercent.toFixed(1)}% (${Math.round(h.unrealizedPnLBase).toLocaleString()} ${baseCurrency})${
+    return `  • ${h.ticker} (${h.market}, ${h.assetType}): กำไร/ขาดทุนที่ยังไม่รับรู้ ${h.unrealizedPnLPercent >= 0 ? '+' : ''}${h.unrealizedPnLPercent.toFixed(1)}% (${Math.round(h.unrealizedPnLBase).toLocaleString()} ${baseCurrency})${
       heldDays !== null ? ` | ถือล็อตเก่าสุด ${heldDays} วัน` : ''
-    } — ${taxRuleNote}`
+    }`
   })
 
   return [
-    `- กำไร/ขาดทุนขายแล้วสะสมปี ${currentYear}: ต่างประเทศ/คริปโต ~ $${ytdForeignRealizedNative.toFixed(2)} | หุ้นไทย SET ~ ฿${Math.round(ytdThaiSetRealizedThb).toLocaleString()} (ยกเว้นภาษีขาย)`,
+    `- กำไร/ขาดทุนรับรู้จากธุรกรรมที่มีต้นทุนครบ ปี ${currentYear} แยกตามสกุล: ${
+      [...realizedByCurrency].map(([currency, amount]) => `${amount.toFixed(2)} ${currency}`).join(' | ') || 'ไม่มีข้อมูล'
+    } (ไม่ใช่ฐานภาษี)`,
+    ...(salesWithoutCompleteCost ? [`- มี ${salesWithoutCompleteCost} รายการขายที่ต้นทุนไม่ครบ จึงไม่นำมารวมในยอดนี้`] : []),
+    `- หากคำถามเกี่ยวกับเงินได้ต่างประเทศ: ${FOREIGN_INCOME_TAX_RULE} อ้างอิง ${FOREIGN_INCOME_TAX_SOURCE}`,
     ...perHoldingTaxLines,
   ].join('\n')
 }
@@ -149,6 +149,7 @@ export async function gatherPortfolioDeepIntelligence(params: {
   baseCurrency: string
   holdings: HoldingItem[]
   txns?: any[]
+  researchTargets?: Array<{ ticker: string; market: string; assetType?: string }>
 }): Promise<PortfolioDeepIntelligence> {
   const { userId, baseCurrency, holdings, txns } = params
 
@@ -158,8 +159,12 @@ export async function gatherPortfolioDeepIntelligence(params: {
       h.assetType !== 'gold' &&
       h.market !== 'CRYPTO'
   )
-  const fundamentalTargets = equityHoldings.slice(0, 6)
-  const catalystTargets = equityHoldings.slice(0, 5)
+  const research = (params.researchTargets || []).filter(
+    (target) => (target.market === 'US' || target.market === 'TH') && (!target.assetType || target.assetType === 'stock' || target.assetType === 'fund')
+  )
+  const targets = prioritizeAdvisorTargets(research, equityHoldings, 6)
+  const fundamentalTargets = targets.slice(0, 6)
+  const catalystTargets = targets.slice(0, 5)
 
   const distinctAssetIds = Array.from(
     new Set([
@@ -319,7 +324,7 @@ export async function gatherPortfolioDeepIntelligence(params: {
   const catalystsPrompt =
     catalystLines.length > 0
       ? catalystLines.join('\n')
-      : 'ไม่มีกำหนดประกาศงบ (Earnings) หรือขึ้น XD ภายใน 45-60 วันข้างหน้า'
+      : 'ไม่พบกำหนดประกาศงบหรือขึ้น XD ที่ยืนยันได้จากชุดข้อมูลที่ตรวจในรอบนี้'
 
   // 3. Goals & User Memory
   const cleanTargetAlloc = activePreset?.targetAllocation

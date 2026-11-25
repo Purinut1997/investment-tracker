@@ -5,6 +5,7 @@
  */
 
 import type { TaxReportSummary } from '@/lib/analytics/tax-fifo'
+import { FOREIGN_INCOME_TAX_RULE, FOREIGN_INCOME_TAX_SOURCE, foreignIncomeAssessment } from '../analytics/foreign-income-tax'
 import {
   EXCEL_COLORS as C,
   borderThin,
@@ -160,8 +161,7 @@ export async function exportTaxReportToExcel(
     includeAiAdvice = true,
   } = options
 
-  const isNewRuleYear = selectedYear >= 2024
-  const isTaxableInThailand = Boolean(repatriated)
+  const taxAssessment = foreignIncomeAssessment(repatriated)
   const exportedAtStr = new Date().toLocaleDateString('th-TH', {
     year: 'numeric',
     month: 'long',
@@ -230,7 +230,7 @@ export async function exportTaxReportToExcel(
       ),
       makeTextCell(report.dividends.totalDividendGrossUSD > 0 ? 'USD / THB' : 'THB', 0, 'center'),
       makeNumCell(report.dividends.totalDividendNetTHB, 0, '฿#,##0.00', { bold: true }),
-      makeBadgeCell('ยื่น ภ.ง.ด.90 (ขอเครดิตภาษี W-8BEN หรือ Final Tax)', 0, 'neutral'),
+      makeBadgeCell('ตรวจประเภทเงินปันผลและสิทธิเครดิตจากเอกสาร', 0, 'neutral'),
     ])
 
     // Row 2: Thai SET Capital Gains
@@ -266,21 +266,21 @@ export async function exportTaxReportToExcel(
         colorRgb: fGainTHB >= 0 ? C.emeraldText : C.roseText,
       }),
       makeBadgeCell(
-        isTaxableInThailand ? 'มีภาระภาษีไทย (ป.161/2566)' : 'ยังไม่มีภาระภาษี (เงินก่อนปี 67)',
+        taxAssessment.label,
         2,
-        isTaxableInThailand ? 'taxable' : 'exempt'
+        'neutral'
       ),
     ])
 
     // Total Flow Row
-    const totalTaxableFlowTHB =
+    const recordedIncomeTHB =
       report.dividends.totalDividendNetTHB +
       (report.foreignAndCryptoGains.totalRealizedGainTHB > 0
         ? report.foreignAndCryptoGains.totalRealizedGainTHB
         : 0)
 
     s1.push([
-      makeTotalCell('รวมกระแสเงินได้ที่ต้องพิจารณาภาษี (Taxable Net Flow)', 'text', '', 'left'),
+      makeTotalCell('รวมเงินปันผลสุทธิและกำไรรับรู้สุทธิที่เป็นบวก', 'text', '', 'left'),
       makeTotalCell(
         report.dividends.items.length + report.foreignAndCryptoGains.trades.length,
         'number',
@@ -290,9 +290,9 @@ export async function exportTaxReportToExcel(
       makeTotalCell('-', 'text', '', 'center'),
       makeTotalCell('-', 'text', '', 'center'),
       makeTotalCell('THB', 'text', '', 'center'),
-      makeTotalCell(totalTaxableFlowTHB, 'number', '฿#,##0.00'),
+      makeTotalCell(recordedIncomeTHB, 'number', '฿#,##0.00'),
       makeTotalCell(
-        isTaxableInThailand ? 'อัตราก้าวหน้า 0-35%' : 'เฉพาะเงินปันผล',
+        'ยอดสรุปจากธุรกรรม',
         'text',
         '',
         'center'
@@ -349,7 +349,7 @@ export async function exportTaxReportToExcel(
         1,
         '฿#,##0.00'
       ),
-      makeTextCell('ถูกหัก W-8BEN 15% สามารถนำมาขอเป็นเครดิตภาษีต่างประเทศตามอนุสัญญาภาษีซ้อน (DTA)', 1),
+      makeTextCell('ตรวจภาษีที่หักตามหลักฐานและสิทธิเครดิตภายใต้อนุสัญญาภาษีซ้อน', 1),
       makeTextCell('1042-S หรือ Dividend Statement จากโบรกเกอร์ต่างประเทศ (Dime, InnovestX)', 1),
     ])
 
@@ -368,9 +368,7 @@ export async function exportTaxReportToExcel(
       makeNumCell(report.foreignAndCryptoGains.totalRealizedGainTHB, 3, '฿#,##0.00'),
       makeNumCell(0, 3, '฿#,##0.00'),
       makeTextCell(
-        isTaxableInThailand
-          ? 'คำสั่งกรมสรรพากร ที่ ป.161/2566 และ ป.162/2566 ยื่น ภ.ง.ด.90 อัตราก้าวหน้า 0-35%'
-          : 'เงินลงทุนก่อนปี 2567 และยังไม่นำเงินกลับไทย ไม่เข้าเกณฑ์เสียภาษี',
+        taxAssessment.detail,
         3
       ),
       makeTextCell('FIFO Realized Gain/Loss Report (ตามชีต 3 ของไฟล์นี้) พร้อมหลักฐานการโอนเงิน', 3),
@@ -506,7 +504,7 @@ export async function exportTaxReportToExcel(
 
       const taxRate = grossNative > 0 ? (taxNative / grossNative) * 100 : 0
       const taxNote = isUSD
-        ? 'W-8BEN 15% (ขอเครดิตภาษีต่างประเทศ DTA)'
+        ? 'ภาษีต่างประเทศตามบันทึก · ตรวจสิทธิเครดิต'
         : 'หัก ณ ที่จ่าย 10% (ขอเครดิตภาษี ม.47 ทวิ หรือ Final Tax)'
 
       s2.push([
@@ -573,7 +571,7 @@ export async function exportTaxReportToExcel(
       makeMetaCell(
         `เกณฑ์คำนวณ: First-In, First-Out (FIFO) | อัตราแลกเปลี่ยน: 1 USD = ฿${usdThbRate.toFixed(
           2
-        )} THB | สถานะ: ${isTaxableInThailand ? 'ต้องยื่นแบบ ภ.ง.ด.90 (ป.161/2566)' : 'เงินก่อนปี 2567 และยังไม่นำเงินกลับไทย'}`
+        )} THB | สถานะที่ระบุ: ${taxAssessment.label}`
       ),
     ])
     s3.push([makeBlankCell()])
@@ -642,11 +640,6 @@ export async function exportTaxReportToExcel(
       const returnPct = cost > 0 ? (gain / cost) * 100 : 0
       const statusType = gain >= 0 ? 'gain' : 'loss'
       const statusStr = gain >= 0 ? 'กำไร (Gain)' : 'ขาดทุน (Loss)'
-      const taxStatus = isTaxableInThailand
-        ? isNewRuleYear
-          ? 'ต้องยื่นภาษีไทย (ปี 67+)'
-          : 'นำเงินกลับไทย'
-        : 'ไม่ต้องเสียภาษีไทย'
 
       s3.push([
         makeTextCell(String(index + 1), index, 'center'),
@@ -674,7 +667,7 @@ export async function exportTaxReportToExcel(
         }),
         makeBadgeCell(statusStr, index, statusType),
         makeNumCell(t.fee || 0, index, isUSD ? '$#,##0.00' : '#,##0.00'),
-        makeBadgeCell(taxStatus, index, isTaxableInThailand ? 'taxable' : 'exempt'),
+        makeBadgeCell(taxAssessment.label, index, 'neutral'),
       ])
     })
 
@@ -708,7 +701,7 @@ export async function exportTaxReportToExcel(
       makeTotalCell(fSumGainTHB, 'number', '฿#,##0.00'),
       makeTotalCell(fSumGainTHB >= 0 ? 'กำไรสุทธิรวม' : 'ขาดทุนสุทธิรวม', 'text', '', 'center'),
       makeTotalCell(fSumFee, 'number', '$#,##0.00'),
-      makeTotalCell(isTaxableInThailand ? 'ภาระภาษีอัตราก้าวหน้า' : 'ได้รับการยกเว้น', 'text', '', 'center'),
+      makeTotalCell(taxAssessment.label, 'text', '', 'center'),
     ])
 
     // Non-netting drilldown box
@@ -885,7 +878,7 @@ export async function exportTaxReportToExcel(
       makeTextCell('3. ภาษีสินทรัพย์ต่างประเทศ', 2),
       makeTextCell('คำสั่งกรมสรรพากร ที่ ป.161/2566 และ ป.162/2566', 2),
       makeTextCell(
-        'ผู้มีถิ่นที่อยู่ในไทย (อยู่เกิน 180 วันในปีปฏิทิน) ที่มีเงินได้พึงประเมินจากต่างประเทศตั้งแต่วันที่ 1 ม.ค. 2567 เป็นต้นไป และนำเงินได้นั้นเข้ามาในไทย ต้องนำมารวมคำนวณภาษีในปีที่นำเข้า',
+        `${FOREIGN_INCOME_TAX_RULE} | อ้างอิง: ${FOREIGN_INCOME_TAX_SOURCE}`,
         2
       ),
     ])
@@ -894,7 +887,7 @@ export async function exportTaxReportToExcel(
       makeTextCell('4. อนุสัญญาภาษีซ้อนไทย-สหรัฐฯ', 3),
       makeTextCell('Double Tax Agreement (DTA) & Form W-8BEN', 3),
       makeTextCell(
-        'นักลงทุนไทยไม่เสียภาษี Capital Gains ในสหรัฐฯ และเสีย Withholding Tax เงินปันผลในอัตราลดหย่อน 15% ซึ่งนำมาใช้เป็นเครดิตภาษีต่างประเทศในไทยได้',
+        'ตรวจประเภทเงินได้ สถานะผู้ลงทุน และภาษีที่หักตามเอกสารโบรกเกอร์ก่อนพิจารณาสิทธิภายใต้อนุสัญญาภาษีซ้อน',
         3
       ),
     ])
@@ -913,7 +906,7 @@ export async function exportTaxReportToExcel(
     } else {
       s5.push([makeSectionHeaderCell('[ส่วนที่ 2] คำแนะนำการเตรียมเอกสารสำหรับการยื่นแบบ ภ.ง.ด. 90')])
       s5.push([makeTextCell('1. หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) สำหรับเงินปันผลหุ้นไทยและกองทุนรวม', 0)])
-      s5.push([makeTextCell('2. รายงานยอดเงินปันผลและภาษี W-8BEN 15% จากแอปหรือโบรกเกอร์ (Dime, InnovestX, IBKR)', 1)])
+      s5.push([makeTextCell('2. รายงานยอดเงินปันผลและหลักฐานภาษีหัก ณ ที่จ่ายจากแอปหรือโบรกเกอร์', 1)])
       s5.push([makeTextCell('3. ตารางคำนวณต้นทุน FIFO และกำไรจากการขายสินทรัพย์ต่างประเทศ (ใช้ชีตที่ 3 ในไฟล์นี้)', 2)])
       s5.push([makeTextCell('4. สลิปหรือหลักฐานการโอนเงินกลับเข้าสู่บัญชีธนาคารไทย เพื่อยืนยันปีภาษีที่มีการนำเงินเข้า', 3)])
     }

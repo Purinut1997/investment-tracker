@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
-import { normalizeGoldTicker, GRAMS_PER_TROY_OZ, GRAMS_PER_THAI_BAHT_BAR } from '@/lib/market-data/gold'
+import { parseModelJson } from '@/lib/ai/model-contracts'
+import { isExtractionEnvelope, normalizeExtraction } from '@/lib/ai/transaction-extraction'
 
 export const maxDuration = 60 // Allow longer processing for multiple images
 
@@ -28,6 +29,9 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (rawImages.length > 10 || rawImages.some((img) => typeof img !== 'string' && (!img || typeof img.data !== 'string'))) {
+      return NextResponse.json({ error: 'กรุณาส่งรูปที่ถูกต้องไม่เกิน 10 ภาพต่อรอบ' }, { status: 400 })
+    }
     // Prepare image parts for Gemini
     const imageParts = rawImages.map((img) => {
       let base64 = typeof img === 'string' ? img : img.data
@@ -48,6 +52,11 @@ export async function POST(req: NextRequest) {
         },
       }
     })
+    if (imageParts.some(({ inlineData }) =>
+      !/^image\/(jpeg|png|webp|heic|heif)$/.test(inlineData.mimeType) || !/^[\w+/]+={0,2}$/.test(inlineData.data)
+    ) || imageParts.reduce((bytes, { inlineData }) => bytes + inlineData.data.length * 0.75, 0) > 12 * 1024 * 1024) {
+      return NextResponse.json({ error: 'รูปภาพไม่รองรับหรือขนาดรวมเกิน 12 MB' }, { status: 400 })
+    }
 
     // Fetch user's existing accounts to help AI match account names accurately
     const userAccounts = await prisma.investmentAccount.findMany({
@@ -56,7 +65,7 @@ export async function POST(req: NextRequest) {
     })
 
     const accountsListStr = userAccounts.length > 0
-      ? userAccounts.map((a) => `- ${a.accountName} (${a.currency}, ${a.accountType}) [ID: ${a.id}]`).join('\n')
+      ? userAccounts.map((a) => `- ${a.accountName} (${a.currency}, ${a.accountType})`).join('\n')
       : 'ผู้ใช้ยังไม่มีบัญชีที่บันทึกไว้ในระบบ (สามารถแนะนำชื่อบัญชีจากสลิปได้ เช่น Dime! USD, Dime! Save, InnovestX)'
 
     const systemPrompt = `คุณคือ AI ผู้เชี่ยวชาญด้านการเงินและการลงทุนที่วิเคราะห์ภาพถ่ายสลิปธุรกรรมการลงทุน (Investment Slips & Brokerage Screenshots) ของแอปพลิเคชันการเงินในไทย (เช่น Dime!, InnovestX, Streaming, Bitkub, Luno ฯลฯ)
@@ -111,7 +120,7 @@ ${accountsListStr}
       "totalAmount": ยอดรวมสุทธิของคำสั่ง (กรณีซื้อ: (หุ้น x ราคา) + ค่าธรรมเนียม, กรณีขาย: (หุ้น x ราคา) - ค่าธรรมเนียม - ภาษี เช่น 329.47),
       "currency": "USD" หรือ "THB",
       "txnDate": "ISO String เช่น 2026-09-09T22:29:00+07:00",
-      "matchedAccountId": "ID ของบัญชีผู้ใช้ถ้าตรง หรือ null",
+      "matchedAccountId": null,
       "accountName": "ชื่อบัญชีที่พบในสลิป เช่น Dime! USD หรือ Dime! Save",
       "note": "สรุปสั้นๆ เช่น ซื้อ GOOGL ผ่าน Dime! สำเร็จ",
       "confidence": 0.95
@@ -119,7 +128,7 @@ ${accountsListStr}
   ],
   "cashBalances": [
     {
-      "matchedAccountId": "ID ของบัญชีถ้าตรง หรือ null",
+      "matchedAccountId": null,
       "accountName": "เช่น Dime! Save, Dime! USD, Dime! FCD",
       "accountType": "bank" | "brokerage" | "cash",
       "currency": "THB" หรือ "USD",
@@ -139,88 +148,12 @@ ${accountsListStr}
       logType: 'quick_add_multimodal',
       systemInstruction: systemPrompt,
       responseMimeType: 'application/json',
+      validateJson: isExtractionEnvelope,
+      timeoutMs: 38_000,
     })
 
-    // Clean JSON response
-    const cleanText = text
-      .replace(/```json/gi, '')
-      .replace(/```/gi, '')
-      .trim()
-
-    let parsedResult: any
-    try {
-      let jsonStr = cleanText
-      const firstBrace = cleanText.indexOf('{')
-      const lastBrace = cleanText.lastIndexOf('}')
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        jsonStr = cleanText.substring(firstBrace, lastBrace + 1)
-      }
-      parsedResult = JSON.parse(jsonStr)
-    } catch (parseErr) {
-      console.error('[extract-slips] JSON Parse error. Raw output:', cleanText)
-      throw new Error('AI ส่งผลลัพธ์ที่ไม่ใช่ JSON ที่ถูกต้อง กรุณาลองใหม่อีกครั้ง')
-    }
-
-    // Enhance matching with user accounts and canonicalize gold tickers
-    if (Array.isArray(parsedResult.transactions)) {
-      parsedResult.transactions.forEach((txn: any, idx: number) => {
-        txn.id = txn.id || `txn_${idx + 1}`
-        const normalizedGold = normalizeGoldTicker(txn.ticker, txn.assetType, txn.currency)
-        if (normalizedGold) {
-          txn.ticker = normalizedGold.ticker
-          txn.assetName = normalizedGold.assetName
-          txn.assetType = 'gold'
-          txn.market = normalizedGold.market
-          txn.currency = normalizedGold.currency
-        }
-        if (!txn.matchedAccountId && txn.accountName) {
-          const match = userAccounts.find(
-            (a) =>
-              a.accountName.toLowerCase() === txn.accountName.toLowerCase() ||
-              a.accountName.toLowerCase().includes(txn.accountName.toLowerCase()) ||
-              txn.accountName.toLowerCase().includes(a.accountName.toLowerCase())
-          )
-          if (match) {
-            txn.matchedAccountId = match.id
-            txn.accountName = match.accountName
-          }
-        }
-
-        const q = Number(txn.quantity || 0)
-        const p = Number(txn.pricePerUnit || 0)
-        const f = Number(txn.fee || 0)
-        const t = Number(txn.taxWithheld || 0)
-        if (txn.txnType === 'SELL' && q > 0 && p > 0 && f > 0) {
-          const gross = q * p
-          if (Number(txn.totalAmount) > gross || Number(txn.totalAmount) === gross + f) {
-            txn.totalAmount = Math.max(0, gross - f - t)
-          }
-        }
-      })
-    }
-
-    if (Array.isArray(parsedResult.cashBalances)) {
-      parsedResult.cashBalances.forEach((cb: any) => {
-        if (!cb.matchedAccountId && cb.accountName) {
-          const match = userAccounts.find(
-            (a) =>
-              a.accountName.toLowerCase() === cb.accountName.toLowerCase() ||
-              a.accountName.toLowerCase().includes(cb.accountName.toLowerCase()) ||
-              cb.accountName.toLowerCase().includes(a.accountName.toLowerCase())
-          )
-          if (match) {
-            cb.matchedAccountId = match.id
-            cb.accountName = match.accountName
-          }
-        }
-      })
-    }
-
-    return NextResponse.json({
-      success: true,
-      modelUsed,
-      data: parsedResult,
-    })
+    const data = normalizeExtraction(parseModelJson(text), userAccounts, imageParts.length)
+    return NextResponse.json({ success: true, modelUsed, data })
   } catch (error: any) {
     console.error('[extract-slips POST]', error)
     return NextResponse.json(

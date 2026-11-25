@@ -4,45 +4,46 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
 
+class StaleCashSnapshot extends Error {}
+
 const BatchTransactionItemSchema = z.object({
-  accountId: z.string().optional(),
+  accountId: z.string().min(1),
   accountName: z.string().optional(),
   currency: z.string().default('USD'),
   accountType: z.enum(['brokerage', 'crypto_exchange', 'bank', 'cash']).default('brokerage'),
-  ticker: z.string().min(1),
+  ticker: z.string().trim().min(1).max(32),
   assetName: z.string().optional(),
   market: z.enum(['US', 'TH', 'CRYPTO']).default('US'),
   assetType: z.enum(['stock', 'fund', 'crypto', 'bond', 'gold']).default('stock'),
-  txnDate: z.string(),
+  txnDate: z.iso.datetime({ offset: true }),
   txnType: z.enum(['BUY', 'SELL', 'DIVIDEND', 'DEPOSIT', 'WITHDRAW', 'FEE']),
-  quantity: z.preprocess((val) => {
-    const num = Number(val)
-    return isNaN(num) || num <= 0 ? 1 : num
-  }, z.number().positive()),
-  pricePerUnit: z.preprocess((val) => {
-    const num = Number(val)
-    return isNaN(num) || num < 0 ? 0 : num
-  }, z.number().nonnegative()),
+  quantity: z.number().positive(),
+  pricePerUnit: z.number().positive(),
   fee: z.number().nonnegative().default(0),
   taxWithheld: z.number().nonnegative().default(0),
-  totalAmount: z.number().optional(),
+  totalAmount: z.number().nonnegative(),
   note: z.string().optional(),
-})
+}).refine((item) => {
+  if (item.txnType === 'DEPOSIT' || item.txnType === 'WITHDRAW' || item.txnType === 'FEE') return item.totalAmount > 0
+  const gross = item.quantity * item.pricePerUnit
+  const expected = item.txnType === 'BUY' ? gross + item.fee : Math.max(0, gross - item.fee - item.taxWithheld)
+  return Math.abs(expected - item.totalAmount) <= 0.02
+}, { message: 'ยอดสุทธิไม่ตรงกับจำนวน ราคา และค่าธรรมเนียม' })
 
 const BatchCashBalanceItemSchema = z.object({
-  accountId: z.string().optional(),
+  accountId: z.string().min(1),
   accountName: z.string().optional(),
   currency: z.string().default('THB'),
   accountType: z.enum(['brokerage', 'crypto_exchange', 'bank', 'cash']).default('bank'),
   cashAmount: z.number(),
   accruedInterest: z.number().default(0),
   interestDays: z.number().nullable().optional(),
-  balanceDate: z.string().optional(),
+  balanceDate: z.union([z.iso.date(), z.iso.datetime({ offset: true })]),
 })
 
 const BatchPayloadSchema = z.object({
-  transactions: z.array(BatchTransactionItemSchema).default([]),
-  cashBalances: z.array(BatchCashBalanceItemSchema).default([]),
+  transactions: z.array(BatchTransactionItemSchema).max(250).default([]),
+  cashBalances: z.array(BatchCashBalanceItemSchema).max(80).default([]),
   updateCashBalances: z.boolean().default(true),
 })
 
@@ -72,208 +73,153 @@ export async function POST(req: NextRequest) {
       where: { userId },
     })
 
-    const accountMap = new Map<string, string>() // Name -> ID
-    existingAccounts.forEach((acc) => {
-      accountMap.set(acc.accountName.toLowerCase(), acc.id)
-    })
-
-    // Helper to get or create account
-    async function resolveAccountId(name?: string, currency = 'USD', accountType: any = 'brokerage', explicitId?: string): Promise<string> {
-      if (explicitId) {
-        const found = existingAccounts.find((a) => a.id === explicitId)
-        if (found) return found.id
-      }
-
-      const cleanName = (name || 'Dime! USD').trim()
-      const existingId = accountMap.get(cleanName.toLowerCase())
-      if (existingId) return existingId
-
-      // Create new account for user
-      const created = await prisma.investmentAccount.create({
-        data: {
-          userId,
-          accountName: cleanName,
-          accountType: accountType || 'brokerage',
-          currency: currency.toUpperCase(),
-        },
-      })
-
-      accountMap.set(cleanName.toLowerCase(), created.id)
-      existingAccounts.push(created)
-      return created.id
+    if ([...transactions, ...cashBalances].some((item) =>
+      !existingAccounts.some((account) => account.id === item.accountId && account.currency === item.currency)
+    )) {
+      return NextResponse.json({ error: 'ตรวจสอบว่าบัญชีและสกุลเงินของทุกรายการตรงกัน' }, { status: 400 })
+    }
+    if (new Set(cashBalances.map((item) => item.accountId)).size !== cashBalances.length) {
+      return NextResponse.json({ error: 'เลือกยอดเงินสดเพียงหนึ่งรายการต่อบัญชี' }, { status: 400 })
     }
 
-    // Helper to get or create asset
-    const assetMap = new Map<string, string>() // "TICKER_MARKET" -> ID
-    async function resolveAssetId(ticker: string, market: any, assetName?: string, assetType: any = 'stock', currency = 'USD'): Promise<string> {
-      const cleanTicker = ticker.trim().toUpperCase()
-      const key = `${cleanTicker}_${market}`
-      if (assetMap.has(key)) return assetMap.get(key)!
+    const { createdTransactions, updatedCashAccounts } = await prisma.$transaction(async (db) => {
+      // Helper to get or create asset
+      const assetMap = new Map<string, string>() // "TICKER_MARKET" -> ID
+      async function resolveAssetId(ticker: string, market: any, assetName?: string, assetType: any = 'stock', currency = 'USD'): Promise<string> {
+        const cleanTicker = ticker.trim().toUpperCase()
+        const key = `${cleanTicker}_${market}`
+        if (assetMap.has(key)) return assetMap.get(key)!
 
-      let asset = await prisma.asset.findUnique({
-        where: { ticker_market: { ticker: cleanTicker, market } },
-      })
-
-      if (!asset) {
-        asset = await prisma.asset.create({
-          data: {
-            ticker: cleanTicker,
-            market,
-            assetName: assetName?.trim() || cleanTicker,
-            assetType: assetType || 'stock',
-            currency: currency || (market === 'US' ? 'USD' : 'THB'),
-          },
+        let asset = await db.asset.findUnique({
+          where: { ticker_market: { ticker: cleanTicker, market } },
         })
-      }
 
-      assetMap.set(key, asset.id)
-      return asset.id
-    }
-
-    const createdTransactions: any[] = []
-    const updatedCashAccounts: any[] = []
-
-    // 1. Process and save Transactions
-    for (const item of transactions) {
-      const resolvedAccountId = await resolveAccountId(
-        item.accountName,
-        item.currency,
-        item.accountType,
-        item.accountId
-      )
-
-      const resolvedAssetId = await resolveAssetId(
-        item.ticker,
-        item.market,
-        item.assetName,
-        item.assetType,
-        item.currency
-      )
-
-      // Calculate proper total amount
-      let computedTotal = item.totalAmount
-      if (
-        computedTotal === undefined ||
-        isNaN(computedTotal) ||
-        computedTotal === 0 ||
-        (item.txnType === 'SELL' && item.quantity > 0 && item.pricePerUnit > 0 && item.fee > 0 && computedTotal > item.quantity * item.pricePerUnit)
-      ) {
-        if (item.txnType === 'BUY') {
-          computedTotal = item.quantity * item.pricePerUnit + item.fee
-        } else if (item.txnType === 'SELL') {
-          computedTotal = Math.max(0, item.quantity * item.pricePerUnit - item.fee - (item.taxWithheld || 0))
-        } else if (item.txnType === 'DIVIDEND') {
-          computedTotal = Math.max(0, item.quantity * item.pricePerUnit - item.taxWithheld - item.fee)
-        } else if (item.txnType === 'FEE') {
-          computedTotal = item.fee
-        } else {
-          computedTotal = item.quantity * item.pricePerUnit
-        }
-      }
-
-      let effectiveQuantity = item.quantity > 0 ? item.quantity : 1
-      let effectivePrice = item.pricePerUnit
-      if (effectivePrice === 0 && computedTotal > 0) {
-        if (item.txnType === 'SELL') {
-          effectivePrice = Math.max(0, (computedTotal + item.fee + (item.taxWithheld || 0)) / effectiveQuantity)
-        } else {
-          effectivePrice = Math.max(0, (computedTotal - item.fee) / effectiveQuantity)
-        }
-      }
-
-      const txnDate = new Date(item.txnDate)
-
-      const createdTxn = await prisma.transaction.create({
-        data: {
-          userId,
-          accountId: resolvedAccountId,
-          assetId: resolvedAssetId,
-          txnDate: isNaN(txnDate.getTime()) ? new Date() : txnDate,
-          txnType: item.txnType,
-          quantity: effectiveQuantity,
-          pricePerUnit: effectivePrice,
-          fee: item.fee,
-          taxWithheld: item.taxWithheld,
-          totalAmount: computedTotal,
-          note: item.note || undefined,
-          source: 'quick_add',
-        },
-        include: {
-          asset: { select: { ticker: true, assetName: true, market: true } },
-          account: { select: { accountName: true, currency: true } },
-        },
-      })
-
-      createdTransactions.push(createdTxn)
-
-      // Automatically adjust cash balance of the account if enabled
-      if (updateCashBalances) {
-        let delta = 0
-        if (item.txnType === 'BUY' || item.txnType === 'WITHDRAW' || item.txnType === 'FEE') {
-          delta = -Number(computedTotal)
-        } else if (item.txnType === 'SELL' || item.txnType === 'DEPOSIT' || item.txnType === 'DIVIDEND') {
-          delta = Number(computedTotal)
-        }
-
-        if (delta !== 0) {
-          await prisma.investmentAccount.update({
-            where: { id: resolvedAccountId },
+        if (!asset) {
+          asset = await db.asset.create({
             data: {
-              cashBalance: { increment: delta },
+              ticker: cleanTicker,
+              market,
+              assetName: assetName?.trim() || cleanTicker,
+              assetType: assetType || 'stock',
+              currency: currency || (market === 'US' ? 'USD' : 'THB'),
             },
           })
         }
+
+        assetMap.set(key, asset.id)
+        return asset.id
       }
-    }
 
-    // 2. Process and save explicit Cash Balances (from cash screenshots)
-    for (const cash of cashBalances) {
-      const resolvedAccountId = await resolveAccountId(
-        cash.accountName,
-        cash.currency,
-        cash.accountType,
-        cash.accountId
-      )
+      const createdTransactions: any[] = []
+      const updatedCashAccounts: any[] = []
 
-      const balanceDate = cash.balanceDate ? new Date(cash.balanceDate) : new Date()
-      const normalizedDate = isNaN(balanceDate.getTime()) ? new Date() : balanceDate
+      // 1. Process and save Transactions
+      for (const item of transactions) {
+        const resolvedAccountId = item.accountId
 
-      const updated = await prisma.investmentAccount.update({
-        where: { id: resolvedAccountId },
-        data: {
-          cashBalance: cash.cashAmount,
-          accruedInterest: cash.accruedInterest || 0,
-          interestDays: cash.interestDays ?? 0,
-        },
-      })
+        const resolvedAssetId = await resolveAssetId(
+          item.ticker,
+          item.market,
+          item.assetName,
+          item.assetType,
+          item.currency
+        )
 
-      // Also record snapshot in CashBalance table
-      const dayStart = new Date(normalizedDate)
-      dayStart.setUTCHours(0, 0, 0, 0)
+        const computedTotal = item.totalAmount
+        const txnDate = new Date(item.txnDate)
 
-      await prisma.cashBalance.upsert({
-        where: {
-          accountId_balanceDate: {
+        const createdTxn = await db.transaction.create({
+          data: {
+            userId,
+            accountId: resolvedAccountId,
+            assetId: resolvedAssetId,
+            txnDate,
+            txnType: item.txnType,
+            quantity: item.quantity,
+            pricePerUnit: item.pricePerUnit,
+            fee: item.fee,
+            taxWithheld: item.taxWithheld,
+            totalAmount: computedTotal,
+            note: item.note || undefined,
+            source: 'quick_add',
+          },
+          include: {
+            asset: { select: { ticker: true, assetName: true, market: true } },
+            account: { select: { accountName: true, currency: true } },
+          },
+        })
+
+        createdTransactions.push(createdTxn)
+
+        // Automatically adjust cash balance of the account if enabled
+        if (updateCashBalances) {
+          let delta = 0
+          if (item.txnType === 'BUY' || item.txnType === 'WITHDRAW' || item.txnType === 'FEE') {
+            delta = -Number(computedTotal)
+          } else if (item.txnType === 'SELL' || item.txnType === 'DEPOSIT' || item.txnType === 'DIVIDEND') {
+            delta = Number(computedTotal)
+          }
+
+          if (delta !== 0) {
+            await db.investmentAccount.update({
+              where: { id: resolvedAccountId },
+              data: {
+                cashBalance: { increment: delta },
+              },
+            })
+          }
+        }
+      }
+
+      // 2. Process and save explicit Cash Balances (from cash screenshots)
+      for (const cash of cashBalances) {
+        const resolvedAccountId = cash.accountId
+
+        const balanceDay = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
+        }).format(new Date(cash.balanceDate))
+        const dayStart = new Date(`${balanceDay}T00:00:00Z`)
+        const newerSnapshot = await db.cashBalance.findFirst({
+          where: { accountId: resolvedAccountId, balanceDate: { gt: dayStart } }, select: { id: true },
+        })
+        if (newerSnapshot) throw new StaleCashSnapshot('บัญชีนี้มียอดเงินสดที่ใหม่กว่า กรุณาใช้ข้อมูลล่าสุด')
+
+        const updated = await db.investmentAccount.update({
+          where: { id: resolvedAccountId },
+          data: {
+            cashBalance: cash.cashAmount,
+            accruedInterest: cash.accruedInterest || 0,
+            interestDays: cash.interestDays ?? 0,
+          },
+        })
+
+        // Also record snapshot in CashBalance table
+
+        await db.cashBalance.upsert({
+          where: {
+            accountId_balanceDate: {
+              accountId: resolvedAccountId,
+              balanceDate: dayStart,
+            },
+          },
+          update: {
+            cashAmount: cash.cashAmount,
+            accruedInterest: cash.accruedInterest || 0,
+            note: 'อัปเดตจากภาพถ่ายสลิปเงินสด',
+          },
+          create: {
             accountId: resolvedAccountId,
             balanceDate: dayStart,
+            cashAmount: cash.cashAmount,
+            accruedInterest: cash.accruedInterest || 0,
+            note: 'อัปเดตจากภาพถ่ายสลิปเงินสด',
           },
-        },
-        update: {
-          cashAmount: cash.cashAmount,
-          accruedInterest: cash.accruedInterest || 0,
-          note: 'อัปเดตจากภาพถ่ายสลิปเงินสด',
-        },
-        create: {
-          accountId: resolvedAccountId,
-          balanceDate: dayStart,
-          cashAmount: cash.cashAmount,
-          accruedInterest: cash.accruedInterest || 0,
-          note: 'อัปเดตจากภาพถ่ายสลิปเงินสด',
-        },
-      })
+        })
 
-      updatedCashAccounts.push(updated)
-    }
+        updatedCashAccounts.push(updated)
+      }
+      return { createdTransactions, updatedCashAccounts }
+    }, { timeout: 15_000 })
 
     invalidateUserHoldingsCache(userId)
 
@@ -286,6 +232,7 @@ export async function POST(req: NextRequest) {
       message: `บันทึกรายการสำเร็จ ${createdTransactions.length} รายการ และปรับปรุงยอดเงินสด ${updatedCashAccounts.length} บัญชี`,
     })
   } catch (error: any) {
+    if (error instanceof StaleCashSnapshot) return NextResponse.json({ error: error.message }, { status: 409 })
     console.error('[transactions/batch POST]', error)
     return NextResponse.json(
       { error: error.message || 'บันทึกข้อมูลธุรกรรมแบบกลุ่มล้มเหลว' },

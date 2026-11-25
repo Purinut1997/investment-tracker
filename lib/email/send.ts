@@ -85,6 +85,9 @@ export async function sendWeeklyDigest(
   digestContent: string,
   weekOf: string
 ): Promise<void> {
+  const escaped = digestContent
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   const resend = getResend()
   if (!resend) {
     console.warn(`[Email Mock] Weekly digest for ${email}: skipped (no API key)`)
@@ -99,7 +102,7 @@ export async function sendWeeklyDigest(
         <h2 style="color:#22d3ee">📊 สรุปพอร์ตประจำสัปดาห์</h2>
         <p style="color:#64748b">สัปดาห์ ${weekOf}</p>
         <div style="background:#0f172a;border-radius:12px;padding:24px;color:#e2e8f0;line-height:1.7">
-          ${digestContent.replace(/\n/g, '<br>')}
+          ${escaped.replace(/\n/g, '<br>')}
         </div>
         <p style="margin-top:24px"><a href="${BASE_URL}/dashboard" style="color:#22d3ee">เปิดแดชบอร์ด →</a></p>
         <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0">

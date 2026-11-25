@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { forecastContextKey, forecastInputSchema } from '@/lib/ai/model-contracts'
 
 export const maxDuration = 45
 
@@ -12,10 +13,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const context = req.nextUrl.searchParams.get('scenario')
+    if (!context || context.length > 330 || !/^[0-9e+._-]+$/.test(context)) {
+      return NextResponse.json({ explanation: null, modelUsed: null, updatedAt: null })
+    }
     const latestLog = await prisma.aiAdviceLog.findFirst({
       where: {
         userId: session.user.id,
         logType: 'forecast_explain',
+        prompt: { contains: `[forecast:v2:${context}]` },
       },
       orderBy: { createdAt: 'desc' },
       select: { response: true, modelUsed: true, createdAt: true },
@@ -38,6 +44,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const body = forecastInputSchema.safeParse(await req.json())
+    if (!body.success) {
+      return NextResponse.json({ error: 'ผลจำลองไม่ครบหรือค่า P10/P50/P90 ไม่เรียงตามลำดับ' }, { status: 400 })
+    }
     const {
       initialAmount,
       monthlyContribution,
@@ -52,10 +62,11 @@ export async function POST(req: NextRequest) {
       retirementMonthlyIncome,
       dividendMonthlyIncome,
       milestonesSummary,
-    } = await req.json()
+    } = body.data
 
     const prompt = `
-คุณเป็น Certified Financial Planner (CFP) และ Wealth Management Director ระดับสถาบันการเงินชั้นนำ
+[forecast:v2:${forecastContextKey(body.data)}]
+คุณกำลังอธิบายผลจำลองการลงทุนที่ระบบคำนวณไว้ภายใต้สมมติฐานของผู้ใช้ P10/P50/P90 เป็นเปอร์เซ็นไทล์ของผลจำลองตามลำดับ ห้ามรับประกันผลลัพธ์หรือเรียก P50 ว่าค่าเฉลี่ย
 กรุณาวิเคราะห์และสังเคราะห์ยุทธศาสตร์การเติบโตของพอร์ตลงทุน (Wealth Forecast & Retirement Horizon) จากผลจำลองสถิติ Monte Carlo 1,000 สถานการณ์จำลอง ต่อไปนี้เป็นภาษาไทยระดับมืออาชีพ ชัดเจน แยกหมวดหมู่อย่างเป็นระบบ และนำไปใช้ปฏิบัติได้ทันที:
 
 📊 ข้อมูลแบบจำลองพอร์ต:
@@ -63,14 +74,14 @@ export async function POST(req: NextRequest) {
 - วินัยการเติมเงินออม DCA รายเดือน: ฿${Number(monthlyContribution).toLocaleString()}/เดือน
 - ระยะเวลาเป้าหมาย: ${years} ปี
 - เป้าหมายเงินก้อนที่ต้องการ: ฿${Number(targetAmount).toLocaleString()}
-- ความน่าจะเป็นในการพิชิตเป้าหมาย (Probability of Success): ${probabilityOfReachingTarget ?? 'N/A'}%
+- สัดส่วนรอบจำลองที่ถึงเป้าหมาย: ${probabilityOfReachingTarget == null ? 'ไม่มีข้อมูล' : `${probabilityOfReachingTarget}%`}
 - ผลลัพธ์คาดการณ์เมื่อครบ ${years} ปี:
-  • กรณีตลาดแย่ (P10 Bear Market): ฿${Number(finalP10).toLocaleString()}
-  • กรณีมัธยฐานหลัก (P50 Expected Wealth): ฿${Number(finalP50).toLocaleString()}
-  • กรณีตลาดดีเยี่ยม (P90 Bull Market): ฿${Number(finalP90).toLocaleString()}
-${adjustInflation && finalRealP50 ? `- อำนาจซื้อแท้จริงหลังหักเงินเฟ้อ (Real Purchasing Power): ฿${Number(finalRealP50).toLocaleString()}` : '- หมายเหตุ: ผู้ใช้ไม่ได้เลือกตัวเลือกปรับเงินเฟ้อ ให้วิเคราะห์มูลค่าพอร์ตในรูปแบบตัวเลข Nominal Value โดยไม่ต้องคาดเดาเงินเฟ้อเอง'}
-${retirementMonthlyIncome ? `- เงินเดือนเกษียณใช้ชีวิตตามกฎ 4% Rule: ฿${Number(retirementMonthlyIncome).toLocaleString()}/เดือน` : ''}
-${dividendMonthlyIncome ? `- กระแสเงินปันผลรับแท้จริงต่อเดือน: ฿${Number(dividendMonthlyIncome).toLocaleString()}/เดือน` : ''}
+  • เปอร์เซ็นไทล์ต่ำ (P10): ฿${Number(finalP10).toLocaleString()}
+  • มัธยฐาน (P50): ฿${Number(finalP50).toLocaleString()}
+  • เปอร์เซ็นไทล์สูง (P90): ฿${Number(finalP90).toLocaleString()}
+${adjustInflation && finalRealP50 != null ? `- อำนาจซื้อหลังปรับเงินเฟ้อตามสมมติฐาน: ฿${Number(finalRealP50).toLocaleString()}` : '- ใช้ตัวเลขก่อนปรับเงินเฟ้อในส่วนที่ไม่มีผลจำลองแบบ Real Value'}
+${retirementMonthlyIncome != null ? `- ตัวอย่างยอดถอนตามสมมติฐาน 4%: ฿${Number(retirementMonthlyIncome).toLocaleString()}/เดือน` : ''}
+${dividendMonthlyIncome != null ? `- กระแสเงินปันผลโดยประมาณจากสมมติฐาน: ฿${Number(dividendMonthlyIncome).toLocaleString()}/เดือน` : ''}
 ${milestonesSummary ? `- ไทม์ไลน์หลักไมล์สำคัญ: ${milestonesSummary}` : ''}
 
 ⚠️ กฎเหล็กในการจัดรูปแบบรายงาน (Executive Format):
@@ -80,15 +91,15 @@ ${milestonesSummary ? `- ไทม์ไลน์หลักไมล์สำ�
 4. จัดรูปแบบแยกหมวดหมู่ด้วย Markdown Headers (###) ทั้ง 5 ส่วนดังนี้:
 
 ### 📌 สรุปภาพรวมผู้บริหาร (Executive Summary)
-- สรุปสถานะพอร์ต โอกาสสำเร็จ ${probabilityOfReachingTarget ?? 0}% และความท้าทายหลักใน 2-3 บรรทัดที่กระชับ คมคาย
+- สรุปผลจำลองและความท้าทายหลัก ใช้สัดส่วนรอบที่ถึงเป้าหมายเฉพาะเมื่อมีข้อมูล
 
 ### 📈 1. การตีความผลลัพธ์และอำนาจซื้อแท้จริง (Executive Interpretation & Inflation Reality)
 - วิเคราะห์ผลลัพธ์มัธยฐาน P50 เทียบกับเป้าหมายที่ตั้งไว้
 ${adjustInflation ? '- ชี้ให้เห็นถึงความเสี่ยงกรณีตลาดแย่ (P10) และผลกระทบของการกัดกร่อนจากเงินเฟ้อต่ออำนาจซื้อแท้จริง' : '- ชี้ให้เห็นถึงความเสี่ยงกรณีตลาดแย่ (P10) และการปกป้องเงินต้นในระยะยาว'}
-- วิเคราะห์กระแสเงินสดเกษียณจากกฎ 4% Rule และเงินปันผลว่าเพียงพอต่อคุณภาพชีวิตจริงหรือไม่
+- แยกตัวอย่างยอดถอน 4% และประมาณการเงินปันผล ระบุว่าต้องมีข้อมูลรายจ่ายก่อนประเมินความเพียงพอ
 
 ### 🎯 2. ประเมินไทม์ไลน์และจุดเร่งทบต้น (Milestone Velocity & Compounding Effect)
-- วิเคราะห์ปีที่คาดว่าจะแตะหลักไมล์สำคัญ (เช่น 1 ล้าน, 3 ล้าน, 5 ล้าน, 10 ล้าน)
+- ใช้ปีของหลักไมล์จากไทม์ไลน์ที่ให้เท่านั้น หากไม่มีให้บอกว่าข้อมูลไม่พอระบุปี
 - อธิบายช่วงเวลาที่จะเริ่มเกิดพลังดอกเบี้ยทบต้น (Compounding Acceleration) ที่เงินทำงานแทนคุณ
 
 ### 🚀 3. พิมพ์เขียวกลยุทธ์เร่งการเติบโต (Actionable Growth Blueprint)

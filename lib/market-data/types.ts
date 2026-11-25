@@ -16,6 +16,7 @@ export interface MarketQuote {
   fiftyTwoWeekHigh?: number
   fiftyTwoWeekLow?: number
   timestamp: number
+  observationTimestamp?: number
   provider: string
   currency: string
 }

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { getBatchTechnicalSignals, TechnicalSignal } from '@/lib/market-data/technical-signals'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { getObservationTime } from '@/lib/ai/advisor-evidence'
 import { BucketStrategyType, STRATEGY_TYPE_META } from '@/lib/analytics/strategy-buckets'
 import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 import {
@@ -146,7 +147,7 @@ export async function POST(req: NextRequest) {
     const {
       bucket,
       question,
-      dcaBudget = 5000,
+      dcaBudget = 0,
     }: {
       bucket: {
         id: string
@@ -164,7 +165,8 @@ export async function POST(req: NextRequest) {
       dcaBudget?: number
     } = body
 
-    if (!bucket || !question) {
+    if (!bucket || typeof question !== 'string' || !question.trim() || question.length > 3000
+      || !Array.isArray(bucket.tickers) || bucket.tickers.length > 60 || !Number.isFinite(dcaBudget) || dcaBudget < 0) {
       return NextResponse.json({ error: 'กรุณาระบุข้อมูลตะกร้ากลยุทธ์และคำถาม' }, { status: 400 })
     }
 
@@ -204,7 +206,10 @@ export async function POST(req: NextRequest) {
     let signals: Record<string, TechnicalSignal> = {}
     if (tickerItems.length > 0) {
       try {
-        signals = await getBatchTechnicalSignals(tickerItems)
+        const fetched = await getBatchTechnicalSignals(tickerItems.slice(0, 15))
+        signals = Object.fromEntries(Object.entries(fetched).filter(([, signal]) =>
+          signal.currentPrice > 0 && getObservationTime(signal.observationTimestamp, Date.now())
+        ))
       } catch (err) {
         console.warn('[bucket-chat technical signals]', err)
       }
@@ -222,9 +227,10 @@ export async function POST(req: NextRequest) {
           heldInPortfolio: Boolean(held),
           quantity: held ? Number(held.quantity.toFixed(4)) : 0,
           avgCost: held ? Number(held.avgCost.toFixed(2)) : null,
-          currentPrice: held?.currentPrice ?? sig?.currentPrice ?? null,
+          currentPrice: sig?.currentPrice ?? null,
+          priceObservedAt: getObservationTime(sig?.observationTimestamp, Date.now()),
           currency: held?.currency ?? (ticker.endsWith('.BK') ? 'THB' : 'USD'),
-          unrealizedPnLPercent: held ? `${held.unrealizedPnLPercent.toFixed(2)}%` : 'ยังไม่ได้ถือครอง',
+          unrealizedPnLPercent: held && !held.isStale && sig ? `${held.unrealizedPnLPercent.toFixed(2)}%` : null,
           portfolioWeightPercent: held ? `${held.allocationPercent.toFixed(1)}%` : '0%',
           rsi14: sig?.rsi14 ?? null,
           supportS1: sig?.supportS1 ?? null,
@@ -232,7 +238,7 @@ export async function POST(req: NextRequest) {
           sma50: sig?.sma50 ?? null,
           sma200: sig?.sma200 ?? null,
           pullbackFrom52WHigh: sig?.pullbackFromHigh !== undefined ? `${sig.pullbackFromHigh}%` : null,
-          technicalSignal: sig?.badgeText ?? 'ปกติ',
+          technicalSignal: sig?.badgeText ?? 'ไม่มีข้อมูลกราฟที่ยืนยันได้',
         }
       })
 
@@ -289,7 +295,7 @@ ${roleSpecificInstruction}
 `
 
     try {
-      const { text, modelUsed, groundingSources } = await callGemini({
+      const { text, modelUsed, groundingSources, groundingStatus } = await callGemini({
         userId,
         prompt,
         logType: 'bucket_chat',
@@ -300,7 +306,7 @@ ${roleSpecificInstruction}
       })
 
       return NextResponse.json({
-        answer: text,
+        answer: groundingStatus === 'verified_sources' ? text : `${text}\n\nรอบนี้ไม่มีแหล่งอ้างอิงจากการค้นเว็บ`,
         modelUsed,
         groundingSources: groundingSources || [],
         updatedAt: new Date().toISOString(),
@@ -313,7 +319,7 @@ ${roleSpecificInstruction}
         strategyType: bucket.strategyType,
         targetPercent: bucket.targetPercent,
         actualPercent: bucket.actualPercent,
-        dcaBudget: Number(dcaBudget) || 5000,
+        dcaBudget,
         baseCurrency,
         totalCash,
         bucketHoldings,

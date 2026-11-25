@@ -3,9 +3,15 @@ import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { calculatePortfolioHealthScore } from '@/lib/analytics/health-score'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { parseModelJson } from '@/lib/ai/model-contracts'
 import { sendWeeklyDigest } from '@/lib/email/send'
+import { z } from 'zod'
 
 export const maxDuration = 60
+const weeklyNarrative = z.object({
+  portfolioSummary: z.string().trim().min(1).max(1800),
+  newsSummary: z.string().trim().min(1).max(1800),
+})
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
@@ -72,14 +78,15 @@ export async function GET(req: NextRequest) {
             publishedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
           },
           take: 5,
+          orderBy: { publishedAt: 'desc' },
         })
 
-        const newsHeadlines = recentNews.map((n) => `[${n.symbol}] ${n.headline}`).join('\n')
+        const newsHeadlines = recentNews.map((n) => `[${n.symbol}] ${n.headline} (${n.sourceName}, ${n.publishedAt.toISOString().slice(0, 10)})`).join('\n')
 
         // 3. Prompt Gemini
         const prompt = `
-สรุปพอร์ตการลงทุนประจำสัปดาห์ สำหรับผู้ใช้ ${user.name || user.email}:
-- มูลค่าพอร์ตรวม: ฿${holdingsResult.totalValueBase.toLocaleString()}
+สรุปพอร์ตการลงทุนประจำสัปดาห์
+- มูลค่าพอร์ตตามระบบ: ${holdingsResult.totalValueBase.toLocaleString()} ${setting.baseCurrency}
 - กำไร/ขาดทุนสะสม: ${holdingsResult.unrealizedPnLPercent.toFixed(2)}%
 - Health Score: ${healthScore.score}/100
 - สินทรัพย์ที่ถือครอง: ${userTickers.join(', ') || 'ยังไม่มี'}
@@ -90,30 +97,26 @@ ${newsHeadlines || 'ไม่มีข่าวเด่น'}
 กรุณาสรุป 2 ส่วนสั้นๆ ในภาษาไทย (ตอบเป็น JSON):
 {
   "portfolioSummary": "ย่อหน้าเดียว สรุปสถานะพอร์ตและคำแนะนำในสัปดาห์นี้",
-  "newsSummary": "ย่อหน้าเดียว สรุปประเด็นข่าวที่กระทบหุ้นที่ถือ",
-  "healthScoreChange": 0
+  "newsSummary": "สรุปเฉพาะข่าวที่แนบหรือระบุว่าไม่พบข่าว แยกข้อเท็จจริงจากผลกระทบที่เป็นสมมติฐาน"
 }
 `
 
-        const { text } = await callGemini({
-          userId: user.id,
-          prompt,
-          logType: 'weekly_digest',
-          systemInstruction: 'คุณเป็น AI สรุปข่าวและวิเคราะห์พอร์ตประจำสัปดาห์ ตอบเป็น JSON ที่ถูกต้องเท่านั้น',
-        })
-
         let parsedAi = {
-          portfolioSummary: `สรุปพอร์ตสัปดาห์นี้ มูลค่ารวม ฿${holdingsResult.totalValueBase.toLocaleString()} สุขภาพพอร์ตเกรด ${healthScore.grade}`,
-          newsSummary: 'ตลาดโดยรวมมีความผันผวนตามปัจจัยมหภาค',
+          portfolioSummary: `สรุปจากข้อมูลระบบ มูลค่าพอร์ต ${holdingsResult.totalValueBase.toLocaleString()} ${setting.baseCurrency} สุขภาพพอร์ตเกรด ${healthScore.grade}`,
+          newsSummary: newsHeadlines || 'ไม่พบหัวข้อข่าวที่ตรงกับสินทรัพย์ในช่วง 7 วันที่ตรวจ',
           healthScoreChange: 0,
         }
 
         try {
-          const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim()
-          parsedAi = { ...parsedAi, ...JSON.parse(cleanText) }
+          const { text } = await callGemini({
+            userId: user.id, prompt, logType: 'weekly_digest',
+            validateJson: (value) => weeklyNarrative.safeParse(value).success,
+            timeoutMs: 10_000,
+          })
+          const narrative = weeklyNarrative.parse(parseModelJson(text))
+          parsedAi = { ...parsedAi, ...narrative, newsSummary: recentNews.length ? narrative.newsSummary : parsedAi.newsSummary }
         } catch {
-          // Fallback to text directly
-          parsedAi.portfolioSummary = text
+          // The database summary is available even when AI is unavailable.
         }
 
         // 4. Save WeeklyDigest record

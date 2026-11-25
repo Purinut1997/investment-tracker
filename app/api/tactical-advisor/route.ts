@@ -3,10 +3,14 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
+import type { MarketQuote } from '@/lib/market-data/types'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 import { getBatchTechnicalSignals } from '@/lib/market-data/technical-signals'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { formatMarketObservation, getObservationTime } from '@/lib/ai/advisor-evidence'
+import { parseModelJson } from '@/lib/ai/model-contracts'
+import { z } from 'zod'
 import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 import {
   gatherPortfolioDeepIntelligence,
@@ -16,6 +20,50 @@ import {
 } from '@/lib/ai/portfolio-intelligence'
 
 export const maxDuration = 45
+
+const tacticalText = z.string().trim().max(2000)
+const tacticalNarrativeSchema = z.object({
+  marketRegime: z.object({
+    status: z.enum(['VOLATILE_CAUTION', 'EARLY_ACCUMULATION', 'BULL_EXPANSION', 'DEFENSIVE_ROTATION']),
+    statusLabelTh: tacticalText,
+    summaryTh: tacticalText,
+    pillars: z.object({
+      sentiment: z.object({ summary: tacticalText.optional() }).optional(),
+      momentum: z.object({
+        spxEmaStatus: tacticalText.optional(), nasdaqEmaStatus: tacticalText.optional(),
+        breadthStatus: tacticalText.optional(), summary: tacticalText.optional(),
+      }).optional(),
+      macroLiquidity: z.object({
+        fedPolicyStance: tacticalText.optional(), inflationExpectation: tacticalText.optional(), summary: tacticalText.optional(),
+      }).optional(),
+      catalystsAndFlows: z.object({
+        safeHavenFlow: z.enum(['RISK_ON', 'DEFENSIVE_ROTATION', 'CASH_PRESERVATION']).optional(),
+        safeHavenFlowLabel: tacticalText.optional(), keyCatalysts: z.array(tacticalText).max(12).optional(),
+        summary: tacticalText.optional(),
+      }).optional(),
+      formula: z.object({ greenlightTrigger: tacticalText.optional(), redflagTrigger: tacticalText.optional() }).optional(),
+    }).optional(),
+  }),
+  portfolioResilience: z.object({
+    score: z.number().min(0).max(100), status: z.enum(['STRONG', 'MODERATE', 'FRAGILE']),
+    statusLabelTh: tacticalText, strengths: z.array(tacticalText).max(20), vulnerabilities: z.array(tacticalText).max(20),
+    thematicRiskAlert: tacticalText.nullish(),
+  }),
+  tacticalActions: z.array(z.object({
+    ticker: z.string().min(1).max(32), market: z.enum(['US', 'TH', 'CRYPTO']),
+    action: z.enum(['ACCUMULATE', 'HOLD_WATCH', 'TRIM_PROFIT', 'CASH_PRESERVE']),
+    actionLabel: tacticalText, badgeColor: z.enum(['emerald', 'amber', 'rose', 'indigo', 'sky']),
+    targetZone: tacticalText, tranchePlan: tacticalText, stopLossPoint: tacticalText, rationale: tacticalText,
+    taxImpactNote: tacticalText.nullish(),
+  })).max(30),
+  cashStrategy: z.object({ recommendedCashPercent: z.number().min(0).max(100), guidanceText: tacticalText }),
+  trackRecordReview: z.array(z.object({
+    period: tacticalText, recommendationSummary: tacticalText, outcomeAssessment: tacticalText,
+    accuracyStatus: z.enum(['ACCURATE', 'NEUTRAL', 'CAUTION']),
+  })).max(15).optional(),
+})
+
+class MarketEvidenceUnavailable extends Error {}
 
 export interface TacticalActionItem {
   id: string
@@ -139,6 +187,7 @@ export interface TacticalAdvisorPayload {
   outcomeMetrics?: AdviceOutcomeMetrics
   modelUsed?: string
   generatedAt: string
+  marketEvidence?: Array<{ symbol: string; provider: string; observedAt: string }>
 }
 
 export function getBangkokDateString(date: Date = new Date()): string {
@@ -161,12 +210,7 @@ export function formatThaiDate(date: Date): string {
 }
 
 export function parseAdviceResponse(rawText: string): any {
-  try {
-    return JSON.parse(rawText)
-  } catch {
-    const cleaned = rawText.replace(/```json/gi, '').replace(/```/g, '').trim()
-    return JSON.parse(cleaned)
-  }
+  return parseModelJson(rawText)
 }
 
 export function createFallbackPillars(rawJson: any): MarketPillarsData {
@@ -268,7 +312,8 @@ export function computeDeterministicClimate(params: {
 
   // 2. Fear & Volatility factor (1 - 5)
   let fearRisk = 2
-  if (fearGreedScore >= 60 && vixPrice < 18) fearRisk = 1
+  if (fearGreedScore < 0) fearRisk = vixPrice < 18 ? 1 : vixPrice < 20 ? 2 : vixPrice <= 25 ? 3 : vixPrice < 30 ? 4 : 5
+  else if (fearGreedScore >= 60 && vixPrice < 18) fearRisk = 1
   else if (fearGreedScore >= 45 && vixPrice < 20) fearRisk = 2
   else if (fearGreedScore >= 35 || (vixPrice >= 20 && vixPrice <= 25)) fearRisk = 3
   else if (fearGreedScore >= 25 || (vixPrice > 25 && vixPrice <= 30)) fearRisk = 4
@@ -295,7 +340,7 @@ export function computeDeterministicClimate(params: {
     posture = 'BULL_AGGRESSIVE'
     postureLabelTh = '🚀 บุกสะสมเชิงรุก (Aggressive Accumulation)'
     postureSubtitleTh = 'ตลาดเอื้ออำนวย ความเสี่ยงต่ำ ทยอยเพิ่มสัดส่วนสินทรัพย์เติบโต'
-  } else if (combinedRisk >= 5 || vixPrice >= 30 || fearGreedScore <= 20) {
+  } else if (combinedRisk >= 5 || vixPrice >= 30 || (fearGreedScore >= 0 && fearGreedScore <= 20)) {
     posture = 'CASH_PRESERVATION'
     postureLabelTh = '🔴 ถือเงินสดหลบภัย (Capital Preservation)'
     postureSubtitleTh = 'ตลาดมีความเสี่ยงสูงผิดปกติ หยุดซื้อถัว ถือเงินสดสำรองรอจุดกลับตัว'
@@ -337,7 +382,8 @@ function reconcileMarketPillars(
     previous1WeekScore: number
     dxyPrice: number
     goldPrice: number
-    oilPrice: number
+    oilPrice?: number
+    goldChangePercent?: number
     deterministicClimate: ReturnType<typeof computeDeterministicClimate>
   }
 ): MarketPillarsData {
@@ -377,7 +423,7 @@ function reconcileMarketPillars(
     sentiment: {
       fearGreedScore: real.fearGreedScore,
       fearGreedRating:
-        real.fearGreedScore <= 25 ? 'extreme_fear' : real.fearGreedScore <= 45 ? 'fear' : 'neutral',
+        real.fearGreedScore < 0 ? 'unavailable' : real.fearGreedScore <= 25 ? 'extreme_fear' : real.fearGreedScore <= 45 ? 'fear' : 'neutral',
       fearGreedLabelTh: real.fearGreedLabelTh,
       fearGreed1WDiff: real.fearGreed1WDiff,
       previous1WeekScore: real.previous1WeekScore,
@@ -386,7 +432,7 @@ function reconcileMarketPillars(
       vixStatusLabel,
       summary:
         rawPillars?.sentiment?.summary ||
-        `อารมณ์ตลาดอยู่ในแดน ${real.fearGreedLabelTh} (${real.fearGreedScore}/100) ขณะที่ VIX อยู่ที่ ${real.vixPrice.toFixed(2)} pts (${vixStatusLabel})`,
+        `VIX อยู่ที่ ${real.vixPrice.toFixed(2)} จุด (${vixStatusLabel})`,
     },
     momentum: {
       spxPrice: real.spxPrice,
@@ -395,17 +441,17 @@ function reconcileMarketPillars(
       spxDrawdownPercent: real.spxDrawdownPercent,
       spxEmaStatus:
         rawPillars?.momentum?.spxEmaStatus ||
-        `Drawdown ${real.spxDrawdownPercent.toFixed(2)}% จากจุดสูงสุด / ทดสอบแนวรับ EMA 50 วัน และยังยืนเหนือ EMA 200 วัน`,
+        'ไม่มีข้อมูล EMA ของดัชนีในรายงานนี้',
       nasdaqPrice: real.nasdaqPrice,
       nasdaqChangePercent: real.nasdaqChangePercent,
       nasdaqFiftyTwoHigh: real.nasdaqFiftyTwoHigh,
       nasdaqDrawdownPercent: real.nasdaqDrawdownPercent,
       nasdaqEmaStatus:
         rawPillars?.momentum?.nasdaqEmaStatus ||
-        `กลุ่มเทคโนโลยี Drawdown ${real.nasdaqDrawdownPercent.toFixed(2)}% จากจุดสูงสุด เผชิญแรงขายทำกำไรระยะสั้น`,
+        'ไม่มีข้อมูล EMA ของดัชนีในรายงานนี้',
       breadthStatus:
         rawPillars?.momentum?.breadthStatus ||
-        'หุ้นใหญ่ประคองดัชนี ขณะที่หุ้นกลาง-เล็กเผชิญแรงขายปรับฐาน (Mega-cap Divergence)',
+        'ไม่มีข้อมูล Market Breadth โดยตรง',
       summary:
         rawPillars?.momentum?.summary ||
         `ดัชนีหลักอยู่ในช่วงปรับฐานย่อตัว โดย S&P 500 ย่อตัว ${real.spxDrawdownPercent.toFixed(2)}% และ NASDAQ ย่อตัว ${real.nasdaqDrawdownPercent.toFixed(2)}%`,
@@ -416,10 +462,10 @@ function reconcileMarketPillars(
       yieldPressureLabel,
       fedPolicyStance:
         rawPillars?.macroLiquidity?.fedPolicyStance ||
-        'ตลาดคาดการณ์ Fed คงอัตราดอกเบี้ยระดับสูง ชะลอการปรับลดดอกเบี้ยนโยบาย',
+        'ไม่มีข้อมูลยืนยันแนวโน้มนโยบาย Fed',
       inflationExpectation:
         rawPillars?.macroLiquidity?.inflationExpectation ||
-        'ตัวเลขเงินเฟ้อ CPI/PCE ทรงตัวหนืด กดดันต้นทุนทางการเงินในระยะยาว',
+        'ไม่มีข้อมูล CPI/PCE ที่ใช้ยืนยันแนวโน้มในรอบนี้',
       summary:
         rawPillars?.macroLiquidity?.summary ||
         `US 10Y Yield อยู่ที่ ${real.us10yYield.toFixed(2)}% (${yieldPressureLabel}) ส่งผลให้ต้นทุนดอกเบี้ยยังคงกดดัน Valuation`,
@@ -429,9 +475,9 @@ function reconcileMarketPillars(
         rawPillars?.catalystsAndFlows?.safeHavenFlow || 'DEFENSIVE_ROTATION',
       safeHavenFlowLabel:
         rawPillars?.catalystsAndFlows?.safeHavenFlowLabel ||
-        'หมุนเวียนเข้าสินทรัพย์ปลอดภัย (Safe-Haven Rotation)',
+        'ไม่มีข้อมูลกระแสเงินทุนโดยตรง',
       goldPrice: real.goldPrice,
-      goldChangePercent: rawPillars?.catalystsAndFlows?.goldChangePercent ?? 0.35,
+      goldChangePercent: real.goldChangePercent,
       dxyPrice: real.dxyPrice,
       oilPrice: real.oilPrice,
       keyCatalysts:
@@ -445,7 +491,7 @@ function reconcileMarketPillars(
             ],
       summary:
         rawPillars?.catalystsAndFlows?.summary ||
-        `เงินทุนกระจายเข้าหาสินทรัพย์ปลอดภัย โดยทองคำอยู่ที่ $${real.goldPrice.toLocaleString()} และ DXY อยู่ที่ ${real.dxyPrice.toFixed(2)}`,
+        `ราคาทองคำ $${real.goldPrice.toLocaleString()} และ DXY ${real.dxyPrice.toFixed(2)} เป็นข้อมูลราคา ยังไม่ยืนยันกระแสเงินทุน`,
     },
     formula: {
       calculatedRiskScore: real.deterministicClimate.riskScore,
@@ -454,7 +500,6 @@ function reconcileMarketPillars(
       postureLabelTh: real.deterministicClimate.postureLabelTh,
       postureSubtitleTh: real.deterministicClimate.postureSubtitleTh,
       formulaEquation:
-        rawPillars?.formula?.formulaEquation ||
         `ดัชนีย่อตัว (SPX Drawdown ${real.spxDrawdownPercent.toFixed(1)}%) + อารมณ์ตลาด (${real.fearGreedLabelTh} / VIX ${real.vixPrice.toFixed(1)}) + Bond Yield (${real.us10yYield.toFixed(2)}%) ➔ เสี่ยงระดับ ${real.deterministicClimate.riskScore}/5 (${real.deterministicClimate.postureLabelTh})`,
       greenlightTrigger:
         rawPillars?.formula?.greenlightTrigger ||
@@ -688,6 +733,8 @@ export function normalizeStoredPayload(
     ...(rawJson?.outcomeMetrics ? { outcomeMetrics: rawJson.outcomeMetrics } : {}),
     modelUsed: rawJson.modelUsed || modelUsed,
     generatedAt: createdAt.toISOString(),
+    ...(Array.isArray(rawJson.marketEvidence) && rawJson.marketEvidence.length >= 6
+      ? { marketEvidence: rawJson.marketEvidence } : {}),
   }
 }
 
@@ -797,25 +844,44 @@ export async function runTacticalAnalysis(
     }).catch(() => null),
   ])
 
-  // Real numeric values for 4 Pillars
-  const spxPrice = market.spx?.price ?? 7561.67
-  const spx52High = market.spx?.fiftyTwoWeekHigh ?? (spxPrice * 1.037)
-  const spxDrawdown = spx52High > 0 ? Number((((spxPrice - spx52High) / spx52High) * 100).toFixed(2)) : -3.61
+  const observedNow = Date.now()
+  const marketEvidence: NonNullable<TacticalAdvisorPayload['marketEvidence']> = []
+  function requiredQuote(symbol: string, quote: MarketQuote | null, needsHigh = false) {
+    const observedAt = getObservationTime(quote?.observationTimestamp, observedNow)
+    if (!quote || !observedAt || !Number.isFinite(quote.price) || quote.price <= 0
+      || (needsHigh && !(quote.fiftyTwoWeekHigh && Number.isFinite(quote.fiftyTwoWeekHigh) && quote.fiftyTwoWeekHigh > 0))) {
+      throw new MarketEvidenceUnavailable(`ยังยืนยันข้อมูล ${symbol} ไม่ได้ ระบบจึงพักการสร้างรายงานกลยุทธ์รอบนี้`)
+    }
+    marketEvidence.push({ symbol, observedAt, provider: quote.provider })
+    return quote
+  }
+  const quoteLine = (label: string, quote: MarketQuote | null, unit: string) =>
+    formatMarketObservation(label, quote ? { ...quote, timestamp: quote.observationTimestamp ?? 0 } : null, observedNow, unit)
+  const spx = requiredQuote('S&P 500', market.spx, true)
+  const nasdaq = requiredQuote('NASDAQ', market.nasdaq, true)
+  const vixPrice = requiredQuote('VIX', market.vix).price
+  const us10yYield = requiredQuote('US10Y', market.tnx).price
+  const dxyPrice = requiredQuote('DXY', market.dxy).price
+  const gold = requiredQuote('XAU', market.gold)
+  const goldPrice = gold.price
+  const oilPrice = getObservationTime(market.oil?.observationTimestamp, observedNow) ? market.oil?.price : undefined
+  const spxPrice = spx.price
+  const spx52High = spx.fiftyTwoWeekHigh!
+  const spxDrawdown = ((spxPrice - spx52High) / spx52High) * 100
+  const nasdaqPrice = nasdaq.price
+  const nasdaq52High = nasdaq.fiftyTwoWeekHigh!
+  const nasdaqDrawdown = ((nasdaqPrice - nasdaq52High) / nasdaq52High) * 100
 
-  const nasdaqPrice = market.nasdaq?.price ?? 25136.27
-  const nasdaq52High = market.nasdaq?.fiftyTwoWeekHigh ?? (nasdaqPrice * 1.10)
-  const nasdaqDrawdown = nasdaq52High > 0 ? Number((((nasdaqPrice - nasdaq52High) / nasdaq52High) * 100).toFixed(2)) : -9.33
-
-  const vixPrice = market.vix?.price ?? 19.3
-  const us10yYield = market.tnx?.price ?? 4.42
-  const dxyPrice = market.dxy?.price ?? 103.41
-  const goldPrice = market.gold?.price ?? 3886.3
-  const oilPrice = market.oil?.price ?? 88.56
-  const btcPrice = market.btc?.price ?? 96500
-
-  const fgScore = market.fearGreed?.score ?? 39
-  const fgPrev1W = market.fearGreed?.previous1Week ?? 42
-  const fgDiff = fgScore - fgPrev1W
+  const fgObservedAt = market.fearGreed?.source === 'CNN_LIVE'
+    ? getObservationTime(Date.parse(market.fearGreed.timestamp), observedNow) : null
+  const sentiment = fgObservedAt && market.fearGreed
+    && Number.isFinite(market.fearGreed.score) && market.fearGreed.score >= 0 && market.fearGreed.score <= 100
+    ? market.fearGreed : null
+  if (sentiment && fgObservedAt) marketEvidence.push({ symbol: 'Fear & Greed', observedAt: fgObservedAt, provider: 'CNN' })
+  const fgScore = sentiment?.score ?? -1
+  const fgPrev1W = sentiment && Number.isFinite(sentiment.previous1Week) ? sentiment.previous1Week : -1
+  const fgDiff = fgPrev1W >= 0 ? fgScore - fgPrev1W : 0
+  const fgLabel = sentiment?.ratingLabelTh || 'ไม่มีข้อมูล CNN ใช้ VIX ในการประเมิน'
 
   // Compute deterministic formula
   const deterministicClimate = computeDeterministicClimate({
@@ -855,27 +921,29 @@ export async function runTacticalAnalysis(
   // 4. Construct high-fidelity system prompt & user prompt for Gemini
   const prompt = `
 [AI Tactical Regime & Portfolio Advisor]
+[tactical-evidence:v2]
 คุณคือ "หัวหน้านักกลยุทธ์การลงทุนอาวุโส (Chief Tactical Investment Strategist)" หน้าที่ของคุณคือการรวบรวมและวิเคราะห์ข้อมูล "4 เสาหลักสภาวะตลาด (4 Pillars of Market Climate)" ผสานเข้ากับพอร์ตจริง, ปัจจัยพื้นฐาน Valuation, ปฏิทินงบ/ปันผล, ภาษี และกฎส่วนตัวของผู้ใช้ เพื่อสังเคราะห์เป็นแผนกลยุทธ์เฉพาะตัวที่แม่นยำ ปฏิบัติได้จริงในห้วงเวลานี้ (Institutional Regime Playbook)
 
-=== ข้อมูล 4 เสาหลักสภาวะตลาดจริง ณ วินาทีนี้ (THE 4 PILLARS OF MARKET CLIMATE) ===
+=== ข้อมูลตลาดพร้อมเวลาสังเกต ===
+${marketEvidence.map((item) => `- ${item.symbol}: ${item.provider} ณ ${item.observedAt}`).join('\n')}
 1. ดัชนีอารมณ์และความกลัว (Sentiment & Volatility):
-   - CNN Fear & Greed Index: ${fgScore}/100 (${market.fearGreed?.ratingLabelTh ?? 'ตลาดกังวล (Fear)'}) [สัปดาห์ก่อน: ${fgPrev1W} | ส่วนต่าง: ${fgDiff >= 0 ? '+' : ''}${fgDiff} จุด]
+   - CNN Fear & Greed Index: ${sentiment ? `${fgScore}/100 (${fgLabel})${fgPrev1W >= 0 ? ` | สัปดาห์ก่อน ${fgPrev1W}` : ''}` : fgLabel}
    - VIX Index (ดัชนีความผันผวน S&P 500): ${vixPrice.toFixed(2)} pts (เกณฑ์ประเมิน: <20 สภาวะปกติ/เสถียรภาพสูง, 20-25 กังวลผันผวนยกระดับ, >30 ตื่นตระหนก Panic)
 
 2. แนวโน้มราคาและโมเมนตัมตลาด (Market Trend & Breadth):
    - S&P 500: ${spxPrice.toLocaleString()} pts (${(market.spx?.changePercent ?? 0) >= 0 ? '+' : ''}${market.spx?.changePercent?.toFixed(2) ?? 0}%) | 52W High: ${spx52High.toLocaleString()} | % Drawdown จากจุดสูงสุด: ${spxDrawdown}%
    - NASDAQ: ${nasdaqPrice.toLocaleString()} pts (${(market.nasdaq?.changePercent ?? 0) >= 0 ? '+' : ''}${market.nasdaq?.changePercent?.toFixed(2) ?? 0}%) | 52W High: ${nasdaq52High.toLocaleString()} | % Drawdown จากจุดสูงสุด: ${nasdaqDrawdown}%
-   - SET Index: ${market.setIndex?.price ?? 1450} pts
-   - เส้นค่าเฉลี่ยสำคัญ: วิเคราะห์การยืนเหนือเส้น EMA 50 / 125 / 200 วัน
-   - Market Breadth: ประเมินว่าตลาดกำลัง "ลงทั้งกระดาน (Broad Selloff)" หรือ "ลงแค่หุ้นใหญ่ / หุ้นใหญ่พยุงตลาด (Mega-cap Divergence)"
+   ${quoteLine('SET Index', market.setIndex, ' จุด')}
+   - ไม่มีชุดข้อมูล EMA ของดัชนีและ Market Breadth ในรอบนี้
 
 3. ต้นทุนทางการเงินและนโยบาย (Macro & Liquidity):
    - US 10Y Bond Yield: ${us10yYield.toFixed(2)}% (เกณฑ์: <4.0% ผ่อนคลายเอื้อสินทรัพย์เสี่ยง, 4.0-4.4% ตึงตัวปานกลาง, >4.4% แรงกดดันสูง)
-   - ทิศทางดอกเบี้ย Fed & ตัวเลขเงินเฟ้อ (CPI/PCE): คาดการณ์ทิศทางดอกเบี้ยครั้งถัดไปและผลกระทบของเงินเฟ้อต่อต้นทุนการเงิน
+   - อธิบายผลของ Bond Yield ตามข้อมูลข้างต้น งดระบุแนวโน้ม Fed หรือเงินเฟ้อที่ไม่มีหลักฐาน
 
 4. ปัจจัยเร่งและกระแสเงินทุน (Catalysts & Fund Flows):
-   - Safe-Haven Demand: ทองคำ ($${goldPrice.toLocaleString()}), ดัชนีดอลลาร์ DXY (${dxyPrice.toFixed(2)}), น้ำมันดิบ ($${oilPrice.toFixed(2)}), Bitcoin ($${btcPrice.toLocaleString()})
-   - เงินทุนกำลังไหลเข้าสินทรัพย์เสี่ยง (Risk-On) หรือหมุนเข้าสินทรัพย์ปลอดภัย (Safe-Haven / Cash)
+   - ทองคำ ($${goldPrice.toLocaleString()}), ดัชนีดอลลาร์ DXY (${dxyPrice.toFixed(2)})
+   ${quoteLine('น้ำมันดิบ', market.oil, ' USD')}
+   - การขยับของราคาเพียงอย่างเดียวไม่ยืนยันกระแสเงินทุน
    - ข่าวล่าสุดในรอบ 7 วันจากคลังข่าวจริงของระบบ (ใช้เป็น Event Drivers หลัก):
 ${recentNewsLines}
 
@@ -891,10 +959,11 @@ ${recentNewsLines}
 ${holdingsResult.holdings
   .map((h, idx) => {
     const sig = technicalSignals[h.ticker.toUpperCase()]
-    const techNote = sig
+    const hasChart = sig?.currentPrice > 0 && getObservationTime(sig.observationTimestamp, observedNow)
+    const techNote = hasChart
       ? ` | RSI(14): ${sig.rsi14 ?? 'N/A'} | SMA50: ${sig.sma50 ?? 'N/A'} | SMA200: ${sig.sma200 ?? 'N/A'} | S1: ${sig.supportS1 ?? 'N/A'} | S2: ${sig.supportS2 ?? 'N/A'} | R1: ${sig.resistanceR1 ?? 'N/A'} | ย่อจาก 52W High: ${sig.pullbackFromHigh}%`
       : ''
-    return `  ${idx + 1}. [${h.ticker}] ${h.assetName} (${h.market}) | สัดส่วน: ${h.allocationPercent.toFixed(1)}% | ราคาปัจจุบัน: ${h.currentPrice} ${h.currency} | ต้นทุนเฉลี่ย: ${h.avgCost} | กำไร/ขาดทุน: ${h.unrealizedPnLPercent.toFixed(2)}% | มูลค่า: ${h.currentValueBase.toLocaleString()} ${baseCurrency}${techNote}`
+    return `  ${idx + 1}. [${h.ticker}] ${h.assetName} (${h.market}) | สัดส่วน: ${h.allocationPercent.toFixed(1)}% | ราคากราฟ: ${hasChart ? `${sig.currentPrice} ${h.currency} ณ ${hasChart}` : 'ไม่มีข้อมูลยืนยัน'} | ต้นทุนเฉลี่ย: ${h.avgCost}${techNote}`
   })
   .join('\n')}
 
@@ -930,7 +999,7 @@ ${pastContextSummaries}
     "riskLevel": ${deterministicClimate.riskScore},
     "riskLevelLabel": "${deterministicClimate.riskLabel}",
     "fearGreedScore": ${fgScore},
-    "fearGreedLabel": "${market.fearGreed?.ratingLabelTh ?? 'Fear'}",
+    "fearGreedLabel": "${fgLabel}",
     "macroDrivers": ["ประเด็นหลักที่ 1", "ประเด็นหลักที่ 2", "ประเด็นหลักที่ 3"],
     "pillars": {
       "sentiment": {
@@ -1009,31 +1078,33 @@ ${pastContextSummaries}
     prompt,
     logType: 'advisor',
     systemInstruction:
-      'คุณคือนักวางแผนกลยุทธ์การลงทุน Tactical Asset Allocation ผู้เชี่ยวชาญระดับโลก ตอบเป็น JSON ภาษาไทยที่ถูกต้อง 100% สื่อสารอย่างตรงไปตรงมา ชัดเจน มีตัวเลขกำกับทุกแอ็กชัน และไม่คลุมเครือ',
+      'วิเคราะห์กลยุทธ์โดยใช้ข้อมูลที่แนบ ตอบเป็น JSON ภาษาไทย งดเสนอราคาเป้าหมายและจุดซื้อขายเมื่อกราฟยืนยันไม่ได้ และรายงานความเสี่ยงตามสูตรจากระบบ',
     responseMimeType: 'application/json',
+    validateJson: (value) => tacticalNarrativeSchema.safeParse(value).success,
     thinkingBudget: 1024,
+    skipLog: true,
   })
 
-  let parsed: any = null
-  try {
-    parsed = JSON.parse(aiResult.text)
-  } catch (err) {
-    const cleaned = aiResult.text.replace(/```json/g, '').replace(/```/g, '').trim()
-    parsed = JSON.parse(cleaned)
-  }
-
+  const parsed = tacticalNarrativeSchema.parse(parseModelJson(aiResult.text))
   const now = new Date()
-  const holdingsMap = new Map(holdingsResult.holdings.map((h) => [h.ticker.toUpperCase(), h]))
-  const reconciledActions = (parsed.tacticalActions || []).map((item: any) => {
-    const matched = holdingsMap.get(item.ticker?.toUpperCase())
-    if (matched && matched.currentPrice > 0) {
-      return {
-        ...item,
-        currentPrice: Number(matched.currentPrice),
-        currency: matched.currency === 'THB' ? '฿' : '$',
-      }
-    }
-    return item
+  const holdingsMap = new Map(holdingsResult.holdings.map((h) => [`${h.market}:${h.ticker.toUpperCase().replace(/\.BK$/, '')}`, h]))
+  const usedPositions = new Set<string>()
+  const reconciledActions = parsed.tacticalActions.flatMap((item): TacticalActionItem[] => {
+    const id = `${item.market}:${item.ticker.toUpperCase().replace(/\.BK$/, '')}`
+    const matched = holdingsMap.get(id)
+    if (!matched || matched.isStale || usedPositions.has(id)) return []
+    const signal = technicalSignals[matched.ticker.toUpperCase()]
+    if (!signal || !getObservationTime(signal.observationTimestamp, observedNow) || !(signal.currentPrice > 0)) return []
+    usedPositions.add(id)
+    return [{
+      ...item,
+      id,
+      ticker: matched.ticker,
+      assetName: matched.assetName,
+      currentPrice: signal.currentPrice,
+      currency: signal.currencySymbol || matched.currency,
+      taxImpactNote: item.taxImpactNote ?? undefined,
+    }]
   })
 
   const resolvedPillars = reconcileMarketPillars(parsed?.marketRegime?.pillars, {
@@ -1048,11 +1119,12 @@ ${pastContextSummaries}
     vixPrice,
     us10yYield,
     fearGreedScore: fgScore,
-    fearGreedLabelTh: market.fearGreed?.ratingLabelTh ?? 'ตลาดกังวล (Fear)',
+    fearGreedLabelTh: fgLabel,
     fearGreed1WDiff: fgDiff,
     previous1WeekScore: fgPrev1W,
     dxyPrice,
     goldPrice,
+    goldChangePercent: gold.changePercent,
     oilPrice,
     deterministicClimate,
   })
@@ -1069,40 +1141,23 @@ ${pastContextSummaries}
       riskLevel: resolvedPillars.formula.calculatedRiskScore,
       riskLevelLabel: resolvedPillars.formula.calculatedRiskLabel,
       fearGreedScore: fgScore,
-      fearGreedLabel: market.fearGreed?.ratingLabelTh ?? 'Fear',
+      fearGreedLabel: fgLabel,
       macroDrivers: resolvedPillars.catalystsAndFlows.keyCatalysts,
       pillars: resolvedPillars,
     },
     portfolioResilience: parsed.portfolioResilience,
     tacticalActions: reconciledActions,
-    cashStrategy: parsed.cashStrategy,
+    cashStrategy: { ...parsed.cashStrategy, currentCashPercent, currentCashTotalBase: totalCash, baseCurrency },
     trackRecordReview: parsed.trackRecordReview || [],
     outcomeMetrics,
     modelUsed: aiResult.modelUsed,
     generatedAt: now.toISOString(),
+    marketEvidence,
   }
 
-  // Persist reconciled full payload back to aiAdviceLog so cache reads are 100% complete
-  try {
-    const latestLog = await prisma.aiAdviceLog.findFirst({
-      where: {
-        userId,
-        logType: 'advisor',
-        prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
-    if (latestLog) {
-      await prisma.aiAdviceLog.update({
-        where: { id: latestLog.id },
-        data: {
-          response: JSON.stringify(payload),
-        },
-      })
-    }
-  } catch (err) {
-    console.error('[Failed to update aiAdviceLog with reconciled payload]', err)
-  }
+  await prisma.aiAdviceLog.create({
+    data: { userId, logType: 'advisor', prompt, response: JSON.stringify(payload), modelUsed: aiResult.modelUsed },
+  })
 
   return payload
 }
@@ -1205,6 +1260,7 @@ export async function GET(req: NextRequest) {
       try {
         const parsed = parseAdviceResponse(todayLog.response)
         const normalized = normalizeStoredPayload(parsed, todayLog.createdAt, todayLog.modelUsed)
+        if (!normalized.marketEvidence) throw new Error('Legacy snapshot lacks evidence')
         const liveMetrics = await computeCachedOutcomeMetrics()
         if (liveMetrics && liveMetrics.totalTrackedCalls > 0) {
           normalized.outcomeMetrics = liveMetrics
@@ -1254,7 +1310,7 @@ export async function GET(req: NextRequest) {
     console.error('[tactical-advisor GET error]', error)
     return NextResponse.json(
       { error: error.message || 'Failed to generate tactical advice' },
-      { status: 500 }
+      { status: error instanceof MarketEvidenceUnavailable ? 503 : 500 }
     )
   }
 }
@@ -1284,7 +1340,7 @@ export async function POST(req: NextRequest) {
     console.error('[tactical-advisor POST error]', error)
     return NextResponse.json(
       { error: error.message || 'Failed to execute tactical analysis' },
-      { status: 500 }
+      { status: error instanceof MarketEvidenceUnavailable ? 503 : 500 }
     )
   }
 }

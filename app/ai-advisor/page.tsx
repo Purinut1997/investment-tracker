@@ -164,7 +164,7 @@ export default function AiAdvisorPage() {
     }
   )
 
-  const payload = responseData?.data
+  const payload = responseData?.data?.marketEvidence ? responseData.data : undefined
   const pillars = payload?.marketRegime?.pillars
   const externalNewsList = newsApiResponse?.items || newsApiResponse?.news || []
 
@@ -194,33 +194,16 @@ export default function AiAdvisorPage() {
       return
     }
 
-    if (payload) {
-      const regimeName = payload.marketRegime?.statusLabelTh || 'ผันผวนและควรระมัดระวัง'
-      const riskScore = pillars?.formula?.calculatedRiskScore || payload.marketRegime?.riskLevel || 4
-      const posture = pillars?.formula?.postureLabelTh || '🛡️ ตั้งรับรอจังหวะ (Defensive Tactical)'
-
-      const welcomeText = `สวัสดีครับ ผมคือ **AI ที่ปรึกษาการลงทุน 360° (Senior Wealth Copilot)** ประจำตัวคุณ
-
-ผมได้ประมวลผลข้อมูลรอบด้านครบทุกมิติ พร้อมให้คำปรึกษาแล้วครับ:
-- **ข้อมูลภายในพอร์ต & ภาษี FIFO:** มูลค่าสินทรัพย์รวม, เงินสดสำรอง (Dry Powder), ต้นทุน FIFO และเกณฑ์ภาษี ป.161/2566
-- **พื้นฐาน Valuation & ตัวเร่งราคา:** P/E, ROE, D/E, Free Cash Flow และปฏิทินงบ (Earnings) / ขึ้น XD ที่ใกล้ถึง
-- **กราฟเทคนิค & ข่าวสด:** Wilder's RSI(14), เส้น SMA 50/200, Pivot S1/S2/R1 พร้อมค้นหาข่าวสดผ่าน Google Search Grounding
-- **สภาวะมหภาค 4 เสาหลัก:** สภาวะตลาดขณะนี้คือ **${regimeName}** (ความเสี่ยง **${riskScore}/5**) กลยุทธ์หลัก: **${posture}**
-
-💡 คุณสามารถเลือกหัวข้อด่วนจากปุ่มแนะนำด้านบน ตั้งค่า "ความจำกลยุทธ์ส่วนตัว" ทางซ้าย หรือพิมพ์คำถามเจาะลึกได้ทันทีครับ`
-
-      setMessages([
-        {
-          id: 'welcome-msg',
-          role: 'assistant',
-          content: welcomeText,
-          timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
-          modelUsed: payload.modelUsed || 'Wealth Copilot Engine',
-        },
-      ])
-      setHasHydratedThread(true)
-    }
-  }, [isChatHistoryLoading, hasHydratedThread, persistedChatData, payload, pillars])
+    setMessages([
+      {
+        id: 'welcome-msg',
+        role: 'assistant',
+        content: 'ถามเกี่ยวกับพอร์ตของคุณหรือระบุหุ้นที่ต้องการเทียบได้เลย เช่น “เทียบ NVDA กับ AAPL โดยดูพื้นฐาน กราฟ และผลต่อความเสี่ยงพอร์ต” ผมจะระบุข้อมูลที่ตรวจได้และสิ่งที่ยังขาดในคำตอบครับ',
+        timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+      },
+    ])
+    setHasHydratedThread(true)
+  }, [isChatHistoryLoading, hasHydratedThread, persistedChatData])
 
   // Handle Send Question
   const handleSendMessage = async (textToSend?: string) => {
@@ -254,7 +237,6 @@ export default function AiAdvisorPage() {
             ...(m.modelUsed ? { modelUsed: m.modelUsed } : {}),
             ...(m.groundingSources ? { groundingSources: m.groundingSources } : {}),
           })),
-          tacticalContext: payload,
         }),
       })
 
@@ -651,10 +633,10 @@ export default function AiAdvisorPage() {
                   <div className="p-2.5 rounded-xl bg-black/40 border border-white/[0.05]">
                     <span className="text-slate-400 block text-[11px]">Fear & Greed</span>
                     <strong className="text-white font-mono text-sm block">
-                      {pillars.sentiment.fearGreedScore}/100
+                      {pillars.sentiment.fearGreedScore >= 0 ? `${pillars.sentiment.fearGreedScore}/100` : '—'}
                     </strong>
                     <span className="text-[10px] text-rose-400">
-                      {pillars.sentiment.fearGreed1WDiff < 0
+                      {pillars.sentiment.previous1WeekScore < 0 ? 'ไม่มีข้อมูลย้อนหลัง' : pillars.sentiment.fearGreed1WDiff < 0
                         ? `⭣ ${Math.abs(pillars.sentiment.fearGreed1WDiff)} pts 1W`
                         : `${pillars.sentiment.fearGreed1WDiff} pts`}
                     </span>

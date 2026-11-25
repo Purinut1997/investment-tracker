@@ -10,6 +10,8 @@
 
 export interface TechnicalSignal {
   ticker: string
+  observationTimestamp?: number
+  marketSymbol?: string
   currentPrice: number
   changePercent: number
   rsi14: number | null
@@ -90,10 +92,11 @@ export function calculateSMA(closes: number[], period: number): number | null {
 export async function fetchSingleTickerTechnicalSignal(
   rawSymbol: string,
   market = 'US',
-  forceRefresh = false
+  forceRefresh = false,
+  strictMarket = false
 ): Promise<TechnicalSignal> {
   const cleanSymbol = rawSymbol.trim().toUpperCase()
-  const cacheKey = `${cleanSymbol}_${market}`
+  const cacheKey = `${cleanSymbol}_${market}${strictMarket ? '_strict' : ''}`
   const cached = technicalCache.get(cacheKey)
   const now = Date.now()
 
@@ -106,13 +109,7 @@ export async function fetchSingleTickerTechnicalSignal(
     market === 'TH' ||
     market === 'SET' ||
     cleanSymbol.endsWith('.BK') ||
-    cleanSymbol === 'SCB' ||
-    cleanSymbol === 'PTT' ||
-    cleanSymbol === 'KBANK' ||
-    cleanSymbol === 'CPALL' ||
-    cleanSymbol === 'AOT' ||
-    cleanSymbol === 'BDMS' ||
-    cleanSymbol === 'DELTA'
+    (!strictMarket && ['SCB', 'PTT', 'KBANK', 'CPALL', 'AOT', 'BDMS', 'DELTA'].includes(cleanSymbol))
 
   let candidates: string[] = []
   if (
@@ -132,9 +129,9 @@ export async function fetchSingleTickerTechnicalSignal(
     candidates = ['SOL-USD']
   } else if (isThaiHint) {
     const bkSymbol = `${cleanSymbol.replace(/\.BK$/, '')}.BK`
-    candidates = [bkSymbol, cleanSymbol.replace(/\.BK$/, '')]
+    candidates = strictMarket ? [bkSymbol] : [bkSymbol, cleanSymbol.replace(/\.BK$/, '')]
   } else {
-    candidates = [cleanSymbol, `${cleanSymbol}.BK`]
+    candidates = strictMarket ? [cleanSymbol] : [cleanSymbol, `${cleanSymbol}.BK`]
   }
 
   let result: any = null
@@ -320,6 +317,8 @@ export async function fetchSingleTickerTechnicalSignal(
 
     const signalData: TechnicalSignal = {
       ticker: cleanSymbol,
+      observationTimestamp: typeof meta.regularMarketTime === 'number' ? meta.regularMarketTime * 1000 : undefined,
+      marketSymbol: activeTicker,
       currentPrice: Number(currentPrice.toFixed(2)),
       changePercent: Number(changePercent.toFixed(2)),
       rsi14,

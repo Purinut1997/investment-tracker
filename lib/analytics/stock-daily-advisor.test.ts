@@ -199,6 +199,11 @@ console.log('🧪 Starting Stock Daily Risk & DCA Simulator Unit Tests...\n')
     JSON.stringify({ ...validPayload, executiveSummary: 'Stock dropped sharply today.' })
   )
   assert.strictEqual(englishOnly, null, 'Non-Thai executiveSummary should be rejected')
+  assert.strictEqual(
+    parseDailyStockAiReport(JSON.stringify({ ...validPayload, verdict: 'UNKNOWN_ACTION' })),
+    null,
+    'Unknown recommendations must not be recorded as HOLD',
+  )
 
   assert.strictEqual(parseDailyStockAiReport('not json'), null)
 

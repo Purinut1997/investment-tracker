@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
+import { FOREIGN_INCOME_TAX_RULE, FOREIGN_INCOME_TAX_SOURCE, foreignIncomeAssessment } from '@/lib/analytics/foreign-income-tax'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -160,17 +161,19 @@ export default function TaxReportPage() {
   const { data: report, isLoading, error } = useSWR(`/api/tax-report/generate?year=${selectedYear}`)
 
   const [aiLoading, setAiLoading] = useState(false)
-  const [aiExplanation, setAiExplanation] = useState<string | null>(null)
-  const [modelUsed, setModelUsed] = useState<string>('')
+  const [aiErrorKey, setAiErrorKey] = useState<string | null>(null)
+  const { mutate } = useSWRConfig()
+  const taxAssessment = foreignIncomeAssessment(repatriated)
 
   // Load persistent latest AI tax explanation for this year from database
-  const { data: cachedTaxAi, mutate: mutateCachedTaxAi } = useSWR(
-    `/api/tax-report/explain?year=${selectedYear}`,
+  const explanationKey = `/api/tax-report/explain?year=${selectedYear}&repatriated=${repatriated}`
+  const { data: cachedTaxAi } = useSWR(
+    explanationKey,
     { revalidateOnFocus: false }
   )
 
-  const currentExplanation = aiExplanation || cachedTaxAi?.explanation
-  const currentModel = modelUsed || cachedTaxAi?.modelUsed
+  const currentExplanation = cachedTaxAi?.explanation
+  const currentModel = cachedTaxAi?.modelUsed
   const currentUpdatedAt = cachedTaxAi?.updatedAt
 
   const usdThbRate: number = report?.usdThbRate ?? 35.5
@@ -179,7 +182,9 @@ export default function TaxReportPage() {
 
   async function handleExplainAI() {
     if (!report) return
+    const requestKey = explanationKey
     setAiLoading(true)
+    setAiErrorKey(null)
     try {
       const res = await fetch('/api/tax-report/explain', {
         method: 'POST',
@@ -208,13 +213,10 @@ export default function TaxReportPage() {
         }),
       })
       const data = await res.json()
-      if (data.explanation) {
-        setAiExplanation(data.explanation)
-        setModelUsed(data.modelUsed || '')
-        await mutateCachedTaxAi(data, false)
-      }
+      if (!res.ok || typeof data.explanation !== 'string' || !data.explanation.trim()) throw new Error('Analysis unavailable')
+      await mutate(requestKey, data, false)
     } catch {
-      setAiExplanation('เกิดข้อผิดพลาดในการประมวลผลคำแนะนำจาก AI กรุณาลองใหม่อีกครั้ง')
+      setAiErrorKey(requestKey)
     } finally {
       setAiLoading(false)
     }
@@ -239,7 +241,6 @@ export default function TaxReportPage() {
                   value={selectedYear}
                   onChange={(e) => {
                     setSelectedYear(parseInt(e.target.value))
-                    setAiExplanation(null)
                   }}
                 >
                   {yearsList.map((y) => (
@@ -280,16 +281,12 @@ export default function TaxReportPage() {
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3 text-xs text-amber-200/90 leading-relaxed shadow-lg shadow-amber-500/5">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold text-amber-300">ข้อควรทราบทางภาษีตาม ป.161/2566 (กรมสรรพากร):</span>
-            <p className="mt-1 leading-relaxed">
-              <span className="text-amber-200 font-semibold">กำไรหุ้นต่างประเทศ (Capital Gains):</span>{' '}
-              นักลงทุนต่างชาติไม่มีภาระภาษีในสหรัฐฯ •{' '}
-              เงินที่ลงทุน<span className="font-semibold">ก่อนปี 2567</span> และ<span className="font-semibold">ไม่นำกลับไทย</span> → ไม่ต้องเสียภาษีไทย •{' '}
-              เงินที่ลงทุน<span className="font-semibold">ตั้งแต่ปี 2567</span> → ต้องยื่นภาษีไทยไม่ว่าจะนำกลับหรือไม่
-            </p>
+            <span className="font-bold text-amber-300">การพิจารณาเงินได้จากต่างประเทศ</span>
+            <p className="mt-1 leading-relaxed">{FOREIGN_INCOME_TAX_RULE}</p>
             <p className="mt-1">
-              <span className="text-amber-200 font-semibold">เงินปันผล:</span>{' '}
-              ถูกหัก ณ ที่จ่าย 15% (W-8BEN) ในสหรัฐฯ — สามารถนำมาเป็นเครดิตภาษีไทยได้
+              <a href={FOREIGN_INCOME_TAX_SOURCE} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">
+                ดูคำอธิบายและตัวอย่างของกรมสรรพากร
+              </a>
             </p>
           </div>
         </div>
@@ -308,16 +305,17 @@ export default function TaxReportPage() {
             {/* Repatriation toggle — key for correct tax liability display */}
             <button
               type="button"
-              onClick={() => { setRepatriated(v => !v); setAiExplanation(null) }}
+              onClick={() => setRepatriated(v => !v)}
+              aria-pressed={repatriated}
               className={`text-xs font-semibold px-3 py-2 rounded-xl border flex items-center gap-2 transition-all cursor-pointer ${
                 repatriated
                   ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
                   : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
               }`}
-              title="กดเพื่อบอกระบบว่าคุณนำเงินกลับไทยหรือไม่ — ส่งผลต่อการแสดงภาระภาษี"
+              title="ระบุว่านำเงินได้จากต่างประเทศเข้าไทยในปีที่เลือกหรือไม่"
             >
               <span>{repatriated ? '🔴' : '🟢'}</span>
-              <span>{repatriated ? 'นำเงินกลับไทยแล้ว → มีภาระภาษีไทย' : 'ยังไม่นำเงินกลับไทย → ไม่มีภาระภาษีไทย (ก่อนปี 2567)'}</span>
+              <span>{repatriated ? 'ปีนี้นำรายได้เข้าไทย' : 'ปีนี้ยังไม่นำรายได้เข้าไทย'}</span>
             </button>
           </div>
         )}
@@ -361,7 +359,7 @@ export default function TaxReportPage() {
               </div>
               <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
                 <div className="flex justify-between">
-                  <span>ภาษีหัก ณ ที่จ่าย W-8BEN (15% สหรัฐฯ):</span>
+                  <span>ภาษีหัก ณ ที่จ่ายตามบันทึก</span>
                   <span className="font-bold text-rose-400">
                     {showTHB
                       ? `-฿${Number(report.dividends.totalTaxWithheldTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
@@ -409,8 +407,6 @@ export default function TaxReportPage() {
 
             {/* Category 3: Foreign & Crypto Gains */}
             {(() => {
-              const isNewRuleYear = selectedYear >= 2024
-              const isTaxableInThailand = isNewRuleYear || repatriated
               const hasForeignGain = report.foreignAndCryptoGains.trades.length > 0
               return (
                 <div className="p-6 rounded-2xl bg-[#12151C] border border-white/[0.08] space-y-4 flex flex-col justify-between min-h-[160px] shadow-xl shadow-black/30">
@@ -420,13 +416,11 @@ export default function TaxReportPage() {
                     </span>
                     {hasForeignGain ? (
                       <span className={`text-[10px] px-2 py-0.5 rounded-md font-mono border font-semibold ${
-                        isTaxableInThailand
-                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                        taxAssessment.status === 'review_required'
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                          : 'bg-slate-800 text-slate-300 border-white/10'
                       }`}>
-                        {isTaxableInThailand
-                          ? isNewRuleYear ? '⚠️ ต้องยื่นภาษีไทย (ปี 2567+)' : '⚠️ นำเงินกลับไทย'
-                          : '✅ ไม่ต้องเสียภาษีไทย'}
+                        {taxAssessment.label}
                       </span>
                     ) : (
                       <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 font-mono text-slate-400">
@@ -447,15 +441,7 @@ export default function TaxReportPage() {
                       </p>
                     )}
                     {/* Tax note */}
-                    <p className={`text-[11px] mt-1.5 font-semibold ${
-                      isTaxableInThailand ? 'text-rose-400' : 'text-emerald-400'
-                    }`}>
-                      {isTaxableInThailand
-                        ? isNewRuleYear
-                          ? '⚠️ ปี 2567+ ต้องยื่นภาษีเงินได้บุคคลธรรมดาไทย (ก้าวหน้า 0-35%)'
-                          : '⚠️ นำเงินกลับไทย → ต้องยื่นภาษี ภ.ง.ด. (อัตราก้าวหน้า 0-35%)'
-                        : '✅ ยังไม่นำเงินกลับไทย + ลงทุนก่อนปี 2567 → ไม่มีภาระภาษีไทย'}
-                    </p>
+                    {hasForeignGain && <p className="mt-2 text-xs leading-relaxed text-slate-300">{taxAssessment.detail}</p>}
                   </div>
                   <div className="text-xs text-slate-400 space-y-1.5 pt-3 border-t border-white/[0.06] font-mono">
                     <div className="flex justify-between">
@@ -473,10 +459,6 @@ export default function TaxReportPage() {
                           ? `฿${Number(report.foreignAndCryptoGains.totalCostTHB).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
                           : `$${Number(report.foreignAndCryptoGains.totalCostUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                       </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">ภาษีสหรัฐฯ (Capital Gains):</span>
-                      <span className="text-emerald-400 font-bold">ไม่ต้องเสีย $0</span>
                     </div>
                   </div>
                 </div>
@@ -527,6 +509,9 @@ export default function TaxReportPage() {
             </div>
           </div>
 
+          {aiErrorKey === explanationKey && (
+            <p role="alert" className="text-sm text-rose-300">วิเคราะห์ภาษีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง</p>
+          )}
           {currentExplanation && (
             <article className="overflow-hidden rounded-2xl border border-indigo-500/25 bg-[#0d1018]/90 animate-fade-in relative z-10 shadow-inner shadow-black/30">
               <div className="flex flex-col gap-2 border-b border-white/[0.07] bg-indigo-500/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">

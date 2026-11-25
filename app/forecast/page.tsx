@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
+import { forecastContextKey } from '@/lib/ai/model-contracts'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import { StrategicRoadmapDisplay } from '@/components/forecast/StrategicRoadmapDisplay'
@@ -105,22 +106,32 @@ export default function ForecastPage() {
   // Simulation State
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
-  const [aiExplanation, setAiExplanation] = useState<string | null>(null)
-  const [modelUsed, setModelUsed] = useState<string>('')
+  const [aiErrorKey, setAiErrorKey] = useState<string | null>(null)
+  const { mutate } = useSWRConfig()
 
   // Reverse Goal-Seek State
   const [goalSeekTarget, setGoalSeekTarget] = useState<number>(10000000)
   const [goalSeekYears, setGoalSeekYears] = useState<number>(10)
   const [activeTab, setActiveTab] = useState<'forecast' | 'goalSeek' | 'stressTest'>('forecast')
 
-  // Load persistent latest AI explanation from database
-  const { data: aiForecastData, mutate: mutateAiForecast } = useSWR(
-    '/api/ai-advisor/explain-forecast',
+  const forecastInputs = result ? {
+    initialAmount, monthlyContribution, years, targetAmount, adjustInflation,
+    finalP10: result.finalP10, finalP50: result.finalP50, finalP90: result.finalP90,
+    probabilityOfReachingTarget: result.probabilityOfReachingTarget,
+    finalRealP50: result.finalRealP50,
+    retirementMonthlyIncome: result.retirementMonthlyIncome,
+    dividendMonthlyIncome: result.dividendMonthlyIncome,
+  } : null
+  const explanationKey = forecastInputs
+    ? `/api/ai-advisor/explain-forecast?scenario=${encodeURIComponent(forecastContextKey(forecastInputs))}`
+    : null
+  const { data: aiForecastData } = useSWR(
+    explanationKey,
     { revalidateOnFocus: false }
   )
 
-  const currentExplanation = aiExplanation || aiForecastData?.explanation
-  const currentModel = modelUsed || aiForecastData?.modelUsed
+  const currentExplanation = aiForecastData?.explanation
+  const currentModel = aiForecastData?.modelUsed
   const currentUpdatedAt = aiForecastData?.updatedAt
 
   // Auto-seed initial amount & portfolio-derived return/volatility from live portfolio if available
@@ -244,8 +255,10 @@ export default function ForecastPage() {
   }, [initialAmount, monthlyContribution, years, annualReturn])
 
   async function handleExplainAI() {
-    if (!result) return
+    if (!result || !forecastInputs || !explanationKey) return
+    const requestKey = explanationKey
     setAiLoading(true)
+    setAiErrorKey(null)
     try {
       const milestonesSummary = result.milestones
         .map(
@@ -258,29 +271,15 @@ export default function ForecastPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          initialAmount,
-          monthlyContribution,
-          years,
-          finalP10: result.finalP10,
-          finalP50: result.finalP50,
-          finalP90: result.finalP90,
-          targetAmount,
-          probabilityOfReachingTarget: result.probabilityOfReachingTarget,
-          adjustInflation,
-          finalRealP50: result.finalRealP50,
-          retirementMonthlyIncome: result.retirementMonthlyIncome,
-          dividendMonthlyIncome: result.dividendMonthlyIncome,
+          ...forecastInputs,
           milestonesSummary,
         }),
       })
       const data = await res.json()
-      if (data.explanation) {
-        setAiExplanation(data.explanation)
-        setModelUsed(data.modelUsed || '')
-        await mutateAiForecast(data, false)
-      }
+      if (!res.ok || !data.explanation) throw new Error('Forecast explanation unavailable')
+      await mutate(requestKey, data, false)
     } catch {
-      setAiExplanation('เกิดข้อผิดพลาดในการขอคำแนะนำจาก AI กรุณาลองใหม่อีกครั้ง')
+      setAiErrorKey(requestKey)
     } finally {
       setAiLoading(false)
     }
@@ -1139,6 +1138,9 @@ export default function ForecastPage() {
             </div>
           </div>
 
+          {explanationKey && aiErrorKey === explanationKey && (
+            <p role="alert" className="mt-3 text-sm text-rose-300">วิเคราะห์ผลจำลองไม่สำเร็จ กรุณาลองใหม่อีกครั้ง</p>
+          )}
           {currentExplanation ? (
             <div className="mt-5 relative z-10">
               <StrategicRoadmapDisplay

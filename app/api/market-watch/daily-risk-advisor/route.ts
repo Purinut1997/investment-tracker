@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { getObservationTime } from '@/lib/ai/advisor-evidence'
 import { parseUserInvestmentMemory } from '@/lib/ai/outcome-evaluator'
 import {
   calculateSingleAssetFifoPosition,
@@ -44,6 +45,7 @@ function formatYahooTicker(rawSymbol: string, market: string): string {
 }
 
 interface DailyTechnicalSnapshot {
+  observationTimestamp: number | undefined
   name: string
   currency: string
   currentPrice: number
@@ -95,9 +97,11 @@ async function fetchDailyChartAndTechnicals(
     const closes: Array<number | null> = quote.close || []
 
     const validBars: Array<{ high: number; low: number; close: number }> = []
+    let lastCloseTime: number | undefined
     for (let i = 0; i < timestamps.length; i++) {
       const c = closes[i]
       if (c !== null && c !== undefined && Number.isFinite(c) && c > 0) {
+        lastCloseTime = timestamps[i] * 1000
         validBars.push({
           high: Number(highs[i] ?? c),
           low: Number(lows[i] ?? c),
@@ -185,6 +189,7 @@ async function fetchDailyChartAndTechnicals(
     }
 
     return {
+      observationTimestamp: typeof meta.regularMarketTime === 'number' ? meta.regularMarketTime * 1000 : lastCloseTime,
       name: meta.longName || meta.shortName || rawSymbol,
       currency: meta.currency || (market === 'TH' ? 'THB' : 'USD'),
       currentPrice: Number(currentPrice.toFixed(4)),
@@ -217,13 +222,14 @@ async function assembleDailyStockContext(
   userMemorySummary: string
   freeCashflow: number | null
   todayTag: string
+  observedAt: string | null
 }> {
   const cleanSymbol = rawSymbol.trim().toUpperCase()
   const cleanMarket = market.trim().toUpperCase() || 'US'
   const yfTicker = formatYahooTicker(cleanSymbol, cleanMarket)
   const reportDate = getBangkokDateKey()
-  const todayTag = `[AI Daily Stock Risk Advisor: ${cleanSymbol} | ${reportDate}]`
-  const symbolPrefix = `[AI Daily Stock Risk Advisor: ${cleanSymbol} |`
+  const symbolPrefix = `[daily-stock:v2:${cleanMarket}:${cleanSymbol}:`
+  const todayTag = `${symbolPrefix}${reportDate}]`
 
   const finnhubKey = process.env.FINNHUB_API_KEY
   const shouldFetchFinnhub =
@@ -517,7 +523,7 @@ async function assembleDailyStockContext(
     payoutRatio,
     daysToEarnings,
     vixPrice: vixQuote?.price ?? null,
-    fearGreedScore: fearGreed?.score ?? null,
+    fearGreedScore: fearGreed?.source === 'CNN_LIVE' && getObservationTime(Date.parse(fearGreed.timestamp), Date.now()) ? fearGreed.score : null,
     newsSentiments: news.map((n) => n.sentiment),
     position,
   })
@@ -564,8 +570,8 @@ async function assembleDailyStockContext(
         vixPrice: vixQuote?.price ?? null,
         vixChangePct: vixQuote?.changePercent ?? null,
         sp500ChangePct: sp500Quote?.changePercent ?? null,
-        fearGreedScore: fearGreed?.score ?? null,
-        fearGreedLabel: fearGreed?.ratingLabelTh ?? null,
+        fearGreedScore: fearGreed?.source === 'CNN_LIVE' && getObservationTime(Date.parse(fearGreed.timestamp), Date.now()) ? fearGreed.score : null,
+        fearGreedLabel: fearGreed?.source === 'CNN_LIVE' && getObservationTime(Date.parse(fearGreed.timestamp), Date.now()) ? fearGreed.ratingLabelTh : null,
       },
       news,
       position,
@@ -603,6 +609,7 @@ async function assembleDailyStockContext(
     userMemorySummary,
     freeCashflow: ySummary?.freeCashflow ?? null,
     todayTag,
+    observedAt: getObservationTime(dailyChart?.observationTimestamp, Date.now()),
   }
 }
 
@@ -648,9 +655,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
     }
 
-    const { response, userMemorySummary, freeCashflow, todayTag } =
+    const { response, userMemorySummary, freeCashflow, todayTag, observedAt } =
       await assembleDailyStockContext(session.user.id, symbol, market)
 
+    if (!observedAt || !(response.contextSnapshot.currentPrice > 0)) {
+      return NextResponse.json({ error: 'ไม่มีราคาที่ใหม่พอสำหรับสร้างรายงานความเสี่ยงรายวัน' }, { status: 503 })
+    }
     if (!forceRefresh && response.isTodayReport && response.aiReport) {
       return NextResponse.json({ ...response, cached: true })
     }
@@ -674,6 +684,7 @@ export async function POST(req: NextRequest) {
       : '- ยังไม่ได้ถือครองหุ้นตัวนี้ในพอร์ต (ประเมินจากมุมมองการเข้าซื้อใหม่)'
 
     const prompt = `${todayTag}
+ราคาที่ใช้ประกอบรายงานมาจาก Yahoo Finance เวลา ${observedAt} เป็นการสังเกตล่าสุดที่ระบบยืนยันได้
 คุณคือ Senior Quantitative Risk Officer & Multi-Asset Portfolio Strategist ที่ให้คำแนะนำรายวันเฉพาะบุคคล
 กรุณาสังเคราะห์ข้อมูลจริงทั้งหมดด้านล่าง (ข้อมูลเก่า + ข้อมูลสดวันนี้ + ข้อมูลคาดการณ์ + พอร์ตจริงของผู้ใช้ + คะแนนความเสี่ยงเชิงปริมาณ) เพื่อออกรายงาน "วิเคราะห์ความเสี่ยง & แผนปฏิบัติการรายวัน" สำหรับ ${response.symbol} (${response.name})
 
@@ -749,6 +760,7 @@ ${q.dimensions.map((d) => `- ${d.label}: ${d.score}/100 (${d.levelLabelTh}) -> $
       systemInstruction,
       logType: 'daily_brief',
       responseMimeType: 'application/json',
+      validateJson: (value) => parseDailyStockAiReport(JSON.stringify(value)) !== null,
       thinkingBudget: 1024,
       skipLog: true,
     })

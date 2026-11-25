@@ -19,6 +19,7 @@ export async function getYahooAuth(): Promise<{ cookie: string; crumb: string } 
 
   try {
     const cookieRes = await fetch('https://fc.yahoo.com', {
+      signal: AbortSignal.timeout(3000),
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -29,6 +30,7 @@ export async function getYahooAuth(): Promise<{ cookie: string; crumb: string } 
     const cookie = cookieHeader.split(';')[0]
 
     const crumbRes = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+      signal: AbortSignal.timeout(3000),
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',

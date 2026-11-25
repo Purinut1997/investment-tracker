@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { FOREIGN_INCOME_TAX_RULE, FOREIGN_INCOME_TAX_SOURCE, foreignIncomeAssessment, taxReportContextTag } from '@/lib/analytics/foreign-income-tax'
 
 export const maxDuration = 45
 
@@ -13,14 +14,18 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const year = searchParams.get('year') || String(new Date().getFullYear())
+  const year = Number(searchParams.get('year') || new Date().getFullYear())
+  const repatriated = searchParams.get('repatriated') === 'true'
+  if (!Number.isInteger(year) || year < 1900 || year > 9999) {
+    return NextResponse.json({ error: 'Invalid tax year' }, { status: 400 })
+  }
 
   try {
     const latestLog = await prisma.aiAdviceLog.findFirst({
       where: {
         userId: session.user.id,
         logType: 'tax_explain',
-        prompt: { contains: `[ปีภาษี: ${year}]` },
+        prompt: { contains: taxReportContextTag(year, repatriated) },
       },
       orderBy: { createdAt: 'desc' },
       select: { response: true, modelUsed: true, createdAt: true },
@@ -31,8 +36,8 @@ export async function GET(req: NextRequest) {
       modelUsed: latestLog?.modelUsed ?? null,
       updatedAt: latestLog?.createdAt ? latestLog.createdAt.toISOString() : null,
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Failed to fetch tax explanation' }, { status: 500 })
+  } catch {
+    return NextResponse.json({ error: 'Failed to fetch tax explanation' }, { status: 500 })
   }
 }
 
@@ -51,17 +56,19 @@ export async function POST(req: NextRequest) {
       foreignAndCryptoGains,
       repatriated = false,
     } = await req.json()
+    if (!Number.isInteger(year) || year < 1900 || year > 9999 || typeof repatriated !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid tax context' }, { status: 400 })
+    }
 
     let fx = Number(usdThbRate) || 0
     if (fx <= 0) {
       try {
         const liveFx = await getExchangeRate('USD', 'THB')
-        fx = liveFx && liveFx > 0 ? liveFx : 34.0
+        fx = liveFx && liveFx > 0 ? liveFx : 0
       } catch {
-        fx = 34.0
+        fx = 0
       }
     }
-    const taxYear2024 = 2024  // rule change year (ป.161/2566)
 
     const divGrossUSD = Number(dividends?.totalDividendGrossUSD ?? 0)
     const divTaxUSD = Number(dividends?.totalTaxWithheldUSD ?? 0)
@@ -81,35 +88,34 @@ export async function POST(req: NextRequest) {
     const hasForeignGain = foreignGainUSD !== 0 || foreignGainTHB !== 0
     const hasDivUSD = divGrossUSD > 0
 
-    const isNewRuleYear = year >= taxYear2024
-    const foreignGainTaxableInThailand = Boolean(repatriated)
+    const assessment = foreignIncomeAssessment(repatriated)
 
     const prompt = `
 [ปีภาษี: ${year}]
+${taxReportContextTag(year, repatriated)}
 คุณเป็นผู้เชี่ยวชาญด้านภาษีการลงทุนสำหรับบุคคลธรรมดาในประเทศไทย ที่มีความเข้าใจลึกซึ้งในกฎภาษีการลงทุนต่างประเทศ
 กรุณาวิเคราะห์และอธิบายสรุปรายงานภาษีปี ${year} ของผู้ลงทุนเป็นภาษาไทยที่เข้าใจง่าย
 
 === กฎภาษีสำคัญที่ต้องใช้ในการวิเคราะห์ ===
 
-ก. ภาษีสหรัฐฯ สำหรับนักลงทุนต่างชาติที่ไม่ได้อาศัยอยู่ในสหรัฐ:
-   - เงินปันผล: ถูกหัก ณ ที่จ่าย 15% (เมื่อยื่น W-8BEN) หรือ 30% (ถ้าไม่ยื่น)
-   - กำไรจากการขายหุ้น (Capital Gains): ไม่ต้องเสียภาษีในสหรัฐฯ เลย
+ก. ภาษีต่างประเทศ:
+   - ใช้ยอดภาษีที่บันทึกจริง ห้ามสมมติว่าทุกธุรกรรมใช้อัตราเดียวกัน
+   - การประเมินภาษีและเครดิตภาษีขึ้นกับแหล่งเงินได้ ประเภทสินทรัพย์ สถานะผู้ลงทุน และสิทธิตามอนุสัญญาภาษีซ้อน
 
 ข. ภาษีไทย (มาตรา 41 วรรค 2 + คำสั่ง ป.161/2566 และ ป.162/2566):
-   - เงินได้จากต่างประเทศที่เกิดขึ้นก่อนปี 2567: เสียภาษีไทยเฉพาะกรณีที่นำเงินได้กลับเข้าไทยในปีภาษีเดียวกัน (หากนำกลับคนละปีหรือยังไม่นำกลับ ไม่ต้องเสียภาษีไทย)
-   - เงินได้จากต่างประเทศที่เกิดขึ้นตั้งแต่ปี 2567 เป็นต้นไป: เสียภาษีไทย **เฉพาะเมื่อนำเงินได้นั้นกลับเข้ามาในประเทศไทย** (ไม่ว่าจะนำกลับในปีใดก็ตาม) หากยังเก็บไว้ในต่างประเทศและ "ไม่นำกลับไทย" ยังไม่ต้องเสียภาษีในปีนั้น
-   - การนำกลับเฉพาะส่วน "เงินต้น (Principal)" ไม่ถือเป็นเงินได้ จึงไม่ต้องเสียภาษีไทย
+   - ${FOREIGN_INCOME_TAX_RULE}
+   - อ้างอิงกรมสรรพากร: ${FOREIGN_INCOME_TAX_SOURCE}
+   - ต้องแยกเงินต้นออกจากเงินได้ด้วยเอกสาร ห้ามถือว่าเงินที่นำเข้าทั้งหมดเป็นกำไรหรือเงินต้น
 
-ค. กลยุทธ์ประหยัดภาษี (กรณีนำเงินกลับไทย):
-   - นำกลับเฉพาะส่วน "ทุน" (≤ เงินต้นที่ส่งออกไป) → ไม่ต้องเสียภาษี
-   - ภาษีหัก ณ ที่จ่ายในสหรัฐ (15%) สามารถนำมาเป็น "เครดิตภาษี" หักออกจากภาษีไทยได้
+ค. สถานะตามข้อมูลที่ผู้ใช้ระบุ: ${assessment.label}
+   - ${assessment.detail}
+   - ระบบไม่มีข้อมูลวันอยู่ไทย ยอดเงินได้ที่นำเข้าจริง หรือเอกสารเครดิตภาษี ห้ามสรุปยอดภาษีหรือหน้าที่ต้องยื่นเด็ดขาดจากสถานะนี้
 
-=== ข้อมูลภาษีปี ${year} (อัตราแลกเปลี่ยน 1 USD = ${fx.toFixed(2)} THB) ===
+=== ข้อมูลปี ${year} (${fx > 0 ? `อัตราอ้างอิง 1 USD = ${fx.toFixed(2)} THB ไม่ใช่อัตรา ณ วันนำเข้า` : 'ไม่พบอัตราแลกเปลี่ยนอ้างอิง'}) ===
 
 1. เงินปันผล (Dividends):
 ${hasDivUSD
-  ? `   - หุ้นต่างประเทศ (USD): ยอดรวม $${divGrossUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} / ภาษีหัก W-8BEN 15% = -$${divTaxUSD.toFixed(2)} / สุทธิ $${divNetUSD.toFixed(2)}
-   - ภาษีที่หักไปแล้วในสหรัฐฯ สามารถนำมาเป็นเครดิตภาษีไทยได้`
+  ? `   - หุ้นต่างประเทศ (USD): ยอดรวม $${divGrossUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} / ภาษีหักตามบันทึก = -$${divTaxUSD.toFixed(2)} / สุทธิ $${divNetUSD.toFixed(2)}`
   : '   - ไม่มีเงินปันผลจากหุ้นต่างประเทศ'}
    - เทียบเท่าเงินบาทรวม: ฿${divGrossTHB.toLocaleString('en-US', { minimumFractionDigits: 2 })} (หัก ฿${divTaxTHB.toFixed(2)}) = สุทธิ ฿${divNetTHB.toFixed(2)}
 
@@ -122,16 +128,13 @@ ${hasDivUSD
 ${hasForeignGain
   ? `   - กำไร FIFO: $${foreignGainUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD (≈ ฿${foreignGainTHB.toFixed(2)} THB)
    - ยอดขายรวม: $${foreignProceedsUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD / ต้นทุน FIFO: $${foreignCostUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
-   - ภาษีสหรัฐฯ: ไม่ต้องเสีย (นักลงทุนต่างชาติไม่มีภาระ Capital Gains ในสหรัฐ)
-   - ภาษีไทย: ${foreignGainTaxableInThailand
-     ? `⚠️ มีการนำเงินได้จากต่างประเทศกลับเข้าไทยในปีภาษี ${year} (${isNewRuleYear ? 'ภายใต้เกณฑ์ ป.161/2566 สำหรับเงินได้ตั้งแต่ปี 2567+' : 'นำกลับในปีเดียวกับที่เกิดเงินได้'}) — ต้องนำกำไรส่วนที่นำเข้ามาคำนวณภาษีเงินได้บุคคลธรรมดา อัตราก้าวหน้าสูงสุด 35%`
-     : `✅ ยังไม่มีภาระภาษีไทยในปี ${year} (ยังไม่ได้นำเงินได้จากต่างประเทศกลับเข้าไทย${isNewRuleYear ? ' — ตาม ป.161/2566 เงินได้ตั้งแต่ปี 2567+ จะต้องเสียภาษีเมื่อนำเงินได้เข้าไทยในปีที่นำเข้า' : ''})`}`
-  : '   - ไม่มีรายการขายหุ้นต่างประเทศในปีนี้'}
+   - สถานะภาษีไทยเบื้องต้น: ${assessment.label} — ${assessment.detail}`
+  : '   - ไม่พบกำไรหรือขาดทุนสุทธิในยอดสรุปที่ส่งมา'}
 
 === กรุณาวิเคราะห์และแนะนำ 3 ประเด็นต่อไปนี้ ===
-1. 📋 **สรุปภาระภาษีจริงของปีนี้**: หมวดไหนที่ "ต้องเสีย" หมวดไหนที่ "ไม่ต้องเสีย" และเพราะเหตุใด
-2. 💵 **คำแนะนำเรื่องเงินปันผล**: วิธีเลือกระหว่าง Final Tax 10% กับการขอเครดิตภาษีจาก W-8BEN 15%
-3. 💡 **กลยุทธ์ภาษีที่แนะนำ**: วิธีบริหารจัดการเงินลงทุนเพื่อประหยัดภาษีสูงสุดอย่างถูกต้องตามกฎหมาย
+1. **ภาพรวมภาษี**: แยกยอดจากระบบ เงื่อนไขทางภาษี และข้อมูลที่ยังขาด
+2. **เงินปันผล**: อธิบายภาษีที่หักตามบันทึกและเอกสารที่ใช้ตรวจสิทธิเครดิตภาษี
+3. **เตรียมก่อนยื่น**: แยกปีที่เกิดเงินได้ ปีที่นำเข้า หลักฐานอัตราแลกเปลี่ยน และเอกสารที่ต้องตรวจ
 
 === รูปแบบคำตอบ (สำคัญ) ===
 - ตอบเป็น Markdown ภาษาไทยที่อ่านง่ายเท่านั้น และเริ่มด้วยหัวข้อ ## ภาพรวมภาษีปี ${year}
@@ -146,7 +149,7 @@ ${hasForeignGain
       prompt,
       logType: 'tax_explain',
       systemInstruction:
-        'คุณเป็นที่ปรึกษาด้านภาษีการลงทุนต่างประเทศสำหรับนักลงทุนไทย ให้คำอธิบายที่ถูกต้องตามกฎหมายภาษีไทยล่าสุด (ป.161/2566) ใช้สกุลเงินที่ถูกต้องเสมอ: $ สำหรับรายได้ USD และ ฿ สำหรับ THB อย่าบอกว่ากำไรหุ้น US ต้องเสียภาษีไทยหากยังไม่นำเงินกลับและเป็นการลงทุนก่อนปี 2567',
+        'คุณช่วยจัดเตรียมข้อมูลภาษีการลงทุน ตอบภาษาไทย อธิบายตามบริบทและแหล่งอ้างอิงที่แนบ ใช้ $ สำหรับ USD และ ฿ สำหรับ THB ระบุข้อมูลที่ขาด และห้ามเดาภาระภาษีเฉพาะบุคคล',
     })
 
     const disclaimer =
@@ -158,8 +161,8 @@ ${hasForeignGain
       modelUsed,
       updatedAt: new Date().toISOString(),
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error('[tax-report explain POST]', error)
-    return NextResponse.json({ error: error.message || 'Failed to explain tax report' }, { status: 500 })
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to explain tax report' }, { status: 500 })
   }
 }

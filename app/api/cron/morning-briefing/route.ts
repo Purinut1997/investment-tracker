@@ -3,8 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
-import { coinGeckoProvider } from '@/lib/market-data/coingecko'
-import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { formatMarketObservation, getObservationTime } from '@/lib/ai/advisor-evidence'
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { runTacticalAnalysis } from '@/app/api/tactical-advisor/route'
@@ -42,71 +41,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 2. Fetch benchmarks and real human sentiment once for all users to save bandwidth
-    const [spxRes, ndxRes, vixRes, setRes, btcRes, goldRes, fxRes, fearGreedRes] = await Promise.allSettled([
-      yahooFinanceProvider.getQuote('^GSPC'),
-      yahooFinanceProvider.getQuote('^IXIC'),
-      yahooFinanceProvider.getQuote('^VIX'),
-      yahooFinanceProvider.getQuote('^SET.BK'),
-      coinGeckoProvider.getQuote('BTC'),
-      yahooFinanceProvider.getQuote('GC=F'),
-      getExchangeRate('USD', 'THB'),
-      fetchRealHumanSentiment(),
+    const now = Date.now()
+    const indicators = ['S&P 500', 'NASDAQ', 'VIX', 'SET INDEX', 'XAU']
+    const [observations, sentiment] = await Promise.all([
+      Promise.all(indicators.map(async (symbol) => {
+        const quote = await yahooFinanceProvider.getQuote(symbol).catch(() => null)
+        return formatMarketObservation(symbol, quote ? { ...quote, timestamp: quote.observationTimestamp ?? 0 } : null, now)
+      })),
+      fetchRealHumanSentiment().catch(() => null),
     ])
-
-    const fearGreed =
-      fearGreedRes.status === 'fulfilled' && fearGreedRes.value
-        ? fearGreedRes.value
-        : {
-            score: 35,
-            rating: 'fear' as const,
-            ratingLabelTh: 'ตลาดกังวล / ระมัดระวัง (Fear)',
-            previousClose: 34,
-            previous1Week: 31,
-            previous1Month: 32,
-            timestamp: new Date().toISOString(),
-            source: 'CALCULATED_FALLBACK' as const,
-          }
-
-    const benchmarks: Array<{ symbol: string; name: string; price: number; changePercent: number }> = []
-
-    if (spxRes.status === 'fulfilled' && spxRes.value) {
-      benchmarks.push({ symbol: 'S&P 500', name: 'ดัชนี S&P 500', price: spxRes.value.price, changePercent: spxRes.value.changePercent })
-    }
-    if (ndxRes.status === 'fulfilled' && ndxRes.value) {
-      benchmarks.push({ symbol: 'NASDAQ', name: 'ดัชนีแนสแด็ก', price: ndxRes.value.price, changePercent: ndxRes.value.changePercent })
-    }
-    const vixPrice = vixRes.status === 'fulfilled' && vixRes.value ? vixRes.value.price : 17.5
-    if (vixRes.status === 'fulfilled' && vixRes.value) {
-      benchmarks.push({ symbol: 'VIX', name: 'ดัชนีความกลัวตลาด', price: vixRes.value.price, changePercent: vixRes.value.changePercent })
-    }
-    if (setRes.status === 'fulfilled' && setRes.value) {
-      benchmarks.push({ symbol: 'SET Index', name: 'ตลาดหุ้นไทย', price: setRes.value.price, changePercent: setRes.value.changePercent })
-    }
-    if (btcRes.status === 'fulfilled' && btcRes.value) {
-      benchmarks.push({ symbol: 'BTC', name: 'Bitcoin', price: btcRes.value.price, changePercent: btcRes.value.changePercent })
-    }
-    if (goldRes.status === 'fulfilled' && goldRes.value) {
-      benchmarks.push({ symbol: 'GOLD (XAU)', name: 'ทองคำสปอต', price: goldRes.value.price, changePercent: goldRes.value.changePercent })
-    }
-
-    const regimeScore = fearGreed.score
-    let regimeTitle = 'ตลาดทรงตัวในกรอบ (Consolidation)'
-    if (regimeScore <= 25) {
-      regimeTitle = 'ตลาดกลัวจัด / ระมัดระวังสูงสุด (Extreme Fear)'
-    } else if (regimeScore <= 45) {
-      regimeTitle = 'ตลาดเข้าสู่โหมดระมัดระวัง (Human Fear)'
-    } else if (regimeScore <= 55) {
-      regimeTitle = 'ตลาดสมดุล / ลังเลรอดูทิศทาง (Human Neutral)'
-    } else if (regimeScore <= 75) {
-      regimeTitle = 'เปิดรับความเสี่ยงเชิงบวก (Human Greed)'
-    } else {
-      regimeTitle = 'ตลาดร้อนแรงเกินพิกัด (Extreme Greed / Overbought)'
-    }
-
-    const benchmarksSummary = benchmarks
-      .map((b) => `${b.symbol}: ${b.price?.toLocaleString()} (${b.changePercent >= 0 ? '+' : ''}${b.changePercent?.toFixed(2)}%)`)
-      .join(', ')
+    const fearGreedSummary = sentiment?.source === 'CNN_LIVE' && getObservationTime(Date.parse(sentiment.timestamp), now)
+      && Number.isFinite(sentiment.score) ? `${sentiment.score}/100 (CNN ณ ${sentiment.timestamp})` : 'ยังยืนยันข้อมูล CNN ไม่ได้'
+    const benchmarksSummary = observations.join('\n')
 
     // 3. Find active users with transactions
     const distinctUsers = await prisma.transaction.findMany({
@@ -128,7 +74,7 @@ export async function GET(req: NextRequest) {
           where: {
             userId,
             logType: 'advisor',
-            prompt: { contains: 'AI Daily Investment Strategist' },
+            prompt: { contains: '[daily-brief:v2]' },
             createdAt: { gte: startOfTodayBangkok },
           },
         })
@@ -144,11 +90,13 @@ export async function GET(req: NextRequest) {
             for (const h of topHoldings) {
               try {
                 const marketHint = h.market || (h.currency === 'THB' ? 'TH' : 'US')
-                const signal = await fetchSingleTickerTechnicalSignal(h.ticker, marketHint)
+                const signal = await fetchSingleTickerTechnicalSignal(h.ticker, marketHint, false, true)
+                const observedAt = getObservationTime(signal.observationTimestamp, Date.now())
+                if (!observedAt || !(signal.currentPrice > 0)) continue
                 const currSym = h.currency === 'THB' ? '฿' : '$'
                 const s1Str = signal?.supportS1 ? `${currSym}${signal.supportS1}` : 'N/A'
                 triggerLines.push(
-                  `- ${h.ticker} (${h.assetName}): ราคา ${currSym}${h.currentPrice} | สัดส่วน ${h.allocationPercent?.toFixed(1)}% | RSI(14): ${signal?.rsi14 ?? 'N/A'} | S1: ${s1Str} | สัญญาณ: ${signal?.badgeText || 'ถือตามรอบปกติ'}`
+                  `- ${h.ticker} (${h.assetName}): ราคา ${currSym}${signal.currentPrice} ณ ${observedAt} | สัดส่วน ${h.allocationPercent.toFixed(1)}% | RSI(14): ${signal.rsi14 ?? 'ไม่มีข้อมูล'} | S1: ${s1Str}`
                 )
               } catch {}
             }
@@ -156,11 +104,11 @@ export async function GET(req: NextRequest) {
             if (triggerLines.length > 0) {
               const prompt = `
 [AI Daily Investment Strategist — สรุปเช้าและแผนปฏิบัติการรายวัน]
+[daily-brief:v2]
 คุณคือ Senior Portfolio Strategist สรุปทิศทางตลาดและแผนปฏิบัติการลงทุนรายวัน วันที่ ${todayStr}:
 
 [ข้อมูลสภาวะตลาดวันนี้]
-- สถานะตลาด (Market Regime): ${regimeTitle}
-- ดัชนีอารมณ์มนุษย์ในตลาดจริง (CNN Fear & Greed Index): ${fearGreed.score}/100 (${fearGreed.ratingLabelTh})
+- ดัชนีอารมณ์ตลาด: ${fearGreedSummary}
 - ดัชนีหลักชี้นำ: ${benchmarksSummary}
 
 [ภาพรวมพอร์ตโฟลิโอ]
@@ -170,7 +118,7 @@ export async function GET(req: NextRequest) {
 ${triggerLines.join('\n')}
 
 [กฎเหล็กการประเมินความเสี่ยงตามความเป็นจริง]:
-- หากดัชนีอารมณ์มนุษย์ (CNN Fear & Greed Index) หรือสภาวะตลาดอยู่ในระดับกังวล/กลัว (Fear/Caution ต่ำกว่า 45): ห้ามมองบวกเกินจริงเด็ดขาด ให้ยึดแนวทาง 'ไม่ Panic Sell ตามฝูงชน และไม่ไล่ราคาตอนเด้งเขียว (Dead-Cat Bounce)' ควรถือเงินสดสำรองและรอรับเฉพาะแนวรับสำคัญ S1 ที่ได้เปรียบเท่านั้น
+- งดตั้งราคา สัดส่วนเงินสด และจุดซื้อขายเพิ่มเมื่อข้อมูลไม่พอ ระบุช่วงเวลาของตลาดและข้อจำกัดให้ชัด
 
 [กฎเหล็กและข้อห้ามเด็ดขาดเพื่อความกระชับสูงสุด]:
 1. ห้ามใส่คำทักทายเด็ดขาด (ห้ามเขียน "เรียน ท่าน...", "สวัสดีครับ", "ยินดีต้อนรับ") ให้เริ่มต้นที่เนื้อหาส่วนที่ 1 ทันที
@@ -208,7 +156,7 @@ ${triggerLines.join('\n')}
             where: {
               userId,
               logType: 'advisor',
-              prompt: { contains: '[AI Tactical Regime & Portfolio Advisor]' },
+              prompt: { contains: '[tactical-evidence:v2]' },
               createdAt: { gte: startOfTodayBangkok },
             },
           })

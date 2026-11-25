@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
+import { getObservationTime, formatMarketObservation } from '@/lib/ai/advisor-evidence'
+import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 
 export const maxDuration = 45
 
@@ -25,7 +27,7 @@ export async function POST(req: NextRequest) {
       forceRefresh = false,
     } = body
 
-    if (!portfolioTriggers || portfolioTriggers.length === 0) {
+    if (!Array.isArray(portfolioTriggers) || portfolioTriggers.length === 0 || typeof totalPortfolioValue !== 'number' || typeof totalCash !== 'number') {
       return NextResponse.json({
         advice: 'ยังไม่มีข้อมูลสินทรัพย์ในพอร์ตที่เพียงพอสำหรับการจัดทำแผนประจำวัน กรุณาบันทึกรายการลงทุนเพื่อเริ่มการวิเคราะห์',
       })
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
         where: {
           userId,
           logType: 'advisor',
-          prompt: { contains: 'AI Daily Investment Strategist' },
+          prompt: { contains: '[daily-brief:v2]' },
         },
         orderBy: { createdAt: 'desc' },
       })
@@ -64,25 +66,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const regimeTitle = marketOverview?.regime?.title || 'Consolidation'
     const fearGreed = marketOverview?.regime?.fearGreed
-    const fearGreedSummary = fearGreed
-      ? `${fearGreed.score}/100 (${fearGreed.ratingLabelTh} — CNN Fear & Greed Index ดัชนีอารมณ์มนุษย์ในตลาดจริง)`
-      : 'N/A'
-
-    const benchmarksSummary = marketOverview?.benchmarks
-      ? marketOverview.benchmarks
-          .map((b: any) => `${b.symbol}: ${b.price?.toLocaleString()} (${b.changePercent >= 0 ? '+' : ''}${b.changePercent?.toFixed(2)}%)`)
-          .join(', ')
-      : 'S&P 500, NASDAQ, SET Index'
-
-    const vixBenchmark = marketOverview?.benchmarks?.find((b: any) => b.symbol === 'VIX')
-    const vixSummary = vixBenchmark
-      ? `${vixBenchmark.price} pts (${vixBenchmark.price < 15 ? 'สงบ/Low Volatility' : vixBenchmark.price < 20 ? 'ปกติ/Balanced' : vixBenchmark.price < 28 ? 'กังวลสูง/Elevated Fear' : 'ตื่นตระหนก/Extreme Fear — จุดช้อนซื้อ'})`
-      : 'N/A'
+    const now = Date.now()
+    const fearGreedSummary = fearGreed?.source === 'CNN_LIVE' && getObservationTime(Date.parse(fearGreed.timestamp), now)
+      && Number.isFinite(fearGreed.score) ? `${fearGreed.score}/100 (CNN ณ ${fearGreed.timestamp})` : 'ไม่มีข้อมูล CNN ที่ยืนยันได้'
+    const marketSymbols = ['S&P 500', 'NASDAQ', 'VIX']
+    const benchmarks = await Promise.all(marketSymbols.map(async (symbol) => {
+      const quote = await yahooFinanceProvider.getQuote(symbol).catch(() => null)
+      return formatMarketObservation(symbol, quote ? { ...quote, timestamp: quote.observationTimestamp ?? 0 } : null, now)
+    }))
 
     // 2. Prioritize triggers intelligently (High priority > Extreme RSI > Near S1 > High weight)
-    const sortedTriggers = [...(portfolioTriggers as any[])].sort((a, b) => {
+    const sortedTriggers = portfolioTriggers.filter((item) =>
+      item && typeof item.ticker === 'string' && typeof item.allocationPercent === 'number'
+      && Number.isFinite(item.currentPrice) && item.currentPrice > 0
+      && getObservationTime(Date.parse(item.observedAt || ''), now)
+    ).slice(0, 50).sort((a, b) => {
       const getScore = (item: any) => {
         let score = 0
         if (item.actionPriority === 'HIGH') score += 100
@@ -121,24 +120,23 @@ export async function POST(req: NextRequest) {
       .join('\n')
 
     const prompt = `
+[daily-brief:v2]
 [AI Daily Investment Strategist — สรุปเช้าและแผนปฏิบัติการรายวัน]
 คุณคือ Senior Portfolio Strategist สรุปทิศทางตลาดและแผนปฏิบัติการลงทุนรายวัน วันที่ ${planDate || 'วันนี้'}:
 
 [ข้อมูลสภาวะตลาดวันนี้]
-- สถานะตลาด (Market Regime): ${regimeTitle}
-- ดัชนีอารมณ์มนุษย์ในตลาดจริง (CNN Fear & Greed Index): ${fearGreedSummary}
-- ดัชนีหลักชี้นำ: ${benchmarksSummary}
-- ดัชนีความกังวลและความกลัว (VIX Volatility Index): ${vixSummary}
+- ดัชนีอารมณ์ตลาด: ${fearGreedSummary}
+${benchmarks.join('\n')}
 
 [ภาพรวมพอร์ตโฟลิโอ]
 - มูลค่าพอร์ตรวม: ${Number(totalPortfolioValue).toLocaleString()} ${baseCurrency}
 - สภาพคล่องเงินสดสำรอง (Dry Powder): ${Number(totalCash).toLocaleString()} ${baseCurrency} (${totalPortfolioValue > 0 ? ((totalCash / totalPortfolioValue) * 100).toFixed(1) : 0}% ของพอร์ต)
 
 [สินทรัพย์ในพอร์ตที่ส่งสัญญาณเทคนิคัลวันนี้ (Holdings with Technical Signals)]
-${triggerSummary}
+${triggerSummary || 'ไม่มีกราฟหุ้นที่ยืนยันได้ ให้จำกัดคำตอบไว้ที่ข้อมูลตลาดและสิ่งที่ต้องตรวจต่อ'}
 
 [กฎเหล็กการประเมินความเสี่ยงตามความเป็นจริง]:
-- หากดัชนีอารมณ์มนุษย์ (CNN Fear & Greed Index) หรือสภาวะตลาดอยู่ในระดับกังวล/กลัว (Fear/Caution ต่ำกว่า 45) หรือ VIX สูง: ห้ามมองบวกเกินจริงเด็ดขาด ให้ยึดแนวทาง 'ไม่ Panic Sell ตามฝูงชน และไม่ไล่ราคาตอนเด้งเขียว (Dead-Cat Bounce)' ควรถือเงินสดสำรอง (Dry Powder) 15-20% และตั้ง Limit Order รอรับเฉพาะแนวรับสำคัญ S1 ที่ได้เปรียบเท่านั้น
+- ระบุเฉพาะราคาและสัญญาณที่มีในข้อมูล ถ้าไม่มีให้เสนอสิ่งที่ต้องตรวจต่อ งดกำหนดเปอร์เซ็นต์เงินสดหรือราคาเข้าซื้อแทนผู้ใช้โดยไม่มีเป้าหมายที่แนบมา
 
 [กฎเหล็กและข้อห้ามเด็ดขาดเพื่อความกระชับสูงสุด]:
 1. ห้ามใส่คำทักทายเด็ดขาด (ห้ามเขียน "เรียน ท่าน...", "สวัสดีครับ", "ยินดีต้อนรับ") ให้เริ่มต้นที่เนื้อหาส่วนที่ 1 ทันที

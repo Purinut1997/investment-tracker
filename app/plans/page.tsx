@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import useSWR, { mutate } from 'swr'
+import { planAdviceContextKey } from '@/lib/ai/model-contracts'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
@@ -266,7 +267,13 @@ export default function PlansPage() {
   } | null>(null)
 
   // AI Advisor State
-  const { data: aiAdvisorData, mutate: mutateAiAdvisor } = useSWR('/api/ai-advisor/analyze', {
+  const adviceInput = {
+    presetId: activePreset?.id, presetName: activePreset?.presetName,
+    targetAllocation: activePreset?.targetAllocation, subAllocations: activePreset?.subTargets,
+    monthlyContribution: cashInflow, tolerancePercent: toleranceBand,
+  }
+  const adviceKey = `/api/ai-advisor/analyze?scenario=${planAdviceContextKey(adviceInput)}`
+  const { data: aiAdvisorData } = useSWR(adviceKey, {
     revalidateOnFocus: false,
   })
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false)
@@ -303,16 +310,11 @@ export default function PlansPage() {
       const res = await fetch('/api/ai-advisor/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          presetName: activePreset?.presetName,
-          targetAllocation: activePreset?.targetAllocation,
-          monthlyContribution: cashInflow || Number(activePreset?.monthlyContribution) || 5000,
-          subAllocations: activePreset?.subTargets || undefined,
-        }),
+        body: JSON.stringify(adviceInput),
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || 'วิเคราะห์ไม่สำเร็จ')
-      await mutateAiAdvisor(result, false)
+      await mutate(adviceKey, result, false)
     } catch (err: any) {
       setAiError(err.message || 'เกิดข้อผิดพลาดในการวิเคราะห์')
     } finally {

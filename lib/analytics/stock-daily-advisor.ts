@@ -711,8 +711,8 @@ export function parseDailyStockAiReport(
       return null
     }
 
-    const rawVerdict = String(parsed.verdict || '').toUpperCase().trim() as DailyVerdict
-    const verdict: DailyVerdict = VALID_VERDICTS.has(rawVerdict) ? rawVerdict : 'HOLD'
+    const verdict = String(parsed.verdict || '').toUpperCase().trim() as DailyVerdict
+    if (!VALID_VERDICTS.has(verdict)) return null
 
     const rawConf = String(parsed.confidence || 'MEDIUM').toUpperCase().trim()
     const confidence: DailyStockAiReport['confidence'] =
@@ -734,10 +734,7 @@ export function parseDailyStockAiReport(
 
     return {
       verdict,
-      verdictLabelTh:
-        typeof parsed.verdictLabelTh === 'string' && parsed.verdictLabelTh.trim().length > 0
-          ? parsed.verdictLabelTh.trim()
-          : getVerdictLabelTh(verdict),
+      verdictLabelTh: getVerdictLabelTh(verdict),
       confidence,
       executiveSummary,
       historicalContext: asStr(parsed.historicalContext),

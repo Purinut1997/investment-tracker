@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import useSWR, { mutate } from 'swr'
+import type { normalizeExtraction } from '@/lib/ai/transaction-extraction'
 import {
   X,
   Sparkles,
@@ -67,6 +68,7 @@ interface ExtractedTxn {
   accountName: string
   note?: string
   confidence?: number
+  sourceImageIndex?: number | null
 }
 
 interface ExtractedCash {
@@ -79,6 +81,36 @@ interface ExtractedCash {
   interestDays?: number | null
   balanceDate?: string
   selected: boolean
+}
+
+function toReviewRows(data: ReturnType<typeof normalizeExtraction>) {
+  const txns: ExtractedTxn[] = data.transactions.map((txn) => ({
+    ...txn,
+    selected: false,
+    ticker: txn.ticker ?? '',
+    assetName: txn.assetName ?? '',
+    market: txn.market ?? (txn.currency === 'THB' ? 'TH' : 'US'),
+    assetType: txn.assetType ?? 'stock',
+    quantity: txn.quantity ?? 0,
+    pricePerUnit: txn.pricePerUnit ?? 0,
+    fee: txn.fee ?? 0,
+    taxWithheld: txn.taxWithheld ?? 0,
+    totalAmount: txn.totalAmount ?? 0,
+    currency: txn.currency ?? '',
+    txnDate: txn.txnDate ?? '',
+    matchedAccountId: txn.matchedAccountId ?? '',
+    accountName: txn.accountName ?? '',
+  }))
+  const cash: ExtractedCash[] = data.cashBalances.map((balance) => ({
+    ...balance,
+    selected: false,
+    matchedAccountId: balance.matchedAccountId ?? '',
+    accountName: balance.accountName ?? '',
+    accountType: ACCOUNT_TYPES.find((type) => type.value === balance.accountType)?.value ?? 'bank',
+    balanceDate: balance.balanceDate ?? undefined,
+    accruedInterest: balance.accruedInterest ?? 0,
+  }))
+  return { txns, cash }
 }
 
 interface QuickAddModalProps {
@@ -610,58 +642,7 @@ export function QuickAddModal({
       clearTimeout(timeoutId)
       const json = await parseResponseJson(res, 'การวิเคราะห์ภาพถ่ายล้มเหลว')
 
-      const defaultAcc = accounts[0]
-      const defaultAccName = defaultAcc?.accountName || 'บัญชีหลัก'
-
-      const txns: ExtractedTxn[] = (json.data?.transactions || []).map((t: any, i: number) => {
-        const matched = accounts.find(
-          (a) =>
-            a.id === t.matchedAccountId ||
-            a.accountName.toLowerCase() === (t.accountName || '').toLowerCase()
-        )
-        const accountId = matched?.id || defaultAcc?.id || ''
-        const accName = matched?.accountName || t.accountName || defaultAccName
-
-        return {
-          id: t.id || `txn_${i + 1}`,
-          selected: true,
-          txnType: t.txnType || 'BUY',
-          ticker: t.ticker || 'UNKNOWN',
-          assetName: t.assetName || t.ticker || 'Asset',
-          market: t.market || 'US',
-          assetType: t.assetType || 'stock',
-          quantity: Number(t.quantity || 0),
-          pricePerUnit: Number(t.pricePerUnit || 0),
-          fee: Number(t.fee || 0),
-          taxWithheld: Number(t.taxWithheld || 0),
-          totalAmount: Number(t.totalAmount || 0),
-          currency: t.currency || matched?.currency || (t.market === 'TH' ? 'THB' : 'USD'),
-          txnDate: t.txnDate || new Date().toISOString(),
-          matchedAccountId: accountId,
-          accountName: accName,
-          note: t.note || '',
-          confidence: t.confidence || 0.9,
-        }
-      })
-
-      const cash: ExtractedCash[] = (json.data?.cashBalances || []).map((c: any) => {
-        const matched = accounts.find(
-          (a) =>
-            a.id === c.matchedAccountId ||
-            a.accountName.toLowerCase() === (c.accountName || '').toLowerCase()
-        )
-        return {
-          matchedAccountId: matched?.id || defaultAcc?.id || '',
-          accountName: matched?.accountName || c.accountName || defaultAccName,
-          accountType: c.accountType || matched?.accountType || 'bank',
-          currency: c.currency || matched?.currency || 'THB',
-          cashAmount: Number(c.cashAmount || 0),
-          accruedInterest: Number(c.accruedInterest || 0),
-          interestDays: c.interestDays !== undefined ? c.interestDays : null,
-          balanceDate: c.balanceDate || new Date().toISOString(),
-          selected: true,
-        }
-      })
+      const { txns, cash } = toReviewRows(json.data)
 
       setExtractedTxns(txns)
       setExtractedCash(cash)
@@ -724,57 +705,44 @@ export function QuickAddModal({
       return
     }
 
-    // Validation and auto-correction for transactions
-    const sanitizedTxns = selectedTxns.map((t, i) => {
-      if (!t.ticker.trim()) {
-        throw new Error(`รายการที่ ${i + 1}: กรุณาระบุชื่อย่อสินทรัพย์ (Ticker)`)
-      }
-
-      let q = Number(t.quantity) || 0
-      let p = Number(t.pricePerUnit) || 0
-      const total = Number(t.totalAmount) || 0
-      const fee = Number(t.fee) || 0
-      const tax = Number(t.taxWithheld) || 0
-
-        if (q <= 0) {
-          if (total > 0) {
-            const grossAmount = t.txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
-            if (p > 0) {
-              const dec = t.assetType === 'gold' || t.assetType === 'crypto' ? 6 : 4
-              q = Number((grossAmount / p).toFixed(dec))
-            } else {
-              q = 1
-              p = grossAmount
-            }
-          } else {
-            throw new Error(`รายการ "${t.ticker}": กรุณาระบุจำนวนหรือมูลค่ารวม`)
-          }
-        } else if (p <= 0 && total > 0) {
-          const grossAmount = t.txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
-          p = Math.max(0, Number((grossAmount / q).toFixed(4)))
+    let sanitizedTxns: ExtractedTxn[]
+    try {
+      sanitizedTxns = selectedTxns.map((txn, index) => {
+        const label = txn.ticker || `รายการที่ ${index + 1}`
+        const account = accounts.find((item) => item.id === txn.matchedAccountId)
+        if (!account || account.currency !== txn.currency) throw new Error(`${label}: กรุณาเลือกบัญชีสกุลเงินเดียวกับรายการ`)
+        if (!txn.txnDate || !Number.isFinite(Date.parse(txn.txnDate))) throw new Error(`${label}: กรุณาระบุวันที่ทำรายการ`)
+        const cashFlow = txn.txnType === 'FEE' || txn.txnType === 'DEPOSIT' || txn.txnType === 'WITHDRAW'
+        if (!cashFlow && !txn.ticker.trim()) throw new Error(`${label}: กรุณาระบุ ticker`)
+        let quantity = txn.quantity
+        let pricePerUnit = txn.pricePerUnit
+        if (cashFlow) {
+          const amount = txn.totalAmount || (txn.txnType === 'FEE' ? txn.fee : txn.pricePerUnit)
+          if (amount <= 0) throw new Error(`${label}: กรุณาระบุยอดเงิน`)
+          return { ...txn, ticker: txn.ticker || 'CASH', quantity: 1, pricePerUnit: amount, totalAmount: amount }
         }
-
-      if (p < 0) {
-        throw new Error(`รายการ "${t.ticker}": ราคาต่อหน่วยต้องไม่ติดลบ`)
-      }
-
-      let finalTotal = total
-      if (t.txnType === 'SELL' && q > 0 && p > 0 && fee > 0) {
-        const gross = q * p
-        if (finalTotal > gross || finalTotal === gross + fee) {
-          finalTotal = calculateTxnTotal(t.txnType, q, p, fee, tax)
+        const gross = txn.txnType === 'BUY' ? txn.totalAmount - txn.fee : txn.totalAmount + txn.fee + txn.taxWithheld
+        if (txn.totalAmount > 0 && gross > 0) {
+          if (quantity > 0 && pricePerUnit <= 0) pricePerUnit = gross / quantity
+          else if (pricePerUnit > 0 && quantity <= 0) quantity = gross / pricePerUnit
         }
-      } else if (finalTotal <= 0) {
-        finalTotal = calculateTxnTotal(t.txnType, q, p, fee, tax)
+        if (quantity <= 0 || pricePerUnit <= 0) throw new Error(`${label}: กรุณากรอกจำนวนและราคาต่อหน่วยจากหลักฐาน`)
+        const totalAmount = Number(calculateTxnTotal(txn.txnType, quantity, pricePerUnit, txn.fee, txn.taxWithheld).toFixed(2))
+        if (txn.totalAmount > 0 && Math.abs(totalAmount - txn.totalAmount) > 0.02) {
+          throw new Error(`${label}: ยอดในเอกสารไม่ตรงกับจำนวน ราคา และค่าธรรมเนียม กรุณาตรวจรายการ`)
+        }
+        return { ...txn, quantity, pricePerUnit, totalAmount }
+      })
+      for (const cash of selectedCash) {
+        const account = accounts.find((item) => item.id === cash.matchedAccountId)
+        if (!account || account.currency !== cash.currency || !cash.balanceDate || !Number.isFinite(Date.parse(cash.balanceDate))) {
+          throw new Error('ยอดเงินสด: กรุณาเลือกบัญชีที่ตรงสกุลเงินและระบุวันที่ยอดคงเหลือ')
+        }
       }
-
-      return {
-        ...t,
-        quantity: q,
-        pricePerUnit: p,
-        totalAmount: Number(finalTotal.toFixed(2)),
-      }
-    })
+    } catch (error) {
+      setError(getErrorMessage(error, 'กรุณาตรวจข้อมูลที่ต้องการบันทึก'))
+      return
+    }
 
     setSubmitting(true)
     setError('')
@@ -792,13 +760,12 @@ export function QuickAddModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transactions: sanitizedTxns.map((t) => {
-            const rawDate = t.txnDate || new Date().toISOString()
-            const dateObj = new Date(rawDate)
-            const isoDate = isNaN(dateObj.getTime()) ? new Date().toISOString() : dateObj.toISOString()
+            const rawDate = t.txnDate.length === 10 ? `${t.txnDate}T00:00:00+07:00` : t.txnDate
+            const isoDate = new Date(rawDate).toISOString()
             return {
-              accountId: t.matchedAccountId || accounts[0]?.id || undefined,
-              accountName: t.accountName || accounts[0]?.accountName || 'Dime! USD',
-              currency: t.currency || (t.market === 'TH' ? 'THB' : 'USD'),
+              accountId: t.matchedAccountId,
+              accountName: t.accountName,
+              currency: t.currency,
               ticker: t.ticker.trim().toUpperCase(),
               assetName: t.assetName || t.ticker.trim().toUpperCase(),
               market: t.market || (t.currency === 'THB' ? 'TH' : 'US'),
@@ -945,8 +912,6 @@ export function QuickAddModal({
             updated.totalAmount = calculateTxnTotal(updated.txnType, q, p, f, t)
           } else if (updated.txnType === 'FEE') {
             updated.totalAmount = f
-          } else {
-            updated.totalAmount = 0
           }
         }
         return updated
@@ -1019,86 +984,14 @@ export function QuickAddModal({
 
       const json = await parseResponseJson(res, 'AI Parser ยังไม่พร้อมทำงาน กรุณาลองใหม่อีกครั้ง')
 
-      const rawTxns = Array.isArray(json.transactions)
-        ? json.transactions
-        : json.ticker
-        ? [json]
-        : []
-
-      const txns: ExtractedTxn[] = rawTxns.map((t: any, i: number) => {
-        let q = Number(t.quantity || 0)
-        let p = Number(t.pricePerUnit || 0)
-        const fee = Number(t.fee || 0)
-        const tax = Number(t.taxWithheld || 0)
-        const total = Number(t.totalAmount || 0)
-
-        const txnType = (t.txnType as TransactionType) || 'BUY'
-        // Auto-resolve zero quantity if total amount is present (e.g. Dime! dollar orders)
-        const grossAmount = txnType === 'SELL' ? total + fee + tax : Math.max(0, total - fee)
-        if (q <= 0 && total > 0) {
-          if (p > 0) {
-            const dec = t.assetType === 'gold' || t.assetType === 'crypto' ? 6 : 4
-            q = Number((grossAmount / p).toFixed(dec))
-          } else {
-            q = 1
-            p = grossAmount
-          }
-        } else if (p <= 0 && total > 0 && q > 0) {
-          p = Math.max(0, Number((grossAmount / q).toFixed(4)))
-        }
-
-        const goldNorm = normalizeGoldTicker(t.ticker || '', t.assetType, t.currency)
-
-        let calculatedTotal = total
-        if (txnType === 'SELL' && q > 0 && p > 0 && fee > 0) {
-          const gross = q * p
-          if (calculatedTotal > gross || calculatedTotal === gross + fee) {
-            calculatedTotal = calculateTxnTotal(txnType, q, p, fee, tax)
-          }
-        } else if (calculatedTotal <= 0) {
-          calculatedTotal = calculateTxnTotal(txnType, q, p, fee, tax)
-        }
-
-        return {
-          id: t.id || `txn_nlp_${Date.now()}_${i + 1}`,
-          selected: true,
-          txnType: (t.txnType as TransactionType) || 'BUY',
-          ticker: goldNorm ? goldNorm.ticker : (t.ticker || '').toUpperCase(),
-          assetName: goldNorm ? goldNorm.assetName : t.assetName || t.ticker || 'Asset',
-          market: goldNorm ? goldNorm.market : (t.market as Market) || (t.currency === 'THB' ? 'TH' : 'US'),
-          assetType: goldNorm ? 'gold' : (t.assetType as AssetType) || 'stock',
-          quantity: q,
-          pricePerUnit: p,
-          fee,
-          taxWithheld: tax,
-          totalAmount: calculatedTotal,
-          currency: goldNorm ? goldNorm.currency : t.currency || (t.market === 'TH' ? 'THB' : 'USD'),
-          txnDate: t.txnDate || new Date().toISOString(),
-          matchedAccountId: t.matchedAccountId || accounts[0]?.id || '',
-          accountName: t.accountName || accounts[0]?.accountName || 'Dime! USD',
-          note: t.note || '',
-          confidence: Number(t.confidence || 0.95),
-        }
-      })
-
-      const cash: ExtractedCash[] = (json.cashBalances || []).map((c: any) => ({
-        matchedAccountId: c.matchedAccountId || accounts[0]?.id || '',
-        accountName: c.accountName || 'Dime! Save',
-        accountType: (c.accountType as AccountTypeValue) || 'bank',
-        currency: c.currency || 'THB',
-        cashAmount: Number(c.cashAmount || 0),
-        accruedInterest: Number(c.accruedInterest || 0),
-        interestDays: c.interestDays ?? 104,
-        balanceDate: c.balanceDate || new Date().toISOString(),
-        selected: true,
-      }))
+      const { txns, cash } = toReviewRows(json)
 
       if (txns.length > 0 || cash.length > 0) {
         setExtractedTxns(txns)
         setExtractedCash(cash)
         setAiSummaryText(json.summary || `พบ ${txns.length} รายการธุรกรรมจากข้อความ`)
         setHasExtracted(true)
-        setSuccessMsg(`AI วิเคราะห์ข้อมูลสำเร็จ! พบ ${txns.length} รายการ ตรวจสอบและบันทึกทั้งหมดได้ทันที`)
+        setSuccessMsg(`พบ ${txns.length} รายการธุรกรรม ตรวจและเลือกรายการที่จะบันทึก`)
         setStatusModal(null)
       } else {
         setError('ไม่พบข้อมูลธุรกรรมในข้อความ กรุณาระบุรายละเอียด เช่น ชื่อย่อหุ้น จำนวน ราคา หรือคำสั่งซื้อขาย')
@@ -1450,6 +1343,7 @@ export function QuickAddModal({
 
                               {/* Transaction Type Selector */}
                               <select
+                                aria-label="บัญชีธุรกรรม"
                                 value={txn.txnType}
                                 onChange={(e) => handleUpdateTxn(idx, { txnType: e.target.value as TransactionType })}
                                 className={`text-xs font-bold px-2 py-1 rounded-lg border focus:outline-none cursor-pointer ${
@@ -1536,7 +1430,8 @@ export function QuickAddModal({
                                 }}
                                 className="text-[11px] bg-[#12151C] border border-white/10 rounded-lg px-2 py-1 text-zinc-300 focus:outline-none cursor-pointer max-w-[160px] truncate"
                               >
-                                {accounts.map((acc) => (
+                                <option value="">เลือกบัญชี</option>
+                                {accounts.filter((acc) => !txn.currency || acc.currency === txn.currency).map((acc) => (
                                   <option key={acc.id} value={acc.id}>
                                     {acc.accountName} ({acc.currency})
                                   </option>
@@ -1705,8 +1600,37 @@ export function QuickAddModal({
                               <Square className="w-3.5 h-3.5" />
                             )}
                           </button>
-                          <span className="font-semibold text-white">{cash.accountName}</span>
-                          <span className="text-[10px] text-zinc-400">({cash.currency})</span>
+                          <div className="flex flex-wrap gap-2">
+                            <select
+                              value={cash.matchedAccountId}
+                              aria-label="บัญชีสำหรับยอดเงินสด"
+                              className="rounded border border-white/10 bg-[#12151C] px-2 py-1 text-white"
+                              onChange={(event) => {
+                                const account = accounts.find((item) => item.id === event.target.value)
+                                setExtractedCash((prev) => prev.map((balance, i) => i === idx ? {
+                                  ...balance,
+                                  matchedAccountId: account?.id || '',
+                                  accountName: account?.accountName || balance.accountName,
+                                  accountType: account?.accountType || balance.accountType,
+                                } : balance))
+                              }}
+                            >
+                              <option value="">{cash.accountName || 'เลือกบัญชี'}</option>
+                              {accounts.filter((account) => account.currency === cash.currency).map((account) => (
+                                <option key={account.id} value={account.id}>{account.accountName}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="date"
+                              value={cash.balanceDate?.slice(0, 10) || ''}
+                              aria-label="วันที่ยอดเงินสด"
+                              className="rounded border border-white/10 bg-[#12151C] px-2 py-1 text-white"
+                              onChange={(event) => {
+                                const date = event.target.value
+                                setExtractedCash((prev) => prev.map((balance, i) => i === idx ? { ...balance, balanceDate: date } : balance))
+                              }}
+                            />
+                          </div>
                         </div>
                         <div className="text-right font-mono">
                           <span className="font-bold text-emerald-300">

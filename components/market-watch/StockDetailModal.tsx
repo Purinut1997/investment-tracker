@@ -601,9 +601,6 @@ export function StockDetailModal({
   const [showVolume, setShowVolume] = useState(false)
   const [isFullscreenChartOpen, setIsFullscreenChartOpen] = useState(false)
   const [isAiLoading, setIsAiLoading] = useState(false)
-  const [aiInsight, setAiInsight] = useState<string | null>(null)
-  const [structuredAi, setStructuredAi] = useState<StructuredAiData | null>(null)
-  const [aiModelUsed, setAiModelUsed] = useState<string | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
@@ -628,23 +625,23 @@ export function StockDetailModal({
     if (isOpen) {
       setRange('1m')
       setActiveTab('chart')
-      setAiInsight(null)
-      setStructuredAi(null)
-      setAiModelUsed(null)
       setAiError(null)
       setIsAiLoading(false)
     }
   }, [isOpen, symbol])
 
   // Fetch persistent latest AI Insight for this symbol from database
-  const { data: cachedAiData, mutate: mutateCachedAi } = useSWR(
-    isOpen && symbol ? `/api/market-watch/ai-insight?symbol=${encodeURIComponent(symbol)}` : null,
+  const insightKey = isOpen && symbol
+    ? `/api/market-watch/ai-insight?symbol=${encodeURIComponent(symbol)}&market=${encodeURIComponent(market)}`
+    : null
+  const { data: cachedAiData } = useSWR(
+    insightKey,
     { revalidateOnFocus: false }
   )
 
-  const activeInsight = aiInsight || cachedAiData?.insight
-  const activeStructured = structuredAi || cachedAiData?.structuredInsight
-  const activeModelUsed = aiModelUsed || cachedAiData?.modelUsed
+  const activeInsight = cachedAiData?.insight
+  const activeStructured = cachedAiData?.structuredInsight
+  const activeModelUsed = cachedAiData?.modelUsed
   const activeUpdatedAt = cachedAiData?.updatedAt
 
   // ESC key to close
@@ -832,24 +829,9 @@ export function StockDetailModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          symbol: data.symbol,
-          name: data.name || initialName,
-          currentPrice: data.currentPrice,
-          currency: data.currency,
-          changePercent: data.changePercent,
-          pe: data.pe,
-          pb: data.pb,
-          evEbitda: data.evEbitda,
-          dividendYield: data.dividendYield,
-          payoutRatio: data.payoutRatio,
-          fiftyTwoWeekHigh: data.fiftyTwoWeekHigh,
-          fiftyTwoWeekLow: data.fiftyTwoWeekLow,
-          marketCap: data.marketCap,
-          revenue: data.revenue,
-          revenueGrowth: data.revenueGrowth,
-          eps: data.eps,
-          freeCashflow: data.freeCashflow,
-          analystTarget: data.analystTarget,
+          symbol,
+          market,
+          forceRefresh: Boolean(activeInsight),
         }),
       })
 
@@ -858,10 +840,7 @@ export function StockDetailModal({
         throw new Error(resData.error || 'ไม่สามารถวิเคราะห์ด้วย AI ได้')
       }
 
-      setAiInsight(resData.insight)
-      setStructuredAi(resData.structuredInsight)
-      setAiModelUsed(resData.modelUsed)
-      await mutateCachedAi(resData, false)
+      if (insightKey) await mutate(insightKey, resData, false)
     } catch (err: any) {
       setAiError(err?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ AI')
     } finally {

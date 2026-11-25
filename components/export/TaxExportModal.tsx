@@ -18,6 +18,7 @@ import {
   HelpCircle,
 } from 'lucide-react'
 import type { TaxReportSummary } from '@/lib/analytics/tax-fifo'
+import { foreignIncomeAssessment } from '@/lib/analytics/foreign-income-tax'
 import { exportTaxReportToExcel } from '@/lib/export/tax-excel-export'
 
 export interface TaxExportModalProps {
@@ -71,8 +72,7 @@ export function TaxExportModal({
 
   if (!mounted || !isOpen) return null
 
-  const isNewRuleYear = selectedYear >= 2024
-  const isTaxableInThailand = isNewRuleYear || repatriated
+  const taxAssessment = foreignIncomeAssessment(repatriated)
 
   const handleDownload = async () => {
     setIsExporting(true)
@@ -210,12 +210,12 @@ export function TaxExportModal({
                   </span>
                   <span
                     className={`font-mono text-[10px] px-1.5 py-0.5 rounded border font-semibold ${
-                      isTaxableInThailand
-                        ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                        : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      taxAssessment.status === 'review_required'
+                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                        : 'bg-slate-800 text-slate-300 border-white/10'
                     }`}
                   >
-                    {isTaxableInThailand ? 'มีภาระภาษี' : 'ยกเว้น'}
+                    {taxAssessment.label}
                   </span>
                 </div>
                 <div className="text-lg font-bold text-white font-mono tabular-nums">

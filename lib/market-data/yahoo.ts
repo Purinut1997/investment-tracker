@@ -163,6 +163,7 @@ export class YahooFinanceProvider implements MarketDataProvider {
         fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh ? Number(meta.fiftyTwoWeekHigh) : undefined,
         fiftyTwoWeekLow: meta.fiftyTwoWeekLow ? Number(meta.fiftyTwoWeekLow) : undefined,
         timestamp: (meta.regularMarketTime ? meta.regularMarketTime * 1000 : now),
+        observationTimestamp: typeof meta.regularMarketTime === 'number' ? meta.regularMarketTime * 1000 : undefined,
         provider: this.name,
         currency,
       }

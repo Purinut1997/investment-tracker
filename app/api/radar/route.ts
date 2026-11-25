@@ -180,7 +180,12 @@ ${riskReport.sectorBreakdown.map((s) => `- ${s.sector}: ${s.percent.toFixed(1)}%
 
 [ข้อกังวลและจุดเสี่ยงที่ตรวจพบ (Risk Sentinel)]
 ${riskReport.keyWarnings.length > 0 ? riskReport.keyWarnings.map((w) => `- ${w}`).join('\n') : '- ไม่พบจุดเสี่ยงระดับรุนแรงในขณะนี้'}
-${riskReport.concentrationRisks.map((c) => `- สินทรัพย์ ${c.ticker} (${c.assetName}): มีสัดส่วน ${c.allocationPercent.toFixed(1)}% (หากร่วง -20% จะกระทบพอร์ต -฿${c.stressTests[1]?.lossAmountBase.toLocaleString()})`).join('\n')}
+${riskReport.concentrationRisks.map((c) => {
+  const scenario = c.stressTests.find(({ dropPercent }) => dropPercent === -20)
+  return `- ${c.ticker} (${c.assetName}): สัดส่วน ${c.allocationPercent.toFixed(1)}%${
+    scenario ? ` | สมมติราคาลด 20% ผลกระทบ ${scenario.lossAmountBase.toLocaleString()} ${baseCurrency}` : ''
+  }`
+}).join('\n')}
 
 [โอกาสการลงทุนและการหมุนเงินทุน (Opportunity & Sector Rotation Radar)]
 ${opportunityReport.opportunities.slice(0, 4).map((o) => `- [${o.opportunityType}] ${o.title}: ${o.metricLabel} ${o.metricValue} -> ${o.suggestedAction}`).join('\n')}
@@ -191,17 +196,17 @@ ${opportunityReport.opportunities.slice(0, 4).map((o) => `- [${o.opportunityType
    - กองทุนปันผลกระแสเงินสดมั่นคง (เช่น SCHD, VYM)
    - กลุ่มการแพทย์และสินค้าจำเป็น (เช่น Healthcare XLV/JNJ, Consumer Staples XLP/PG)
    - สินทรัพย์หลบภัย (เช่น ทองคำ GOLD, พันธบัตร TLT) หรือกองทุนดัชนีหลัก (VOO)
-3. กฎความชัดเจนเชิงปฏิบัติ (Actionable Numbers): ต้องระบุเป็นสัดส่วน % แนะนำ (เช่น ทยอยลด 8-10%, หมุนเข้ากลุ่มปันผล 5-8%) พร้อมระบุเหตุผลทางการเงินชัดเจน
+3. ใช้เฉพาะสัดส่วนที่ระบบคำนวณหรือผู้ใช้กำหนด ถ้าไม่มีเป้าหมายให้เสนอสิ่งที่จะประเมินก่อนเลือกวงเงินหรือสัดส่วนใหม่
 
 [โครงสร้างบทวิเคราะห์ที่ต้องตอบ (ใช้ Markdown สวยงาม อ่านง่าย)]:
 1. 🛡️ **การประเมินโครงสร้างและจุดอ่อนของพอร์ต (Structural & Sector Audit)**: 
-   - สรุปสถานะพอร์ต, ค่าความผันผวน (Beta), และสัดส่วนกลุ่มอุตสาหกรรมที่เอียงเกินไป
+   - สรุปสถานะพอร์ตและสัดส่วนกลุ่มอุตสาหกรรม ห้ามอ้าง Beta หรือ Correlation ที่ระบบไม่ได้คำนวณ
 2. 🎯 **แผนจัดสรรเงินทุนและการหมุนกลุ่มอุตสาหกรรม (Capital Allocation & Sector Rotation Blueprint)**:
    - **ขั้นตอนที่ 1 — Take Profit & De-risk**: ระบุหุ้นที่ควรลดน้ำหนัก, ขายสัดส่วนกี่ %, ดึงลงมาเหลือเท่าไหร่
    - **ขั้นตอนที่ 2 — Sector Rotation (หมุนเข้ากลุ่มใหม่)**: ระบุสินทรัพย์/กลุ่มปลายทางข้ามอุตสาหกรรม (เช่น SCHD, XLV, ทองคำ) ที่ควรแบ่งเงินไปสะสม เพื่อสร้างสมดุลพอร์ต
    - **ขั้นตอนที่ 3 — Tactical Stock Stance**: กำหนดจุดยืนต่อหุ้นตัวอื่นๆ ในพอร์ต (เช่น สั่งชะลอการซื้อเพิ่มในกลุ่มที่ล้นพอร์ตอยู่แล้ว)
 3. 💡 **แผนบริหารกระสุนเงินสด (Dry Powder Roadmap)**: 
-   - คำนวณยอดเงินสดหลัง De-risk, สัดส่วนที่ควรคงไว้สำรองฉุกเฉิน vs สัดส่วนที่พร้อมใช้สะสม
+   - แยกเงินสดปัจจุบันออกจากเงินสมมติหลังปรับพอร์ต และระบุข้อจำกัดเรื่องเป้าหมายหรือข้อมูลค่าใช้จ่ายที่ยังขาด
 `
 
     const systemInstruction =

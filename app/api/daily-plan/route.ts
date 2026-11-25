@@ -7,6 +7,7 @@ import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
 import { getExchangeRate, sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
+import { getObservationTime } from '@/lib/ai/advisor-evidence'
 
 export const maxDuration = 45
 
@@ -425,8 +426,10 @@ export async function GET(req: NextRequest) {
     const holdingsWithSignals = await Promise.all(triggerPromises)
 
     // Actionable items: near support, oversold, or deep dip
-    const actionItems = holdingsWithSignals.map(({ holding, signal }) => {
-      const currentPrice = holding.currentPrice > 0 ? holding.currentPrice : (signal?.currentPrice ?? 0)
+    const actionItems = holdingsWithSignals.map(({ holding, signal: candidate }) => {
+      const observedAt = getObservationTime(candidate?.observationTimestamp, Date.now())
+      const signal = observedAt && candidate && candidate.currentPrice > 0 ? candidate : null
+      const currentPrice = signal?.currentPrice ?? holding.currentPrice
       const s1 = signal?.supportS1 ?? null
       const r1 = signal?.resistanceR1 ?? null
       const sma50 = signal?.sma50 ?? null
@@ -444,7 +447,7 @@ export async function GET(req: NextRequest) {
       }
 
       let actionPriority: 'HIGH' | 'MEDIUM' | 'NORMAL' = 'NORMAL'
-      let actionTag = 'ถือตามรอบปกติ'
+      let actionTag = signal ? 'ติดตามตามแผน' : 'ยังยืนยันข้อมูลกราฟไม่ได้'
       let actionTagColor = 'text-slate-400 bg-slate-500/10 border-slate-500/20'
 
       if (signal?.signalType === 'STRONG_DIP_BUY') {
@@ -471,6 +474,7 @@ export async function GET(req: NextRequest) {
         market: holding.market,
         currency: holding.currency,
         currentPrice,
+        observedAt,
         unrealizedPnLPercent: holding.unrealizedPnLPercent,
         allocationPercent: holding.allocationPercent,
         currentValueBase: holding.currentValueBase,
@@ -487,7 +491,7 @@ export async function GET(req: NextRequest) {
         actionPriority,
         actionTag,
         actionTagColor,
-        technicalReason: signal?.technicalReason || 'ราคาทรงตัวในกรอบปกติ',
+        technicalReason: signal?.technicalReason || 'ไม่มีสัญญาณกราฟที่ยืนยันได้',
       }
     })
 
@@ -521,7 +525,7 @@ export async function GET(req: NextRequest) {
       where: {
         userId,
         logType: 'advisor',
-        prompt: { contains: 'AI Daily Investment Strategist' },
+        prompt: { contains: '[daily-brief:v2]' },
       },
       orderBy: { createdAt: 'desc' },
       select: { response: true, modelUsed: true, createdAt: true },
@@ -550,6 +554,7 @@ export async function GET(req: NextRequest) {
             previousClose: fearGreed.previousClose,
             previous1Week: fearGreed.previous1Week,
             source: fearGreed.source,
+            timestamp: fearGreed.timestamp,
           },
           playbook,
           drivers: {
