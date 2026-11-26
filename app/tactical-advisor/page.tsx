@@ -1046,7 +1046,7 @@ export default function TacticalAdvisorPage() {
               )}
             </div>
 
-            {/* Cross-link banner to Regime Opportunity & Hedge Scanner in /radar */}
+            {/* Cross-link banner to Dedicated Regime Opportunity & Hedge Scanner (/opportunities) */}
             <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/35 via-[#121622] to-indigo-950/35 border border-emerald-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-0.5">
                 <h4 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
@@ -1058,10 +1058,10 @@ export default function TacticalAdvisorPage() {
                 </p>
               </div>
               <Link
-                href="/radar"
+                href="/opportunities"
                 className="px-4 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/35 text-emerald-200 hover:text-white text-xs font-bold inline-flex items-center gap-1.5 shrink-0 transition-all self-start sm:self-auto"
               >
-                <span>เปิด Regime Alpha ใน Radar</span>
+                <span>เปิดหน้า AI หาโอกาสทำกำไร</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>

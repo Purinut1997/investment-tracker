@@ -256,20 +256,30 @@ export function RegimeOpportunityPanel({
       </div>
 
       {/* Candidate Cards */}
-      <div className="space-y-4">
-        {filteredCandidates.map((cand: RegimeOpportunityCandidate) => {
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {filteredCandidates.map((cand: RegimeOpportunityCandidate, idx: number) => {
           const aiPick = aiPickMap.get(cand.ticker.toUpperCase())
           const currSym = cand.currency === 'THB' ? '฿' : '$'
+          const isTopPick = report.candidates[0]?.ticker === cand.ticker
 
           return (
             <div
               key={cand.ticker}
-              className="p-4 sm:p-5 rounded-2xl bg-[#0D1119]/90 border border-white/[0.08] hover:border-emerald-500/35 transition-all space-y-3.5"
+              className={`p-4 sm:p-5 rounded-2xl bg-[#0D1119]/90 border transition-all space-y-3.5 ${
+                isTopPick
+                  ? 'border-emerald-500/45 shadow-lg shadow-emerald-950/30'
+                  : 'border-white/[0.08] hover:border-emerald-500/35'
+              }`}
             >
               {/* Top Row */}
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1.5 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
+                    {isTopPick && (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-black">
+                        #{idx + 1} ตัวเด่นวันนี้
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() =>

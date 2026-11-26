@@ -617,10 +617,10 @@ export function formatUnifiedContextPrompt(
 
 export function buildUnifiedDecisionRules(surface: AiSurface): string {
   const nextLinksBySurface: Record<AiSurface, string> = {
-    tactical: '/radar (เช็กกระจุกตัว/หมุนกลุ่ม), /plans (ปรับงบ DCA), /ai-advisor (ถามเจาะจงรายตัว)',
-    copilot: '/tactical-advisor (สภาวะ 4 เสา), /radar (ความเสี่ยงโครงสร้าง), /plans (จัดสรร DCA), /tax-report (เช็กภาษีก่อนขาย)',
-    radar: '/tactical-advisor (ตรวจจังหวะตลาด), /plans (ปรับสัดส่วน/ตะกร้า DCA), /tax-report (ประเมินภาษีก่อนขายลดน้ำหนัก)',
-    daily_brief: '/tactical-advisor (เจาะแผน 4 เสา), /radar (เช็กเตือนกระจุกตัว), /ai-advisor (ถามต่อยอดหรือจำลองงบ)',
+    tactical: '/opportunities (สแกนตัวทำกำไรสวนตลาด & กันกระแทก), /radar (เช็กกระจุกตัว/หมุนกลุ่ม), /plans (ปรับงบ DCA), /ai-advisor (ถามเจาะจงรายตัว)',
+    copilot: '/tactical-advisor (สภาวะ 4 เสา), /opportunities (สแกนตัวกันกระแทก & ทำกำไร), /radar (ความเสี่ยงโครงสร้าง), /plans (จัดสรร DCA), /tax-report (เช็กภาษีก่อนขาย)',
+    radar: '/opportunities (เปิดหน้าสแกนตัวทำกำไร & กันกระแทกเต็มจอ), /tactical-advisor (ตรวจจังหวะตลาด), /plans (ปรับสัดส่วน/ตะกร้า DCA), /tax-report (ประเมินภาษีก่อนขายลดน้ำหนัก)',
+    daily_brief: '/tactical-advisor (เจาะแผน 4 เสา), /opportunities (หาตัวทำกำไร/กันกระแทก), /radar (เช็กเตือนกระจุกตัว), /ai-advisor (ถามต่อยอดหรือจำลองงบ)',
     plans_analyze: '/tactical-advisor (เช็กจังหวะตลาดก่อนเคาะ), /radar (กันซื้อซ้ำกลุ่ม Overweight), /forecast (วัดระยะถึงเป้า)',
     bucket_chat: '/tactical-advisor (เทียบสภาวะตลาดรวม), /radar (เช็กน้ำหนักเกินเป้า), /tax-report (เช็กภาษีก่อนขายทำกำไร)',
     forecast: '/plans (ปรับงบ DCA/ตะกร้าเพื่อให้ถึงเป้า), /radar (ลด Drawdown เสี่ยง), /ai-advisor (จำลองสถานการณ์เพิ่มเงิน)',

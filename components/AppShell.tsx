@@ -33,6 +33,7 @@ import {
   Sunrise,
   Bot,
   LineChart,
+  Target,
 } from 'lucide-react'
 import { QuickAddModal } from './QuickAddModal'
 import { TickerTape } from './TickerTape'
@@ -65,7 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         label: 'กลยุทธ์ & บริหารความเสี่ยง',
         href: '/plans',
-        matchPrefixes: ['/plans', '/tactical-advisor', '/ai-advisor', '/radar', '/forecast'],
+        matchPrefixes: ['/plans', '/tactical-advisor', '/opportunities', '/ai-advisor', '/radar', '/forecast'],
         icon: PieChart,
         badge: 'AI',
       },
@@ -106,10 +107,11 @@ const HUB_SUB_TABS: Array<{
     ],
   },
   {
-    hubPrefixes: ['/plans', '/tactical-advisor', '/ai-advisor', '/radar', '/forecast'],
+    hubPrefixes: ['/plans', '/tactical-advisor', '/opportunities', '/ai-advisor', '/radar', '/forecast'],
     tabs: [
       { label: 'สัดส่วนเป้าหมาย & ปรับพอร์ต DCA', href: '/plans', icon: PieChart, badge: 'Dime! Style' },
       { label: 'AI ชี้เป้าตามสภาวะตลาด', href: '/tactical-advisor', icon: Sparkles, badge: 'ใหม่' },
+      { label: 'AI หาโอกาสทำกำไร & กันพอร์ต', href: '/opportunities', icon: Target, badge: 'Alpha' },
       { label: 'AI ที่ปรึกษาการลงทุน 360° (Chat)', href: '/ai-advisor', icon: Bot, badge: 'PRO' },
       { label: 'เรดาร์ความเสี่ยง & โอกาสช้อนซื้อ', href: '/radar', icon: Radar },
       { label: 'จำลองพอร์ต 10 ปี (Monte Carlo)', href: '/forecast', icon: TrendingUp },
