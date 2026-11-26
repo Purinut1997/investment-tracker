@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, type FormEvent } from 'react'
-import useSWR from 'swr'
+import Link from 'next/link'
+import useSWR, { useSWRConfig } from 'swr'
 import type { AdvisorPlanResult, AdvisorPolicyConfig } from '@/lib/ai/advisor-plan'
 
 const endpoint = '/api/advisor/plan'
@@ -16,6 +17,17 @@ type Options = {
   presets: { id: string; presetName: string; monthlyContribution: string; targetAllocation: unknown }[]
   assets: { id: string; ticker: string; market: string }[]
 }
+function presetTargets(preset: Options['presets'][number] | undefined, assets: Options['assets']): AdvisorPolicyConfig['targets'] {
+  const allocation = preset?.targetAllocation
+  if (!allocation || typeof allocation !== 'object' || Array.isArray(allocation)) return []
+  return Object.entries(allocation).flatMap(([symbol, weight]) => {
+    const matches = assets.filter(asset => asset.ticker.toUpperCase() === symbol.trim().toUpperCase())
+    if (matches.length !== 1 || typeof weight !== 'number' || weight <= 0 || weight > 100) return []
+    const [asset] = matches
+    return [{ assetId: asset.id, weight, lotSize: asset.market === 'TH' ? 100 : 1 }]
+  })
+}
+
 type Review = {
   sampleSize: number
   runs: { id: string; spent: number; baselineAllocated: number | null; durationMs: number }[]
@@ -37,8 +49,10 @@ const buttonClass = 'rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-
 const date = (value: string) => new Date(value).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })
 
 export function AdvisorPlanPanel({ edit = false, simulate = false }: { edit?: boolean; simulate?: boolean }) {
-  const { data, mutate } = useSWR<Options>(edit ? endpoint + '?options=1' : endpoint, request)
+  const { data, error: loadError, mutate } = useSWR<Options>(edit ? endpoint + '?options=1' : endpoint, request)
   const [draft, setDraft] = useState<AdvisorPolicyConfig | null>(null)
+  const { mutate: refresh } = useSWRConfig()
+  const [step, setStep] = useState(1)
   const [draftVersion, setDraftVersion] = useState(0)
   const [review, setReview] = useState<Review | null>(null)
   const [scenario, setScenario] = useState<Run | null>(null)
@@ -46,6 +60,7 @@ export function AdvisorPlanPanel({ edit = false, simulate = false }: { edit?: bo
   const [reserve, setReserve] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  if (loadError && !data) return <p role="alert" className="text-sm text-amber-200">โหลดแผนเติมเงินไม่สำเร็จ <button type="button" onClick={() => void mutate()} className="min-h-11 underline">ลองอีกครั้ง</button></p>
   if (!data?.enabled) return null
   const policy = data.policy
   const run = scenario ?? data.run
@@ -61,24 +76,45 @@ export function AdvisorPlanPanel({ edit = false, simulate = false }: { edit?: bo
 
   function editPolicy() {
     if (!data) return
+    setError('')
+    setStep(1)
     setDraftVersion(policy?.version ?? 0)
     setDraft(policy?.config ?? {
       accountId: data.accounts[0]?.id ?? '', presetId: data.presets[0]?.id ?? '',
       reserve: 0, monthlyBudget: Number(data.presets[0]?.monthlyContribution ?? 0),
-      maxPositionPercent: 20, horizonYears: 10, feePercent: 0, feePerOrder: 0, targets: [],
+      maxPositionPercent: 20, horizonYears: 10, feePercent: 0, feePerOrder: 0, targets: presetTargets(data.presets[0], data.assets),
     })
   }
 
   function submitPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!draft || busy) return
+    if (step < 3) {
+      if (step === 2 && (!draft.targets.length || new Set(draft.targets.map(t => t.assetId)).size !== draft.targets.length || draft.targets.reduce((sum, t) => sum + t.weight, 0) > 100 + 1e-8)) {
+        setError('เลือกสินทรัพย์อย่างน้อยหนึ่งตัวโดยไม่ซ้ำ และให้น้ำหนักรวมไม่เกิน 100%')
+        return
+      }
+      setError('')
+      setStep(step + 1)
+      return
+    }
     void work(async () => {
-      await request(endpoint, {
+      const saved = await request<{ policy: Policy }>(endpoint, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config: draft, expectedVersion: draftVersion }),
       })
       setDraft(null)
       setScenario(null)
-      await mutate()
+      try {
+        await request(endpoint, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedVersion: saved.policy.version }),
+        })
+      } catch (err) {
+        throw new Error('บันทึกกฎแล้ว แต่คำนวณแผนไม่สำเร็จ · ' + (err instanceof Error ? err.message : '') + ' กดคำนวณและบันทึกแผนเพื่อลองอีกครั้ง')
+      } finally {
+        await Promise.all([mutate(), refresh(endpoint)])
+      }
     })
   }
 
@@ -92,44 +128,51 @@ export function AdvisorPlanPanel({ edit = false, simulate = false }: { edit?: bo
           : {}),
       })
       setScenario(isSimulation ? result.run : null)
-      if (!isSimulation) await mutate()
+      if (!isSimulation) await Promise.all([mutate(), refresh(endpoint)])
     })
   }
 
-  return <section className="space-y-4 rounded-2xl border border-white/10 bg-slate-900 p-4">
+  return <section id="advisor-plan" className="scroll-mt-24 space-y-4 rounded-2xl border border-white/10 bg-slate-900 p-4">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h2 className="text-base font-semibold text-white">แผนเติมเงินของที่ปรึกษา</h2>
-      {edit && <div className="flex flex-wrap gap-2">
-        <button type="button" className={buttonClass} onClick={editPolicy}>ตั้งค่ากฎพอร์ต</button>
+      {edit && !draft && <div className="flex flex-wrap gap-2">
+        <button type="button" className={buttonClass} disabled={busy} onClick={editPolicy}>ตั้งค่ากฎพอร์ต</button>
         {policy && <button type="button" className={buttonClass} disabled={busy} onClick={() => calculate(false)}>คำนวณและบันทึกแผน</button>}
       </div>}
     </div>
-    {!policy && <p className="text-sm text-slate-300">ยืนยันบัญชี แผน เป้าหมาย และกฎพอร์ตในหน้ากลยุทธ์ก่อนคำนวณ</p>}
+    {!policy && <p className="text-sm text-slate-300">เลือกบัญชีและแผนลงทุนก่อนคำนวณเงินเติม { !edit && <Link className="underline" href="/plans#advisor-plan">ไปตั้งค่ากฎพอร์ต</Link> }</p>}
     {draft && edit && <form className="space-y-3" onSubmit={submitPolicy}>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <p aria-live="polite" className="font-medium text-indigo-200">ขั้น {step} จาก 3 · {step === 1 ? 'เลือกบัญชีและแผน' : step === 2 ? 'ตรวจงบและเป้าหมาย' : 'ตรวจรายละเอียดก่อนยืนยัน'}</p>
+      {step === 1 && <div className="grid gap-2 sm:grid-cols-2">
         <label>บัญชีซื้อขายในสกุลฐาน<select required className={inputClass} value={draft.accountId} onChange={(event) => change({ accountId: event.target.value })}>
           <option value="">เลือกบัญชี</option>
           {data.accounts.map((account) => <option key={account.id} value={account.id}>{account.accountName}</option>)}
         </select></label>
         <label>แผนลงทุน<select required className={inputClass} value={draft.presetId} onChange={(event) => {
           const selected = data.presets.find((preset) => preset.id === event.target.value)
-          change({ presetId: event.target.value, monthlyBudget: Number(selected?.monthlyContribution ?? 0) })
+          change({ presetId: event.target.value, monthlyBudget: Number(selected?.monthlyContribution ?? 0), targets: presetTargets(selected, data.assets) })
         }}>
           <option value="">เลือกแผน</option>
           {data.presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.presetName}</option>)}
         </select></label>
+        {!data.accounts.length && <Link href="/accounts" className="underline">เพิ่มบัญชีซื้อขายสกุล {data.currency}</Link>}
+        {!data.presets.length && <a href="#investment-presets" className="underline">สร้างแผนลงทุนด้านล่าง</a>}
+      </div>}
+      {step === 2 && <>
+      <div className="grid gap-2 sm:grid-cols-2">
         {([
           ['reserve', 'เงินสดขั้นต่ำ'], ['monthlyBudget', 'เพดานเงินเติมรายเดือน'],
           ['maxPositionPercent', 'เพดานต่อสินทรัพย์ (%)'], ['horizonYears', 'ระยะลงทุน (ปี)'],
           ['feePercent', 'ค่าธรรมเนียมตามมูลค่า (%)'], ['feePerOrder', 'ค่าธรรมเนียมคงที่ต่อรายการ'],
         ] as const).map(([field, label]) => <label key={field}>{label}
-          <input className={inputClass} required type="number" min={0} step={field === 'horizonYears' ? 1 : 0.01}
+          <input className={inputClass} required type="number" min={field === 'horizonYears' ? 1 : field === 'maxPositionPercent' ? 0.01 : 0}
+            max={field === 'monthlyBudget' ? Number(data.presets.find(p => p.id === draft.presetId)?.monthlyContribution) : field === 'feePercent' ? 10 : field === 'maxPositionPercent' ? 100 : field === 'horizonYears' ? 50 : 100000000} step={field === 'horizonYears' ? 1 : 0.01}
             value={draft[field]} onChange={(event) => change({ [field]: Number(event.target.value) })} />
         </label>)}
       </div>
       <p className="text-xs text-slate-300">ระบุค่าธรรมเนียมและจำนวนหน่วยขั้นต่ำตามบัญชีของคุณ เป้าหมายคิดจากมูลค่าพอร์ตรวมเงินสด</p>
       {draft.targets.map((target, index) => <div key={index} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-4">
-        <label>สินทรัพย์<select required className={inputClass} value={target.assetId} onChange={(event) => {
+        <label>สินทรัพย์<select aria-label="สินทรัพย์" required className={inputClass} value={target.assetId} onChange={(event) => {
           const asset = data.assets.find((item) => item.id === event.target.value)
           change({ targets: draft.targets.map((row, i) => i === index ? { ...row, assetId: event.target.value, lotSize: asset?.market === 'TH' ? 100 : 1 } : row) })
         }}>
@@ -138,14 +181,26 @@ export function AdvisorPlanPanel({ edit = false, simulate = false }: { edit?: bo
         </select></label>
         <label>เป้าหมาย (%)<input className={inputClass} type="number" min="0.01" max="100" step="0.01" required
           value={target.weight} onChange={(event) => change({ targets: draft.targets.map((row, i) => i === index ? { ...row, weight: Number(event.target.value) } : row) })} /></label>
-        <label>หน่วยต่อชุด<input className={inputClass} type="number" min="1" required
+        <label>หน่วยต่อชุด<input className={inputClass} type="number" min="1" max="10000" required
           value={target.lotSize} onChange={(event) => change({ targets: draft.targets.map((row, i) => i === index ? { ...row, lotSize: Number(event.target.value) } : row) })} /></label>
         <button type="button" className="text-sm text-rose-300" onClick={() => change({ targets: draft.targets.filter((_, i) => i !== index) })}>นำออก</button>
       </div>)}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={buttonClass} onClick={() => change({ targets: [...draft.targets, { assetId: '', weight: 0, lotSize: 1 }] })}>เพิ่มเป้าหมาย</button>
-        <button type="submit" className={buttonClass} disabled={busy || draft.targets.length === 0}>ยืนยันกฎและบันทึก</button>
-        <button type="button" className="text-sm text-slate-300" onClick={() => setDraft(null)}>ยกเลิก</button>
+        <button type="button" className={buttonClass} disabled={draft.targets.length >= 50 || !data.assets.length} onClick={() => change({ targets: [...draft.targets, { assetId: '', weight: 0, lotSize: 1 }] })}>เพิ่มเป้าหมาย</button>
+      </div>
+      {!data.assets.length && <Link href="/transactions" className="underline">เพิ่มรายการถือครองเพื่อเลือกเป้าหมาย</Link>}
+      </>}
+      {step === 3 && <div className="space-y-1 rounded-lg bg-slate-800 p-3 text-sm">
+        <p>{data.accounts.find(a => a.id === draft.accountId)?.accountName} · {data.presets.find(p => p.id === draft.presetId)?.presetName}</p>
+        <p>เงินเติมได้ถึง {amount(draft.monthlyBudget)} {data.currency}/เดือน · กันเงินสด {amount(draft.reserve)} {data.currency}</p>
+        <p>เพดานต่อสินทรัพย์ {draft.maxPositionPercent}% · ระยะลงทุน {draft.horizonYears} ปี</p>
+        <p>ค่าธรรมเนียม {draft.feePercent}% และ {amount(draft.feePerOrder)} {data.currency} ต่อรายการ</p>
+        {draft.targets.map(t => <p key={t.assetId}>{data.assets.find(a => a.id === t.assetId)?.ticker} · เป้า {t.weight}% · ชุดละ {t.lotSize} หน่วย</p>)}
+      </div>}
+      <div className="flex flex-wrap gap-3">
+        {step > 1 && <button type="button" disabled={busy} className="text-sm" onClick={() => { setError(''); setStep(step - 1) }}>ย้อนกลับ</button>}
+        <button type="submit" className={buttonClass} disabled={busy}>{busy ? 'กำลังบันทึก…' : step === 3 ? 'ยืนยันและคำนวณแผน' : 'ถัดไป'}</button>
+        <button type="button" className="text-sm text-slate-300" disabled={busy} onClick={() => { setError(''); setDraft(null) }}>ยกเลิก</button>
       </div>
     </form>}
     {simulate && policy && <p className="text-sm text-slate-300">

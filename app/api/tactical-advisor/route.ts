@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const userId = session.user.id
   const { searchParams } = new URL(req.url)
   const forceRefresh = searchParams.get('refresh') === 'true'
+  const cachedOnly = searchParams.get('cachedOnly') === '1'
   const requestedDate = searchParams.get('date') // e.g. "2026-11-14"
 
   try {
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
         try {
           const parsed = parseAdviceResponse(targetLog.response)
           const normalized = normalizeStoredPayload(parsed, targetLog.createdAt, targetLog.modelUsed)
-          const liveMetrics = await computeCachedOutcomeMetrics()
+          const liveMetrics = cachedOnly ? undefined : await computeCachedOutcomeMetrics()
           if (liveMetrics && liveMetrics.totalTrackedCalls > 0) {
             normalized.outcomeMetrics = liveMetrics
           }
@@ -109,7 +110,7 @@ export async function GET(req: NextRequest) {
         const parsed = parseAdviceResponse(todayLog.response)
         const normalized = normalizeStoredPayload(parsed, todayLog.createdAt, todayLog.modelUsed)
         if (!normalized.marketEvidence) throw new Error('Legacy snapshot lacks evidence')
-        const liveMetrics = await computeCachedOutcomeMetrics()
+        const liveMetrics = cachedOnly ? undefined : await computeCachedOutcomeMetrics()
         if (liveMetrics && liveMetrics.totalTrackedCalls > 0) {
           normalized.outcomeMetrics = liveMetrics
         }
@@ -128,6 +129,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    if (cachedOnly) {
+      return NextResponse.json({ success: true, data: null, cached: false, selectedDate: todayBangkok, availableDates })
+    }
     // 4. Otherwise, compute fresh analysis for today
     const payload = await runTacticalAnalysis(userId, baseCurrency)
 

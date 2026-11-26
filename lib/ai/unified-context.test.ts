@@ -1,3 +1,5 @@
+import { identifyCopilotPlanIntent as intent } from './advisor-copilot'
+import { dailyPriority } from './daily-priority'
 import assert from 'node:assert/strict'
 import {
   extractTacticalContinuity,
@@ -229,3 +231,14 @@ assert.equal(buildCopilotDeepLink(' สวัสดี '), '/ai-advisor?q=%E0%B8
 console.log('✅ Test 4 Passed: Dynamic Quick Questions & Deep Links adapt to real holdings')
 
 console.log('\n🎉 ALL UNIFIED AI CONTEXT & QUICK QUESTION TESTS PASSED!')
+
+// Input and brief formats emitted by both advisor flows.
+const scenario = { kind: 'scenario', field: 'inflow', extra: false, amount: 10000, currency: 'THB', reserve: 3000 }
+assert.deepEqual(intent('เติมเงิน 10,000 บาท และขอกันเงินสดไว้ 3,000 บาท'), scenario)
+assert.deepEqual(intent('ถ้ากันเงินสด ๓,๐๐๐ บาท และอยากลงทุนหนึ่งหมื่นบาท'), scenario)
+assert.deepEqual(intent('เติมเงิน 100 บาท และกันเงินสด 40 USD'), { kind: 'clarify' })
+assert.equal(intent('ซื้อหุ้น A ที่ 100 บาทดีไหม'), null)
+assert.equal(intent('เดือนหน้าผมจะเติมอีกหนึ่งหมื่นบาท ช่วยเทียบกับแผนเดิมให้หน่อย')?.kind, 'scenario')
+assert.deepEqual(dailyPriority('1. **ภาพรวมตลาด**\n- ตลาดทรงตัว\n2. **ภาพรวมพอร์ต**\n- ถือเงินสด\n3. **สิ่งที่ต้องตรวจ**\n- ตรวจเวลาราคา'), { context: 'ตลาดทรงตัว', action: 'ตรวจเวลาราคา' })
+assert.equal(dailyPriority('3. 📋 **แผนปฏิบัติการ 3 ข้อวันนี้**: รอราคาปิด').action, 'รอราคาปิด')
+assert.equal(dailyPriority('ภาพรวมอย่างเดียว').action, undefined)

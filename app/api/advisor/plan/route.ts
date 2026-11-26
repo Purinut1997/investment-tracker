@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
 }
 
 const updateSchema = z.object({ config: policySchema, expectedVersion: z.number().int().nonnegative() })
-const runSchema = z.object({ scenario: scenarioSchema.optional() })
+const runSchema = z.object({ scenario: scenarioSchema.optional(), expectedVersion: z.number().int().positive().optional() })
 
 export async function PUT(req: NextRequest) {
   const userId = await authorize()
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   const input = runSchema.safeParse(await req.json().catch(() => null))
   if (!input.success) return NextResponse.json({ error: 'ตรวจงบและเงินสดขั้นต่ำ' }, { status: 400 })
   try {
-    return NextResponse.json({ run: await runAdvisorPlan(userId, input.data.scenario) })
+    return NextResponse.json({ run: await runAdvisorPlan(userId, input.data.scenario, input.data.expectedVersion) })
   } catch (error) {
     return failed(error)
   }

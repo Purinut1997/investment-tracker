@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import useSWR from 'swr'
 import {
@@ -110,10 +110,10 @@ const HUB_SUB_TABS: Array<{
     hubPrefixes: ['/plans', '/tactical-advisor', '/opportunities', '/ai-advisor', '/radar', '/forecast'],
     tabs: [
       { label: 'สัดส่วนเป้าหมาย & ปรับพอร์ต DCA', href: '/plans', icon: PieChart, badge: 'Dime! Style' },
-      { label: 'AI ชี้เป้าตามสภาวะตลาด', href: '/tactical-advisor', icon: Sparkles, badge: 'ใหม่' },
-      { label: 'AI หาโอกาสทำกำไร & กันพอร์ต', href: '/opportunities', icon: Target, badge: 'Alpha' },
-      { label: 'AI ที่ปรึกษาการลงทุน 360° (Chat)', href: '/ai-advisor', icon: Bot, badge: 'PRO' },
-      { label: 'เรดาร์ความเสี่ยง & โอกาสช้อนซื้อ', href: '/radar', icon: Radar },
+      { label: 'ดูจังหวะตลาด', href: '/tactical-advisor', icon: Sparkles, badge: 'ใหม่' },
+      { label: 'ค้นหาโอกาสลงทุน', href: '/opportunities', icon: Target, badge: 'Alpha' },
+      { label: 'ถามที่ปรึกษา', href: '/ai-advisor', icon: Bot, badge: 'PRO' },
+      { label: 'ตรวจความเสี่ยงพอร์ต', href: '/radar', icon: Radar },
       { label: 'จำลองพอร์ต 10 ปี (Monte Carlo)', href: '/forecast', icon: TrendingUp },
     ],
   },
@@ -145,6 +145,7 @@ const SUPERADMIN_NAV: NavItem[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const { data: session, status: sessionStatus } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen]   = useState(false)
   const [quickAddOpen, setQuickAddOpen]       = useState(false)
@@ -570,7 +571,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )
               if (!matchedHub) return null
               return (
-                <div className="mb-6 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-b border-white/[0.07]">
+                <>
+                <label className="mb-3 flex items-center gap-2 text-xs text-slate-300 md:hidden">
+                  หน้าในหมวดนี้
+                  <select aria-label="หน้าในหมวดนี้" value={matchedHub.tabs.find(t => pathname === t.href || pathname.startsWith(t.href + '/'))?.href ?? ''} onChange={event => router.push(event.target.value)}
+                    className="min-h-11 min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-2 text-sm text-white">
+                    {matchedHub.tabs.map(tab => <option key={tab.href} value={tab.href}>{tab.label}</option>)}
+                  </select>
+                </label>
+                <div className="mb-6 hidden md:flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-b border-white/[0.07]">
                   {matchedHub.tabs.map((tab) => {
                     const TabIcon = tab.icon
                     const isTabActive =
@@ -600,6 +609,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     )
                   })}
                 </div>
+                </>
               )
             })()}
             {children}
@@ -614,7 +624,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── MOBILE BOTTOM NAV (Pseudo-Glass: 0% GPU Blur Penalty) ── */}
-      <nav className="app-mobile-only fixed bottom-0 left-0 right-0 z-30 bg-[#0B0E14] border-t border-white/[0.08] shadow-[0_-4px_24px_rgba(0,0,0,0.6)] px-1.5 pt-2 pb-[calc(0.5rem_+_env(safe-area-inset-bottom))] gap-1 items-stretch">
+      <nav aria-label="เมนูหลักบนมือถือ" className="app-mobile-only fixed bottom-0 left-0 right-0 z-40 bg-[#0B0E14] border-t border-white/[0.08] shadow-[0_-4px_24px_rgba(0,0,0,0.6)] px-1.5 pt-2 pb-[calc(0.5rem_+_env(safe-area-inset-bottom))] gap-1 items-stretch">
         {[
           {
             href: '/dashboard',
@@ -624,7 +634,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           },
           {
             href: '/plans',
-            match: ['/plans', '/tactical-advisor', '/ai-advisor', '/radar', '/forecast'],
+            match: ['/plans', '/tactical-advisor', '/opportunities', '/ai-advisor', '/radar', '/forecast'],
             icon: PieChart,
             label: 'กลยุทธ์/เสี่ยง',
           },
@@ -634,6 +644,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={href}
               href={href}
+              aria-current={active ? 'page' : undefined}
               className={`flex min-w-0 flex-1 flex-col items-center justify-center min-h-14 px-1 rounded-xl text-[9px] leading-tight font-medium transition-colors no-underline ${
                 active ? 'text-indigo-400 font-semibold' : 'text-slate-400'
               }`}
@@ -644,21 +655,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )
         })}
 
-        <Link
-          href={ctaHref}
-          onClick={
-            hasAccounts
-              ? (event) => {
-                  event.preventDefault()
-                  openQuickAdd()
-                }
-              : undefined
-          }
-          className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 min-h-14 px-1 rounded-xl text-[9px] leading-tight font-bold text-white bg-indigo-600 shadow-md shadow-indigo-600/30"
-        >
-          <Plus className="w-5 h-5" />
-          <span>{hasAccounts ? 'บันทึกด่วน' : 'สร้างบัญชี'}</span>
-        </Link>
+        {hasAccounts ? (
+          <button type="button" onClick={openQuickAdd} aria-haspopup="dialog" className="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 min-h-14 rounded-xl bg-indigo-600 text-[11px] font-bold text-white">
+            <Plus className="h-5 w-5" />บันทึกด่วน
+          </button>
+        ) : accountsData ? (
+          <Link href="/accounts" className="flex min-w-0 flex-1 flex-col items-center justify-center min-h-14 rounded-xl bg-indigo-600 text-[11px] font-bold text-white">
+            <Plus className="h-5 w-5" />สร้างบัญชี
+          </Link>
+        ) : (
+          <button type="button" onClick={() => router.push('/accounts')} className="min-w-0 flex-1 min-h-14 rounded-xl bg-indigo-600 text-[11px] text-white">บัญชี</button>
+        )}
 
         {[
           {
@@ -679,6 +686,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={href}
               href={href}
+              aria-current={active ? 'page' : undefined}
               className={`flex min-w-0 flex-1 flex-col items-center justify-center min-h-14 px-1 rounded-xl text-[9px] leading-tight font-medium transition-colors no-underline ${
                 active ? 'text-indigo-400 font-semibold' : 'text-slate-400'
               }`}

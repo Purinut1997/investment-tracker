@@ -397,7 +397,7 @@ export async function getUnifiedPortfolioContext(
   const [holdingsResult, resolvedCash] = await Promise.all([
     options?.holdingsResult
       ? Promise.resolve(options.holdingsResult)
-      : calculateUserHoldings(userId, baseCurrency, false).catch(() => null),
+      : calculateUserHoldings(userId, baseCurrency, false),
     options?.totalCash !== undefined
       ? Promise.resolve(options.totalCash)
       : prisma.investmentAccount
@@ -405,8 +405,7 @@ export async function getUnifiedPortfolioContext(
             where: { userId },
             select: { cashBalance: true, currency: true },
           })
-          .then((accounts) => sumAccountCashInBaseCurrency(accounts, baseCurrency))
-          .catch(() => 0),
+          .then((accounts) => sumAccountCashInBaseCurrency(accounts, baseCurrency)),
   ])
 
   const memory = parseUserInvestmentMemory(userSettings?.defaultRiskProfile)
@@ -633,7 +632,7 @@ export function buildUnifiedDecisionRules(surface: AiSurface): string {
 
   return [
     '=== มาตรฐานการตัดสินใจและความสอดคล้องข้ามระบบ ===',
-    '1. ยึดความจริงและหลักฐาน: อ้างอิงเฉพาะตัวเลข ราคา สัญญาณ และวันที่ที่แนบมา ห้ามแต่งราคาเป้าหมาย จุดซื้อขาย หรือข้อสรุปภาษีที่ขาดหลักฐาน',
+    '1. ยึดความจริงและหลักฐาน: อ้างอิงเฉพาะตัวเลข ราคา สัญญาณ และวันที่ที่แนบมา หากโหลดข้อมูลพอร์ตหรือเงินสดไม่ได้ ให้บอกว่ายังตรวจสอบไม่ได้ ห้ามถือเป็นศูนย์ วงเงินและจำนวนซื้อรายตัวให้ใช้จากแผนที่คำนวณไว้เท่านั้น ห้ามแต่งราคาเป้าหมาย จุดซื้อขาย หรือข้อสรุปภาษีที่ขาดหลักฐาน',
     '2. พูดองค์ประกอบไปทางเดียวกัน: ยึด Market Posture, คำเตือน Risk Sentinel, เพดานต่อหุ้น, และกฎใน AI Memory ให้สอดคล้องกัน หากข้อมูลสดในหน้านี้เปลี่ยนข้อสรุปเดิม ให้ชี้แจงชัดว่าอะไรเปลี่ยน',
     '3. อ่านแล้วรู้ทันทีว่าต้องทำอย่างไรต่อ: สรุป "แปลว่าอะไร -> ทำอะไรต่อเป็นขั้น 1-2-3 -> เงื่อนไขระวัง/เปลี่ยนแผน"',
     `4. เชื่อมต่อใช้งานต่อเนื่องในแอป: ชี้หน้าถัดไปที่ช่วยตัดสินใจต่อได้อย่างเหมาะสม (${nextLinksBySurface[surface]})`,

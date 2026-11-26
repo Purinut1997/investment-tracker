@@ -1272,7 +1272,7 @@ export default function PlansPage() {
         {/* ─── SAVED PRESETS LIST ─────────────────────────────────────────── */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-white tracking-wide">
+            <h3 id="investment-presets" className="text-base font-bold text-white tracking-wide">
               แผนการลงทุนที่บันทึกไว้ ({presets.length})
             </h3>
           </div>

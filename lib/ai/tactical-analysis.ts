@@ -995,8 +995,8 @@ ${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'tactica
 ${buildUnifiedDecisionRules('tactical')}
 
 === กฎเหล็ก 6 มิติที่ต้องคำนึงถึงในการวิเคราะห์ (MANDATORY GUARDRAILS) ===
-1. กำหนดขนาดไม้และวงเงินเสมอ (Position Sizing & Tranches): หากแนะนำให้สะสม (ACCUMULATE) ต้องระบุว่าใช้เงินสดกี่ % หรือกี่บาท/ดอลลาร์ และแบ่งเป็นกี่ไม้ชัดเจน (เช่น ไม้แรก 25% ที่ราคา..., ไม้สอง 35% ที่แนวรับ S1...) และห้ามขัดเพดาน Max Position ใน User Memory
-2. มีจุดหนีไฟหรือจุดตัดขาดทุนเสมอ (Stop Loss / Invalidation Point): ต้องระบุราคาที่หากหลุด ต้องหยุดซื้อถัวหรือพิจารณาตัดขาดทุน
+1. แยกจังหวะตลาดออกจากงบซื้อ ระบุเงื่อนไขเฝ้าดู ส่วนวงเงินและจำนวนหน่วยให้อ้างอิงแผนเติมเงินที่คำนวณเท่านั้น
+2. ระบุหลักฐานที่จะทำให้ทบทวน เช่น สัญญาณเทคนิคเปลี่ยน หากขาดราคาที่ตรวจสอบได้ให้บอกว่าต้องรอข้อมูล
 3. Value-Trap & Catalyst Guardrail: ห้ามแนะนำซื้อ (ACCUMULATE) หุ้นที่ติดธง VALUE_TRAP_RISK หรือมีวันประกาศงบ (Earnings) ภายใน ≤ 5 วัน โดยไม่ระบุคำเตือนความเสี่ยงด้านงบ/พื้นฐานอย่างชัดเจนใน rationale
 4. ตรวจสอบความเสี่ยงเชิงธีมซ้ำซ้อน (Thematic Correlation Risk): วิเคราะห์ว่าถือหุ้นคนละตัวแต่อยู่ในธีมเดียวกันมากเกินไปไหม (เช่น Tech/AI เกิน 50-60%) หากพบให้ระบุใน thematicRiskAlert
 5. คำนึงถึงภาษีเงินได้จากการขาย (Tax Sensitivity): หากแนะนำให้ขายทำกำไร (TRIM_PROFIT) ให้ระบุเตือนภาษีจริงตามตลาด (หุ้นไทย SET ยกเว้น / หุ้นนอก+คริปโตตาม ป.161/2566)
@@ -1060,9 +1060,9 @@ ${buildUnifiedDecisionRules('tactical')}
       "badgeColor": "emerald" | "amber" | "rose" | "indigo",
       "currentPrice": ราคาปัจจุบัน,
       "currency": "$ หรือ ฿",
-      "targetZone": "ช่วงราคาเป้าหมาย เช่น $155 - $160",
-      "tranchePlan": "แผนแบ่งไม้และวงเงิน เช่น แบ่งเงินสด 25% ($800) เข้าไม้แรกที่ $155 และรอไม้สอง $1,000 ที่แนวรับ $133",
-      "stopLossPoint": "จุดยอมแพ้ เช่น $128.00 (หลุดแนวรับสำคัญ)",
+      "targetZone": "แนวรับที่มีหลักฐาน หรือรอตรวจราคา",
+      "tranchePlan": "ตรวจวงเงินจากแผนเติมเงิน",
+      "stopLossPoint": "เงื่อนไขทบทวนที่มีหลักฐาน",
       "rationale": "เหตุผลเชิงกลยุทธ์ที่คมชัด 1-2 ประโยค",
       "taxImpactNote": "หมายเหตุภาษี (ถ้าเป็นขายให้เตือนภาษี ถ้าเป็นซื้อให้ระบุว่าไม่มีภาษี)"
     }
@@ -1113,6 +1113,7 @@ ${buildUnifiedDecisionRules('tactical')}
       id,
       ticker: matched.ticker,
       assetName: matched.assetName,
+      tranchePlan: 'ตรวจวงเงินและจำนวนหน่วยในแผนเติมเงินก่อนส่งคำสั่ง',
       currentPrice: signal.currentPrice,
       currency: signal.currencySymbol || matched.currency,
       taxImpactNote: item.taxImpactNote ?? undefined,

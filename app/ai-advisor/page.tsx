@@ -3,6 +3,7 @@
 import { AdvisorPlanPanel } from '@/components/advisor/AdvisorPlanPanel'
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { identifyCopilotPlanIntent } from '@/lib/ai/advisor-copilot'
 import useSWR from 'swr'
 import Link from 'next/link'
 import {
@@ -123,7 +124,7 @@ export default function AiAdvisorPage() {
 
   // 1. Fetch 360° Tactical & Market Context
   const { data: responseData } = useSWR<TacticalAdvisorApiResponse>(
-    '/api/tactical-advisor',
+    '/api/tactical-advisor?cachedOnly=1',
     {
       revalidateOnFocus: false,
       dedupingInterval: 60000,
@@ -132,6 +133,7 @@ export default function AiAdvisorPage() {
 
   // 1.5 Fetch Persistent Copilot Thread & User AI Memory
   const { data: persistedChatData, isLoading: isChatHistoryLoading, mutate: mutateChatHistory } = useSWR<{
+    planningEnabled?: boolean
     messages?: ChatMessage[]
     memory?: UserInvestmentMemory
     holdingsDigest?: Array<{
@@ -157,6 +159,8 @@ export default function AiAdvisorPage() {
     }
   )
 
+  const draftIntent = persistedChatData?.planningEnabled ? identifyCopilotPlanIntent(inputQuestion) : null
+  const simulation = draftIntent?.kind === 'scenario' ? draftIntent : null
   const payload = responseData?.data?.marketEvidence ? responseData.data : undefined
   const pillars = payload?.marketRegime?.pillars
   const externalNewsList = newsApiResponse?.items || newsApiResponse?.news || []
@@ -185,7 +189,8 @@ export default function AiAdvisorPage() {
 
   // Scroll to bottom when messages change
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const list = messagesEndRef.current?.parentElement
+    if (list) list.scrollTop = list.scrollHeight
   }
 
   useEffect(() => {
@@ -348,7 +353,7 @@ export default function AiAdvisorPage() {
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <AdvisorPlanPanel simulate />
+
         {/* Page Top Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
           <div className="space-y-1">
@@ -357,7 +362,7 @@ export default function AiAdvisorPage() {
                 <Bot className="w-6 h-6" />
               </span>
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
-                <span>AI ที่ปรึกษาการลงทุน 360° (Institutional Wealth Copilot)</span>
+                <span>ถามที่ปรึกษาเรื่องพอร์ต</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-gradient-to-r from-indigo-500/30 to-purple-500/30 text-indigo-300 border border-indigo-500/40 font-bold uppercase tracking-wider hidden sm:inline">
                   PRO SUITE
                 </span>
@@ -391,7 +396,8 @@ export default function AiAdvisorPage() {
         {/* ── TWO-COLUMN WORKSPACE: COCKPIT & INTERACTIVE TERMINAL ── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* ── LEFT COLUMN (LG: 4 COLUMNS): 360° INVESTOR DOSSIER ── */}
-          <div className="lg:col-span-4 space-y-4">
+          <div id="advisor-evidence" className="order-2 lg:order-1 lg:col-span-4 min-w-0 space-y-4">
+            <AdvisorPlanPanel simulate />
             {/* 1. Internal Portfolio DNA Card */}
             <div className="p-5 rounded-2xl bg-[#0D1019] border border-white/[0.08] shadow-lg space-y-3.5">
               <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
@@ -402,17 +408,18 @@ export default function AiAdvisorPage() {
                   </h3>
                 </div>
                 <span className="text-[11px] text-slate-400 font-mono">
-                  {payload?.cashStrategy.baseCurrency || 'THB'}
+                  {payload?.cashStrategy.baseCurrency || ''}
                 </span>
               </div>
 
+              {!payload && <Link href="/tactical-advisor" className="block text-sm text-indigo-200">ดูสถานะสรุปกลยุทธ์วันนี้</Link>}
               {/* Cash & Dry Powder */}
               <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] space-y-2">
                 <div className="flex items-center justify-between text-xs text-slate-300">
                   <span>เงินสดสำรอง (Dry Powder):</span>
                   <span className="font-mono font-bold text-emerald-400 text-sm">
                     {payload?.cashStrategy.currentCashTotalBase?.toLocaleString() || '-'}{' '}
-                    {payload?.cashStrategy.baseCurrency || 'THB'}
+                    {payload?.cashStrategy.baseCurrency || ''}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-400">
@@ -420,7 +427,7 @@ export default function AiAdvisorPage() {
                   <span className="font-mono font-semibold text-white">
                     {payload?.cashStrategy.currentCashPercent?.toFixed(1) || '-'}%{' '}
                     <span className="text-slate-500 font-normal">
-                      (เป้าสภาวะนี้: {payload?.cashStrategy.recommendedCashPercent || 25}%)
+                      (เป้าสภาวะนี้: {payload ? payload.cashStrategy.recommendedCashPercent + '%' : 'รอสรุปกลยุทธ์'})
                     </span>
                   </span>
                 </div>
@@ -554,6 +561,7 @@ export default function AiAdvisorPage() {
                             onClick={() => {
                               const q = `วิเคราะห์กราฟเทคนิค ทรงราคา และแนวรับแนวต้านของหุ้น ${stock.ticker} ให้ละเอียด พร้อมบอกจังหวะเข้า/ออก`
                               setInputQuestion(q)
+                              document.getElementById('advisor-chat')?.scrollIntoView({ block: 'start' })
                               handleSendMessage(q)
                             }}
                             className="py-1.5 px-2.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/30 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-indigo-500/30"
@@ -628,6 +636,7 @@ export default function AiAdvisorPage() {
                             onClick={() => {
                               const prompt = `ช่วยวิเคราะห์ผลกระทบของข่าวนี้: "${news.headline}" (แหล่งข่าว: ${news.sourceName}) ว่าส่งผลต่อราคาและทิศทางของหุ้น ${news.symbol || 'ในตลาด'} อย่างไร?`
                               setInputQuestion(prompt)
+                              document.getElementById('advisor-chat')?.scrollIntoView({ block: 'start' })
                               handleSendMessage(prompt)
                             }}
                             className="w-full py-1.5 px-2 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
@@ -866,7 +875,7 @@ export default function AiAdvisorPage() {
           </div>
 
           {/* ── RIGHT COLUMN (LG: 8 COLUMNS): FULL INTERACTIVE AI CHAT SUITE ── */}
-          <div className="lg:col-span-8 flex flex-col h-[780px] rounded-3xl bg-gradient-to-b from-[#111522] via-[#0E121D] to-[#0A0D15] border border-indigo-500/20 shadow-2xl overflow-hidden relative">
+          <div id="advisor-chat" className="scroll-mt-20 order-1 lg:order-2 lg:col-span-8 min-w-0 flex flex-col h-[70dvh] min-h-80 lg:h-[780px] rounded-3xl bg-gradient-to-b from-[#111522] via-[#0E121D] to-[#0A0D15] border border-indigo-500/20 shadow-2xl overflow-hidden relative">
             {/* Terminal Header */}
             <div className="p-4 sm:p-5 bg-black/40 border-b border-white/[0.08] flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -915,7 +924,7 @@ export default function AiAdvisorPage() {
                       setInputQuestion(q.prompt)
                       handleSendMessage(q.prompt)
                     }}
-                    disabled={isLoading}
+                    disabled={!hasHydratedThread || isLoading}
                     className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 text-indigo-200 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-40"
                   >
                     <IconComponent className="w-3 h-3 text-indigo-300" />
@@ -925,8 +934,9 @@ export default function AiAdvisorPage() {
               })}
             </div>
 
+            <a href="#advisor-evidence" className="order-last lg:hidden px-4 py-2 text-xs text-indigo-200">ดูข้อมูลประกอบและแผนเติมเงิน</a>
             {/* Messages Thread Container */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+            <div className="order-3 lg:order-none min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
               {messages.map((msg) => {
                 const isUser = msg.role === 'user'
 
@@ -1042,7 +1052,11 @@ export default function AiAdvisorPage() {
             </div>
 
             {/* Bottom Sticky Input Form */}
-            <div className="p-4 sm:p-5 bg-black/70 border-t border-white/[0.08] backdrop-blur-md">
+            <div className="order-2 lg:order-none p-3 sm:p-5 bg-black/70 border-t border-white/[0.08] backdrop-blur-md">
+              {simulation && <p aria-live="polite" className="mb-2 text-xs text-indigo-200">
+                {simulation.field === 'reserve' ? 'เงินสำรอง' : simulation.extra ? 'เพิ่มจากงบเดิม' : 'เงินเติม'} {simulation.amount.toLocaleString('th-TH')} {simulation.currency || 'ตามสกุลพอร์ต'}
+                {simulation.reserve !== undefined && ' · เงินสำรอง ' + simulation.reserve.toLocaleString('th-TH')}
+              </p>}
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
@@ -1054,13 +1068,13 @@ export default function AiAdvisorPage() {
                   type="text"
                   value={inputQuestion}
                   onChange={(e) => setInputQuestion(e.target.value)}
-                  placeholder="พิมพ์คำถามวิเคราะห์ข่าว กราฟ หรือกลยุทธ์การลงทุน เช่น 'วิเคราะห์ข่าวดอกเบี้ยกระทบพอร์ต'..."
+                  aria-label="คำถามถึงที่ปรึกษา" placeholder="ถามเรื่องพอร์ต หรือจำลองเงินเติม…"
                   disabled={isLoading}
-                  className="flex-1 px-4 py-3 rounded-2xl bg-[#090C14] border border-white/[0.1] text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
+                  className="min-w-0 flex-1 px-4 py-3 rounded-2xl bg-[#090C14] border border-white/[0.1] text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
                 />
                 <button
                   type="submit"
-                  disabled={isLoading || !inputQuestion.trim()}
+                  aria-label={simulation ? 'คำนวณ' : 'ส่งคำถาม'} disabled={isLoading || !hasHydratedThread || !inputQuestion.trim()}
                   className="px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer shadow-lg hover:shadow-indigo-500/25 shrink-0"
                 >
                   {isLoading ? (
@@ -1068,7 +1082,7 @@ export default function AiAdvisorPage() {
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span className="hidden sm:inline">ส่งคำถาม</span>
+                      <span>{simulation ? 'คำนวณ' : 'ส่ง'}</span>
                     </>
                   )}
                 </button>

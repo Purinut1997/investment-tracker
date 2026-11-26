@@ -22,7 +22,7 @@ export const maxDuration = 45
 
 const text = z.string().trim().min(1).max(1200)
 
-export const regimeAlphaAiSchema = z.object({
+const regimeAlphaAiSchema = z.object({
   regimeHeadline: text,
   portfolioDefenseStrategy: text,
   picks: z

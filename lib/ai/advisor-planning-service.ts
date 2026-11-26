@@ -92,10 +92,11 @@ export async function getLatestAdvisorRun(userId: string, policy: Awaited<Return
   return { ...data, stale }
 }
 
-export async function runAdvisorPlan(userId: string, scenario?: AdvisorScenario) {
+export async function runAdvisorPlan(userId: string, scenario?: AdvisorScenario, expectedVersion?: number) {
   const started = Date.now()
   const policy = await getAdvisorPolicy(userId)
   if (!policy) throw new AdvisorPlanError('ยืนยันโปรไฟล์ที่ปรึกษาก่อนคำนวณ', 409)
+  if (expectedVersion !== undefined && expectedVersion !== policy.version) throw new AdvisorPlanError('กฎพอร์ตเปลี่ยนแล้ว กรุณาตรวจก่อนคำนวณใหม่', 409)
   const portfolioKey = await stateKey(userId, policy.config.presetId)
   const reportDate = advisorDate()
   const monthStart = advisorDayBounds(reportDate.slice(0, 7) + '-01')!.gte

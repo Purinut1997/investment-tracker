@@ -173,17 +173,13 @@ export default function DashboardPage() {
   const [allocationView, setAllocationView] = useState<'assets' | 'classes'>('assets')
   const [rightPanelTab, setRightPanelTab] = useState<'allocation' | 'cashflow'>('allocation')
 
-  const [cachedSummary, setCachedSummary] = useState<any>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const item = sessionStorage.getItem('port_summary_cache_v1')
-        return item ? JSON.parse(item) : null
-      } catch {
-        return null
-      }
-    }
-    return null
-  })
+  const [cachedSummary, setCachedSummary] = useState<any>(null)
+  useEffect(() => {
+    try {
+      const item = sessionStorage.getItem('port_summary_cache_v1')
+      if (item) setCachedSummary(JSON.parse(item))
+    } catch { /* Fall back to the live summary. */ }
+  }, [])
 
   const { data: summaryRaw, error: summaryError, isLoading: sumLoading } = useSWR<any>(
     '/api/portfolio/summary',
@@ -558,6 +554,7 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <div className="flex flex-col gap-5 sm:gap-6 w-full max-w-[1600px] mx-auto animate-fade-in pb-12">
+        <MorningBriefBanner />
         {/* ── HEADER BAR WITH LIVE STATUS & QUICK ACTIONS ───────────── */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
           <div className="space-y-1">
@@ -671,9 +668,6 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
-
-        {/* ── DAILY MORNING AI BRIEFING QUICK ACCESS BANNER ─────────── */}
-        <MorningBriefBanner />
 
         {/* ── 1. HERO WEALTH KPI ROW (12-COLUMN BENTO GRID) ───────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">

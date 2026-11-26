@@ -217,6 +217,7 @@ export async function GET() {
 
     return NextResponse.json({
       messages: thread.messages,
+      planningEnabled: advisorFlags(userId).planning,
       memory,
       outcomeMetrics,
       holdingsDigest,
@@ -351,7 +352,7 @@ export async function POST(req: NextRequest) {
             ? 'พอร์ตหรือข้อมูลอ้างอิงเปลี่ยนจากแผนเดิม กรุณาคำนวณแผนใหม่ในหน้ากลยุทธ์ แล้วผมจะอธิบายเหตุผลจากแผนล่าสุด'
             : 'ยังไม่มีแผนเติมเงินที่บันทึกไว้ กรุณาคำนวณและบันทึกแผนในหน้ากลยุทธ์ก่อน'
       } else if (intent.kind === 'clarify') {
-        answer = 'ระบุจำนวนเงินระหว่าง 0 ถึง 100,000,000 เช่น “ถ้ามีเงินลงทุน 5,000 บาท”'
+        answer = 'ระบุเงินเติมและเงินสำรองอย่างละหนึ่งยอดในสกุลเดียวกัน เช่น “เติมเงิน 10,000 บาท และกันเงินสดไว้ 3,000 บาท” แต่ละยอดต้องอยู่ระหว่าง 0 ถึง 100,000,000'
       } else if (intent.currency && intent.currency !== baseCurrency) {
         answer = `พอร์ตนี้ใช้ ${baseCurrency} กรุณาระบุเงินในสกุลนั้นเพื่อจำลอง ระบบจะใช้ยอดที่คุณระบุในสกุลของพอร์ต`
       } else {
@@ -362,7 +363,7 @@ export async function POST(req: NextRequest) {
         } else {
           try {
             const simulation = await runAdvisorPlan(userId, {
-              inflow, ...(intent.field === 'reserve' ? { reserve: intent.amount } : {}),
+              inflow, reserve: intent.field === 'reserve' ? intent.amount : intent.reserve,
             })
             const basis = intent.extra
               ? `คำนวณโดยเพิ่มเงินจากงบตามโปรไฟล์ ${policy.config.monthlyBudget.toLocaleString('th-TH')} ${baseCurrency}\n\n`

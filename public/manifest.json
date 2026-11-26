@@ -2,6 +2,7 @@
   "name": "Investment Tracker",
   "short_name": "InvTracker",
   "description": "ระบบบันทึกและวิเคราะห์การลงทุนส่วนบุคคล",
+  "scope": "/",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#020817",
