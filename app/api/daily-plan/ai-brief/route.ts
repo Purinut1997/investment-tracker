@@ -8,6 +8,12 @@ import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { getObservationTime, formatMarketObservation } from '@/lib/ai/advisor-evidence'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+  invalidateUnifiedContextCache,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -90,10 +96,13 @@ export async function POST(req: NextRequest) {
     const fearGreedSummary = fearGreed?.source === 'CNN_LIVE' && getObservationTime(Date.parse(fearGreed.timestamp), now)
       && Number.isFinite(fearGreed.score) ? `${fearGreed.score}/100 (CNN ณ ${fearGreed.timestamp})` : 'ไม่มีข้อมูล CNN ที่ยืนยันได้'
     const marketSymbols = ['S&P 500', 'NASDAQ', 'VIX']
-    const benchmarks = await Promise.all(marketSymbols.map(async (symbol) => {
-      const quote = await yahooFinanceProvider.getQuote(symbol).catch(() => null)
-      return formatMarketObservation(symbol, quote ? { ...quote, timestamp: quote.observationTimestamp ?? 0 } : null, now)
-    }))
+    const [benchmarks, unifiedCtx] = await Promise.all([
+      Promise.all(marketSymbols.map(async (symbol) => {
+        const quote = await yahooFinanceProvider.getQuote(symbol).catch(() => null)
+        return formatMarketObservation(symbol, quote ? { ...quote, timestamp: quote.observationTimestamp ?? 0 } : null, now)
+      })),
+      getUnifiedPortfolioContext(userId, { baseCurrency, totalCash }).catch(() => null),
+    ])
 
     // 2. Prioritize triggers intelligently (High priority > Extreme RSI > Near S1 > High weight)
     const sortedTriggers = portfolioTriggers.filter((item) =>
@@ -154,6 +163,10 @@ ${benchmarks.join('\n')}
 [สินทรัพย์ในพอร์ตที่ส่งสัญญาณเทคนิคัลวันนี้ (Holdings with Technical Signals)]
 ${triggerSummary || 'ไม่มีกราฟหุ้นที่ยืนยันได้ ให้จำกัดคำตอบไว้ที่ข้อมูลตลาดและสิ่งที่ต้องตรวจต่อ'}
 
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'daily_brief', compact: true }) : ''}
+
+${buildUnifiedDecisionRules('daily_brief')}
+
 [กฎเหล็กการประเมินความเสี่ยงตามความเป็นจริง]:
 - ระบุเฉพาะราคาและสัญญาณที่มีในข้อมูล ถ้าไม่มีให้เสนอสิ่งที่ต้องตรวจต่อ งดกำหนดเปอร์เซ็นต์เงินสดหรือราคาเข้าซื้อแทนผู้ใช้โดยไม่มีเป้าหมายที่แนบมา
 
@@ -180,6 +193,7 @@ ${triggerSummary || 'ไม่มีกราฟหุ้นที่ยืน�
       systemInstruction:
         'คุณเป็น Senior Portfolio Strategist ที่ให้คำแนะนำการลงทุนตามหลักการบริหารความเสี่ยงระดับสถาบัน ชัดเจน ตรงประเด็น ใช้ภาษาไทยเข้าใจง่าย',
     })
+    invalidateUnifiedContextCache(userId)
 
     return NextResponse.json({
       success: true,

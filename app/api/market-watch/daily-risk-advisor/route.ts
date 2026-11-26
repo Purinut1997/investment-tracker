@@ -23,6 +23,11 @@ import { getExchangeRate } from '@/lib/market-data/frankfurter'
 import { parseHistoricalStats } from '@/lib/market-data/historical-stats'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { getYahooQuoteSummary } from '@/lib/market-data/yahoo-crumb'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -223,6 +228,8 @@ async function assembleDailyStockContext(
   freeCashflow: number | null
   todayTag: string
   observedAt: string | null
+  holdingsResult: Awaited<ReturnType<typeof calculateUserHoldings>> | null
+  baseCurrency: string
 }> {
   const cleanSymbol = rawSymbol.trim().toUpperCase()
   const cleanMarket = market.trim().toUpperCase() || 'US'
@@ -610,6 +617,8 @@ async function assembleDailyStockContext(
     freeCashflow: ySummary?.freeCashflow ?? null,
     todayTag,
     observedAt: getObservationTime(dailyChart?.observationTimestamp, Date.now()),
+    holdingsResult,
+    baseCurrency,
   }
 }
 
@@ -655,7 +664,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing symbol' }, { status: 400 })
     }
 
-    const { response, userMemorySummary, freeCashflow, todayTag, observedAt } =
+    const { response, userMemorySummary, freeCashflow, todayTag, observedAt, holdingsResult, baseCurrency } =
       await assembleDailyStockContext(session.user.id, symbol, market)
 
     if (!observedAt || !(response.contextSnapshot.currentPrice > 0)) {
@@ -664,6 +673,11 @@ export async function POST(req: NextRequest) {
     if (!forceRefresh && response.isTodayReport && response.aiReport) {
       return NextResponse.json({ ...response, cached: true })
     }
+
+    const unifiedCtx = await getUnifiedPortfolioContext(session.user.id, {
+      baseCurrency,
+      holdingsResult: holdingsResult ?? undefined,
+    }).catch(() => null)
 
     const snap = response.contextSnapshot
     const q = response.quant
@@ -715,6 +729,10 @@ ${newsText}
 6) คะแนนความเสี่ยงที่ระบบคำนวณไว้แล้ว (Quant Risk Scorecard):
 - คะแนนความเสี่ยงรวม: ${q.overallScore}/100 (${q.overallLabelTh}) • สัญญาณตั้งต้น: ${q.defaultVerdict}
 ${q.dimensions.map((d) => `- ${d.label}: ${d.score}/100 (${d.levelLabelTh}) -> ${d.drivers.join('; ')}`).join('\n')}
+
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'daily_stock_risk', focusSymbol: response.symbol, compact: true }) : ''}
+
+${buildUnifiedDecisionRules('daily_stock_risk')}
 
 กฎเหล็ก:
 - ห้ามแต่งตัวเลขราคา แนวรับ แนวต้าน เปอร์เซ็นต์ หรือข่าวที่ไม่ปรากฏในข้อมูลข้างต้น

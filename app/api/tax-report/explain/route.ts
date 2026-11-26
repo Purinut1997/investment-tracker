@@ -4,6 +4,11 @@ import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { getExchangeRate } from '@/lib/market-data/frankfurter'
 import { FOREIGN_INCOME_TAX_RULE, FOREIGN_INCOME_TAX_SOURCE, foreignIncomeAssessment, taxReportContextTag } from '@/lib/analytics/foreign-income-tax'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest) {
     const hasDivUSD = divGrossUSD > 0
 
     const assessment = foreignIncomeAssessment(repatriated)
+    const unifiedCtx = await getUnifiedPortfolioContext(session.user.id).catch(() => null)
 
     const prompt = `
 [ปีภาษี: ${year}]
@@ -112,6 +118,10 @@ ${taxReportContextTag(year, repatriated)}
    - ระบบไม่มีข้อมูลวันอยู่ไทย ยอดเงินได้ที่นำเข้าจริง หรือเอกสารเครดิตภาษี ห้ามสรุปยอดภาษีหรือหน้าที่ต้องยื่นเด็ดขาดจากสถานะนี้
 
 === ข้อมูลปี ${year} (${fx > 0 ? `อัตราอ้างอิง 1 USD = ${fx.toFixed(2)} THB ไม่ใช่อัตรา ณ วันนำเข้า` : 'ไม่พบอัตราแลกเปลี่ยนอ้างอิง'}) ===
+
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'tax', compact: true }) : ''}
+
+${buildUnifiedDecisionRules('tax')}
 
 1. เงินปันผล (Dividends):
 ${hasDivUSD
@@ -141,7 +151,7 @@ ${hasForeignGain
 - ใช้หัวข้อ ## สำหรับแต่ละหมวดหลัก และ ### สำหรับหัวข้อย่อย ไม่ต้องใช้เส้นคั่น ---
 - แต่ละย่อหน้าไม่เกิน 2 ประโยค และใช้ bullet list เมื่อมีรายการมากกว่า 1 ข้อ
 - เน้นเฉพาะสถานะภาษี จำนวนเงิน อัตราภาษี และสิ่งที่ต้องทำด้วย **ตัวหนา**; อย่าใส่ตัวหนาทั้งย่อหน้า
-- ปิดท้ายด้วยหัวข้อ ## สิ่งที่ควรทำต่อ โดยระบุเป็นลำดับ 1. 2. 3. ที่ทำตามได้จริง
+- ปิดท้ายด้วยหัวข้อ ## สิ่งที่ควรทำต่อ โดยระบุเป็นลำดับ 1. 2. 3. ที่ทำตามได้จริง พร้อมเชื่อมโยงกับหุ้นที่อาจพิจารณาลดน้ำหนักในพอร์ต (หากมีใน /radar หรือ /tactical-advisor) และหน้าที่ควรเช็กต่อ
 `
 
     const { text, modelUsed } = await callGemini({

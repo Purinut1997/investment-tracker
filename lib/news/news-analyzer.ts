@@ -14,6 +14,10 @@ import { isModelRecord, parseModelJson } from '@/lib/ai/model-contracts'
 import { z } from 'zod'
 import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
 import type { HoldingItem } from '@/lib/analytics/holdings'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+} from '@/lib/ai/unified-context'
 
 export interface SynthesizedTakeaways {
   thaiHeadline: string
@@ -817,14 +821,17 @@ export async function generateNewsDeepDive(
   source?: { sourceName: string; sourceUrl: string; publishedAt: Date } | null,
 ): Promise<NewsDeepDiveResult> {
   const targetSymbol = symbol ? symbol.toUpperCase() : 'ตลาดการเงินรวม'
+  const unifiedCtx = await getUnifiedPortfolioContext(userId).catch(() => null)
 
   const prompt = `คุณคือ Investment Intelligence AI ประจำระบบ Investment Pro
-กรุณาวิเคราะห์ข่าวต่อไปนี้อย่างลึกซึ้งและเป็นกลาง:
+กรุณาวิเคราะห์ข่าวต่อไปนี้อย่างลึกซึ้ง เชื่อมกับสถานะพอร์ตจริงของผู้ใช้ และเป็นกลาง:
 สินทรัพย์: ${targetSymbol}
 หัวข้อข่าว: ${headline}
 แหล่งและวันเผยแพร่: ${source ? `${source.sourceName} | ${source.publishedAt.toISOString()} | ${source.sourceUrl}` : 'ข้อมูลจากผู้ใช้ ยังไม่ยืนยันแหล่งหรือวันเผยแพร่'}
 เนื้อหาย่อ: ${summary?.slice(0, 8000) || 'ไม่มีเนื้อหาย่อ'}
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'news', focusSymbol: symbol || undefined, compact: true }) : ''}
 จำกัดข้อเท็จจริงไว้ที่เนื้อหาที่ให้มา แยกกรณีสมมติและระบุข้อมูลที่ต้องอ่านต้นฉบับ ห้ามสรุปว่าข่าวนี้เป็นข่าวล่าสุด
+ใน whyItMatters และ actionPlan ให้เชื่อมผลกระทบกับสัดส่วนถือครองจริง (ถ้ามีในพอร์ต), Market Posture ล่าสุด, และกฎส่วนตัวให้ตรงกัน พร้อมชี้หน้าถัดไปที่ควรเช็กต่อ (/tactical-advisor หรือ /ai-advisor)
 
 ตอบกลับเป็น JSON ภาษาไทยที่มีโครงสร้างดังนี้เท่านั้น:
 {

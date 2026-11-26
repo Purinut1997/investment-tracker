@@ -1,7 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import useSWR from 'swr'
+import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 import {
   Sparkles,
   Plus,
@@ -982,17 +984,28 @@ export function StrategyBucketsSection({
                       <span className="text-[11px] font-semibold text-indigo-300 truncate">
                         💬 คำถาม: &ldquo;{savedAi.question}&rdquo;
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = { ...bucketAnswers }
-                          delete next[bucket.id]
-                          setBucketAnswers(next)
-                        }}
-                        className="text-[10px] text-slate-500 hover:text-slate-300 shrink-0 cursor-pointer"
-                      >
-                        ซ่อนคำตอบ
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Link
+                          href={buildCopilotDeepLink(
+                            `ต่อยอดจากแผนตะกร้า "${bucket.name}" (สัดส่วนจริง ${bucket.actualPercent}% เทียบเป้า ${bucket.targetPercent}% | งบ DCA ${dcaBudget} ${baseCurrency}) ช่วยเทียบกับสภาวะตลาด Tactical และคำเตือน Risk Sentinel ให้หน่อยว่าควรทำอะไรต่อเป็นขั้น 1-2-3?`
+                          )}
+                          className="text-[10px] text-indigo-300 hover:text-white font-semibold inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-500/15 border border-indigo-500/30 transition-colors"
+                        >
+                          <span>ต่อยอดใน Copilot</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = { ...bucketAnswers }
+                            delete next[bucket.id]
+                            setBucketAnswers(next)
+                          }}
+                          className="text-[10px] text-slate-500 hover:text-slate-300 shrink-0 cursor-pointer"
+                        >
+                          ซ่อนคำตอบ
+                        </button>
+                      </div>
                     </div>
                     {renderFormattedAiAnswer(savedAi.answer)}
                   </div>

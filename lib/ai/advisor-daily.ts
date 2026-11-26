@@ -10,6 +10,12 @@ import { callGemini } from './gemini-client'
 import { formatMarketObservation, getObservationTime } from './advisor-evidence'
 import { advisorDate, advisorDayBounds, matchesLegacyReport } from './advisor-date'
 import { advisorFlags } from './advisor-rollout'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+  invalidateUnifiedContextCache,
+} from './unified-context'
 
 const legacySelect = { id: true, prompt: true, response: true, modelUsed: true, createdAt: true } as const
 
@@ -121,9 +127,24 @@ export async function generateAdvisorBrief(userId: string, date: string, force: 
     let modelUsed = 'rule-engine'
     if (settings?.aiEnabled && snapshot.holdings.some((holding) => holding.price !== null)) {
       try {
+        const unifiedCtx = await getUnifiedPortfolioContext(userId, {
+          baseCurrency: snapshot.baseCurrency,
+          totalCash: snapshot.cash,
+        }).catch(() => null)
+        const prompt = [
+          `สรุปภาพรวมตลาดและแผนปฏิบัติการประจำวันที่ ${date} เป็นภาษาไทยที่อ่านจบใน 1 นาที:`,
+          'กฎเหล็ก: อ้างอิงเฉพาะตัวเลข เวลา และสัญญาณที่มีในหลักฐาน snapshot ด้านล่างเท่านั้น ห้ามแต่งราคา จุดซื้อขาย หรือวงเงินที่ไม่ได้แนบ ถ้าไม่มีให้ระบุสิ่งที่ต้องตรวจต่อ',
+          unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'daily_brief', compact: true }) : '',
+          buildUnifiedDecisionRules('daily_brief'),
+          'จัดโครงสร้าง 3 หัวข้อให้ชัด:',
+          '1. **ภาพรวมตลาด** — ทิศทางดัชนีหลักและความเชื่อมโยงกับสภาวะตลาดใน Tactical Advisor ล่าสุด',
+          '2. **ภาพรวมพอร์ต** — สรุปสถานะเงินสด สินทรัพย์ที่ส่งสัญญาณเด่น (ระบุ TICKER ราคา RSI S1 ที่มีจริง) และความเสี่ยงกระจุกตัวตาม AI Memory',
+          '3. **สิ่งที่ต้องตรวจ** — เช็กลิสต์ 1-2-3 ที่ควรทำต่อวันนี้ พร้อมชี้หน้าในแอปที่ควรเปิดเช็กต่อ (/tactical-advisor, /radar, /ai-advisor)',
+          `หลักฐาน Snapshot:\n${JSON.stringify(snapshot)}`,
+        ].filter(Boolean).join('\n\n')
         const result = await callGemini({
           userId, logType: 'daily_brief', timeoutMs: 18_000, skipLog: true, thinkingBudget: 0,
-          prompt: `สรุปภาพรวมตลาดและข้อสังเกตของพอร์ตวันที่ ${date} จากหลักฐานเท่านั้น ระบุจุดที่ต้องตรวจเพิ่ม งดกำหนดจุดซื้อขายหรือวงเงิน ใช้ภาษาไทย หัวข้อ 1. ภาพรวมตลาด 2. ภาพรวมพอร์ต 3. สิ่งที่ต้องตรวจ\n${JSON.stringify(snapshot)}`,
+          prompt,
         })
         text = result.text
         modelUsed = result.modelUsed
@@ -141,6 +162,7 @@ export async function generateAdvisorBrief(userId: string, date: string, force: 
         snapshot, text, modelUsed, durationMs: Date.now() - startedAt,
       } })
     })
+    if (report) invalidateUnifiedContextCache(userId)
     return report ? { status: 'generated' as const, report } : { status: 'running' as const }
   } finally {
     await prisma.advisorJob.deleteMany({ where: { userId, date, token } }).catch(() => undefined)

@@ -102,6 +102,11 @@ SENTRY_DSN=""
 
 ## ⚠️ สิ่งที่ต้องรู้เกี่ยวกับ Gemini AI
 
+โหมด Auto ใช้ Gemini 3.8 Flash สำหรับงานวิเคราะห์และ Gemini 3.5 Flash-Lite สำหรับงานด่วน โหมด Manual เลือก Gemini 3.1 Pro Preview ได้เมื่อโปรเจกต์ API รองรับและเปิด Billing แล้ว
+
+สำหรับฐานข้อมูลเดิม ใช้ `npx ts-node prisma/sync-gemini-models.ts` เพื่ออัปเดตรายการในหน้าตั้งค่าและย้ายรายการเลือกโมเดลที่เลิกใช้ คำสั่งนี้เปลี่ยนเฉพาะข้อมูลโมเดลและรายการที่ผู้ใช้เลือก ให้ยืนยันว่า environment ชี้ไปที่ฐานข้อมูลที่ต้องการก่อนรัน
+
+
 > **Google AI Pro/Ultra subscription ส่วนตัวของคุณ ≠ การเรียก Gemini API จากแอปนี้**
 
 - Google AI Pro subscription ใช้ได้เฉพาะใน AI Studio Playground เท่านั้น

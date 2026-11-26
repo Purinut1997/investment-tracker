@@ -11,6 +11,12 @@ import {
 import { callGemini } from '@/lib/ai/gemini-client'
 import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
 import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+  invalidateUnifiedContextCache,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -164,11 +170,19 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    const unifiedCtx = await getUnifiedPortfolioContext(userId, {
+      baseCurrency,
+      holdingsResult,
+      totalCash,
+    }).catch(() => null)
+
     // Prepare institutional-grade prompt for Gemini AI
     const prompt = `
 [AI Risk Sentinel]
 คุณเป็น "Chief Risk Officer (CRO) & Global Chief Investment Officer (CIO)" สถาบันบริหารความมั่งคั่งระดับโลก (Institutional Wealth Management)
 จงประเมินและสรุปยุทธศาสตร์ "AI Strategic Executive Briefing & Capital Allocation Blueprint" เป็นภาษาไทยระดับมืออาชีพ สำหรับพอร์ตนี้:
+
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'radar' }) : ''}
 
 [ภาพรวมพอร์ตโฟลิโอ]
 - มูลค่าสินทรัพย์ลงทุน: ${holdingsResult.totalValueBase.toLocaleString()} ${baseCurrency}
@@ -191,22 +205,20 @@ ${riskReport.concentrationRisks.map((c) => {
 ${opportunityReport.opportunities.slice(0, 4).map((o) => `- [${o.opportunityType}] ${o.title}: ${o.metricLabel} ${o.metricValue} -> ${o.suggestedAction}`).join('\n')}
 
 [กฎเหล็กระดับสถาบันการเงิน (Institutional Rules - ห้ามละเมิดเด็ดขาด)]:
-1. กฎห้ามสร้างความเสี่ยงกระจุกตัวซ้ำซ้อน: หากแนะนำให้ขายทำกำไรหรือลดความเสี่ยง (De-risk) จากหุ้น Growth/Tech ตัวใดตัวหนึ่ง (เช่น GOOGL) ห้ามแนะนำให้เอาเงินที่ได้ไปทุ่มซื้อหุ้น Growth/Tech/Semiconductor ตัวอื่น (เช่น ห้ามโยกไปซื้อ MU) เพราะไม่ได้ช่วยลดความเสี่ยงเชิงโครงสร้าง (Sector Risk) เลย!
-2. กฎการหมุนเงินทุนข้ามกลุ่ม (Cross-Sector Rotation): ต้องแนะนำให้นำเงินที่ได้จากการ De-risk ไปจัดสรรสู่สินทรัพย์ที่มี Correlation ต่ำ หรือกลุ่มป้องกันความเสี่ยง (Defensive) เช่น:
-   - กองทุนปันผลกระแสเงินสดมั่นคง (เช่น SCHD, VYM)
-   - กลุ่มการแพทย์และสินค้าจำเป็น (เช่น Healthcare XLV/JNJ, Consumer Staples XLP/PG)
-   - สินทรัพย์หลบภัย (เช่น ทองคำ GOLD, พันธบัตร TLT) หรือกองทุนดัชนีหลัก (VOO)
+1. กฎห้ามสร้างความเสี่ยงกระจุกตัวซ้ำซ้อน: หากแนะนำให้ลดน้ำหนัก (De-risk) จากสินทรัพย์หรือกลุ่มอุตสาหกรรมที่ Overweight หรือเกินเพดาน Max Single Position ใน AI Memory ห้ามแนะนำให้นำเงินที่ได้ไปทุ่มซื้อสินทรัพย์ในกลุ่มเสี่ยงเดียวกัน/Correlation สูงเดียวกันซ้ำ!
+2. กฎการหมุนเงินทุนข้ามกลุ่ม (Cross-Sector Rotation): ต้องแนะนำให้นำเงินที่ได้จากการ De-risk หรือเงินใหม่ไปจัดสรรสู่สินทรัพย์ที่มี Correlation ต่ำหรือกลุ่มป้องกันความเสี่ยงที่ยังไม่ล้นพอร์ต (เช่น ETF ปันผล, กลุ่ม Healthcare/Staples, ทองคำ XAU/GOLD965, พันธบัตร, หรือดัชนีหลัก) โดยเช็กไม่ให้ขัดกับ Market Posture ใน Tactical Advisor ล่าสุด
 3. ใช้เฉพาะสัดส่วนที่ระบบคำนวณหรือผู้ใช้กำหนด ถ้าไม่มีเป้าหมายให้เสนอสิ่งที่จะประเมินก่อนเลือกวงเงินหรือสัดส่วนใหม่
+${buildUnifiedDecisionRules('radar')}
 
-[โครงสร้างบทวิเคราะห์ที่ต้องตอบ (ใช้ Markdown สวยงาม อ่านง่าย)]:
+[โครงสร้างบทวิเคราะห์ที่ต้องตอบ (ใช้ Markdown สวยงาม อ่านง่าย 3 หมวด)]:
 1. 🛡️ **การประเมินโครงสร้างและจุดอ่อนของพอร์ต (Structural & Sector Audit)**: 
-   - สรุปสถานะพอร์ตและสัดส่วนกลุ่มอุตสาหกรรม ห้ามอ้าง Beta หรือ Correlation ที่ระบบไม่ได้คำนวณ
+   - สรุปสถานะพอร์ต สัดส่วนกลุ่มอุตสาหกรรม และเทียบกับกฎ Max Position/Max Drawdown ใน AI Memory ห้ามอ้าง Beta หรือ Correlation ที่ระบบไม่ได้คำนวณ
 2. 🎯 **แผนจัดสรรเงินทุนและการหมุนกลุ่มอุตสาหกรรม (Capital Allocation & Sector Rotation Blueprint)**:
-   - **ขั้นตอนที่ 1 — Take Profit & De-risk**: ระบุหุ้นที่ควรลดน้ำหนัก, ขายสัดส่วนกี่ %, ดึงลงมาเหลือเท่าไหร่
-   - **ขั้นตอนที่ 2 — Sector Rotation (หมุนเข้ากลุ่มใหม่)**: ระบุสินทรัพย์/กลุ่มปลายทางข้ามอุตสาหกรรม (เช่น SCHD, XLV, ทองคำ) ที่ควรแบ่งเงินไปสะสม เพื่อสร้างสมดุลพอร์ต
-   - **ขั้นตอนที่ 3 — Tactical Stock Stance**: กำหนดจุดยืนต่อหุ้นตัวอื่นๆ ในพอร์ต (เช่น สั่งชะลอการซื้อเพิ่มในกลุ่มที่ล้นพอร์ตอยู่แล้ว)
-3. 💡 **แผนบริหารกระสุนเงินสด (Dry Powder Roadmap)**: 
-   - แยกเงินสดปัจจุบันออกจากเงินสมมติหลังปรับพอร์ต และระบุข้อจำกัดเรื่องเป้าหมายหรือข้อมูลค่าใช้จ่ายที่ยังขาด
+   - **ขั้นตอนที่ 1 — Take Profit & De-risk**: ระบุสินทรัพย์จริงที่ควรลดน้ำหนักหรือชะลอซื้อ พร้อมเงื่อนไขทำกำไร/ตัดความเสี่ยง และข้อควรระวังภาษี (ถ้าขายหุ้นนอก/คริปโต)
+   - **ขั้นตอนที่ 2 — Sector Rotation (หมุนเข้ากลุ่มใหม่)**: ระบุสินทรัพย์/กลุ่มปลายทางข้ามอุตสาหกรรมที่สอดคล้องกับเป้าหมายและ Market Posture เพื่อสร้างสมดุลพอร์ต
+   - **ขั้นตอนที่ 3 — Tactical Stock Stance**: กำหนดจุดยืนต่อสินทรัพย์หลักตัวอื่นๆ ในพอร์ตให้ตรงกับ Tactical Advisor
+3. 💡 **แผนบริหารกระสุนเงินสด & ขั้นตอนทำต่อทันที (Dry Powder & Next Actions)**: 
+   - แยกเงินสดปัจจุบันออกจากเงินสมมติหลังปรับพอร์ต สรุปเป็นเช็กลิสต์ 1-2-3 ที่ทำได้ทันที พร้อมระบุหน้าที่ควรไปต่อ (/tactical-advisor, /plans, /tax-report, /ai-advisor)
 `
 
     const systemInstruction =
@@ -218,6 +230,7 @@ ${opportunityReport.opportunities.slice(0, 4).map((o) => `- [${o.opportunityType
       logType: 'advisor',
       systemInstruction,
     })
+    invalidateUnifiedContextCache(userId)
 
     // If critical risk, record in AllocationAlert
     if (riskReport.overallRiskLevel === 'CRITICAL' || riskReport.overallRiskLevel === 'ELEVATED') {

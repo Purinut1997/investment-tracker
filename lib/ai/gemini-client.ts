@@ -7,6 +7,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@/lib/prisma'
 import { decrypt } from '@/lib/crypto'
+import { autoGeminiModels, geminiThinkingConfig, migratedGeminiModel } from './gemini-model-policy'
 import { parseModelJson, remainingModelBudget } from './model-contracts'
 
 export interface GroundingSource {
@@ -130,28 +131,18 @@ export async function callGemini({
     throw new Error('กรุณาระบุ Gemini API Key ในหน้าตั้งค่า (Settings) ก่อนใช้งานฟีเจอร์ AI')
   }
 
-  // 2. Determine models to try based on Auto or Manual mode
-  let modelsToTry: string[] = []
-  const deprecatedModels = new Set(['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'])
+  const fastTask = logType === 'quick_add_multimodal' || logType === 'csv_mapping' ||
+    (logType === 'daily_brief' && thinkingBudget === 0)
+  const selectedModel = userSettings?.aiModelMode === 'manual' ? userSettings.selectedAiModel : null
+  const modelsToTry = selectedModel?.modelId
+    ? [migratedGeminiModel(selectedModel.modelId)]
+    : autoGeminiModels(await prisma.aiModelOption.findMany({
+        where: { provider: 'gemini' },
+        orderBy: [{ isDefaultForAuto: 'desc' }, { sortOrder: 'asc' }],
+        select: { modelId: true, isActive: true, tier: true },
+      }), fastTask && !enableGoogleSearch)
 
-  if (userSettings?.aiModelMode === 'manual' && userSettings.selectedAiModel?.modelId) {
-    modelsToTry = [userSettings.selectedAiModel.modelId]
-  } else {
-    // Auto Mode: prioritize non-billing models first, keep billing models only as last-resort fallback
-    const dbModels = await prisma.aiModelOption.findMany({
-      where: { isActive: true },
-      orderBy: [{ isDefaultForAuto: 'desc' }, { sortOrder: 'asc' }],
-    })
-
-    const activeModels = dbModels.filter((m) => !deprecatedModels.has(m.modelId))
-    const standardModels = activeModels.filter((m) => m.tier !== 'requires_billing').map((m) => m.modelId)
-    const billingModels = activeModels.filter((m) => m.tier === 'requires_billing').map((m) => m.modelId)
-    modelsToTry = [...standardModels, ...billingModels]
-
-    if (modelsToTry.length === 0) {
-      modelsToTry = ['gemini-2.5-flash', 'gemini-3-flash']
-    }
-  }
+  if (!modelsToTry.length) throw new Error('ไม่มีโมเดล Gemini ที่เปิดใช้งานสำหรับโหมด Auto')
 
   // Enable structured reasoning budget for advisory/analysis endpoints; 0 for fast extraction
   const deepReasoningTypes = new Set<CallGeminiOptions['logType']>([
@@ -161,6 +152,7 @@ export async function callGemini({
     'tax_explain',
     'weekly_digest',
     'daily_brief',
+    'stock_insight',
   ])
 
   const effectiveThinkingBudget =
@@ -183,6 +175,7 @@ export async function callGemini({
 
     for (const modelId of modelsToTry) {
       if (remainingModelBudget(startedAt, timeoutMs) === 0) break
+      const thinking = geminiThinkingConfig(modelId, effectiveThinkingBudget)
       const contentPayload = images && images.length > 0 ? [prompt, ...images] : prompt
 
       const invokeModel = async (useSearch: boolean, useThinking: boolean) => {
@@ -193,8 +186,8 @@ export async function callGemini({
         if (outputMimeType) {
           generationConfig.responseMimeType = outputMimeType
         }
-        if (useThinking && effectiveThinkingBudget > 0) {
-          generationConfig.thinkingConfig = { thinkingBudget: effectiveThinkingBudget }
+        if (useThinking && thinking) {
+          generationConfig.thinkingConfig = thinking
         }
 
         const model = ai.getGenerativeModel({
@@ -222,37 +215,28 @@ export async function callGemini({
         const groundingSources = useSearch ? extractGroundingSources(response) : []
         const groundingStatus: CallGeminiResult['groundingStatus'] = groundingSources.length ? 'verified_sources'
           : useSearch ? 'no_sources' : enableGoogleSearch ? 'unavailable' : 'not_requested'
-        return { text, groundingSources, groundingStatus }
+        const reportedVersion = (response as { modelVersion?: unknown }).modelVersion
+        const modelUsed = typeof reportedVersion === 'string' && reportedVersion.trim()
+          ? reportedVersion.trim() : modelId
+        return { text, modelUsed, groundingSources, groundingStatus }
       }
 
       try {
         let generated: Awaited<ReturnType<typeof invokeModel>>
         try {
-          generated = await invokeModel(shouldUseSearch, effectiveThinkingBudget > 0)
+          generated = await invokeModel(shouldUseSearch, Boolean(thinking))
         } catch (primaryErr: any) {
           const msg = String(primaryErr?.message || '')
-          const isAuthKeyInvalid =
-            msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')
-          const isFeatureRejected =
-            !isAuthKeyInvalid &&
-            (shouldUseSearch || effectiveThinkingBudget > 0) &&
-            (msg.includes('google_search') ||
-              msg.includes('Search') ||
-              msg.includes('tools') ||
-              msg.includes('thinking') ||
-              msg.includes('thinkingConfig') ||
-              msg.includes('INVALID_ARGUMENT') ||
-              msg.includes('400'))
-
-          if (!isFeatureRejected) {
-            throw primaryErr
-          }
+          const invalidKey = /API_KEY_INVALID|API key not valid/i.test(msg)
+          const rejectedSearch = shouldUseSearch && /google[ _]?search|grounding|\btools?\b/i.test(msg)
+          const rejectedThinking = thinking && /thinking[_ ]?(?:config|budget|level)|thinking is not supported/i.test(msg)
+          if (invalidKey || (!rejectedSearch && !rejectedThinking)) throw primaryErr
 
           console.warn(`[Gemini] Retrying ${modelId} after optional configuration rejection`)
-          generated = await invokeModel(false, false)
+          generated = await invokeModel(shouldUseSearch && !rejectedSearch, Boolean(thinking && !rejectedThinking))
         }
 
-        const { text, groundingSources, groundingStatus } = generated
+        const { text, modelUsed, groundingSources, groundingStatus } = generated
 
         // Map logType safely to Prisma enum (advisor, weekly_digest, forecast_explain, tax_explain, csv_mapping, quick_add_multimodal)
         const validDbLogType =
@@ -273,7 +257,7 @@ export async function callGemini({
                 logType: validDbLogType,
                 prompt,
                 response: text,
-                modelUsed: modelId,
+                modelUsed,
               },
             })
           } catch (err) {
@@ -283,7 +267,7 @@ export async function callGemini({
 
         return {
           text,
-          modelUsed: modelId,
+          modelUsed,
           groundingStatus,
           ...(groundingSources.length > 0 ? { groundingSources } : {}),
         }
@@ -300,6 +284,7 @@ export async function callGemini({
           errMsg.includes('API key not valid') ||
           errMsg.includes('timeout') || err?.name === 'TimeoutError' || err?.name === 'AbortError'
 
+        if (/API_KEY_INVALID|API key not valid/i.test(errMsg)) break
         if (userSettings?.aiModelMode === 'manual' && !isRetryable) {
           break
         }

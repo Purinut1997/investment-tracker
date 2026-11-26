@@ -12,6 +12,11 @@ import {
   parseUserInvestmentMemory,
   formatInvestmentMemoryForPrompt,
 } from '@/lib/ai/portfolio-intelligence'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -104,9 +109,12 @@ export async function POST(req: NextRequest) {
     }))
 
     const dcaBudget = monthlyContribution
-    const storedPreset = presetId ? await prisma.investmentPreset.findFirst({
-      where: { id: presetId, userId }, select: { targetAllocation: true },
-    }) : null
+    const [storedPreset, unifiedCtx] = await Promise.all([
+      presetId ? prisma.investmentPreset.findFirst({
+        where: { id: presetId, userId }, select: { targetAllocation: true },
+      }) : Promise.resolve(null),
+      getUnifiedPortfolioContext(userId, { baseCurrency, holdingsResult, totalCash }).catch(() => null),
+    ])
     const { computedBuckets } = computeBucketsWithHoldings(
       extractStrategyBuckets(storedPreset?.targetAllocation as Record<string, unknown> | undefined || targetAllocation, holdingsResult.holdings),
       holdingsResult.holdings,
@@ -152,6 +160,10 @@ ${mathRebalanceSummary}
 
 [ความจำกลยุทธ์และกฎความเสี่ยงของผู้ลงทุน (AI Memory)]:
 ${formatInvestmentMemoryForPrompt(memory)}
+
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'plans_analyze', compact: true }) : ''}
+
+${buildUnifiedDecisionRules('plans_analyze')}
 
 [ข้อกำหนดสำคัญในการเขียนคำตอบ - ต้องปฏิบัติตามอย่างเคร่งครัด]:
 1. ห้ามมีคำทักทายเกริ่นนำใดๆ ทั้งสิ้น (ห้ามเขียน "เรียน ท่านนักลงทุน", "สวัสดีครับ", "ในฐานะ Investment Advisor...") ให้เริ่มเข้าสู่หัวข้อที่ 1 ทันที!

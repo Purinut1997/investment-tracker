@@ -16,6 +16,12 @@ import {
   formatOutcomeMetricsForPrompt,
   AdviceOutcomeMetrics,
 } from '@/lib/ai/portfolio-intelligence'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+  invalidateUnifiedContextCache,
+} from '@/lib/ai/unified-context'
 
 
 const tacticalText = z.string().trim().max(2000)
@@ -807,7 +813,7 @@ export async function runTacticalAnalysis(
   const heldTickersUpper = topHoldings.map((h) => h.ticker.toUpperCase())
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-  const [market, technicalSignals, recentNews, deepIntel] = await Promise.all([
+  const [market, technicalSignals, recentNews, deepIntel, unifiedCtx] = await Promise.all([
     gatherMarketData(),
     topHoldings.length > 0
       ? getBatchTechnicalSignals(
@@ -838,6 +844,11 @@ export async function runTacticalAnalysis(
       baseCurrency,
       holdings: holdingsResult.holdings,
       txns: holdingsResult.txns,
+    }).catch(() => null),
+    getUnifiedPortfolioContext(userId, {
+      baseCurrency,
+      holdingsResult,
+      totalCash,
     }).catch(() => null),
   ])
 
@@ -978,6 +989,10 @@ ${deepIntel?.taxContextPrompt || 'ไม่มีข้อมูลภาษี'
 
 === สถิติผลลัพธ์คำแนะนำในรอบที่ผ่านๆ มา (CLOSED-LOOP TRACK RECORD) ===
 ${pastContextSummaries}
+
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'tactical', compact: true }) : ''}
+
+${buildUnifiedDecisionRules('tactical')}
 
 === กฎเหล็ก 6 มิติที่ต้องคำนึงถึงในการวิเคราะห์ (MANDATORY GUARDRAILS) ===
 1. กำหนดขนาดไม้และวงเงินเสมอ (Position Sizing & Tranches): หากแนะนำให้สะสม (ACCUMULATE) ต้องระบุว่าใช้เงินสดกี่ % หรือกี่บาท/ดอลลาร์ และแบ่งเป็นกี่ไม้ชัดเจน (เช่น ไม้แรก 25% ที่ราคา..., ไม้สอง 35% ที่แนวรับ S1...) และห้ามขัดเพดาน Max Position ใน User Memory
@@ -1155,6 +1170,7 @@ ${pastContextSummaries}
   await prisma.aiAdviceLog.create({
     data: { userId, logType: 'advisor', prompt, response: JSON.stringify(payload), modelUsed: aiResult.modelUsed },
   })
+  invalidateUnifiedContextCache(userId)
 
   return payload
 }

@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import useSWR, { useSWRConfig } from 'swr'
 import { forecastContextKey } from '@/lib/ai/model-contracts'
+import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import { StrategicRoadmapDisplay } from '@/components/forecast/StrategicRoadmapDisplay'
@@ -37,6 +39,7 @@ import {
   Wallet,
   Activity,
   Calculator,
+  ExternalLink,
 } from 'lucide-react'
 import CountUp from 'react-countup'
 import {
@@ -1114,7 +1117,7 @@ export default function ForecastPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 self-start sm:self-auto">
+            <div className="flex items-center gap-3 flex-wrap self-start sm:self-auto">
               {currentUpdatedAt && (
                 <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-white/[0.03] px-3 py-1.5 rounded-xl border border-white/[0.06] font-mono">
                   <Clock className="w-3.5 h-3.5 text-slate-500" />
@@ -1125,6 +1128,17 @@ export default function ForecastPage() {
                   })}{' '}
                   น.
                 </span>
+              )}
+              {result && (
+                <Link
+                  href={buildCopilotDeepLink(
+                    `อิงผลคาดการณ์ Monte Carlo ${years} ปี (โอกาสถึงเป้า ฿${targetAmount.toLocaleString()} = ${result.probabilityOfReachingTarget}% | ออม ฿${monthlyContribution.toLocaleString()}/ด.) เทียบกับพอร์ตและ Risk Sentinel ปัจจุบัน ผมควรปรับงบ DCA หรือสัดส่วนสินทรัพย์ตัวไหนเพื่อให้ถึงเป้าหมายเร็วและมั่นคงขึ้น?`
+                  )}
+                  className="px-3 py-2 rounded-xl text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 flex items-center gap-1.5 transition-colors"
+                >
+                  <span>ต่อยอดใน Copilot</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
               )}
               <button
                 type="button"

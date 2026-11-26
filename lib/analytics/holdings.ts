@@ -88,10 +88,12 @@ export function setInFlightSummary(userId: string, baseCurrency: string, promise
 
 import { invalidateAssetPerformanceCache } from './asset-performance'
 import { invalidatePortfolioAnalyticsCache } from './analytics-cache'
+import { invalidateUnifiedContextCache } from '../ai/unified-context'
 
 export function invalidateUserPortfolioCache(userId?: string) {
   invalidateAssetPerformanceCache(userId)
   invalidatePortfolioAnalyticsCache(userId)
+  invalidateUnifiedContextCache(userId)
   if (userId) {
     for (const key of userHoldingsCache.keys()) {
       if (key.startsWith(`${userId}_`)) {

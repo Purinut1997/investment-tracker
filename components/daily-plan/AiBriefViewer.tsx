@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 import {
   Sparkles,
   Compass,
@@ -20,6 +22,7 @@ import {
   Flame,
   CheckCircle2,
   Layers,
+  ExternalLink,
 } from 'lucide-react'
 
 interface AiBriefViewerProps {
@@ -462,7 +465,18 @@ export function AiBriefViewer({
           ข้อมูล ณ {new Date(asOf).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
         </span>}
         {/* Action Buttons */}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          {text && (
+            <Link
+              href={buildCopilotDeepLink(
+                'ต่อยอดจากแผนรายวัน (Daily Plan) วันนี้ ช่วยเชื่อมกับ Tactical Advisor และ Risk Sentinel เพื่อสรุปลำดับสิ่งที่ผมควรทำใน 24 ชั่วโมงนี้ (ซื้อ/รอ/ลดน้ำหนัก/เงินสด) ให้เป็นขั้น 1-2-3'
+              )}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 hover:text-white border border-indigo-500/30 transition-colors flex items-center gap-1.5"
+            >
+              <span>ต่อยอดใน Copilot</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          )}
           {text && (
             <button
               onClick={handleCopy}

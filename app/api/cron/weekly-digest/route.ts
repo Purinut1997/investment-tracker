@@ -6,6 +6,11 @@ import { callGemini } from '@/lib/ai/gemini-client'
 import { parseModelJson } from '@/lib/ai/model-contracts'
 import { sendWeeklyDigest } from '@/lib/email/send'
 import { z } from 'zod'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 60
 const weeklyNarrative = z.object({
@@ -72,14 +77,20 @@ export async function GET(req: NextRequest) {
 
         // 2. Gather news for user's tickers in the past 7 days
         const userTickers = holdingsResult.holdings.map((h) => h.ticker)
-        const recentNews = await prisma.newsItem.findMany({
-          where: {
-            symbol: { in: userTickers },
-            publishedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-          },
-          take: 5,
-          orderBy: { publishedAt: 'desc' },
-        })
+        const [recentNews, unifiedCtx] = await Promise.all([
+          prisma.newsItem.findMany({
+            where: {
+              symbol: { in: userTickers },
+              publishedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+            },
+            take: 5,
+            orderBy: { publishedAt: 'desc' },
+          }),
+          getUnifiedPortfolioContext(user.id, {
+            baseCurrency: setting.baseCurrency,
+            holdingsResult,
+          }).catch(() => null),
+        ])
 
         const newsHeadlines = recentNews.map((n) => `[${n.symbol}] ${n.headline} (${n.sourceName}, ${n.publishedAt.toISOString().slice(0, 10)})`).join('\n')
 
@@ -91,12 +102,16 @@ export async function GET(req: NextRequest) {
 - Health Score: ${healthScore.score}/100
 - สินทรัพย์ที่ถือครอง: ${userTickers.join(', ') || 'ยังไม่มี'}
 
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'weekly_digest', compact: true }) : ''}
+
+${buildUnifiedDecisionRules('weekly_digest')}
+
 หัวข้อข่าวที่เกี่ยวข้องกับหุ้นที่ถือในสัปดาห์นี้:
 ${newsHeadlines || 'ไม่มีข่าวเด่น'}
 
-กรุณาสรุป 2 ส่วนสั้นๆ ในภาษาไทย (ตอบเป็น JSON):
+กรุณาสรุป 2 ส่วนสั้นๆ ในภาษาไทย ให้เชื่อมโยงกับจุดยืนตลาดและความเสี่ยงล่าสุด (ตอบเป็น JSON):
 {
-  "portfolioSummary": "ย่อหน้าเดียว สรุปสถานะพอร์ตและคำแนะนำในสัปดาห์นี้",
+  "portfolioSummary": "ย่อหน้าเดียว สรุปสถานะพอร์ต แผนสัปดาห์หน้า 1-2-3 ที่สอดคล้องกับ AI หน้าอื่น",
   "newsSummary": "สรุปเฉพาะข่าวที่แนบหรือระบุว่าไม่พบข่าว แยกข้อเท็จจริงจากผลกระทบที่เป็นสมมติฐาน"
 }
 `

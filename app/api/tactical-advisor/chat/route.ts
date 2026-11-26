@@ -1,5 +1,7 @@
 import { advisorFlags } from '@/lib/ai/advisor-rollout'
-import { getAdvisorPolicy, getLatestAdvisorRun } from '@/lib/ai/advisor-planning-service'
+import { AdvisorPlanError, getAdvisorPolicy, getLatestAdvisorRun, runAdvisorPlan } from '@/lib/ai/advisor-planning-service'
+import { describeCopilotPlan, identifyCopilotPlanIntent } from '@/lib/ai/advisor-copilot'
+import type { AdvisorPlanResult } from '@/lib/ai/advisor-plan'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/auth'
@@ -24,6 +26,12 @@ import {
   parseUserInvestmentMemory,
   serializeUserInvestmentMemory,
 } from '@/lib/ai/portfolio-intelligence'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+  invalidateUnifiedContextCache,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -108,6 +116,63 @@ async function saveCopilotThread(
   })
 }
 
+async function persistCopilotReply(
+  userId: string,
+  activeQuestion: string,
+  messages: unknown,
+  savedThread: Awaited<ReturnType<typeof loadSavedCopilotThread>>,
+  answer: string,
+  modelUsed: string,
+  groundingSources: GroundingSource[] = [],
+) {
+  const nowTimeLabel = new Date().toLocaleTimeString('th-TH', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Bangkok',
+  })
+  const baseHistory: PersistedCopilotMessage[] =
+    Array.isArray(messages) && messages.length > 0
+      ? messages
+          .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && m.content)
+          .map((m: any, idx: number) => ({
+            id: String(m.id || `msg-${Date.now()}-${idx}`),
+            role: m.role,
+            content: String(m.content),
+            timestamp: String(m.timestamp || nowTimeLabel),
+            ...(m.modelUsed ? { modelUsed: String(m.modelUsed) } : {}),
+            ...(Array.isArray(m.groundingSources) ? { groundingSources: m.groundingSources } : {}),
+          }))
+      : [
+          ...savedThread.messages,
+          {
+            id: `user-${Date.now()}`,
+            role: 'user',
+            content: activeQuestion,
+            timestamp: nowTimeLabel,
+          },
+        ]
+
+  const assistantReply: PersistedCopilotMessage = {
+    id: `bot-${Date.now()}`,
+    role: 'assistant',
+    content: answer,
+    timestamp: nowTimeLabel,
+    modelUsed,
+    ...(groundingSources.length ? { groundingSources } : {}),
+  }
+
+  try {
+    await saveCopilotThread(
+      userId,
+      [...baseHistory, assistantReply],
+      modelUsed,
+      savedThread.logId
+    )
+  } catch (persistErr) {
+    console.warn('[tactical-advisor chat] Failed to persist thread:', persistErr)
+  }
+}
+
 export async function GET() {
   const session = await auth()
   if (!session?.user?.id) {
@@ -142,10 +207,19 @@ export async function GET() {
     )
     const outcomeMetrics = computeAdviceOutcomeMetrics(pastLogs, livePriceMap)
 
+    const holdingsDigest = (holdingsRes?.holdings || []).slice(0, 10).map((h) => ({
+      ticker: h.ticker,
+      market: h.market,
+      assetType: h.assetType,
+      allocationPercent: Number(h.allocationPercent || 0),
+      unrealizedPnLPercent: Number(h.unrealizedPnLPercent || 0),
+    }))
+
     return NextResponse.json({
       messages: thread.messages,
       memory,
       outcomeMetrics,
+      holdingsDigest,
     })
   } catch (error: any) {
     console.error('[tactical-advisor chat GET]', error)
@@ -189,6 +263,7 @@ export async function PATCH(req: NextRequest) {
       update: { defaultRiskProfile: serialized },
       create: { userId, defaultRiskProfile: serialized },
     })
+    invalidateUnifiedContextCache(userId)
 
     return NextResponse.json({
       success: true,
@@ -217,6 +292,7 @@ export async function DELETE() {
         prompt: COPILOT_THREAD_TAG,
       },
     })
+    invalidateUnifiedContextCache(session.user.id)
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('[tactical-advisor chat DELETE]', error)
@@ -257,11 +333,56 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing question or messages' }, { status: 400 })
     }
 
-    const policy = advisorFlags(userId).planning ? await getAdvisorPolicy(userId) : null
-    const candidate = await getLatestAdvisorRun(userId, policy)
+    const planningEnabled = advisorFlags(userId).planning
+    const intent = planningEnabled ? identifyCopilotPlanIntent(activeQuestion) : null
+    const policy = planningEnabled ? await getAdvisorPolicy(userId) : null
+    const candidate = !intent || intent.kind === 'explain' ? await getLatestAdvisorRun(userId, policy) : null
     const savedPlan = candidate?.stale ? null : candidate
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+    if (intent) {
+      let answer: string
+      if (!policy) {
+        answer = 'กรุณายืนยันบัญชีลงทุน เป้าหมาย และกฎพอร์ตในหน้ากลยุทธ์ก่อนคำนวณ'
+      } else if (intent.kind === 'explain') {
+        answer = savedPlan
+          ? describeCopilotPlan(savedPlan.result as unknown as AdvisorPlanResult, savedPlan.policyVersion)
+          : candidate?.stale
+            ? 'พอร์ตหรือข้อมูลอ้างอิงเปลี่ยนจากแผนเดิม กรุณาคำนวณแผนใหม่ในหน้ากลยุทธ์ แล้วผมจะอธิบายเหตุผลจากแผนล่าสุด'
+            : 'ยังไม่มีแผนเติมเงินที่บันทึกไว้ กรุณาคำนวณและบันทึกแผนในหน้ากลยุทธ์ก่อน'
+      } else if (intent.kind === 'clarify') {
+        answer = 'ระบุจำนวนเงินระหว่าง 0 ถึง 100,000,000 เช่น “ถ้ามีเงินลงทุน 5,000 บาท”'
+      } else if (intent.currency && intent.currency !== baseCurrency) {
+        answer = `พอร์ตนี้ใช้ ${baseCurrency} กรุณาระบุเงินในสกุลนั้นเพื่อจำลอง ระบบจะใช้ยอดที่คุณระบุในสกุลของพอร์ต`
+      } else {
+        const inflow = intent.field === 'reserve' ? policy.config.monthlyBudget
+          : intent.amount + (intent.extra ? policy.config.monthlyBudget : 0)
+        if (inflow > 100_000_000) {
+          answer = 'เงินใหม่รวมเกินขอบเขตการจำลอง กรุณาระบุยอดรวมไม่เกิน 100,000,000'
+        } else {
+          try {
+            const simulation = await runAdvisorPlan(userId, {
+              inflow, ...(intent.field === 'reserve' ? { reserve: intent.amount } : {}),
+            })
+            const basis = intent.extra
+              ? `คำนวณโดยเพิ่มเงินจากงบตามโปรไฟล์ ${policy.config.monthlyBudget.toLocaleString('th-TH')} ${baseCurrency}\n\n`
+              : ''
+            answer = simulation.policyVersion === policy.version && simulation.result.currency === baseCurrency
+              ? basis + describeCopilotPlan(simulation.result, simulation.policyVersion, simulation.comparison)
+              : 'โปรไฟล์เปลี่ยนระหว่างคำนวณ กรุณาส่งคำถามใหม่'
+          } catch (error) {
+            if (!(error instanceof AdvisorPlanError)) throw error
+            answer = error.message
+          }
+        }
+      }
+      const modelUsed = 'advisor-engine'
+      if (!skipPersist) {
+        await persistCopilotReply(userId, activeQuestion, messages, await loadSavedCopilotThread(userId), answer, modelUsed)
+      }
+      return NextResponse.json({ answer, modelUsed, groundingSources: [] })
+    }
+
     const [holdingsResult, accounts, savedThread] = await Promise.all([
       calculateUserHoldings(userId, baseCurrency),
       prisma.investmentAccount.findMany({
@@ -349,7 +470,7 @@ export async function POST(req: NextRequest) {
     const focusSymbols = new Set(researchTargets.map((target) => target.ticker.toUpperCase().replace(/\.BK$/, '')))
     const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000)
 
-    const [signals, focusNews, portfolioNews, generalMarketNews, deepIntel, pastAdvisorLogs] = await Promise.all([
+    const [signals, focusNews, portfolioNews, generalMarketNews, deepIntel, pastAdvisorLogs, unifiedCtx] = await Promise.all([
       Promise.all(targets.map((target) => fetchSingleTickerTechnicalSignal(target.ticker, target.market, false, true))),
       focusSymbols.size > 0 ? prisma.newsItem.findMany({
         where: { symbol: { in: [...focusSymbols] }, publishedAt: { gte: sevenDaysAgo } },
@@ -379,6 +500,11 @@ export async function POST(req: NextRequest) {
         take: 15,
         select: { createdAt: true, response: true },
       }),
+      getUnifiedPortfolioContext(userId, {
+        baseCurrency,
+        holdingsResult,
+        totalCash,
+      }).catch(() => null),
     ])
 
     const allNews = [...focusNews, ...[...portfolioNews, ...generalMarketNews]
@@ -498,7 +624,7 @@ ${deepIntel?.catalystsPrompt || 'ไม่มีกำหนดการงบ/�
 
 [แผนเติมเงินที่บันทึกไว้]
 ${savedPlan ? JSON.stringify(savedPlan) : 'ไม่มีแผนเติมเงินที่บันทึกสำหรับโปรไฟล์ปัจจุบัน'}
-เมื่ออธิบายแผน ให้ใช้คำสั่งซื้อ งบ เงินสด และสัดส่วนจากแผนที่บันทึกไว้ พร้อมระบุเวลาและห้ามนำตัวเลขดังกล่าวไปใช้เป็นราคาปัจจุบัน ถ้าถามให้เปลี่ยนเงินใหม่หรือเงินสดขั้นต่ำ ให้ชี้ไปที่ฟอร์มจำลองในหน้า Copilot และอย่าคำนวณจำนวนสั่งซื้อเอง
+เมื่ออธิบายแผน ให้ใช้คำสั่งซื้อ งบ เงินสด และสัดส่วนจากแผนที่บันทึกไว้ พร้อมระบุเวลาและห้ามนำตัวเลขดังกล่าวไปใช้เป็นราคาปัจจุบัน หากคำถามมีหลายสมมติฐานหรือไม่ชัดเจน ให้ขอจำนวนเงินใหม่หรือเงินสดขั้นต่ำทีละหนึ่งค่า หรือชี้ไปที่ฟอร์มจำลองในหน้า Copilot งดเสนอจำนวนสั่งซื้อจากการคำนวณเอง
 
 [เป้าหมายแผนลงทุน & กฎส่วนตัวใน AI Memory]
 ${deepIntel?.goalsAndMemoryPrompt || 'ยังไม่ได้ตั้งเป้าหมายเฉพาะ'}
@@ -509,15 +635,19 @@ ${deepIntel?.taxContextPrompt || 'ไม่มีข้อมูลภาษี'
 [การติดตามคำแนะนำย้อนหลังตามเกณฑ์ของระบบ ไม่ใช่ผลทดสอบความแม่นยำ]
 ${formatOutcomeMetricsForPrompt(outcomeMetrics)}
 
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'copilot', focusSymbol: researchTargets[0]?.ticker }) : ''}
+
+${buildUnifiedDecisionRules('copilot')}
+
 ${previousHistoryText}
 
 === คำถามล่าสุดของผู้ใช้ ===
 "${activeQuestion}"
 
-=== รูปแบบคำตอบ ===
-1. ตอบใจความสำคัญก่อน แล้วค่อยอธิบายหลักฐาน ความเสี่ยง และสิ่งที่ควรตรวจเพิ่มเท่าที่เกี่ยวข้อง
-2. แยกข้อมูลจากระบบ ข้อมูลค้นเว็บ และข้ออนุมานของคุณ ระบุแหล่ง เวลา สกุลเงิน และช่วงที่วัดเมื่อมีข้อมูล ห้ามใช้คำว่าเรียลไทม์กับราคาปิดล่าสุดหรืออ้างว่าค้นเว็บแล้วถ้าไม่มีผลค้น
-3. ห้ามใส่ราคา สัญญาณเทคนิค กำหนดการ ตัวเลขภาษี หรือแหล่งอ้างอิงขึ้นเอง หากมีข้อมูลไม่พอให้ระบุสิ่งที่ขาดหรือถามคำถามสั้น ๆ โดยเฉพาะตลาดของ ticker ที่กำกวม
+=== รูปแบบคำตอบ (Decision-Ready Structure) ===
+1. **ฟันธงคำตอบสั้นๆ ก่อน (Direct Verdict)**: ตอบคำถามตรงจุดใน 1–2 ประโยคแรก (อ่านแล้วรู้เลยว่าทำ/รอ/ลด/ถือ)
+2. **หลักฐาน & ความเชื่อมโยงกับพอร์ตและ AI หน้าอื่น**: เชื่อมข้อมูลกราฟ/ข่าว/พื้นฐาน/ภาษี เข้ากับสภาวะตลาดใน Tactical Advisor, คำเตือน Risk Sentinel, และเพดาน/กฎใน AI Memory แยกข้อเท็จจริงจากระบบ ผลค้นเว็บ และข้ออนุมานให้ชัด พร้อมระบุแหล่ง เวลา สกุลเงิน (ห้ามใช้คำว่าเรียลไทม์กับราคาปิดล่าสุด หรืออ้างว่าค้นเว็บถ้าไม่มีผลค้น)
+3. **ขั้นถัดไปที่ทำได้ทันที (Next Steps 1-2-3 + จุดระวัง/เปลี่ยนใจ)**: ระบุสิ่งที่ทำต่อได้ทันที เงื่อนไข Invalidation/Stop-Loss และหน้าในแอปที่ควรเช็กต่อ (ห้ามแต่งราคา สัญญาณเทคนิค กำหนดการ หรือตัวเลขภาษีเอง ถ้าข้อมูลไม่พอให้บอกสิ่งที่ขาดหรือถามสั้นๆ เฉพาะส่วนที่ขาด)
 4. เมื่อใช้ตัวเลขเชิงกลยุทธ์ ให้แสดงสมมติฐานและแยกจากข้อเท็จจริง ระบุข้อจำกัดเรื่องความเสี่ยง เงินสด และข้อมูลภาษีตามบริบท
 `
 
@@ -544,56 +674,9 @@ ${previousHistoryText}
       ? `${answer}\n\n**ขอบเขตข้อมูลที่ระบบตรวจได้**\n${evidenceNotes.map((note) => `- ${note}`).join('\n')}`
       : answer
 
-    // Persist thread in AiAdviceLog unless caller explicitly asks to skip
     if (!skipPersist) {
-      const nowTimeLabel = new Date().toLocaleTimeString('th-TH', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Bangkok',
-      })
-      const baseHistory: PersistedCopilotMessage[] =
-        Array.isArray(messages) && messages.length > 0
-          ? messages
-              .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && m.content)
-              .map((m: any, idx: number) => ({
-                id: String(m.id || `msg-${Date.now()}-${idx}`),
-                role: m.role,
-                content: String(m.content),
-                timestamp: String(m.timestamp || nowTimeLabel),
-                ...(m.modelUsed ? { modelUsed: String(m.modelUsed) } : {}),
-                ...(Array.isArray(m.groundingSources) ? { groundingSources: m.groundingSources } : {}),
-              }))
-          : [
-              ...savedThread.messages,
-              {
-                id: `user-${Date.now()}`,
-                role: 'user',
-                content: activeQuestion,
-                timestamp: nowTimeLabel,
-              },
-            ]
-
-      const assistantReply: PersistedCopilotMessage = {
-        id: `bot-${Date.now()}`,
-        role: 'assistant',
-        content: cleanedAnswer,
-        timestamp: nowTimeLabel,
-        modelUsed: aiResult.modelUsed,
-        ...(aiResult.groundingSources && aiResult.groundingSources.length > 0
-          ? { groundingSources: aiResult.groundingSources }
-          : {}),
-      }
-
-      try {
-        await saveCopilotThread(
-          userId,
-          [...baseHistory, assistantReply],
-          aiResult.modelUsed,
-          savedThread.logId
-        )
-      } catch (persistErr) {
-        console.warn('[tactical-advisor chat] Failed to persist thread:', persistErr)
-      }
+      await persistCopilotReply(userId, activeQuestion, messages, savedThread, cleanedAnswer, aiResult.modelUsed, aiResult.groundingSources)
+      invalidateUnifiedContextCache(userId)
     }
 
     return NextResponse.json({

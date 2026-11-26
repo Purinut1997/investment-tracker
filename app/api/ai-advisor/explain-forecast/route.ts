@@ -3,6 +3,11 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { forecastContextKey, forecastInputSchema } from '@/lib/ai/model-contracts'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -64,10 +69,16 @@ export async function POST(req: NextRequest) {
       milestonesSummary,
     } = body.data
 
+    const unifiedCtx = await getUnifiedPortfolioContext(session.user.id).catch(() => null)
+
     const prompt = `
 [forecast:v2:${forecastContextKey(body.data)}]
 คุณกำลังอธิบายผลจำลองการลงทุนที่ระบบคำนวณไว้ภายใต้สมมติฐานของผู้ใช้ P10/P50/P90 เป็นเปอร์เซ็นไทล์ของผลจำลองตามลำดับ ห้ามรับประกันผลลัพธ์หรือเรียก P50 ว่าค่าเฉลี่ย
-กรุณาวิเคราะห์และสังเคราะห์ยุทธศาสตร์การเติบโตของพอร์ตลงทุน (Wealth Forecast & Retirement Horizon) จากผลจำลองสถิติ Monte Carlo 1,000 สถานการณ์จำลอง ต่อไปนี้เป็นภาษาไทยระดับมืออาชีพ ชัดเจน แยกหมวดหมู่อย่างเป็นระบบ และนำไปใช้ปฏิบัติได้ทันที:
+กรุณาวิเคราะห์และสังเคราะห์ยุทธศาสตร์การเติบโตของพอร์ตลงทุน (Wealth Forecast & Retirement Horizon) จากผลจำลองสถิติ Monte Carlo 1,000 สถานการณ์จำลอง เชื่อมโยงกับโครงสร้างพอร์ตจริงของผู้ใช้ ต่อไปนี้เป็นภาษาไทยระดับมืออาชีพ ชัดเจน แยกหมวดหมู่อย่างเป็นระบบ และนำไปใช้ปฏิบัติได้ทันที:
+
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'forecast', compact: true }) : ''}
+
+${buildUnifiedDecisionRules('forecast')}
 
 📊 ข้อมูลแบบจำลองพอร์ต:
 - เงินต้นเริ่มต้นปัจจุบัน: ฿${Number(initialAmount).toLocaleString()}
@@ -108,7 +119,7 @@ ${adjustInflation ? '- ชี้ให้เห็นถึงความเส
 - 3. [กลยุทธ์กระแสเงินสด]: แนวทางการสร้าง Passive Income รองรับเกษียณ
 
 ### 💡 4. คำแนะนำสรุปฟันธง (Strategic Conclusion)
-- สรุป Action สำคัญที่สุด 1 ประการที่นักลงทุนควรลงมือทำทันทีในเดือนนี้เพื่อเพิ่มโอกาสสำเร็จของพอร์ต
+- สรุป Action สำคัญ 1-2-3 ที่เชื่อมผลจำลองเข้ากับพอร์ตจริงตอนนี้ (เช่น ปรับงบ DCA ใน /plans, ลดความเสี่ยงกระจุกตัวใน /radar, หรือจำลองเพิ่มงบใน /ai-advisor)
 `
 
     const { text, modelUsed } = await callGemini({

@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useState } from 'react'
+import Link from 'next/link'
 import useSWR, { useSWRConfig } from 'swr'
 import { FOREIGN_INCOME_TAX_RULE, FOREIGN_INCOME_TAX_SOURCE, foreignIncomeAssessment } from '@/lib/analytics/foreign-income-tax'
+import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import {
@@ -18,6 +20,7 @@ import {
   DollarSign,
   Clock,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react'
 import { exportTaxReportToExcel } from '@/lib/export/tax-excel-export'
 import { TaxExportModal } from '@/components/export/TaxExportModal'
@@ -518,6 +521,15 @@ export default function TaxReportPage() {
                 <span className="text-sm font-semibold text-indigo-100 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-indigo-400" /> ผลการวิเคราะห์ล่าสุด · ปีภาษี {selectedYear}
                 </span>
+                <Link
+                  href={buildCopilotDeepLink(
+                    `อิงสรุปภาษีปี ${selectedYear} (ปันผลสุทธิ ฿${Number(report?.dividends?.totalDividendNetTHB ?? 0).toFixed(0)} | กำไรต่างประเทศ/คริปโต $${Number(report?.foreignAndCryptoGains?.totalRealizedGainUSD ?? 0).toFixed(2)}) และพอร์ตปัจจุบัน ผมควรวางแผนขายปรับสมดุลหรือเตรียมเงินภาษีอย่างไรให้คุ้มที่สุด?`
+                  )}
+                  className="inline-flex items-center gap-1.5 self-start sm:self-auto px-3 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 text-xs font-semibold text-indigo-200 hover:text-white transition-colors"
+                >
+                  <span>วางแผนปรับพอร์ตต่อใน Copilot</span>
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
                 {currentModel && (
                   <span className="self-start rounded-lg border border-white/[0.08] bg-black/20 px-2 py-1 font-mono text-[11px] text-slate-400 sm:self-auto">
                     {currentModel}

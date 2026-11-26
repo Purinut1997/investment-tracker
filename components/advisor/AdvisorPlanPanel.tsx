@@ -148,6 +148,9 @@ export function AdvisorPlanPanel({ edit = false, simulate = false }: { edit?: bo
         <button type="button" className="text-sm text-slate-300" onClick={() => setDraft(null)}>ยกเลิก</button>
       </div>
     </form>}
+    {simulate && policy && <p className="text-sm text-slate-300">
+      ถามในแชตได้ เช่น “สรุปแผนเติมเงิน” “ถ้ามีเงินลงทุน 5,000” หรือ “ถ้ากันเงินสดขั้นต่ำ 3,000”
+    </p>}
     {simulate && policy && <div className="grid items-end gap-2 sm:grid-cols-3">
       <label>เงินใหม่ในการจำลอง<input type="number" min="0" step="0.01" className={inputClass} value={inflow} onChange={(event) => setInflow(event.target.value)} /></label>
       <label>เงินสดขั้นต่ำของกรณีจำลอง<input type="number" min="0" step="0.01" className={inputClass} value={reserve} onChange={(event) => setReserve(event.target.value)} placeholder={String(policy.config.reserve)} /></label>

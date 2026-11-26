@@ -20,7 +20,8 @@
     "test:daily-advisor": "ts-node lib/analytics/stock-daily-advisor.test.ts",
     "test:advisor-evidence": "ts-node lib/ai/advisor-evidence.test.ts",
     "test:model-contracts": "ts-node lib/ai/model-contracts.test.ts",
-    "test:all": "npm run test:tax && npm run test:price-sync && npm run test:quant && npm run test:splits && npm run test:analytics && npm run test:daily-advisor && npm run test:advisor-evidence && npm run test:model-contracts"
+    "test:unified-ai": "ts-node lib/ai/unified-context.test.ts",
+    "test:all": "npm run test:tax && npm run test:price-sync && npm run test:quant && npm run test:splits && npm run test:analytics && npm run test:daily-advisor && npm run test:advisor-evidence && npm run test:model-contracts && npm run test:unified-ai"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

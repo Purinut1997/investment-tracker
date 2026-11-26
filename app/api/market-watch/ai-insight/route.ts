@@ -8,6 +8,11 @@ import { formatMarketObservation } from '@/lib/ai/advisor-evidence'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { getYahooQuoteSummary } from '@/lib/market-data/yahoo-crumb'
 import { resolveMarketQuote } from '@/lib/market-data/resolver'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -79,7 +84,7 @@ export async function POST(req: NextRequest) {
     }
     const ticker = market === 'TH' ? symbol.replace(/\.BK$/, '') + '.BK' : symbol
     const newsSymbols = [...new Set([symbol, ticker])]
-    const [quote, fundamentals, news] = await Promise.all([
+    const [quote, fundamentals, news, unifiedCtx] = await Promise.all([
       (market === 'CRYPTO'
         ? resolveMarketQuote(symbol, 'crypto').then((item) => item.itemType === 'crypto' ? item.quote : null)
         : yahooFinanceProvider.getQuote(ticker, market)).catch(() => null),
@@ -89,6 +94,7 @@ export async function POST(req: NextRequest) {
         orderBy: { publishedAt: 'desc' }, take: 8,
         select: { headline: true, sourceName: true, sourceUrl: true, publishedAt: true },
       }).catch(() => []),
+      getUnifiedPortfolioContext(session.user.id).catch(() => null),
     ])
     if (!quote && !fundamentals && !news.length) {
       return NextResponse.json({ error: 'ยังไม่พบข้อมูลที่ยืนยันสัญลักษณ์ในตลาดนี้ กรุณาตรวจชื่อย่อและตลาด' }, { status: 422 })
@@ -102,7 +108,9 @@ ${contextTag(symbol, market)}
 พื้นฐานจาก Yahoo Finance (ห้ามเดางวดบัญชีหรือค่าเฉลี่ยกลุ่ม): ${fundamentals ? JSON.stringify(fundamentals) : 'ไม่มีข้อมูล'}
 ข่าวของสัญลักษณ์ที่บันทึกใน 7 วันล่าสุด (ให้ตรวจความเกี่ยวข้องกับตลาดก่อนใช้):
 ${news.map((item) => `- ${item.publishedAt.toISOString()} | ${item.sourceName}: ${item.headline} | ${item.sourceUrl}`).join('\n') || 'ไม่มีข้อมูลข่าวในช่วงนี้'}
-แยกข้อมูลจริงจากกรณีสมมติ ห้ามตั้งราคาเป้าหมายหรือกล่าวอ้างข่าวล่าสุดเมื่อไม่มีหลักฐาน
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'stock_insight', focusSymbol: symbol, compact: true }) : ''}
+${buildUnifiedDecisionRules('stock_insight')}
+ให้ระบุความสอดคล้องของ ${symbol} กับสถานะถือครองในพอร์ตจริง, เพดานต่อหุ้น, และสภาวะตลาดรวมไว้ใน summary และ risks โดยแยกข้อมูลจริงจากกรณีสมมติ ห้ามตั้งราคาเป้าหมายหรือกล่าวอ้างข่าวล่าสุดเมื่อไม่มีหลักฐาน
 ตอบเป็น JSON เท่านั้น โครงสร้าง:
 {"summary":"ข้อความ","businessOverview":"ข้อความ","financialPerformance":{"revenue":"ข้อความ","eps":"ข้อความ","growth":"ข้อความ","fcf":"ข้อความ"},"valuationAndDividend":{"pe":"ข้อความ","pb":"ข้อความ","evEbitda":"ข้อความ","dividendYield":"ข้อความ","payoutRatio":"ข้อความ"},"strengths":["ข้อความ"],"risks":["ข้อความ"],"scenarioAnalysis":{"bull":"ข้อความ","base":"ข้อความ","bear":"ข้อความ"},"latestNewsCatalyst":"ข้อความ"}
 `

@@ -211,7 +211,7 @@ export default function SettingsPage() {
                     )}
                   </div>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    ระบบจะเลือกโมเดลที่ดีที่สุดและมีโควตาฟรีให้โดยอัตโนมัติ พร้อมสลับตัวสำรองหากโควตาเต็ม
+                    ใช้ Gemini 3.8 Flash สำหรับการวิเคราะห์ และ Gemini 3.5 Flash-Lite สำหรับงานสั้น พร้อมสลับรุ่นสำรองเมื่อเรียกไม่สำเร็จ
                   </p>
                 </div>
 

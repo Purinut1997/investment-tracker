@@ -11,6 +11,11 @@ import {
   parseUserInvestmentMemory,
   formatInvestmentMemoryForPrompt,
 } from '@/lib/ai/portfolio-intelligence'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 45
 
@@ -204,16 +209,18 @@ export async function POST(req: NextRequest) {
       })
 
     let signals: Record<string, TechnicalSignal> = {}
-    if (tickerItems.length > 0) {
-      try {
-        const fetched = await getBatchTechnicalSignals(tickerItems.slice(0, 15))
-        signals = Object.fromEntries(Object.entries(fetched).filter(([, signal]) =>
-          signal.currentPrice > 0 && getObservationTime(signal.observationTimestamp, Date.now())
-        ))
-      } catch (err) {
-        console.warn('[bucket-chat technical signals]', err)
-      }
-    }
+    const [fetchedSignals, unifiedCtx] = await Promise.all([
+      tickerItems.length > 0
+        ? getBatchTechnicalSignals(tickerItems.slice(0, 15)).catch((err) => {
+            console.warn('[bucket-chat technical signals]', err)
+            return {} as Record<string, TechnicalSignal>
+          })
+        : Promise.resolve({} as Record<string, TechnicalSignal>),
+      getUnifiedPortfolioContext(userId, { baseCurrency, holdingsResult, totalCash }).catch(() => null),
+    ])
+    signals = Object.fromEntries(Object.entries(fetchedSignals).filter(([, signal]) =>
+      signal.currentPrice > 0 && getObservationTime(signal.observationTimestamp, Date.now())
+    ))
 
     const strategyMeta = STRATEGY_TYPE_META[bucket.strategyType] || STRATEGY_TYPE_META.CUSTOM
 
@@ -279,6 +286,10 @@ ${JSON.stringify(detailedAssets, null, 2)}
 [กฎส่วนตัวและขอบเขตความเสี่ยงของผู้ใช้ (AI Memory)]:
 ${formatInvestmentMemoryForPrompt(memory)}
 
+${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'bucket_chat', compact: true }) : ''}
+
+${buildUnifiedDecisionRules('bucket_chat')}
+
 [แนวทางการวิเคราะห์เฉพาะตะกร้านี้]:
 ${roleSpecificInstruction}
 
@@ -290,7 +301,7 @@ ${roleSpecificInstruction}
    ### 📊 แผนจัดการรายตัว (จุดเข้า / จุดขาย / แนวรับ-แนวต้าน)
    (เจาะรายตัวในตะกร้านี้ ระบุชื่อ **TICKER** พร้อมตัวเลขราคาปัจจุบัน แนวรับ **S1**, แนวต้าน **R1**, ค่า **RSI** และกำไร/ขาดทุนจริงของผู้ใช้)
    ### 💵 แอ็กชันแนะนำตอนนี้
-   (สรุป 1-2 ข้อที่ทำตามได้ทันที เช่น ถ้างบ ฿${Number(dcaBudget).toLocaleString()} ควรแบ่งใส่ตัวไหนกี่บาท หรือตั้งขายที่ราคาเท่าไหร่)
+   (สรุป 1-2-3 ที่ทำตามได้ทันที: ถ้างบ ฿${Number(dcaBudget).toLocaleString()} แบ่งซื้อกี่ไม้ตามแนวรับโดยไม่เกินเพดาน ${memory.maxSinglePositionPercent}%/ตัว, เงื่อนไข Stop-Loss/Invalidation, และหน้าที่ควรเช็กต่อ เช่น /tactical-advisor หรือ /tax-report)
 3. เน้นตัวหนา (**...**) ที่ชื่อหุ้น (Ticker ภาษาอังกฤษพิมพ์ใหญ่), ราคา ($ หรือ ฿), และเปอร์เซ็นต์เสมอ
 `
 

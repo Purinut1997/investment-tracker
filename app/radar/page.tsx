@@ -35,6 +35,7 @@ import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
+import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 import {
   RiskSentinelReport,
   OpportunityRadarReport,
@@ -584,12 +585,25 @@ export default function RadarPage() {
                 </p>
               </div>
             </div>
-            {aiBriefing?.updatedAt && (
-              <span className="text-xs text-slate-400 flex items-center gap-1.5 self-start sm:self-auto bg-white/[0.03] px-3 py-1.5 rounded-xl border border-white/[0.06]">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
-                อัปเดตล่าสุด: {new Date(aiBriefing.updatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
-              </span>
-            )}
+            <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+              {aiBriefing?.updatedAt && (
+                <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-white/[0.03] px-3 py-1.5 rounded-xl border border-white/[0.06]">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
+                  อัปเดตล่าสุด: {new Date(aiBriefing.updatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                </span>
+              )}
+              {aiBriefing?.text && (
+                <Link
+                  href={buildCopilotDeepLink(
+                    `ต่อยอดจากผลสแกน Risk Sentinel ล่าสุด (ความเสี่ยง ${riskReport?.overallRiskLevel || ''} ${riskReport?.overallRiskScore ?? ''}/100) ช่วยจัดลำดับ 1-2-3 ว่าจะลดกระจุกตัวและหมุนเงินข้ามกลุ่มไปตัวไหนก่อนดี พร้อมเช็กจุดเข้าและภาษี?`
+                  )}
+                  className="text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-500/15 hover:bg-indigo-500/25 px-3 py-1.5 rounded-xl border border-indigo-500/30 flex items-center gap-1.5 transition-colors"
+                >
+                  <span>ถามต่อยอดใน Copilot</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Link>
+              )}
+            </div>
           </div>
 
           {aiBriefing?.text ? (

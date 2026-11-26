@@ -2,7 +2,7 @@
 
 import { AdvisorPlanPanel } from '@/components/advisor/AdvisorPlanPanel'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import useSWR from 'swr'
 import Link from 'next/link'
 import {
@@ -32,6 +32,9 @@ import {
   LineChart,
   Brain,
   Save,
+  Compass,
+  Scale,
+  Receipt,
 } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
 import { StockLogo } from '@/components/StockLogo'
@@ -39,6 +42,10 @@ import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
 import { FormattedCopilotMessage } from '@/components/FormattedCopilotMessage'
 import type { TacticalAdvisorApiResponse } from '@/app/tactical-advisor/page'
 import type { UserInvestmentMemory } from '@/lib/ai/outcome-evaluator'
+import {
+  buildCopilotQuickQuestions,
+  type QuickQuestionIconKey,
+} from '@/lib/ai/quick-questions'
 
 interface GroundingSource {
   title: string
@@ -83,42 +90,19 @@ function formatLocale(val: number | null | undefined, decimals = 2, fallback = '
   })
 }
 
-const QUICK_STRATEGY_QUESTIONS = [
-  {
-    category: '📰 ข่าวภายนอกกระทบพอร์ต',
-    icon: Newspaper,
-    prompt:
-      'สรุปข่าวสารภายนอกล่าสุด (เช่น ข่าว AI Chips ของ Google/Nvidia, การเคลื่อนไหวของ Bond Yield, นโยบาย Fed, หรือคดีความ) ที่ส่งผลกระทบต่อหุ้นในพอร์ตของผมให้หน่อย',
-  },
-  {
-    category: '📊 กราฟ & เทคนิครายตัว',
-    icon: BarChart3,
-    prompt:
-      'อ่านกราฟแท่งเทียนและแนวโน้มราคาของหุ้นทุกตัวที่ผมถืออยู่ให้หน่อย พร้อมระบุ RSI(14) แนวรับ S1/S2 เส้น SMA 50/200 และจุดย่อตัวจากจุดสูงสุด',
-  },
-  {
-    category: '🎯 แบ่งไม้ช้อนซื้อ',
-    icon: Layers,
-    prompt:
-      'เงินสดที่มีอยู่ตอนนี้ ควรแบ่งเข้าตัวไหนเป็นไม้แรก (Tranche Entry) ตามแนวรับและสภาวะตลาดห้วงนี้?',
-  },
-  {
-    category: '🛡️ จุดหนีไฟ Stop Loss',
-    icon: ShieldAlert,
-    prompt:
-      'ตรวจสอบจุดหนีไฟ (Stop Loss) และแนวรับสำคัญของหุ้นแต่ละตัวในพอร์ต มีตัวไหนเสี่ยงหลุดแนวรับบ้าง?',
-  },
-  {
-    category: '🌐 ดอกเบี้ย Fed & มหภาค',
-    icon: Globe,
-    prompt:
-      'วิเคราะห์ข่าว Bond Yield สหรัฐฯ 10 ปีที่ทรงตัวสูง และความกังวลเรื่องดอกเบี้ย Fed ว่ากำลังกดดันหุ้นกลุ่ม Tech & AI ในพอร์ตของผมอย่างไร?',
-  },
-]
+const QUICK_QUESTION_ICONS: Record<QuickQuestionIconKey, React.ComponentType<{ className?: string }>> = {
+  compass: Compass,
+  layers: Layers,
+  shield: ShieldAlert,
+  newspaper: Newspaper,
+  scale: Scale,
+  receipt: Receipt,
+}
 
 export default function AiAdvisorPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [hasHydratedThread, setHasHydratedThread] = useState(false)
+  const hasConsumedQueryRef = useRef(false)
   const [inputQuestion, setInputQuestion] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -150,6 +134,13 @@ export default function AiAdvisorPage() {
   const { data: persistedChatData, isLoading: isChatHistoryLoading, mutate: mutateChatHistory } = useSWR<{
     messages?: ChatMessage[]
     memory?: UserInvestmentMemory
+    holdingsDigest?: Array<{
+      ticker: string
+      market: string
+      assetType: string
+      allocationPercent: number
+      unrealizedPnLPercent: number
+    }>
   }>('/api/tactical-advisor/chat', {
     revalidateOnFocus: false,
   })
@@ -169,6 +160,28 @@ export default function AiAdvisorPage() {
   const payload = responseData?.data?.marketEvidence ? responseData.data : undefined
   const pillars = payload?.marketRegime?.pillars
   const externalNewsList = newsApiResponse?.items || newsApiResponse?.news || []
+
+  const quickQuestions = useMemo(
+    () =>
+      buildCopilotQuickQuestions({
+        holdings: persistedChatData?.holdingsDigest,
+        tacticalActions: payload?.tacticalActions,
+        cashPercent: payload?.cashStrategy?.currentCashPercent,
+        recommendedCashPercent: payload?.cashStrategy?.recommendedCashPercent,
+        riskLevel: payload?.marketRegime?.riskLevel,
+        maxSinglePositionPercent: memoryDraft.maxSinglePositionPercent,
+        hasThematicAlert: Boolean(payload?.portfolioResilience?.thematicRiskAlert),
+      }),
+    [
+      persistedChatData?.holdingsDigest,
+      payload?.tacticalActions,
+      payload?.cashStrategy?.currentCashPercent,
+      payload?.cashStrategy?.recommendedCashPercent,
+      payload?.marketRegime?.riskLevel,
+      payload?.portfolioResilience?.thematicRiskAlert,
+      memoryDraft.maxSinglePositionPercent,
+    ]
+  )
 
   // Scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -200,12 +213,25 @@ export default function AiAdvisorPage() {
       {
         id: 'welcome-msg',
         role: 'assistant',
-        content: 'ถามเกี่ยวกับพอร์ตของคุณหรือระบุหุ้นที่ต้องการเทียบได้เลย เช่น “เทียบ NVDA กับ AAPL โดยดูพื้นฐาน กราฟ และผลต่อความเสี่ยงพอร์ต” ผมจะระบุข้อมูลที่ตรวจได้และสิ่งที่ยังขาดในคำตอบครับ',
+        content:
+          'สวัสดีครับ ผมเชื่อมข้อมูลพอร์ตจริง, แผนรายวัน (Daily Plan), สภาวะตลาด (Tactical Advisor), เรดาร์ความเสี่ยง (Risk Sentinel), และกฎส่วนตัวใน AI Memory ไว้เป็นเสียงเดียวกันแล้ว\n\nลองกด **คำถามแนะนำด้านบน** เพื่อดูลำดับสิ่งที่ควรทำต่อ 1-2-3 หรือพิมพ์ถามเจาะจงรายตัว (เช่น เทียบหุ้น กราฟ แบ่งไม้เงินสด หรือเช็กภาษีก่อนขาย) ได้เลยครับ',
         timestamp: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
       },
     ])
     setHasHydratedThread(true)
   }, [isChatHistoryLoading, hasHydratedThread, persistedChatData])
+
+  // Auto-run cross-page deep-link question (?q=...) once thread is hydrated
+  useEffect(() => {
+    if (!hasHydratedThread || isLoading || hasConsumedQueryRef.current) return
+    if (typeof window === 'undefined') return
+    const q = new URLSearchParams(window.location.search).get('q')?.trim()
+    if (!q) return
+    hasConsumedQueryRef.current = true
+    window.history.replaceState({}, '', window.location.pathname)
+    handleSendMessage(q)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydratedThread, isLoading])
 
   // Handle Send Question
   const handleSendMessage = async (textToSend?: string) => {
@@ -879,11 +905,11 @@ export default function AiAdvisorPage() {
                 <Zap className="w-3.5 h-3.5 text-amber-400" />
                 คำถามแนะนำ:
               </span>
-              {QUICK_STRATEGY_QUESTIONS.map((q, idx) => {
-                const IconComponent = q.icon
+              {quickQuestions.map((q) => {
+                const IconComponent = QUICK_QUESTION_ICONS[q.iconKey]
                 return (
                   <button
-                    key={idx}
+                    key={q.id}
                     type="button"
                     onClick={() => {
                       setInputQuestion(q.prompt)

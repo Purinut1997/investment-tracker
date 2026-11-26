@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import type { TacticalAdvisorPayload, TacticalActionItem } from '@/lib/ai/tactical-analysis'
 import type { GroundingSource } from '@/lib/ai/gemini-client'
+import { buildTacticalQuickQuestions } from '@/lib/ai/quick-questions'
 
 export interface AvailableDateItem {
   dateKey: string
@@ -1209,13 +1210,8 @@ export default function TacticalAdvisorPage() {
 
               {/* 1-Click Quick Question Pills */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-slate-400 text-xs sm:text-sm font-medium">ตัวอย่างคำถามคลิกเดียว:</span>
-                {[
-                  'อ่านกราฟและจุดกลับตัวของหุ้นทุกตัวที่ถืออยู่',
-                  'ถ้าตลาดร่วงอีก 5% พอร์ตฉันจะกระทบแค่ไหน?',
-                  'เงินสดที่มีอยู่ตอนนี้ ควรแบ่งเข้าตัวไหนเป็นไม้แรก?',
-                  'ตัวไหนในพอร์ตควรขายทำกำไรก่อนสิ้นปีเพื่อบริหารภาษี?',
-                ].map((q, idx) => (
+                <span className="text-slate-400 text-xs sm:text-sm font-medium">คำถามต่อยอดคลิกเดียว:</span>
+                {buildTacticalQuickQuestions(payload).map((q, idx) => (
                   <button
                     key={idx}
                     type="button"

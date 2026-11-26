@@ -9,6 +9,12 @@ import { formatMarketObservation, getObservationTime } from '@/lib/ai/advisor-ev
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { runTacticalAnalysis } from '@/lib/ai/tactical-analysis'
+import {
+  getUnifiedPortfolioContext,
+  formatUnifiedContextPrompt,
+  buildUnifiedDecisionRules,
+  invalidateUnifiedContextCache,
+} from '@/lib/ai/unified-context'
 
 export const maxDuration = 60
 
@@ -108,6 +114,10 @@ export async function GET(req: NextRequest) {
               }
 
               if (triggerLines.length > 0) {
+                const unifiedCtx = await getUnifiedPortfolioContext(userId, {
+                  baseCurrency,
+                  holdingsResult,
+                }).catch(() => null)
                 const prompt = `
   [AI Daily Investment Strategist — สรุปเช้าและแผนปฏิบัติการรายวัน]
   [daily-brief:v2]
@@ -122,6 +132,10 @@ export async function GET(req: NextRequest) {
 
   [สินทรัพย์ในพอร์ตที่ส่งสัญญาณเทคนิคัลวันนี้ (Holdings with Technical Signals)]
   ${triggerLines.join('\n')}
+
+  ${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'daily_brief', compact: true }) : ''}
+
+  ${buildUnifiedDecisionRules('daily_brief')}
 
   [กฎเหล็กการประเมินความเสี่ยงตามความเป็นจริง]:
   - งดตั้งราคา สัดส่วนเงินสด และจุดซื้อขายเพิ่มเมื่อข้อมูลไม่พอ ระบุช่วงเวลาของตลาดและข้อจำกัดให้ชัด
@@ -148,6 +162,7 @@ export async function GET(req: NextRequest) {
                   systemInstruction:
                     'คุณเป็น Senior Portfolio Strategist ที่ให้คำแนะนำการลงทุนตามหลักการบริหารความเสี่ยงระดับสถาบัน ชัดเจน ตรงประเด็น ใช้ภาษาไทยเข้าใจง่าย',
                 })
+                invalidateUnifiedContextCache(userId)
 
                 results.briefsGenerated++
               }
