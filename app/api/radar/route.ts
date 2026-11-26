@@ -17,12 +17,18 @@ import {
   buildUnifiedDecisionRules,
   invalidateUnifiedContextCache,
 } from '@/lib/ai/unified-context'
+import {
+  formatRegimeOpportunitiesForPrompt,
+  getLiveRegimeOpportunities,
+} from '@/lib/analytics/regime-opportunities'
+import { parseUserInvestmentMemory } from '@/lib/ai/outcome-evaluator'
 
 export const maxDuration = 45
 
 async function getPortfolioRadarData(userId: string) {
   const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
   const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+  const memory = parseUserInvestmentMemory(userSettings?.defaultRiskProfile)
 
   // 1. Calculate holdings
   const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
@@ -54,27 +60,36 @@ async function getPortfolioRadarData(userId: string) {
     { currentPrice: number; currency: string; changePercent: number; pullbackFromHigh: number; rsi14: number | null; market: string }
   >()
 
-  await Promise.all(
-    unheldWatchlist.map(async (w) => {
-      const mkt =
-        w.itemType === 'crypto' ? 'CRYPTO' : w.symbol.toUpperCase().endsWith('.BK') ? 'TH' : 'US'
-      try {
-        const sig = await fetchSingleTickerTechnicalSignal(w.symbol, mkt)
-        if (sig && sig.currentPrice > 0) {
-          enrichedMap.set(w.symbol.toUpperCase(), {
-            currentPrice: sig.currentPrice,
-            currency: sig.currencySymbol === '฿' ? 'THB' : 'USD',
-            changePercent: sig.changePercent,
-            pullbackFromHigh: sig.pullbackFromHigh,
-            rsi14: sig.rsi14,
-            market: mkt,
-          })
+  const [, regimeOpportunities] = await Promise.all([
+    Promise.all(
+      unheldWatchlist.map(async (w) => {
+        const mkt =
+          w.itemType === 'crypto' ? 'CRYPTO' : w.symbol.toUpperCase().endsWith('.BK') ? 'TH' : 'US'
+        try {
+          const sig = await fetchSingleTickerTechnicalSignal(w.symbol, mkt)
+          if (sig && sig.currentPrice > 0) {
+            enrichedMap.set(w.symbol.toUpperCase(), {
+              currentPrice: sig.currentPrice,
+              currency: sig.currencySymbol === '฿' ? 'THB' : 'USD',
+              changePercent: sig.changePercent,
+              pullbackFromHigh: sig.pullbackFromHigh,
+              rsi14: sig.rsi14,
+              market: mkt,
+            })
+          }
+        } catch {
+          // ignore quote failure for individual watchlist ticker
         }
-      } catch {
-        // ignore quote failure for individual watchlist ticker
-      }
-    })
-  )
+      })
+    ),
+    getLiveRegimeOpportunities({
+      holdings: holdingsResult.holdings,
+      watchlists,
+      totalCashBase: totalCash,
+      baseCurrency,
+      maxSinglePositionPercent: memory.maxSinglePositionPercent,
+    }).catch(() => null),
+  ])
 
   const enrichedWatchlists = watchlists.map((w) => {
     const extra = enrichedMap.get(w.symbol.toUpperCase())
@@ -102,6 +117,7 @@ async function getPortfolioRadarData(userId: string) {
     totalCash,
     riskReport,
     opportunityReport,
+    regimeOpportunities,
   }
 }
 
@@ -114,19 +130,52 @@ export async function GET(req: NextRequest) {
   const userId = session.user.id
 
   try {
-    const { baseCurrency, holdingsResult, totalCash, riskReport, opportunityReport } =
-      await getPortfolioRadarData(userId)
+    const todayKey = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
 
-    // Fetch latest AI briefing (specifically for Risk Sentinel)
-    const latestAiLog = await prisma.aiAdviceLog.findFirst({
-      where: {
-        userId,
-        logType: 'advisor',
-        prompt: { contains: 'AI Risk Sentinel' },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { response: true, modelUsed: true, createdAt: true },
-    })
+    const [
+      { baseCurrency, holdingsResult, totalCash, riskReport, opportunityReport, regimeOpportunities },
+      latestAiLog,
+      latestRegimeAlphaLog,
+    ] = await Promise.all([
+      getPortfolioRadarData(userId),
+      prisma.aiAdviceLog.findFirst({
+        where: {
+          userId,
+          logType: 'advisor',
+          prompt: { contains: 'AI Risk Sentinel' },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { response: true, modelUsed: true, createdAt: true },
+      }),
+      prisma.aiAdviceLog.findFirst({
+        where: {
+          userId,
+          logType: 'advisor',
+          AND: [
+            { prompt: { contains: '[AI Regime Alpha Opportunities]' } },
+            { prompt: { contains: `[regime-alpha:v1:${todayKey}]` } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { response: true, modelUsed: true, createdAt: true },
+      }),
+    ])
+
+    let regimeAlphaAi: any = null
+    if (latestRegimeAlphaLog) {
+      try {
+        regimeAlphaAi = {
+          report: JSON.parse(latestRegimeAlphaLog.response),
+          modelUsed: latestRegimeAlphaLog.modelUsed,
+          updatedAt: latestRegimeAlphaLog.createdAt,
+        }
+      } catch {}
+    }
 
     return NextResponse.json({
       baseCurrency,
@@ -135,6 +184,8 @@ export async function GET(req: NextRequest) {
       totalCash,
       riskReport,
       opportunityReport,
+      regimeOpportunities,
+      regimeAlphaAi,
       aiBriefing: latestAiLog
         ? {
             text: latestAiLog.response,
@@ -159,7 +210,7 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id
 
   try {
-    const { baseCurrency, holdingsResult, totalCash, riskReport, opportunityReport } =
+    const { baseCurrency, holdingsResult, totalCash, riskReport, opportunityReport, regimeOpportunities } =
       await getPortfolioRadarData(userId)
 
     if (holdingsResult.holdings.length === 0) {
@@ -203,6 +254,7 @@ ${riskReport.concentrationRisks.map((c) => {
 
 [โอกาสการลงทุนและการหมุนเงินทุน (Opportunity & Sector Rotation Radar)]
 ${opportunityReport.opportunities.slice(0, 4).map((o) => `- [${o.opportunityType}] ${o.title}: ${o.metricLabel} ${o.metricValue} -> ${o.suggestedAction}`).join('\n')}
+${regimeOpportunities ? `\n${formatRegimeOpportunitiesForPrompt(regimeOpportunities)}` : ''}
 
 [กฎเหล็กระดับสถาบันการเงิน (Institutional Rules - ห้ามละเมิดเด็ดขาด)]:
 1. กฎห้ามสร้างความเสี่ยงกระจุกตัวซ้ำซ้อน: หากแนะนำให้ลดน้ำหนัก (De-risk) จากสินทรัพย์หรือกลุ่มอุตสาหกรรมที่ Overweight หรือเกินเพดาน Max Single Position ใน AI Memory ห้ามแนะนำให้นำเงินที่ได้ไปทุ่มซื้อสินทรัพย์ในกลุ่มเสี่ยงเดียวกัน/Correlation สูงเดียวกันซ้ำ!

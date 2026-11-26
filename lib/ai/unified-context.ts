@@ -85,6 +85,11 @@ export interface UnifiedAiContext {
   continuity: {
     tactical: TacticalContinuitySummary | null
     radar: { date: string; summary: string } | null
+    regimeAlpha: {
+      date: string
+      headline: string
+      topPicks: Array<{ ticker: string; role: string }>
+    } | null
     dailyBrief: { date: string; summary: string } | null
     copilot: { date: string; lastQuestion: string; lastAnswerSummary: string } | null
     unacknowledgedAlert: { date: string; summary: string } | null
@@ -137,6 +142,33 @@ export function extractMarkdownHeadline(text: string, maxLen = 190): string {
   const combined = lines.slice(0, 2).join(' | ')
   if (combined.length <= maxLen) return combined
   return `${combined.slice(0, Math.max(20, maxLen - 1)).trimEnd()}…`
+}
+
+export function extractRegimeAlphaContinuity(
+  rawResponse: string,
+  createdAt: Date
+): { date: string; headline: string; topPicks: Array<{ ticker: string; role: string }> } | null {
+  if (!rawResponse || typeof rawResponse !== 'string') return null
+  try {
+    const parsed = JSON.parse(rawResponse)
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.regimeHeadline !== 'string') {
+      return null
+    }
+    const picksRaw = Array.isArray(parsed.picks) ? parsed.picks : []
+    return {
+      date: formatShortDateBangkok(createdAt),
+      headline: parsed.regimeHeadline.trim().slice(0, 140),
+      topPicks: picksRaw
+        .slice(0, 4)
+        .filter((p: any) => p && typeof p.ticker === 'string')
+        .map((p: any) => ({
+          ticker: String(p.ticker).toUpperCase(),
+          role: String(p.roleLabelTh || '').slice(0, 40),
+        })),
+    }
+  } catch {
+    return null
+  }
 }
 
 export function extractTacticalContinuity(
@@ -386,6 +418,11 @@ export async function getUnifiedPortfolioContext(
 
   let tactical: TacticalContinuitySummary | null = null
   let radar: { date: string; summary: string } | null = null
+  let regimeAlpha: {
+    date: string
+    headline: string
+    topPicks: Array<{ ticker: string; role: string }>
+  } | null = null
   let dailyBrief: { date: string; summary: string } | null = latestAdvisorReport
     ? {
         date: latestAdvisorReport.reportDate,
@@ -400,6 +437,8 @@ export async function getUnifiedPortfolioContext(
     } else if (!radar && log.prompt.includes('[AI Risk Sentinel]')) {
       const summary = extractMarkdownHeadline(log.response, 170)
       if (summary) radar = { date: formatShortDateBangkok(log.createdAt), summary }
+    } else if (!regimeAlpha && log.prompt.includes('[AI Regime Alpha Opportunities]')) {
+      regimeAlpha = extractRegimeAlphaContinuity(log.response, log.createdAt)
     } else if (!dailyBrief && log.prompt.includes('[daily-brief:v2]')) {
       const summary = extractMarkdownHeadline(log.response, 170)
       if (summary) dailyBrief = { date: formatShortDateBangkok(log.createdAt), summary }
@@ -421,7 +460,7 @@ export async function getUnifiedPortfolioContext(
         // ignore malformed thread
       }
     }
-    if (tactical && radar && dailyBrief && copilot) break
+    if (tactical && radar && regimeAlpha && dailyBrief && copilot) break
   }
 
   const unacknowledgedAlert =
@@ -452,6 +491,7 @@ export async function getUnifiedPortfolioContext(
     continuity: {
       tactical,
       radar,
+      regimeAlpha,
       dailyBrief,
       copilot,
       unacknowledgedAlert,
@@ -542,6 +582,13 @@ export function formatUnifiedContextPrompt(
   if (exclude !== 'radar' && ctx.continuity.radar) {
     continuityLines.push(
       `  • Risk Sentinel Briefing (${ctx.continuity.radar.date}): ${ctx.continuity.radar.summary}`
+    )
+  }
+  if (ctx.continuity.regimeAlpha) {
+    const r = ctx.continuity.regimeAlpha
+    const picksText = r.topPicks.map((p) => `${p.ticker}${p.role ? `(${p.role})` : ''}`).join(', ')
+    continuityLines.push(
+      `  • Regime Alpha Opportunities (${r.date}): ${r.headline}${picksText ? ` | ตัวเด่น: ${picksText}` : ''}`
     )
   }
   if (ctx.continuity.unacknowledgedAlert) {

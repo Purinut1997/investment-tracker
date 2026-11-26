@@ -35,6 +35,7 @@ import { AppShell } from '@/components/AppShell'
 import { PageHeader } from '@/components/PageHeader'
 import { QuickAddModal } from '@/components/QuickAddModal'
 import { StockDetailModal } from '@/components/market-watch/StockDetailModal'
+import { RegimeOpportunityPanel } from '@/components/radar/RegimeOpportunityPanel'
 import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 import {
   RiskSentinelReport,
@@ -907,6 +908,18 @@ export default function RadarPage() {
                   <span>+ บันทึกซื้อทันที</span>
                 </button>
               </div>
+
+              {/* AI Regime Alpha & Downside Hedge Scanner (Option A) */}
+              <RegimeOpportunityPanel
+                report={data?.regimeOpportunities || null}
+                initialAiState={data?.regimeAlphaAi || null}
+                onSelectStock={(stock) => setSelectedStock(stock)}
+                onQuickBuy={(buyData) => {
+                  setQuickAddInitialData(buyData)
+                  setQuickAddOpen(true)
+                }}
+                onRefreshRadar={() => mutate()}
+              />
 
               {/* Opportunity Cards List */}
               {opportunityReport?.opportunities && opportunityReport.opportunities.length > 0 ? (

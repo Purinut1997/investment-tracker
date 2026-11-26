@@ -102,8 +102,8 @@ export function buildCopilotQuickQuestions(input: QuickQuestionInput = {}): Copi
     .join(', ')
 
   const q5Prompt = trimTickers.length > 0
-    ? `ตัวที่แผนแนะนำจับตา/ล็อกกำไร (${trimTickers.join(', ')}) ควรแบ่งขายหรือชะลอซื้อแค่ไหน แล้วหมุนเงินไปเสริมกลุ่ม ${assetMixFocus} ตัวไหนเพื่อลดความเสี่ยงรวมของพอร์ต?`
-    : `ดูโครงสร้างพอร์ตล่าสุดว่ากลุ่มไหนโตเกินเป้าจนควรชะลอซื้อ และควรเพิ่มน้ำหนัก ${assetMixFocus} หรือหุ้น/ETF ตัวไหนเพื่อให้พอร์ตสมดุลตามแผนระยะยาว?`
+    ? `ตัวที่แผนแนะนำจับตา/ล็อกกำไร (${trimTickers.join(', ')}) ควรแบ่งขายหรือชะลอซื้อแค่ไหน แล้วหมุนเงินเข้าตัวกันกระแทกหรือโอกาสทำกำไรจาก Regime Alpha (${assetMixFocus}) ตัวไหนเพื่อลด Drawdown เวลาหุ้นเทคร่วง?`
+    : `เช็กผลสแกน Regime Alpha & โครงสร้างพอร์ตล่าสุดว่ากลุ่มไหนโตเกินเป้าจนควรชะลอซื้อ และควรเสริม ${assetMixFocus} ตัวไหนที่ Correlation ต่ำเพื่อกันกระแทกและสร้างโอกาสทำกำไรเมื่อตลาดผันผวน?`
 
   const taxTickers = trimTickers.length > 0 ? trimTickers : profitLeaders
   const q6Prompt = taxTickers.length > 0

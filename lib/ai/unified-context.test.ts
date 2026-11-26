@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import {
   extractTacticalContinuity,
+  extractRegimeAlphaContinuity,
   extractMarkdownHeadline,
   formatUnifiedContextPrompt,
   buildUnifiedDecisionRules,
@@ -54,6 +55,19 @@ assert.equal(extractMarkdownHeadline('รอบนี้ไม่มีแหล
 console.log('✅ Test 2 Passed: extractMarkdownHeadline strips markdown and truncates cleanly')
 
 // 3. formatUnifiedContextPrompt (excludeSurface, focusSymbol held vs unheld, compactness)
+const regimeAlpha = extractRegimeAlphaContinuity(
+  JSON.stringify({
+    regimeHeadline: 'หุ้นเทคถูกกดดันจาก Yield สูง หมุนเข้าทองคำและปันผล',
+    picks: [
+      { ticker: 'GLD', roleLabelTh: 'กันกระแทกพอร์ต' },
+      { ticker: 'SCHD', roleLabelTh: 'ปันผลรอจังหวะ' },
+    ],
+  }),
+  new Date('2026-11-26T04:00:00Z')
+)
+assert.ok(regimeAlpha && regimeAlpha.topPicks[0].ticker === 'GLD')
+assert.equal(extractRegimeAlphaContinuity('invalid', new Date()), null)
+
 const mockCtx: UnifiedAiContext = {
   userId: 'user-1',
   baseCurrency: 'THB',
@@ -149,6 +163,7 @@ const mockCtx: UnifiedAiContext = {
   continuity: {
     tactical: extracted,
     radar: { date: '2026-11-26', summary: 'ลดน้ำหนักหุ้นเดี่ยวที่เกิน 25% แล้วเสริมสินทรัพย์ปันผล' },
+    regimeAlpha,
     dailyBrief: { date: '2026-11-26', summary: 'จับตาแนวรับ VOO และกันเงินสด 25%' },
     copilot: { date: '2026-11-26', lastQuestion: 'ซื้อทองเพิ่มดีไหม', lastAnswerSummary: 'รอจังหวะย่อ' },
     unacknowledgedAlert: null,
@@ -160,6 +175,7 @@ const promptFromRadar = formatUnifiedContextPrompt(mockCtx, {
   focusSymbol: 'XAU',
 })
 assert.match(promptFromRadar, /Tactical Market Climate/)
+assert.match(promptFromRadar, /Regime Alpha Opportunities/)
 assert.doesNotMatch(promptFromRadar, /Risk Sentinel Briefing/)
 assert.match(promptFromRadar, /สถานะ XAU ในพอร์ตของคุณ: ถืออยู่/)
 assert.match(promptFromRadar, /เกิน\/ชนเพดาน 20%/)
