@@ -12,7 +12,6 @@ import {
   classifyNewsCategory,
   generateThaiSynthesis,
   generateDailyBrief,
-  buildUserHoldingTechnicalContexts,
   getDailyBriefHistoryList,
   getDailyBriefByDate,
   getTodayBangkokDateString,
@@ -245,7 +244,7 @@ export async function GET(req: NextRequest) {
     if (isHistorical) {
       dailyBrief = await getDailyBriefByDate(userId, selectedDate)
     } else {
-      const userHoldingContexts = await buildUserHoldingTechnicalContexts(activeHoldings)
+      const userHoldingContexts = activeHoldings.map(({ ticker, assetName, allocationPercent }) => ({ ticker, assetName, allocationPercent }))
 
       const hasGeminiKey = Boolean(
         userSettings?.geminiApiKeyEncrypted || process.env.GEMINI_API_KEY

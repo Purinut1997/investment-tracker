@@ -98,14 +98,14 @@ export async function fetchYahooDailySeries(
   if (!cleanSym) return new Map()
 
   const now = Date.now()
-  const cacheKey = `${cleanSym}`
+  const cacheKey = `${cleanSym}:${options?.skipSplitUnadjust ? "adjusted" : "as-traded"}:${options?.market ?? ""}`
   const cached = symbolHistoryCache.get(cacheKey)
 
   if (
     !forceRefresh &&
     cached &&
     now - cached.timestamp < SYMBOL_HISTORY_TTL_MS &&
-    cached.startMs <= startDateMs + 3 * 86400_000
+    cached.startMs <= startDateMs
   ) {
     return cached.prices
   }

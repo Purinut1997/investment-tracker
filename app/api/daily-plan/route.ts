@@ -1,3 +1,4 @@
+import { readAdvisorBrief } from '@/lib/ai/advisor-daily'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
@@ -520,16 +521,7 @@ export async function GET(req: NextRequest) {
     const targetActions: DailyPlanTargetAction[] =
       (existingPlan?.targetActions as unknown as DailyPlanTargetAction[]) || []
 
-    // 6. Fetch latest AI brief for daily plan
-    const latestAiLog = await prisma.aiAdviceLog.findFirst({
-      where: {
-        userId,
-        logType: 'advisor',
-        prompt: { contains: '[daily-brief:v2]' },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { response: true, modelUsed: true, createdAt: true },
-    })
+    const dailyBrief = await readAdvisorBrief(userId, queryDate)
 
     return NextResponse.json({
       planDate: queryDate,
@@ -588,11 +580,13 @@ export async function GET(req: NextRequest) {
         targetActions,
         updatedAt: existingPlan?.updatedAt || null,
       },
-      aiBriefing: latestAiLog
+      aiBriefing: dailyBrief
         ? {
-            text: latestAiLog.response,
-            modelUsed: latestAiLog.modelUsed,
-            updatedAt: latestAiLog.createdAt,
+            text: dailyBrief.text,
+            modelUsed: dailyBrief.modelUsed,
+            updatedAt: dailyBrief.createdAt,
+            asOf: dailyBrief.asOf,
+            revision: dailyBrief.revision,
           }
         : null,
       lastUpdated: new Date().toISOString(),

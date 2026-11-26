@@ -1,3 +1,5 @@
+import { advisorFlags } from '@/lib/ai/advisor-rollout'
+import { getAdvisorPolicy, getLatestAdvisorRun } from '@/lib/ai/advisor-planning-service'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/auth'
@@ -255,6 +257,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing question or messages' }, { status: 400 })
     }
 
+    const policy = advisorFlags(userId).planning ? await getAdvisorPolicy(userId) : null
+    const candidate = await getLatestAdvisorRun(userId, policy)
+    const savedPlan = candidate?.stale ? null : candidate
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
     const [holdingsResult, accounts, savedThread] = await Promise.all([
@@ -490,6 +495,10 @@ ${deepIntel?.catalystsPrompt || 'ไม่มีกำหนดการงบ/�
         ? `🚨 พอร์ตมีความเสี่ยงกระจุกตัวสูงมากในกลุ่ม US Tech & AI (${techAiAllocationPercent.toFixed(1)}% ของพอร์ต)`
         : `Tech & AI: ${techAiAllocationPercent.toFixed(1)}% (ตัวเลขนี้ไม่ได้ประเมินการกระจุกตัวทุกกลุ่ม)`
     }
+
+[แผนเติมเงินที่บันทึกไว้]
+${savedPlan ? JSON.stringify(savedPlan) : 'ไม่มีแผนเติมเงินที่บันทึกสำหรับโปรไฟล์ปัจจุบัน'}
+เมื่ออธิบายแผน ให้ใช้คำสั่งซื้อ งบ เงินสด และสัดส่วนจากแผนที่บันทึกไว้ พร้อมระบุเวลาและห้ามนำตัวเลขดังกล่าวไปใช้เป็นราคาปัจจุบัน ถ้าถามให้เปลี่ยนเงินใหม่หรือเงินสดขั้นต่ำ ให้ชี้ไปที่ฟอร์มจำลองในหน้า Copilot และอย่าคำนวณจำนวนสั่งซื้อเอง
 
 [เป้าหมายแผนลงทุน & กฎส่วนตัวใน AI Memory]
 ${deepIntel?.goalsAndMemoryPrompt || 'ยังไม่ได้ตั้งเป้าหมายเฉพาะ'}

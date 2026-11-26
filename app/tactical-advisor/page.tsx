@@ -1,5 +1,7 @@
 'use client'
 
+import { AdvisorPlanPanel } from '@/components/advisor/AdvisorPlanPanel'
+
 import React, { useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
@@ -36,7 +38,7 @@ import {
   DollarSign,
   Bot,
 } from 'lucide-react'
-import type { TacticalAdvisorPayload, TacticalActionItem } from '@/app/api/tactical-advisor/route'
+import type { TacticalAdvisorPayload, TacticalActionItem } from '@/lib/ai/tactical-analysis'
 import type { GroundingSource } from '@/lib/ai/gemini-client'
 
 export interface AvailableDateItem {
@@ -156,6 +158,7 @@ export default function TacticalAdvisorPage() {
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        <AdvisorPlanPanel />
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-white/[0.06]">
           <div>

@@ -4,8 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { refreshPortfolioAndMarketNews } from '@/lib/news/fetch-news'
 import {
-  buildUserHoldingTechnicalContexts,
   generateDailyBrief,
+  getTodayBangkokDateString,
   invalidateDailyBriefCache,
 } from '@/lib/news/news-analyzer'
 
@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
       // no body
     }
 
+    if (targetDate !== undefined && targetDate !== getTodayBangkokDateString()) {
+      return NextResponse.json({ error: 'สร้างสรุปข่าวใหม่ได้เฉพาะวันที่ปัจจุบัน' }, { status: 400 })
+    }
     invalidateDailyBriefCache(userId, targetDate)
     const userSettings = await prisma.userSettings.findUnique({
       where: { userId },
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
     await refreshPortfolioAndMarketNews(activeHoldings)
 
     // 2. Build technical context for holdings
-    const userHoldingContexts = await buildUserHoldingTechnicalContexts(activeHoldings)
+    const userHoldingContexts = activeHoldings.map(({ ticker, assetName, allocationPercent }) => ({ ticker, assetName, allocationPercent }))
 
     // 3. Query only recent news within last 7 days
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)

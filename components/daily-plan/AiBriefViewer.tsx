@@ -28,7 +28,9 @@ interface AiBriefViewerProps {
   updatedAt?: string
   isGenerating?: boolean
   error?: string | null
-  onRegenerate: () => void
+  asOf?: string | null
+  isHistorical?: boolean
+  onRegenerate?: () => void
   onCopyNotes: () => void
   onAddToChecklist: (actionText: string) => void
 }
@@ -406,6 +408,8 @@ export function AiBriefViewer({
   text,
   modelUsed,
   updatedAt,
+  asOf,
+  isHistorical = false,
   isGenerating,
   error,
   onRegenerate,
@@ -454,6 +458,9 @@ export function AiBriefViewer({
           </div>
         </div>
 
+        {asOf && <span className="text-xs text-slate-400">
+          ข้อมูล ณ {new Date(asOf).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
+        </span>}
         {/* Action Buttons */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {text && (
@@ -467,7 +474,7 @@ export function AiBriefViewer({
             </button>
           )}
 
-          <button
+          {onRegenerate && <button
             onClick={onRegenerate}
             disabled={isGenerating}
             className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 transition-all flex items-center gap-2 disabled:opacity-50"
@@ -483,7 +490,7 @@ export function AiBriefViewer({
                 <span>ขอคำแนะนำใหม่</span>
               </>
             )}
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -734,11 +741,16 @@ export function AiBriefViewer({
         /* Empty State */
         <div className="mt-6 border-2 border-dashed border-white/[0.08] rounded-2xl p-10 text-center space-y-2.5">
           <Sparkles className="w-10 h-10 text-indigo-400/60 mx-auto" />
-          <h4 className="text-sm font-bold text-white">ยังไม่มีบทวิเคราะห์สำหรับวันนี้</h4>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            กดปุ่ม <span className="text-indigo-300 font-semibold">&quot;ขอคำแนะนำใหม่&quot;</span> ด้านบน
-            เพื่อประมวลผลดัชนีตลาดโลก สัญญาณแนวรับ-แนวต้าน และระดับ RSI ของหุ้นในพอร์ตคุณ
-          </p>
+          <h4 className="text-sm font-bold text-white">
+            {isHistorical ? 'ไม่มีบทวิเคราะห์ที่บันทึกไว้สำหรับวันที่เลือก' : 'ยังไม่มีบทวิเคราะห์สำหรับวันนี้'}
+          </h4>
+          {isHistorical ? (
+            <p className="text-xs text-slate-400">เลือกวันนี้เพื่อดูหรือสร้างบทวิเคราะห์ล่าสุด</p>
+          ) : onRegenerate && (
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              กดปุ่ม <span className="text-indigo-300 font-semibold">&quot;ขอคำแนะนำใหม่&quot;</span> เพื่อสร้างบทวิเคราะห์ประจำวัน
+            </p>
+          )}
         </div>
       )}
     </div>

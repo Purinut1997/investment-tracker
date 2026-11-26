@@ -1,5 +1,7 @@
 'use client'
 
+import { AdvisorPlanPanel } from '@/components/advisor/AdvisorPlanPanel'
+
 import React, { useState, useEffect, useMemo } from 'react'
 import useSWR, { mutate } from 'swr'
 import { planAdviceContextKey } from '@/lib/ai/model-contracts'
@@ -529,6 +531,7 @@ export default function PlansPage() {
   return (
     <AppShell>
       <div className="space-y-6 max-w-[1600px] mx-auto w-full animate-fade-in pb-16">
+        <AdvisorPlanPanel edit />
         {/* Top Header */}
         <PageHeader
           eyebrow="Portfolio Allocation & Smart Rebalance"

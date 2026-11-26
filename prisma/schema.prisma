@@ -39,6 +39,10 @@ model User {
   weeklyDigests        WeeklyDigest[]
   allocationAlerts     AllocationAlert[]
   dailyPlans           DailyPlan[]
+  advisorReports       AdvisorReport[]
+  advisorJobs          AdvisorJob[]
+  advisorPolicies      AdvisorPolicy[]
+  advisorRuns          AdvisorRun[]
   dailyBriefHistories  DailyBriefHistory[]
   passwordResetTokens  PasswordResetToken[]
   emailVerifTokens     EmailVerificationToken[]
@@ -560,4 +564,64 @@ model AssetSplit {
 enum SplitSource {
   auto_yahoo
   manual
+}
+
+
+model AdvisorReport {
+  id            String   @id @default(cuid())
+  userId        String
+  reportDate    String
+  revision      Int
+  requestId     String
+  asOf          DateTime
+  createdAt     DateTime @default(now())
+  schemaVersion Int      @default(1)
+  snapshot      Json
+  text          String   @db.Text
+  modelUsed     String
+  durationMs    Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reportDate, revision])
+  @@unique([userId, reportDate, requestId])
+}
+
+model AdvisorJob {
+  userId   String
+  date     String
+  token    String
+  leaseEnd DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, date])
+}
+
+model AdvisorPolicy {
+  id        String   @id @default(cuid())
+  userId    String
+  version   Int
+  createdAt DateTime @default(now())
+  config    Json
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, version])
+}
+
+model AdvisorRun {
+  id          String   @id @default(cuid())
+  userId      String
+  policyVersion Int
+  createdAt   DateTime @default(now())
+  asOf        DateTime
+  schemaVersion Int    @default(1)
+  snapshot    Json
+  result      Json
+  durationMs  Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

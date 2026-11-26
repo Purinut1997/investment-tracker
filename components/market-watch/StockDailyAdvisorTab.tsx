@@ -1,5 +1,7 @@
 'use client'
 
+import { AdvisorStockImpact } from '@/components/advisor/AdvisorPlanPanel'
+
 import React, { useState, useMemo, useEffect } from 'react'
 import useSWR from 'swr'
 import {
@@ -249,6 +251,7 @@ export function StockDailyAdvisorTab({ symbol, market }: StockDailyAdvisorTabPro
 
   return (
     <div className="space-y-5 text-slate-200 animate-fade-in">
+      <AdvisorStockImpact symbol={symbol} market={market} />
       {/* 1. DAILY VERDICT BANNER */}
       <section className="rounded-2xl bg-[#12151C] border border-white/[0.08] p-4 sm:p-5 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">

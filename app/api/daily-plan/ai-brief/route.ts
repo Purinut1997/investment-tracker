@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto'
+import { advisorDate } from '@/lib/ai/advisor-date'
+import { advisorFlags } from '@/lib/ai/advisor-rollout'
+import { generateAdvisorBrief } from '@/lib/ai/advisor-daily'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
@@ -27,6 +31,21 @@ export async function POST(req: NextRequest) {
       forceRefresh = false,
     } = body
 
+    if (planDate !== undefined && planDate !== advisorDate()) {
+      return NextResponse.json({ error: 'สร้างรายงานใหม่ได้เฉพาะวันที่ปัจจุบัน' }, { status: 400 })
+    }
+    if (advisorFlags(userId).daily) {
+      const requestId = typeof body.requestId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(body.requestId)
+        ? body.requestId : randomUUID()
+      const result = await generateAdvisorBrief(userId, advisorDate(), forceRefresh === true, requestId)
+      if (!result.report) {
+        return NextResponse.json({ status: result.status }, { status: result.status === 'running' ? 202 : 409 })
+      }
+      return NextResponse.json({
+        success: true, status: result.status, advice: result.report.text, modelUsed: result.report.modelUsed,
+        generatedAt: result.report.createdAt, asOf: result.report.asOf, revision: result.report.revision,
+      })
+    }
     if (!Array.isArray(portfolioTriggers) || portfolioTriggers.length === 0 || typeof totalPortfolioValue !== 'number' || typeof totalCash !== 'number') {
       return NextResponse.json({
         advice: 'ยังไม่มีข้อมูลสินทรัพย์ในพอร์ตที่เพียงพอสำหรับการจัดทำแผนประจำวัน กรุณาบันทึกรายการลงทุนเพื่อเริ่มการวิเคราะห์',
@@ -47,7 +66,7 @@ export async function POST(req: NextRequest) {
         where: {
           userId,
           logType: 'advisor',
-          prompt: { contains: '[daily-brief:v2]' },
+          AND: [{ prompt: { contains: '[daily-brief:v2]' } }, { prompt: { contains: `วันที่ ${todayBangkok}:` } }],
         },
         orderBy: { createdAt: 'desc' },
       })
@@ -122,7 +141,7 @@ export async function POST(req: NextRequest) {
     const prompt = `
 [daily-brief:v2]
 [AI Daily Investment Strategist — สรุปเช้าและแผนปฏิบัติการรายวัน]
-คุณคือ Senior Portfolio Strategist สรุปทิศทางตลาดและแผนปฏิบัติการลงทุนรายวัน วันที่ ${planDate || 'วันนี้'}:
+คุณคือ Senior Portfolio Strategist สรุปทิศทางตลาดและแผนปฏิบัติการลงทุนรายวัน วันที่ ${advisorDate()}:
 
 [ข้อมูลสภาวะตลาดวันนี้]
 - ดัชนีอารมณ์ตลาด: ${fearGreedSummary}

@@ -1,5 +1,7 @@
 'use client'
 
+import { AdvisorPlanPanel } from '@/components/advisor/AdvisorPlanPanel'
+
 import React, { useState, useEffect, useMemo } from 'react'
 import useSWR from 'swr'
 import { AppShell } from '@/components/AppShell'
@@ -154,6 +156,7 @@ interface DailyPlanApiResponse {
     text: string
     modelUsed: string
     updatedAt: string
+    asOf?: string | null
   } | null
   lastUpdated: string
 }
@@ -412,7 +415,7 @@ export default function DailyPlanPage() {
 
   // Generate AI Daily Brief
   const handleGenerateAiBrief = async () => {
-    if (!data) return
+    if (!data?.isToday) return
     setGeneratingAi(true)
     setAiError(null)
     try {
@@ -427,10 +430,16 @@ export default function DailyPlanPage() {
           totalCash: data.totalCash,
           baseCurrency: data.baseCurrency,
           forceRefresh: true,
+          requestId: crypto.randomUUID(),
         }),
       })
       const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Failed to generate AI brief')
+      if (res.status === 202) {
+        await revalidatePlan()
+        throw new Error('กำลังสร้างรายงานจากคำขอก่อนหน้า กรุณารอสักครู่แล้วโหลดหน้าใหม่')
+      }
+      if (!res.ok) throw new Error(result.error || 'สร้างสรุปไม่สำเร็จ')
+      if (result.status === 'refresh_failed') throw new Error('อัปเดตไม่สำเร็จ กำลังแสดงรายงานเดิม')
 
       await revalidatePlan()
     } catch (err: any) {
@@ -562,14 +571,18 @@ export default function DailyPlanPage() {
           </div>
         </div>
 
+        {data?.isToday && <AdvisorPlanPanel />}
+
         {/* SECTION 2: AI MARKET STRATEGIST BENTO VIEWER */}
         <AiBriefViewer
           text={data?.aiBriefing?.text || ''}
           modelUsed={data?.aiBriefing?.modelUsed}
           updatedAt={data?.aiBriefing?.updatedAt}
+          asOf={data?.aiBriefing?.asOf}
+          isHistorical={selectedDate !== todayStr}
           isGenerating={generatingAi}
           error={aiError}
-          onRegenerate={handleGenerateAiBrief}
+          onRegenerate={data?.isToday ? handleGenerateAiBrief : undefined}
           onCopyNotes={handleCopyAiToNotes}
           onAddToChecklist={handleAddToChecklistFromAi}
         />
