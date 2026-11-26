@@ -4,6 +4,7 @@ import {
   calculatePearsonCorrelation,
   computeRegimeOpportunityScore,
   detectMarketRegime,
+  evaluateEntryReadiness,
   rankRegimeOpportunities,
   simulateHedgeImpact,
   type DailySeriesSnapshot,
@@ -220,5 +221,79 @@ assert.ok(ranked.techExposurePercent > 70)
 assert.equal(ranked.candidates[0].ticker, 'GLD')
 assert.ok(ranked.candidates[0].hedgeImpact !== null && ranked.candidates[0].hedgeImpact.lossReductionBase > 0)
 console.log('✅ Test 5 Passed: Ranker picks top 5 diverse Long-only Regime Alpha candidates accurately')
+
+// 6. Comprehensive 4-layer evaluateEntryReadiness checks
+const overbought = evaluateEntryReadiness({
+  category: 'Gold',
+  isWatchlist: false,
+  currentPrice: 260,
+  rsi14: 75.5,
+  sma50: 245,
+  supportS1: 250,
+  resistanceR1: 265,
+})
+assert.equal(overbought.entryReadiness, 'TOO_HIGH_DO_NOT_CHASE')
+assert.equal(overbought.entryTimingScore, 3)
+
+const extendedSma = evaluateEntryReadiness({
+  category: 'Gold',
+  isWatchlist: false,
+  currentPrice: 272,
+  rsi14: 66,
+  sma50: 240,
+  supportS1: 258,
+  resistanceR1: 280,
+})
+assert.equal(extendedSma.entryReadiness, 'TOO_HIGH_DO_NOT_CHASE')
+assert.ok((extendedSma.distanceAboveSma50Pct ?? 0) >= 12)
+
+const poorRewardAtR1 = evaluateEntryReadiness({
+  category: 'Dividend',
+  isWatchlist: false,
+  currentPrice: 82.9,
+  rsi14: 59,
+  sma50: 80.5,
+  supportS1: 79.0,
+  resistanceR1: 83.0,
+})
+assert.equal(poorRewardAtR1.entryReadiness, 'TOO_HIGH_DO_NOT_CHASE')
+assert.ok((poorRewardAtR1.riskRewardRatio ?? 99) < 0.2)
+
+const richValuation = evaluateEntryReadiness({
+  category: 'Watchlist',
+  isWatchlist: true,
+  currentPrice: 500,
+  rsi14: 54,
+  sma50: 495,
+  supportS1: 492,
+  resistanceR1: 525,
+  forwardPe: 55,
+})
+assert.equal(richValuation.entryReadiness, 'WAIT_PULLBACK')
+assert.ok(richValuation.valuationWarningTh !== null && richValuation.valuationWarningTh.includes('55.0x'))
+
+const sgovReady = evaluateEntryReadiness({
+  category: 'CashYield',
+  isWatchlist: false,
+  currentPrice: 100.4,
+  rsi14: 78,
+  sma50: 100.1,
+  supportS1: 100.2,
+  resistanceR1: 100.5,
+})
+assert.equal(sgovReady.entryReadiness, 'READY_TO_ENTER')
+
+const cleanDip = evaluateEntryReadiness({
+  category: 'Healthcare',
+  isWatchlist: false,
+  currentPrice: 141,
+  rsi14: 44,
+  sma50: 140,
+  supportS1: 139.5,
+  resistanceR1: 148,
+})
+assert.equal(cleanDip.entryReadiness, 'READY_TO_ENTER')
+assert.ok((cleanDip.riskRewardRatio ?? 0) >= 2.0)
+console.log('✅ Test 6 Passed: 4-layer entry readiness catches RSI, SMA50 stretch, R:R, and high P/E')
 
 console.log('\n🎉 ALL REGIME OPPORTUNITY & HEDGE QUANT TESTS PASSED!')

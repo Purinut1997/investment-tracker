@@ -216,6 +216,13 @@ export async function POST(req: NextRequest) {
       supportS1: c.supportS1,
       resistanceR1: c.resistanceR1,
       alreadyHeldPct: c.alreadyHeldPct,
+      entryReadiness: c.entryReadiness,
+      entryVerdictLabelTh: c.entryVerdictLabelTh,
+      distanceAboveSma50Pct: c.distanceAboveSma50Pct,
+      upsideToR1Pct: c.upsideToR1Pct,
+      downsideToS1Pct: c.downsideToS1Pct,
+      riskRewardRatio: c.riskRewardRatio,
+      valuationWarningTh: c.valuationWarningTh,
       entryCaution: c.entryCaution,
       hedgeImpactSummary: c.hedgeImpact?.summaryTh ?? null,
     }))
@@ -235,7 +242,9 @@ ${JSON.stringify(candidatesJson, null, 2)}
 [กฎเหล็กที่ต้องปฏิบัติตามอย่างเคร่งครัด]:
 1. เลือก "ticker" ได้เฉพาะจากรายการ Top Candidates ข้างต้นเท่านั้น ห้ามสร้าง ticker ใหม่เองโดยเด็ดขาด
 2. ห้ามแต่งราคา ผลตอบแทน ยิลด์ หรือวันประกาศเอง ใช้เฉพาะตัวเลขจริงที่แนบมา (ถ้าระบุราคาเข้า/จุดหนีไฟ ให้อิงจาก currentPrice, supportS1, sma50 ที่มีจริงเท่านั้น)
-3. ต้องสอดคล้องกับ Market Posture ใน Tactical Advisor และเพดานต่อหุ้น (${ctx.memory.maxSinglePositionPercent}%) ใน AI Memory ถ้าตัวไหนมี entryCaution (RSI > 72) ให้เตือนให้รอจังหวะย่อที่แนวรับ S1 ห้ามแนะนำไล่ราคา
+3. ต้องสอดคล้องกับ Market Posture ใน Tactical Advisor และเพดานต่อหุ้น (${ctx.memory.maxSinglePositionPercent}%) ใน AI Memory:
+   - หากตัวไหนมี entryReadiness === 'TOO_HIGH_DO_NOT_CHASE' ต้องระบุชัดใน entryPlanTh ว่า "ห้ามไล่ราคาตอนนี้ — รอย่อลงมาใกล้แนวรับ S1" พร้อมอ้างอิงเหตุผลจริง (RSI, ระยะห่าง SMA50, R:R หรือ Valuation P/E)
+   - หากตัวไหนมี entryReadiness === 'WAIT_PULLBACK' ให้แนะนำแบ่งไม้รอจังหวะย่อ ไม่แนะนำทุ่มซื้อทีเดียว
 4. ทุกตัวใน "picks" ต้องบอกชัด: ทำไมชนะในสภาวะตลาดนี้ -> แผนแบ่งไม้เข้าซื้อ -> จุดหนีไฟ (Invalidation) -> เงื่อนไขเลิกถือ/หมุนกลับเข้าหุ้นเติบโต
 
 ตอบกลับเป็น JSON Object ตาม Schema นี้เท่านั้น:

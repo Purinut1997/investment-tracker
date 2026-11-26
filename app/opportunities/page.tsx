@@ -206,7 +206,11 @@ export default function OpportunitiesPage() {
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-300 truncate">
-                      {topCandidate.roleLabelTh} · Corr {topCandidate.corr60DWithQqq.toFixed(2)}
+                      {topCandidate.roleLabelTh} · {topCandidate.entryVerdictLabelTh}
+                    </p>
+                    <p className="text-[10px] font-mono text-slate-400">
+                      พร้อมเข้า {quantReport.candidates.filter((c) => c.entryReadiness === 'READY_TO_ENTER').length} ตัว · รอย่อ/สูงเกิน{' '}
+                      {quantReport.candidates.filter((c) => c.entryReadiness !== 'READY_TO_ENTER').length} ตัว
                     </p>
                   </>
                 ) : (

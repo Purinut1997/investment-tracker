@@ -55,6 +55,7 @@ export function RegimeOpportunityPanel({
   onRefreshRadar,
 }: RegimeOpportunityPanelProps) {
   const [roleFilter, setRoleFilter] = useState<'ALL' | OpportunityRole>('ALL')
+  const [readyOnly, setReadyOnly] = useState(false)
   const [aiReport, setAiReport] = useState<RegimeAlphaAiReport | null>(
     initialAiState?.report ?? null
   )
@@ -103,10 +104,11 @@ export function RegimeOpportunityPanel({
     }
   }
 
-  const filteredCandidates =
-    roleFilter === 'ALL'
-      ? report.candidates
-      : report.candidates.filter((c) => c.role === roleFilter)
+  const filteredCandidates = report.candidates.filter((c) => {
+    if (roleFilter !== 'ALL' && c.role !== roleFilter) return false
+    if (readyOnly && c.entryReadiness !== 'READY_TO_ENTER') return false
+    return true
+  })
 
   const aiPickMap = new Map(
     (aiReport?.picks || []).map((p) => [p.ticker.toUpperCase(), p])
@@ -253,7 +255,37 @@ export function RegimeOpportunityPanel({
             </button>
           )
         })}
+
+        <button
+          type="button"
+          onClick={() => setReadyOnly((prev) => !prev)}
+          className={`ml-auto px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+            readyOnly
+              ? 'bg-emerald-500 text-black border-emerald-400 shadow-sm'
+              : 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border-emerald-500/30'
+          }`}
+        >
+          🟢 เฉพาะตัวที่เข้าซื้อได้ตอนนี้ ({report.candidates.filter((c) => c.entryReadiness === 'READY_TO_ENTER').length})
+        </button>
       </div>
+
+      {filteredCandidates.length === 0 && (
+        <div className="p-6 rounded-2xl bg-black/30 border border-white/[0.06] text-center space-y-2">
+          <p className="text-xs sm:text-sm font-semibold text-white">
+            ยังไม่พบสินทรัพย์ในตัวกรองนี้ที่พร้อมเข้าซื้อทันที (ส่วนใหญ่ราคาตึงตัว)
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setRoleFilter('ALL')
+              setReadyOnly(false)
+            }}
+            className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-xs text-slate-200 cursor-pointer"
+          >
+            แสดงทั้งหมดรวมตัวที่รอย่อ
+          </button>
+        </div>
+      )}
 
       {/* Candidate Cards */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -296,6 +328,17 @@ export function RegimeOpportunityPanel({
                     <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-white/[0.05] text-slate-200 border border-white/[0.08]">
                       {aiPick?.roleLabelTh || cand.roleLabelTh}
                     </span>
+                    <span
+                      className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                        cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE'
+                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/35'
+                          : cand.entryReadiness === 'WAIT_PULLBACK'
+                          ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                          : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                      }`}
+                    >
+                      {cand.entryVerdictLabelTh}
+                    </span>
                     {cand.isWatchlist && (
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
                         Watchlist ของคุณ
@@ -327,9 +370,59 @@ export function RegimeOpportunityPanel({
 
               {/* Entry Caution Banner */}
               {cand.entryCaution && (
-                <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-200 flex items-center gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <div
+                  className={`px-3 py-2 rounded-xl border text-xs flex items-start gap-2 leading-relaxed ${
+                    cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE'
+                      ? 'bg-rose-500/15 border-rose-500/35 text-rose-200'
+                      : 'bg-amber-500/10 border-amber-500/25 text-amber-200'
+                  }`}
+                >
+                  <AlertTriangle
+                    className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${
+                      cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE'
+                        ? 'text-rose-400'
+                        : 'text-amber-400'
+                    }`}
+                  />
                   <span>{cand.entryCaution}</span>
+                </div>
+              )}
+
+              {/* Price Stretch & Risk/Reward Bar */}
+              {(cand.distanceAboveSma50Pct !== null || cand.riskRewardRatio !== null || cand.valuationWarningTh) && (
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                  {cand.distanceAboveSma50Pct !== null && (
+                    <span
+                      className={`px-2.5 py-1 rounded-lg border ${
+                        cand.distanceAboveSma50Pct >= 9
+                          ? 'bg-rose-500/10 border-rose-500/25 text-rose-300'
+                          : cand.distanceAboveSma50Pct >= 6
+                          ? 'bg-amber-500/10 border-amber-500/25 text-amber-300'
+                          : 'bg-black/35 border-white/[0.06] text-slate-300'
+                      }`}
+                    >
+                      ห่าง SMA50: {cand.distanceAboveSma50Pct >= 0 ? '+' : ''}
+                      {cand.distanceAboveSma50Pct}%
+                    </span>
+                  )}
+                  {cand.riskRewardRatio !== null && (
+                    <span
+                      className={`px-2.5 py-1 rounded-lg border ${
+                        cand.riskRewardRatio >= 1.5
+                          ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
+                          : cand.riskRewardRatio < 1.0
+                          ? 'bg-rose-500/10 border-rose-500/25 text-rose-300'
+                          : 'bg-black/35 border-white/[0.06] text-slate-300'
+                      }`}
+                    >
+                      R:R {cand.riskRewardRatio.toFixed(2)}x (R1 {cand.upsideToR1Pct !== null ? `${cand.upsideToR1Pct >= 0 ? '+' : ''}${cand.upsideToR1Pct}%` : '—'} / S1 {cand.downsideToS1Pct !== null ? `-${cand.downsideToS1Pct}%` : '—'})
+                    </span>
+                  )}
+                  {cand.valuationWarningTh && (
+                    <span className="px-2.5 py-1 rounded-lg border bg-amber-500/10 border-amber-500/25 text-amber-300 font-sans">
+                      ⚠️ {cand.valuationWarningTh}
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -464,13 +557,28 @@ export function RegimeOpportunityPanel({
                     onQuickBuy({
                       ticker: cand.ticker,
                       action: 'BUY',
-                      price: cand.currentPrice,
+                      price:
+                        cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE' && cand.supportS1
+                          ? cand.supportS1
+                          : cand.currentPrice,
                       market: cand.market === 'TH' ? 'TH' : 'US',
                     })
                   }
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/25 cursor-pointer transition-all"
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                    cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE'
+                      ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 border border-rose-500/35'
+                      : cand.entryReadiness === 'WAIT_PULLBACK'
+                      ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/35'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/25'
+                  }`}
                 >
-                  <span>ซื้อทันที</span>
+                  <span>
+                    {cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE'
+                      ? 'ตั้งซื้อเมื่อย่อ (ห้ามไล่)'
+                      : cand.entryReadiness === 'WAIT_PULLBACK'
+                      ? 'บันทึกซื้อ (รอย่อ)'
+                      : 'ซื้อทันที'}
+                  </span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>

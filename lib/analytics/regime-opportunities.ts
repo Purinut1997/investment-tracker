@@ -11,6 +11,7 @@ import type { HoldingItem } from './holdings'
 import { classifySector } from './risk-sentinel'
 import { calculateSMA, calculateWildersRSI } from '../market-data/technical-signals'
 import { getObservationTime } from '../ai/advisor-evidence'
+import { getYahooQuoteSummary } from '../market-data/yahoo-crumb'
 
 export type MarketRegimeCode =
   | 'TECH_SELLOFF_YIELD_PRESSURE'
@@ -24,6 +25,11 @@ export type OpportunityRole =
   | 'SECTOR_ROTATION'
   | 'INCOME_BUFFER'
   | 'CONTRARIAN_DIP'
+
+export type EntryReadinessStatus =
+  | 'READY_TO_ENTER'
+  | 'WAIT_PULLBACK'
+  | 'TOO_HIGH_DO_NOT_CHASE'
 
 export interface DailySeriesSnapshot {
   symbol: string
@@ -99,6 +105,15 @@ export interface RegimeOpportunityCandidate {
   supportS1: number | null
   resistanceR1: number | null
   pullbackFrom6MHigh: number
+  entryReadiness: EntryReadinessStatus
+  entryVerdictLabelTh: string
+  distanceAboveSma50Pct: number | null
+  upsideToR1Pct: number | null
+  downsideToS1Pct: number | null
+  riskRewardRatio: number | null
+  forwardPe: number | null
+  trailingPe: number | null
+  valuationWarningTh: string | null
   entryCaution: string | null
   alreadyHeldPct: number
   entryZoneTh: string
@@ -342,8 +357,202 @@ export function detectMarketRegime(params: {
   }
 }
 
+export interface EntryReadinessEvaluation {
+  entryReadiness: EntryReadinessStatus
+  entryVerdictLabelTh: string
+  entryTimingScore: number
+  entryCaution: string | null
+  distanceAboveSma50Pct: number | null
+  upsideToR1Pct: number | null
+  downsideToS1Pct: number | null
+  riskRewardRatio: number | null
+  valuationWarningTh: string | null
+}
+
+const DEFENSIVE_LOW_VOL_CATEGORIES = new Set([
+  'Bonds',
+  'Staples',
+  'Utilities',
+  'Dividend',
+  'Healthcare',
+])
+
+export function evaluateEntryReadiness(params: {
+  category: string
+  isWatchlist: boolean
+  role?: OpportunityRole
+  currentPrice: number
+  currency?: string
+  rsi14: number | null
+  sma50: number | null
+  supportS1: number | null
+  resistanceR1: number | null
+  forwardPe?: number | null
+  trailingPe?: number | null
+}): EntryReadinessEvaluation {
+  const {
+    category,
+    isWatchlist,
+    role = 'SECTOR_ROTATION',
+    currentPrice,
+    currency = 'USD',
+    rsi14,
+    sma50,
+    supportS1,
+    resistanceR1,
+    forwardPe = null,
+    trailingPe = null,
+  } = params
+
+  const distanceAboveSma50Pct =
+    sma50 && sma50 > 0 && currentPrice > 0
+      ? Number((((currentPrice - sma50) / sma50) * 100).toFixed(1))
+      : null
+
+  const upsideToR1Pct =
+    resistanceR1 && currentPrice > 0
+      ? Number((((resistanceR1 - currentPrice) / currentPrice) * 100).toFixed(1))
+      : null
+
+  const downsideToS1Pct =
+    supportS1 && currentPrice > 0
+      ? Number((((currentPrice - supportS1) / currentPrice) * 100).toFixed(1))
+      : null
+
+  let riskRewardRatio: number | null = null
+  if (upsideToR1Pct !== null && downsideToS1Pct !== null) {
+    if (upsideToR1Pct <= 0) {
+      riskRewardRatio = 0
+    } else if (downsideToS1Pct <= 0.3) {
+      riskRewardRatio = 3.5
+    } else {
+      riskRewardRatio = Number((upsideToR1Pct / downsideToS1Pct).toFixed(2))
+    }
+  }
+
+  if (category === 'CashYield') {
+    return {
+      entryReadiness: 'READY_TO_ENTER',
+      entryVerdictLabelTh: '🟢 พักเงินรับดอกเบี้ยได้ทันที',
+      entryTimingScore: 17,
+      entryCaution: null,
+      distanceAboveSma50Pct,
+      upsideToR1Pct,
+      downsideToS1Pct,
+      riskRewardRatio,
+      valuationWarningTh: null,
+    }
+  }
+
+  const effectivePe = forwardPe ?? trailingPe ?? null
+  const isValuationStretched = Boolean(isWatchlist && effectivePe !== null && effectivePe > 40)
+  const valuationWarningTh = isValuationStretched
+    ? `Valuation ตึงตัว (${forwardPe ? `Fwd P/E ${forwardPe.toFixed(1)}x` : `P/E ${trailingPe!.toFixed(1)}x`})`
+    : null
+
+  const isLowVolGroup = DEFENSIVE_LOW_VOL_CATEGORIES.has(category)
+  const mildSmaThreshold = isLowVolGroup ? 6 : 8
+  const severeSmaThreshold = isLowVolGroup ? 9 : 12
+
+  const severeReasons: string[] = []
+  if (rsi14 !== null && rsi14 > 72) {
+    severeReasons.push(`RSI ${rsi14.toFixed(1)} (>72 Overbought)`)
+  }
+  if (distanceAboveSma50Pct !== null && distanceAboveSma50Pct >= severeSmaThreshold) {
+    severeReasons.push(`ราคาห่าง SMA50 +${distanceAboveSma50Pct.toFixed(1)}% (ตึงตัวสูง)`)
+  }
+  if (
+    upsideToR1Pct !== null &&
+    downsideToS1Pct !== null &&
+    upsideToR1Pct <= 0.5 &&
+    downsideToS1Pct >= 2.5
+  ) {
+    severeReasons.push(`ราคาจ่อ/ชนแนวต้าน R1 (Upside เหลือ ${upsideToR1Pct.toFixed(1)}% vs Downside -${downsideToS1Pct.toFixed(1)}%)`)
+  }
+  if (isValuationStretched && rsi14 !== null && rsi14 >= 62) {
+    severeReasons.push(`${valuationWarningTh} + RSI สูง (${rsi14.toFixed(1)})`)
+  }
+
+  const mildReasons: string[] = []
+  if (rsi14 !== null && rsi14 >= 64) {
+    mildReasons.push(`RSI ${rsi14.toFixed(1)} เริ่มสูง`)
+  }
+  if (distanceAboveSma50Pct !== null && distanceAboveSma50Pct >= mildSmaThreshold) {
+    mildReasons.push(`ห่าง SMA50 +${distanceAboveSma50Pct.toFixed(1)}%`)
+  }
+  if (
+    riskRewardRatio !== null &&
+    riskRewardRatio < 1.0 &&
+    downsideToS1Pct !== null &&
+    downsideToS1Pct >= 2.0
+  ) {
+    mildReasons.push(`R:R ${riskRewardRatio.toFixed(2)}x ไม่คุ้ม (<1.0x)`)
+  }
+  if (isValuationStretched) {
+    mildReasons.push(valuationWarningTh!)
+  }
+
+  let entryReadiness: EntryReadinessStatus = 'READY_TO_ENTER'
+  let entryVerdictLabelTh = '🟢 เข้าทยอยซื้อได้'
+  let entryTimingScore = 15
+
+  if (severeReasons.length > 0) {
+    entryReadiness = 'TOO_HIGH_DO_NOT_CHASE'
+    entryVerdictLabelTh = '🔴 สูงเกินเข้า (ห้ามไล่ราคา)'
+    entryTimingScore = 3
+  } else if (mildReasons.length > 0) {
+    entryReadiness = 'WAIT_PULLBACK'
+    entryVerdictLabelTh = '🟡 รอย่อก่อนค่อยเข้า'
+    entryTimingScore = mildReasons.length >= 2 ? 7 : 9
+  } else {
+    if (rsi14 !== null && rsi14 <= 42) entryTimingScore = 18
+    else if (rsi14 !== null && rsi14 <= 56) entryTimingScore = 16
+    else entryTimingScore = 14
+
+    if (downsideToS1Pct !== null && downsideToS1Pct <= 3.0) {
+      entryTimingScore = Math.min(20, entryTimingScore + 2)
+    }
+    if (riskRewardRatio !== null && riskRewardRatio >= 1.8) {
+      entryTimingScore = Math.min(20, entryTimingScore + 2)
+    }
+    if (sma50 && currentPrice >= sma50 * 0.99 && role !== 'CONTRARIAN_DIP') {
+      entryTimingScore = Math.min(20, entryTimingScore + 1)
+    }
+  }
+
+  const currSym = currency === 'THB' ? '฿' : '$'
+  const s1Suggestion =
+    supportS1 && downsideToS1Pct !== null && downsideToS1Pct > 0.5
+      ? ` รอย่อ -${downsideToS1Pct.toFixed(1)}% แถวแนวรับ S1 (${currSym}${supportS1.toFixed(2)})`
+      : supportS1
+      ? ` อ้างอิงแนวรับ S1 (${currSym}${supportS1.toFixed(2)})`
+      : ''
+
+  let entryCaution: string | null = null
+  if (entryReadiness === 'TOO_HIGH_DO_NOT_CHASE') {
+    entryCaution = `ราคาสูง/ตึงตัวเกินเข้า: ${severeReasons.join(' · ')} — ห้ามไล่ราคา${s1Suggestion}`
+  } else if (entryReadiness === 'WAIT_PULLBACK') {
+    entryCaution = `ควรรอจังหวะย่อ: ${mildReasons.join(' · ')}${s1Suggestion}`
+  }
+
+  return {
+    entryReadiness,
+    entryVerdictLabelTh,
+    entryTimingScore,
+    entryCaution,
+    distanceAboveSma50Pct,
+    upsideToR1Pct,
+    downsideToS1Pct,
+    riskRewardRatio,
+    valuationWarningTh,
+  }
+}
+
 export function computeRegimeOpportunityScore(params: {
   role: OpportunityRole
+  category?: string
+  isWatchlist?: boolean
+  currency?: string
   regime: DetectedMarketRegime
   rsVsQqq5D: number
   rsVsQqq21D: number
@@ -352,12 +561,15 @@ export function computeRegimeOpportunityScore(params: {
   rsi14: number | null
   currentPrice: number
   supportS1: number | null
+  resistanceR1?: number | null
   sma50: number | null
   pullbackFrom6MHigh: number
   techExposurePercent: number
   alreadyHeldPct: number
   effectiveCategoryHeldPct?: number
   maxSinglePositionPercent: number
+  forwardPe?: number | null
+  trailingPe?: number | null
 }): {
   totalScore: number
   scoreBreakdown: {
@@ -367,9 +579,13 @@ export function computeRegimeOpportunityScore(params: {
     portfolioFit: number
   }
   entryCaution: string | null
+  readiness: EntryReadinessEvaluation
 } {
   const {
     role,
+    category = 'Other',
+    isWatchlist = false,
+    currency = 'USD',
     regime,
     rsVsQqq5D,
     rsVsQqq21D,
@@ -378,12 +594,15 @@ export function computeRegimeOpportunityScore(params: {
     rsi14,
     currentPrice,
     supportS1,
+    resistanceR1 = null,
     sma50,
     pullbackFrom6MHigh,
     techExposurePercent,
     alreadyHeldPct,
     effectiveCategoryHeldPct = alreadyHeldPct,
     maxSinglePositionPercent,
+    forwardPe = null,
+    trailingPe = null,
   } = params
 
   // 1. Relative Strength vs QQQ (0 - 35)
@@ -413,32 +632,22 @@ export function computeRegimeOpportunityScore(params: {
   else if (regime.preferredRoles.includes(role)) hedgePower += 2
   hedgePower = Math.max(0, Math.min(25, hedgePower))
 
-  // 3. Entry Timing & Anti-Chase Guardrail (0 - 20)
-  let entryTiming = 11
-  let entryCaution: string | null = null
-  if (rsi14 !== null) {
-    if (rsi14 > 72) {
-      entryTiming = 3
-      entryCaution = `RSI สูง (${rsi14.toFixed(1)} > 72) ระวังไล่ราคา รอจังหวะย่อใกล้แนวรับ S1`
-    } else if (rsi14 >= 65) {
-      entryTiming = 9
-    } else if (rsi14 >= 38 && rsi14 <= 60) {
-      entryTiming = 16
-    } else if (rsi14 < 38) {
-      entryTiming = 18
-    }
-  }
-  if (entryCaution === null) {
-    if (supportS1 && currentPrice > 0) {
-      const distS1Pct = ((currentPrice - supportS1) / supportS1) * 100
-      if (distS1Pct >= -1.5 && distS1Pct <= 3.5) {
-        entryTiming = Math.min(20, entryTiming + 3)
-      }
-    }
-    if (sma50 && currentPrice >= sma50 * 0.99 && role !== 'CONTRARIAN_DIP') {
-      entryTiming = Math.min(20, entryTiming + 1)
-    }
-  }
+  // 3. Entry Timing, Overextension & Risk/Reward Guardrail (0 - 20)
+  const readiness = evaluateEntryReadiness({
+    category,
+    isWatchlist,
+    role,
+    currentPrice,
+    currency,
+    rsi14,
+    sma50,
+    supportS1,
+    resistanceR1,
+    forwardPe,
+    trailingPe,
+  })
+  const entryTiming = readiness.entryTimingScore
+  const entryCaution = readiness.entryCaution
 
   // 4. Portfolio Fit vs Concentration & AI Memory Cap (0 - 20)
   const cap = Math.max(5, maxSinglePositionPercent || 20)
@@ -459,6 +668,7 @@ export function computeRegimeOpportunityScore(params: {
     totalScore,
     scoreBreakdown: { relativeStrength, hedgePower, entryTiming, portfolioFit },
     entryCaution,
+    readiness,
   }
 }
 
@@ -521,7 +731,16 @@ export function rankRegimeOpportunities(params: {
   regime: DetectedMarketRegime
   qqqSeries: DailySeriesSnapshot
   candidates: Array<{
-    spec: { ticker: string; name: string; category: string; defaultRole: OpportunityRole; isWatchlist: boolean; market: string }
+    spec: {
+      ticker: string
+      name: string
+      category: string
+      defaultRole: OpportunityRole
+      isWatchlist: boolean
+      market: string
+      forwardPe?: number | null
+      trailingPe?: number | null
+    }
     series: DailySeriesSnapshot
   }>
   holdings: HoldingItem[]
@@ -582,6 +801,9 @@ export function rankRegimeOpportunities(params: {
 
     const scoring = computeRegimeOpportunityScore({
       role,
+      category: spec.category,
+      isWatchlist: spec.isWatchlist,
+      currency: series.currency,
       regime,
       rsVsQqq5D,
       rsVsQqq21D,
@@ -590,12 +812,15 @@ export function rankRegimeOpportunities(params: {
       rsi14: series.rsi14,
       currentPrice: series.currentPrice,
       supportS1: series.supportS1,
+      resistanceR1: series.resistanceR1,
       sma50: series.sma50,
       pullbackFrom6MHigh: series.pullbackFrom6MHigh,
       techExposurePercent,
       alreadyHeldPct,
       effectiveCategoryHeldPct,
       maxSinglePositionPercent,
+      forwardPe: spec.forwardPe ?? null,
+      trailingPe: spec.trailingPe ?? null,
     })
 
     const suggestedWeightPct =
@@ -654,6 +879,15 @@ export function rankRegimeOpportunities(params: {
       supportS1: series.supportS1,
       resistanceR1: series.resistanceR1,
       pullbackFrom6MHigh: series.pullbackFrom6MHigh,
+      entryReadiness: scoring.readiness.entryReadiness,
+      entryVerdictLabelTh: scoring.readiness.entryVerdictLabelTh,
+      distanceAboveSma50Pct: scoring.readiness.distanceAboveSma50Pct,
+      upsideToR1Pct: scoring.readiness.upsideToR1Pct,
+      downsideToS1Pct: scoring.readiness.downsideToS1Pct,
+      riskRewardRatio: scoring.readiness.riskRewardRatio,
+      forwardPe: spec.forwardPe ?? null,
+      trailingPe: spec.trailingPe ?? null,
+      valuationWarningTh: scoring.readiness.valuationWarningTh,
       entryCaution: scoring.entryCaution,
       alreadyHeldPct,
       entryZoneTh,
@@ -873,18 +1107,34 @@ export async function getLiveRegimeOpportunities(params: {
     fetchYahooDailySeriesSnapshot('^VIX', 'US', 'CBOE VIX Index', forceRefresh),
     fetchYahooDailySeriesSnapshot('^TNX', 'US', 'US 10Y Treasury Yield', forceRefresh),
     Promise.all(
-      candidateSpecs.map(async (spec) => ({
-        spec,
-        series: await fetchYahooDailySeriesSnapshot(spec.ticker, spec.market, spec.name, forceRefresh),
-      }))
+      candidateSpecs.map(async (spec) => {
+        const yfSummarySym =
+          spec.market === 'TH' && !spec.ticker.endsWith('.BK') ? `${spec.ticker}.BK` : spec.ticker
+        const [series, summary] = await Promise.all([
+          fetchYahooDailySeriesSnapshot(spec.ticker, spec.market, spec.name, forceRefresh),
+          spec.isWatchlist
+            ? getYahooQuoteSummary(yfSummarySym).catch(() => null)
+            : Promise.resolve(null),
+        ])
+        return {
+          spec: {
+            ...spec,
+            forwardPe: summary?.forwardPe ?? null,
+            trailingPe: summary?.pe ?? null,
+          },
+          series,
+        }
+      })
     ),
   ])
 
   if (!qqqSeries || !spySeries) return null
 
   const validCandidates = candidateSeriesList.filter(
-    (entry): entry is { spec: (typeof candidateSpecs)[number]; series: DailySeriesSnapshot } =>
-      Boolean(entry.series && entry.series.currentPrice > 0)
+    (entry): entry is {
+      spec: (typeof candidateSpecs)[number] & { forwardPe: number | null; trailingPe: number | null }
+      series: DailySeriesSnapshot
+    } => Boolean(entry.series && entry.series.currentPrice > 0)
   )
 
   if (validCandidates.length === 0) return null
@@ -935,8 +1185,10 @@ export function formatRegimeOpportunitiesForPrompt(report: RegimeOpportunitiesRe
 
   for (const c of report.candidates) {
     const curr = c.currency === 'THB' ? '฿' : '$'
+    const smaStr = c.distanceAboveSma50Pct !== null ? `${c.distanceAboveSma50Pct >= 0 ? '+' : ''}${c.distanceAboveSma50Pct}%` : 'N/A'
+    const rrStr = c.riskRewardRatio !== null ? `${c.riskRewardRatio.toFixed(2)}x` : 'N/A'
     lines.push(
-      `  • [${c.ticker}] ${c.name} (${c.roleLabelTh}) | Score ${c.totalScore}/100 | ราคา ${curr}${c.currentPrice} (ณ ${c.observedAt.slice(0, 10)}) | RS 1M vs QQQ: ${c.rsVsQqq21D >= 0 ? '+' : ''}${c.rsVsQqq21D}% | Corr 60D: ${c.corr60DWithQqq} | RSI ${c.rsi14 ?? 'N/A'} | S1 ${c.supportS1 ?? 'N/A'} | ถืออยู่แล้ว ${c.alreadyHeldPct}%${c.entryCaution ? ` | ⚠️ ${c.entryCaution}` : ''}${c.hedgeImpact ? ` | ${c.hedgeImpact.summaryTh}` : ''}`
+      `  • [${c.ticker}] ${c.name} (${c.roleLabelTh}) | สถานะเข้าซื้อ: ${c.entryVerdictLabelTh} | Score ${c.totalScore}/100 | ราคา ${curr}${c.currentPrice} (ณ ${c.observedAt.slice(0, 10)}) | RS 1M vs QQQ: ${c.rsVsQqq21D >= 0 ? '+' : ''}${c.rsVsQqq21D}% | Corr 60D: ${c.corr60DWithQqq} | RSI ${c.rsi14 ?? 'N/A'} | ห่าง SMA50: ${smaStr} | R:R: ${rrStr} | S1 ${c.supportS1 ?? 'N/A'} | ถืออยู่แล้ว ${c.alreadyHeldPct}%${c.valuationWarningTh ? ` | ⚠️ ${c.valuationWarningTh}` : ''}${c.entryCaution ? ` | ⚠️ ${c.entryCaution}` : ''}${c.hedgeImpact ? ` | ${c.hedgeImpact.summaryTh}` : ''}`
     )
   }
 
