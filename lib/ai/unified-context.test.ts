@@ -1,5 +1,5 @@
 import { identifyCopilotPlanIntent as intent } from './advisor-copilot'
-import { dailyPriority } from './daily-priority'
+import { dailyPriority, dailyBriefTasks, splitDailyBrief } from './daily-priority'
 import assert from 'node:assert/strict'
 import {
   extractTacticalContinuity,
@@ -242,3 +242,13 @@ assert.equal(intent('เดือนหน้าผมจะเติมอี�
 assert.deepEqual(dailyPriority('1. **ภาพรวมตลาด**\n- ตลาดทรงตัว\n2. **ภาพรวมพอร์ต**\n- ถือเงินสด\n3. **สิ่งที่ต้องตรวจ**\n- ตรวจเวลาราคา'), { context: 'ตลาดทรงตัว', action: 'ตรวจเวลาราคา' })
 assert.equal(dailyPriority('3. 📋 **แผนปฏิบัติการ 3 ข้อวันนี้**: รอราคาปิด').action, 'รอราคาปิด')
 assert.equal(dailyPriority('ภาพรวมอย่างเดียว').action, undefined)
+
+assert.equal(dailyPriority('3. **สิ่งที่ต้องตรวจ**:\n---\n- **ตรวจกรอบราคา**').action, 'ตรวจกรอบราคา')
+assert.equal(dailyPriority('3. **สิ่งที่ต้องตรวจ**：\n- …').action, undefined)
+
+const legacyBrief = '🧭 **ทิศทางตลาดวันนี้ (Market Regime)**: ตลาดผันผวน 🎯 **วิเคราะห์เจาะจงสินทรัพย์ในพอร์ต**: - **AAA (RSI: 29):** ตรวจความเสี่ยง 📋 **แผนปฏิบัติการ 3 ข้อที่ควรทำวันนี้**: - 1. **[ทบทวน AAA]:** ตรวจน้ำหนัก - 2. **[เฝ้าดูกราฟ]:** รอราคาปิด'
+const legacySections = splitDailyBrief(legacyBrief)
+assert.equal(legacySections.market, 'ตลาดผันผวน')
+assert.match(legacySections.portfolio, /AAA/)
+assert.equal(dailyBriefTasks(legacySections.tasks).length, 2)
+assert.equal(dailyPriority(legacyBrief).action, '[ทบทวน AAA]: ตรวจน้ำหนัก')

@@ -1,3 +1,4 @@
+import { parseUserInvestmentMemory } from '@/lib/ai/outcome-evaluator'
 import { readAdvisorBrief } from '@/lib/ai/advisor-daily'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
@@ -74,6 +75,7 @@ export async function GET(req: NextRequest) {
   try {
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
+    const positionCap = parseUserInvestmentMemory(userSettings?.defaultRiskProfile).maxSinglePositionPercent
 
     // 1. Fetch user's holdings & cash
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency, forceRefresh)
@@ -453,11 +455,11 @@ export async function GET(req: NextRequest) {
 
       if (signal?.signalType === 'STRONG_DIP_BUY') {
         actionPriority = 'HIGH'
-        actionTag = '🎯 จุดช้อนซื้อได้เปรียบสูง (Dip Buy)'
+        actionTag = 'ราคาย่อลึก · ตรวจความเสี่ยงก่อนเพิ่ม'
         actionTagColor = 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30'
-      } else if (signal?.signalType === 'NEAR_SUPPORT' || (distanceToS1Percent !== null && distanceToS1Percent <= 2)) {
+      } else if (signal?.signalType === 'NEAR_SUPPORT' || (distanceToS1Percent !== null && Math.abs(distanceToS1Percent) <= 2)) {
         actionPriority = 'HIGH'
-        actionTag = '🟢 ทดสอบแนวรับสำคัญ (จ่อ S1)'
+        actionTag = 'ใกล้แนวรับ · รอตรวจสัญญาณ'
         actionTagColor = 'text-teal-300 bg-teal-500/15 border-teal-500/30'
       } else if (signal?.signalType === 'OVERBOUGHT_RESISTANCE') {
         actionPriority = 'MEDIUM'
@@ -492,7 +494,7 @@ export async function GET(req: NextRequest) {
         actionPriority,
         actionTag,
         actionTagColor,
-        technicalReason: signal?.technicalReason || 'ไม่มีสัญญาณกราฟที่ยืนยันได้',
+        technicalReason: signal ? 'ประเมินจากข้อมูลกราฟ ตรวจน้ำหนักพอร์ตและเหตุผลที่ถือประกอบ' : 'ไม่มีสัญญาณกราฟที่ยืนยันได้',
       }
     })
 
@@ -572,6 +574,7 @@ export async function GET(req: NextRequest) {
         },
       },
       portfolioTriggers: actionItems,
+      positionCap,
       plan: {
         id: existingPlan?.id || null,
         marketBias: existingPlan?.marketBias || regimeType,

@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { dailyBriefTasks, splitDailyBrief } from '@/lib/ai/daily-priority'
 import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 import {
   Sparkles,
@@ -205,25 +206,7 @@ function parseAiResponse(rawText: string): ParsedSections {
   }
 
   try {
-    // 1. Separate sections flexibly (handles single-line text and multi-line markdown)
-    let sec1 = ''
-    let sec2 = ''
-    let sec3 = ''
-
-    const m1 = rawText.match(
-      /(?:1\.\s*(?:🧭)?\s*[\*]*ทิศทางตลาด[^\n:]*[:\)]?)\s*([\s\S]*?)(?=(?:2\.\s*(?:🎯)?\s*[\*]*วิเคราะห์))/i
-    )
-    if (m1) sec1 = m1[1].trim()
-
-    const m2 = rawText.match(
-      /(?:2\.\s*(?:🎯)?\s*[\*]*วิเคราะห์[^\n:]*[:\)]?)\s*([\s\S]*?)(?=(?:3\.\s*(?:📋)?\s*[\*]*แผนปฏิบัติการ))/i
-    )
-    if (m2) sec2 = m2[1].trim()
-
-    const m3 = rawText.match(
-      /(?:3\.\s*(?:📋)?\s*[\*]*แผนปฏิบัติการ[^\n:]*[:\)]?)\s*([\s\S]*)$/i
-    )
-    if (m3) sec3 = m3[1].trim()
+    const { market: sec1, portfolio: sec2, tasks: sec3 } = splitDailyBrief(rawText)
 
     // Fallback if not matched by structured headers
     if (!sec1 && !sec2 && !sec3) {
@@ -239,7 +222,7 @@ function parseAiResponse(rawText: string): ParsedSections {
     }
 
     // 2. Parse Stocks (Split by newline OR ' - ' separator for single-line output)
-    const rawStockItems = sec2.split(/(?:[\r\n]+|\s+-\s+)(?=[A-Za-z0-9_.\-]+\s*[\(\:])/).map((s) => s.trim()).filter((s) => s && s !== '-')
+    const rawStockItems = sec2.split(/(?:[\r\n]+|\s+-\s+)(?=(?:\*\*)?[A-Za-z0-9_.\-]+\s*[\(\:])/).map((s) => s.trim()).filter((s) => s && s !== '-')
     const parsedStocks: ParsedStockItem[] = []
 
     for (const item of rawStockItems) {
@@ -347,28 +330,14 @@ function parseAiResponse(rawText: string): ParsedSections {
     }
 
     // 4. Parse Action Steps (Handles single-line ' - 1. ' or multi-line '1. ')
-    const rawActionItems = sec3
-      .split(/(?:[\r\n]+|(?:\s+-\s+|\s+)?)(?=\d+\.\s+)/)
-      .map((a) => a.trim())
-      .filter((a) => a && a !== '-')
-
-    const parsedActions: ParsedActionStep[] = []
-    let stepNum = 1
-
-    for (const act of rawActionItems) {
-      // Regex matches: 1. **ทยอยสะสม GOOGL:** รายละเอียด หรือ 1. ทยอยสะสม GOOGL: รายละเอียด
-      const match = act.match(/^(?:[-•*]\s*)?(\d+)\.\s*(?:\*\*)?([^:\*\n]+)(?:\*\*)?:?\s*(.*)$/)
-      if (match) {
-        const parsedNum = parseInt(match[1]) || stepNum++
-        const headline = match[2].trim()
-        const details = match[3].trim()
-        parsedActions.push({
-          number: parsedNum,
-          headline,
-          details,
-        })
+    const parsedActions = dailyBriefTasks(sec3).map((line, index) => {
+      const delimiter = line.search(/[:：]| [—–] /u)
+      return {
+        number: index + 1,
+        headline: delimiter < 0 ? line : line.slice(0, delimiter).trim(),
+        details: delimiter < 0 ? '' : line.slice(delimiter + 1).trim(),
       }
-    }
+    })
 
     // 5. Build Executive Summary & Focus Pills
     let executiveSummary = ''
@@ -446,7 +415,7 @@ export function AiBriefViewer({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-lg font-black text-white tracking-tight">
-                AI Market Strategist
+                บทวิเคราะห์จาก AI
               </h3>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
                 สรุปเช้า & ยุทธศาสตร์พอร์ต

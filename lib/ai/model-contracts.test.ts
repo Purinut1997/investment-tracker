@@ -1,3 +1,5 @@
+import { isProviderQuotaError } from './gemini-errors'
+import { copilotQuotaSummary } from './copilot-quota-summary'
 import assert from 'node:assert/strict'
 import { parseModelJson, remainingModelBudget, forecastInputSchema, forecastContextKey, planAdviceContextKey, planAdviceInput } from './model-contracts'
 import { normalizeExtraction, type ExtractionAccount } from './transaction-extraction'
@@ -46,3 +48,12 @@ assert.equal(imported.transactions[4].txnDate, null)
 assert.equal(imported.cashBalances.length, 0)
 assert.throws(() => normalizeExtraction({ transactions: 'invalid' }, accounts))
 console.log('✅ Model JSON, request budgets, forecast inputs and extraction safety checks passed')
+
+assert.equal(isProviderQuotaError({ status: 429 }), true)
+assert.equal(isProviderQuotaError(new Error('RESOURCE_EXHAUSTED')), true)
+assert.equal(isProviderQuotaError(new Error('request 14291 failed')), false)
+assert.equal(isProviderQuotaError({ status: 403, message: 'Quota settings' }), false)
+const limited = copilotQuotaSummary({ requestedEvidence: ['GOOGL · ไม่มีข้อมูลกราฟที่ใหม่พอ'], unresolvedSymbols: [], cash: 200, baseCurrency: 'THB', holdingsCount: 3 })
+assert.match(limited, /GOOGL/)
+assert.doesNotMatch(limited, /200 THB/)
+assert.match(copilotQuotaSummary({ requestedEvidence: [], unresolvedSymbols: [], cash: 0, baseCurrency: 'THB', holdingsCount: 0 }), /0 THB/)

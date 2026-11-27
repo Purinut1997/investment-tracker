@@ -4,6 +4,7 @@
  * optional Google Search Grounding, request timeout, and AiAdviceLog auditing.
  */
 
+import { GeminiQuotaError, isProviderQuotaError } from './gemini-errors'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '@/lib/prisma'
 import { decrypt } from '@/lib/crypto'
@@ -277,9 +278,7 @@ export async function callGemini({
         console.warn(`[Gemini] Model ${modelId} attempt failed`, { status: err?.status, name: err?.name })
 
         const isRetryable =
-          errMsg.includes('429') ||
-          errMsg.includes('Quota') ||
-          errMsg.includes('ResourceExhausted') ||
+          isProviderQuotaError(err) ||
           errMsg.includes('API_KEY_INVALID') ||
           errMsg.includes('API key not valid') ||
           errMsg.includes('timeout') || err?.name === 'TimeoutError' || err?.name === 'AbortError'
@@ -300,8 +299,8 @@ export async function callGemini({
   const errString = String(lastError?.message || 'Unknown error')
   if (errString.includes('API_KEY_INVALID') || errString.includes('API key not valid')) {
     throw new Error('Gemini API Key ไม่ถูกต้อง กรุณาตรวจสอบคีย์ในหน้าตั้งค่า')
-  } else if (errString.includes('429') || errString.includes('Quota')) {
-    throw new Error('โควตาการเรียกใช้งาน Gemini API เต็มชั่วคราว กรุณารอสักครู่แล้วลองใหม่')
+  } else if (isProviderQuotaError(lastError)) {
+    throw new GeminiQuotaError()
   } else if (errString.includes('Billing') || errString.includes('billing')) {
     throw new Error('โมเดลนี้ต้องการเปิด Cloud Billing บน Google Cloud Project ก่อนใช้งาน')
   }

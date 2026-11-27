@@ -967,7 +967,7 @@ export default function AiAdvisorPage() {
                       {/* Top Header of Message */}
                       <div className="flex items-center justify-between gap-3 text-xs pb-1 border-b border-white/[0.06]">
                         <span className={`font-semibold ${isUser ? 'text-indigo-200' : 'text-indigo-400'}`}>
-                          {isUser ? 'คุณ' : 'Senior Wealth Copilot (360°)'}
+                          {isUser ? 'คุณ' : msg.modelUsed === 'portfolio-evidence' ? 'ข้อมูลจากระบบพอร์ต' : 'Senior Wealth Copilot (360°)'}
                         </span>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-slate-400 font-mono">{msg.timestamp}</span>
@@ -1024,7 +1024,7 @@ export default function AiAdvisorPage() {
                       )}
 
                       {/* Model Used Tag */}
-                      {msg.modelUsed && !isUser && (
+                      {msg.modelUsed && msg.modelUsed !== 'portfolio-evidence' && !isUser && (
                         <div className="pt-2 text-[10px] text-slate-400 font-mono flex items-center justify-end gap-1">
                           <Sparkles className="w-3 h-3 text-amber-400" />
                           <span>{msg.modelUsed}</span>

@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 import { AdvisorPlanPanel } from '@/components/advisor/AdvisorPlanPanel'
 
 import React, { useState, useEffect, useMemo } from 'react'
@@ -82,6 +84,7 @@ interface PortfolioTriggerItem {
   assetName: string
   market: string
   currency: string
+  observedAt?: string | null
   currentPrice: number
   unrealizedPnLPercent: number
   allocationPercent: number
@@ -108,6 +111,7 @@ interface DailyPlanApiResponse {
   baseCurrency: string
   totalPortfolioValue: number
   investedValue: number
+  positionCap: number
   totalCash: number
   marketOverview: {
     regime: {
@@ -161,7 +165,11 @@ interface DailyPlanApiResponse {
   lastUpdated: string
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = async (url: string) => {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('โหลดแผนประจำวันไม่สำเร็จ')
+  return response.json()
+}
 
 function getTodayDateString(): string {
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -215,18 +223,6 @@ export default function DailyPlanPage() {
     assetName?: string
   } | undefined>(undefined)
 
-  const handleOpenQuickAddForTrigger = (item: PortfolioTriggerItem) => {
-    const isSell = item.signalType === 'OVERBOUGHT_RESISTANCE'
-    setQuickAddInitialData({
-      ticker: item.ticker,
-      assetName: item.assetName,
-      market: (item.market as 'US' | 'TH' | 'CRYPTO') || 'US',
-      action: isSell ? 'SELL' : 'BUY',
-      price: item.currentPrice,
-    })
-    setQuickAddOpen(true)
-  }
-
   const handleOpenQuickAddForAction = (action: TargetAction) => {
     setQuickAddInitialData({
       ticker: action.ticker,
@@ -256,6 +252,7 @@ export default function DailyPlanPage() {
   // Save & AI Status
   const [savingPlan, setSavingPlan] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [saveError, setSaveError] = useState(false)
   const [generatingAi, setGeneratingAi] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
 
@@ -283,6 +280,7 @@ export default function DailyPlanPage() {
   ) => {
     setSavingPlan(true)
     setSaveSuccess(false)
+    setSaveError(false)
     try {
       const res = await fetch('/api/daily-plan', {
         method: 'POST',
@@ -300,6 +298,7 @@ export default function DailyPlanPage() {
       setTimeout(() => setSaveSuccess(false), 3000)
       revalidatePlan()
     } catch (err: any) {
+      setSaveError(true)
       console.error('Save daily plan error:', err)
     } finally {
       setSavingPlan(false)
@@ -343,7 +342,7 @@ export default function DailyPlanPage() {
   // Add checklist item directly from AI Recommendation
   const handleAddToChecklistFromAi = (actionText: string) => {
     const cleanText = actionText.replace(/^[\d+.\-•*]\s*/, '').trim()
-    if (!cleanText) return
+    if (!cleanText || savingPlan || checklist.some(item => item.text === cleanText)) return
     const newItem: ChecklistItem = {
       id: Date.now().toString(),
       text: cleanText,
@@ -363,15 +362,14 @@ export default function DailyPlanPage() {
   }
 
   // Add Target Action
-  const handleAddAction = (ticker: string, targetPrice?: number, defaultNote?: string) => {
+  const handleAddAction = (ticker: string, defaultNote: string) => {
     const exists = targetActions.find((a) => a.ticker.toUpperCase() === ticker.toUpperCase() && a.status === 'PENDING')
-    if (exists) return
+    if (exists || savingPlan) return
     const newAction: TargetAction = {
       id: Date.now().toString(),
       ticker: ticker.toUpperCase(),
-      action: 'BUY',
-      targetPrice: targetPrice ?? undefined,
-      note: defaultNote ?? 'จังหวะย่อตัวแตะแนวรับ S1',
+      action: 'WATCH',
+      note: defaultNote,
       status: 'PENDING',
     }
     const updated = [...targetActions, newAction]
@@ -474,6 +472,14 @@ export default function DailyPlanPage() {
   // Checklist completion stats
   const completedCount = checklist.filter((c) => c.done).length
   const progressPercent = checklist.length > 0 ? Math.round((completedCount / checklist.length) * 100) : 0
+  const currentData = data?.planDate === selectedDate ? data : undefined
+  const nextTask = checklist.find(item => !item.done && item.category !== 'routine') ?? checklist.find(item => !item.done)
+  const currentSignals = currentData?.isToday ? currentData.portfolioTriggers : []
+  const overweight = currentSignals
+    .filter(item => item.allocationPercent > (currentData?.positionCap ?? 100))
+    .sort((a, b) => b.allocationPercent - a.allocationPercent)[0]
+  const watch = currentSignals.find(item => item.actionPriority === 'HIGH' && item.ticker !== overweight?.ticker && item.observedAt)
+
 
   return (
     <AppShell>
@@ -481,8 +487,8 @@ export default function DailyPlanPage() {
         {/* Top Header & Date Bar */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <PageHeader
-            title="แผนการลงทุนประจำวัน (Daily Action Hub)"
-            description="ศูนย์บัญชาการวิเคราะห์สภาวะตลาด ทิศทางแนวโน้ม และแผนปฏิบัติการลงมือทำประจำวันสำหรับพอร์ตของคุณ"
+            title="แผนลงทุนประจำวัน"
+            description="จัดลำดับสิ่งที่ต้องตรวจ ติดตามงาน และดูข้อมูลประกอบ"
           />
 
           {/* Date Selector Pill */}
@@ -530,49 +536,399 @@ export default function DailyPlanPage() {
           </div>
         </div>
 
-        {/* SECTION 1: MARKET REGIME & SENTIMENT COMPASS */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Regime Gauge Speedometer Card */}
-          <div className="lg:col-span-5 flex flex-col">
-            <MarketRegimeGauge
-              regime={data?.marketOverview?.regime}
-              benchmarks={data?.marketOverview?.benchmarks}
-              totalCash={data?.totalCash ?? 0}
-              totalPortfolioValue={data?.totalPortfolioValue ?? 0}
-              usdThbRate={data?.marketOverview?.usdThbRate}
-            />
-          </div>
+        {!currentData && (error ? (
+          <p role="alert" className="text-sm text-amber-200">โหลดแผนไม่สำเร็จ <button className="min-h-11 underline" onClick={() => void revalidatePlan()}>ลองอีกครั้ง</button></p>
+        ) : <p role="status" className="text-sm text-slate-300">กำลังโหลดแผน…</p>)}
 
-          {/* Benchmark Ticker Tiles & Market Radar (Balanced Layout) */}
-          <div className="lg:col-span-7 flex flex-col justify-between gap-3.5">
-            {/* Top: 6 Balanced Benchmark Cards (3 cols on sm+, 2 cols on mobile) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {(data?.marketOverview?.benchmarks || []).map((bm) => (
-                <BenchmarkCard
-                  key={bm.symbol}
-                  benchmark={bm}
-                  onClick={() => {
-                    const cleanSymbol = bm.symbol.replace('^', '').replace('=X', '')
-                    setSelectedStock({
-                      symbol: cleanSymbol,
-                      name: bm.name,
-                      market: bm.currency === 'THB' ? 'TH' : 'US',
-                    })
-                  }}
+        {currentData && <>
+          <section className="rounded-2xl border border-indigo-300/25 bg-slate-900 p-4 sm:p-6" aria-labelledby="daily-next-heading">
+            <h2 id="daily-next-heading" className="text-xl font-semibold text-white">{currentData.isToday ? 'วันนี้ให้ดูเรื่องนี้ก่อน' : 'งานและแผนของวันที่เลือก'}</h2>
+            <p className="mt-1 text-sm text-slate-300">{checklist.length - completedCount} งานค้าง · เสร็จแล้ว {completedCount} งาน · {targetActions.filter(action => action.status === 'PENDING').length} รายการในแผนที่ยังเปิดอยู่</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {overweight && <article className="rounded-xl border border-amber-300/25 bg-slate-950/60 p-4">
+                <p className="text-xs font-semibold text-amber-200">ตรวจความเสี่ยง</p>
+                <h3 className="mt-1 font-semibold text-white">ทบทวนสัดส่วน {overweight.ticker}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-300">ถือ {overweight.allocationPercent.toFixed(1)}% ของมูลค่าสินทรัพย์ลงทุน เทียบกับเพดานในโปรไฟล์ {currentData.positionCap}% ตรวจทั้งน้ำหนักและเหตุผลที่ถือก่อนปรับพอร์ต</p>
+                <Link className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-indigo-200"
+                  href={buildCopilotDeepLink('ช่วยตรวจสัดส่วน ' + overweight.ticker + ' (' + overweight.market + ') เทียบเพดานในโปรไฟล์ ระบุฐานคำนวณและสิ่งที่ต้องตรวจต่อ')}>ตรวจสัดส่วนใน Copilot <ArrowRight className="ml-2 size-4" /></Link>
+              </article>}
+              <article className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-xs font-semibold text-indigo-200">งานในแผน</p>
+                <h3 className="mt-1 break-words font-semibold text-white">{nextTask?.text ?? 'จัดการเช็กลิสต์'}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-300">{nextTask ? 'เปิดเช็กลิสต์เพื่อบันทึกผลหลังตรวจเสร็จ' : 'เพิ่มงานเพื่อติดตามผล หรือเปิดดูรายการที่ทำเสร็จแล้ว'}</p>
+                <a href="#daily-checklist" className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-indigo-200">เปิดเช็กลิสต์ <ArrowRight className="ml-2 size-4" /></a>
+              </article>
+              {watch && <article className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-xs font-semibold text-slate-300">เฝ้าดู</p>
+                <h3 className="mt-1 font-semibold text-white">ติดตามกราฟ {watch.ticker}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-300">{watch.actionTag} · ทบทวนเมื่อได้ราคาปิดถัดไป แล้วตรวจว่าสัญญาณยังอยู่หรือเปลี่ยนไป</p>
+                <button type="button" disabled={savingPlan || targetActions.some(action => action.ticker === watch.ticker && action.status === 'PENDING')}
+                  onClick={() => handleAddAction(watch.ticker, watch.actionTag + ' · ตรวจอีกครั้งหลังราคาปิดถัดไป')}
+                  className="mt-1 min-h-11 text-sm font-semibold text-indigo-200 disabled:text-slate-400">{targetActions.some(action => action.ticker === watch.ticker && action.status === 'PENDING') ? 'มีในแผนแล้ว' : 'เพิ่มเฝ้าดู'}</button>
+              </article>}
+            </div>
+          </section>
+
+          {saveError && <p role="alert" className="text-sm text-amber-200">บันทึกแผนไม่สำเร็จ <button type="button" disabled={savingPlan} onClick={() => void handleSavePlan()} className="min-h-11 underline">ลองบันทึกอีกครั้ง</button></p>}
+        {/* SECTION 4: TODAY'S EXECUTION PLAN & INTERACTIVE CHECKLIST */}
+        <div id="daily-checklist" className="scroll-mt-32 grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left Column: Interactive Daily Checklist */}
+          <div className="lg:col-span-5 bg-slate-900/80 border-2 border-white/[0.08] rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                    <CalendarCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
+                      Daily Routine
+                    </span>
+                    <h3 className="text-xl font-black text-white tracking-tight">
+                      เช็กลิสต์ประจำวัน
+                    </h3>
+                  </div>
+                </div>
+                <span className="text-sm font-mono font-bold text-emerald-300 bg-emerald-500/20 px-3.5 py-1.5 rounded-xl border border-emerald-500/30">
+                  {completedCount}/{checklist.length} สำเร็จ ({progressPercent}%)
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-slate-800 rounded-full h-2 mb-6 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500 shadow-md shadow-emerald-500/50"
+                  style={{ width: `${progressPercent}%` }}
                 />
-              ))}
+              </div>
+
+              {/* Checklist Items */}
+              <div className="space-y-3 mb-5">
+                {checklist.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleItemClick(item)}
+                    className={`group flex items-start justify-between gap-3.5 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                      item.done
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-slate-400'
+                        : 'bg-slate-950/60 hover:bg-slate-950/90 border-white/[0.08] text-slate-100 hover:border-emerald-500/40 shadow-sm hover:shadow-md'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3.5 flex-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleItemClick(item)
+                        }}
+                        className="mt-0.5 text-emerald-400 hover:text-emerald-300 shrink-0"
+                        title={item.done ? "คลิกเพื่อยกเลิกการติ๊ก" : "คลิกเพื่อเปิดอ่านคำแนะนำและติ๊กบันทึก"}
+                      >
+                        {item.done ? (
+                          <CheckCircle2 className="w-5 h-5 fill-emerald-500/30 text-emerald-400" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition-colors" />
+                        )}
+                      </button>
+                      <div className="flex-1">
+                        <span className={`text-sm md:text-base leading-relaxed font-medium block ${item.done ? 'line-through text-slate-500' : 'text-slate-100'}`}>
+                          {item.text}
+                        </span>
+                        {!item.done && (
+                          <span className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-emerald-400 transition-colors">
+                            คลิกเพื่อเปิดอ่านคำแนะนำและบันทึกอัตโนมัติ ↗
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteChecklist(item.id)
+                      }}
+                      className="text-slate-500 hover:text-rose-400 p-1.5 transition-colors"
+                      title="ลบข้อนี้"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Custom Task Form */}
+              <form onSubmit={handleAddChecklist} className="flex gap-2.5 mt-4">
+                <input
+                  type="text"
+                  placeholder="+ เพิ่มสิ่งที่ต้องทำวันนี้..."
+                  value={newChecklistText}
+                  onChange={(e) => setNewChecklistText(e.target.value)}
+                  className="flex-1 bg-slate-950/80 border-2 border-white/[0.1] focus:border-emerald-500/60 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-400 outline-none transition-all shadow-inner"
+                />
+                <button
+                  type="submit"
+                  disabled={!newChecklistText.trim()}
+                  className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-bold transition-all shadow-lg shadow-emerald-600/30"
+                >
+                  เพิ่ม
+                </button>
+              </form>
             </div>
 
-            {/* Bottom: Global Market Trading Sessions & Macro Pulse Radar */}
-            <MarketRadarPanel
-              macro={data?.marketOverview?.macro}
-              usdThbRate={data?.marketOverview?.usdThbRate}
-            />
+            <div className="text-xs font-medium text-slate-400 mt-6 pt-4 border-t border-white/[0.08] flex items-center justify-between">
+              <span>* การติ๊กเลือกจะบันทึกอัตโนมัติลงฐานข้อมูลทันที</span>
+              {saveSuccess && (
+                <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <Check className="w-4 h-4" /> บันทึกแล้ว
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Strategy Notes & Target Orders Plan */}
+          <div className="lg:col-span-7 bg-slate-900/80 border-2 border-white/[0.08] rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
+            <div className="space-y-6">
+              {/* Header & Market Bias selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-blue-400 uppercase tracking-wider block">
+                      Execution Strategy
+                    </span>
+                    <h3 className="text-xl font-black text-white tracking-tight">
+                      บันทึกกลยุทธ์ & แผนตั้งรับ
+                    </h3>
+                  </div>
+                </div>
+
+                {/* Bias Selector */}
+                <div className="flex items-center gap-1.5 bg-slate-950/80 p-1.5 rounded-2xl border border-white/[0.08] text-xs">
+                  {(['BULLISH', 'NEUTRAL', 'BEARISH', 'VOLATILE'] as const).map((b) => {
+                    const isSelected = marketBias === b
+                    const label =
+                      b === 'BULLISH'
+                        ? '🟢 Bullish'
+                        : b === 'NEUTRAL'
+                        ? '⚪ Neutral'
+                        : b === 'BEARISH'
+                        ? '🔴 Bearish'
+                        : '⚡ Volatile'
+                    return (
+                      <button
+                        key={b}
+                        onClick={() => {
+                          setMarketBias(b)
+                          handleSavePlan(b)
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                          isSelected
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Planned Target Orders Table */}
+              <div className="bg-slate-950/60 border border-white/[0.08] rounded-2xl p-4 md:p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-slate-200">
+                    🎯 สินทรัพย์เป้าหมายของวันนี้ (Target Orders)
+                  </span>
+                  <span className="text-xs font-bold text-slate-400 font-mono">
+                    {targetActions.length} รายการ
+                  </span>
+                </div>
+
+                {targetActions.length === 0 ? (
+                  <div className="p-5 bg-slate-900/60 border-2 border-dashed border-white/[0.06] rounded-xl text-center text-sm text-slate-400">
+                    ยังไม่มีรายการสั่งซื้อขายที่วางแผนไว้สำหรับวันนี้ (กด &quot;เพิ่มเฝ้าดู&quot; จากตารางด้านบน หรือเพิ่มด้านล่าง)
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
+                    {targetActions.map((action) => (
+                      <div
+                        key={action.id}
+                        className="bg-slate-900/90 border border-white/[0.08] p-3.5 rounded-xl flex items-center justify-between gap-3 text-sm"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`px-2.5 py-1 rounded-lg font-black text-xs ${
+                              action.action === 'BUY'
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : action.action === 'SELL'
+                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                : 'bg-slate-800 text-slate-200'
+                            }`}
+                          >
+                            {action.action}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedStock({
+                                symbol: action.ticker,
+                                market: 'US',
+                              })
+                            }
+                            className="font-black text-white font-mono text-base hover:text-blue-400 hover:underline transition-colors"
+                            title="ดูข้อมูลทางเทคนิคและกราฟ"
+                          >
+                            {action.ticker}
+                          </button>
+                          {action.targetPrice && (
+                            <span className="text-slate-200 font-mono font-bold text-sm">
+                              @ ${action.targetPrice.toFixed(2)}
+                            </span>
+                          )}
+                          {action.note && (
+                            <span className="text-slate-300 text-xs hidden sm:inline break-words">
+                              ({action.note})
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {(action.action === 'BUY' || action.action === 'SELL') && <button
+                            type="button"
+                            onClick={() => handleOpenQuickAddForAction(action)}
+                            className="px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-bold transition-all flex items-center gap-1"
+                            title="เปิดบันทึกธุรกรรมสำหรับเป้าหมายนี้"
+                          >
+                            <Zap className="w-3.5 h-3.5 text-blue-400" />
+                            <span className="hidden sm:inline">บันทึกธุรกรรม</span>
+                          </button>}
+
+                          <select
+                            value={action.status}
+                            onChange={(e) =>
+                              handleToggleActionStatus(
+                                action.id,
+                                e.target.value as 'PENDING' | 'EXECUTED' | 'CANCELLED'
+                              )
+                            }
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl border bg-slate-900 outline-none ${
+                              action.status === 'EXECUTED'
+                                ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/20'
+                                : action.status === 'CANCELLED'
+                                ? 'text-rose-400 border-rose-500/40 bg-rose-950/20'
+                                : 'text-amber-400 border-amber-500/40 bg-amber-950/20'
+                            }`}
+                          >
+                            <option value="PENDING">รอดำเนินการ</option>
+                            <option value="EXECUTED">ทำตามแผนแล้ว</option>
+                            <option value="CANCELLED">ยกเลิก</option>
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAction(action.id)}
+                            className="text-slate-500 hover:text-rose-400 p-1.5"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Inline add action form */}
+                <form onSubmit={handleAddCustomAction} className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-2">
+                  <input
+                    type="text"
+                    placeholder="Ticker (เช่น NVDA)"
+                    value={newTicker}
+                    onChange={(e) => setNewTicker(e.target.value)}
+                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3.5 py-2 text-sm text-white placeholder-slate-400 uppercase outline-none font-bold"
+                  />
+                  <select
+                    value={newActionType}
+                    onChange={(e) => setNewActionType(e.target.value as any)}
+                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white outline-none font-semibold"
+                  >
+                    <option value="BUY">BUY (ซื้อ)</option>
+                    <option value="SELL">SELL (ขาย)</option>
+                    <option value="HOLD">HOLD (ถือ)</option>
+                    <option value="WATCH">WATCH (เฝ้าดู)</option>
+                  </select>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="ราคาเป้าหมาย ($)"
+                    value={newTargetPrice}
+                    onChange={(e) => setNewTargetPrice(e.target.value)}
+                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3.5 py-2 text-sm text-white placeholder-slate-400 outline-none font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newTicker.trim()}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/30"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>เพิ่มออร์เดอร์</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* Free-form Strategy Notes */}
+              <div>
+                <label className="text-sm font-bold text-slate-200 block mb-2">
+                  📝 บันทึกกลยุทธ์ & Trading Journal ส่วนตัว
+                </label>
+                <textarea
+                  rows={5}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="เขียนแผนการตัดสินใจวันนี้ เช่น 'วันนี้ตั้งรับ NVDA ที่ $118 แบ่งซื้อ 1 ไม้ ไม่ไล่ราคาถ้ารีบาวด์แรง...'"
+                  className="w-full bg-slate-950/80 border-2 border-white/[0.1] focus:border-blue-500/60 rounded-2xl p-4 text-sm md:text-base text-slate-100 placeholder-slate-400 outline-none transition-all resize-none leading-relaxed shadow-inner"
+                />
+              </div>
+            </div>
+
+            {/* Save Button Bar */}
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/[0.08]">
+              <span className="text-xs text-slate-400 font-medium">
+                {data?.plan?.updatedAt ? `บันทึกล่าสุด: ${new Date(data.plan.updatedAt).toLocaleTimeString('th-TH')}` : ''}
+              </span>
+
+              <button
+                onClick={() => handleSavePlan()}
+                disabled={savingPlan}
+                className="px-6 py-3 rounded-2xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-600/30 transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                {savingPlan ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>กำลังบันทึก...</span>
+                  </>
+                ) : saveSuccess ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>บันทึกสำเร็จ!</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>บันทึกแผนงานวันนี้</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
-
-        {data?.isToday && <AdvisorPlanPanel />}
-
+          {currentData.isToday && <AdvisorPlanPanel />}
+          <details className="rounded-2xl border border-white/10 bg-slate-900/80">
+            <summary className="cursor-pointer px-4 py-4 font-semibold text-white">บทวิเคราะห์และเหตุผลจาก AI</summary>
+            <div className="px-2 pb-3 sm:px-4">
         {/* SECTION 2: AI MARKET STRATEGIST BENTO VIEWER */}
         <AiBriefViewer
           text={data?.aiBriefing?.text || ''}
@@ -586,24 +942,28 @@ export default function DailyPlanPage() {
           onCopyNotes={handleCopyAiToNotes}
           onAddToChecklist={handleAddToChecklistFromAi}
         />
-
+            </div>
+          </details>
+          {currentData.isToday && <>
+            <details className="rounded-2xl border border-white/10 bg-slate-900/80">
+              <summary className="cursor-pointer px-4 py-4 font-semibold text-white">สัญญาณหุ้นในพอร์ต · {currentData.portfolioTriggers.length} รายการ</summary>
         {/* SECTION 3: PORTFOLIO ACTIONABLE TRIGGERS & S/R WATCH */}
-        <div className="bg-slate-900/80 border-2 border-white/[0.08] rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-2xl">
+        <div className="border-t border-white/10 px-3 py-4 sm:p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <div className="flex items-center gap-2.5">
                 <Target className="w-6 h-6 text-teal-400" />
                 <h3 className="text-xl font-black text-white tracking-tight">
-                  Portfolio Daily Action Watch (สแกนจุดซื้อ/ขายในพอร์ตวันนี้)
+                  สัญญาณหุ้นในพอร์ต
                 </h3>
               </div>
               <p className="text-sm text-slate-300 mt-1">
-                คัดกรองหุ้นในพอร์ตที่แตะแนวรับสำคัญ (S1/SMA), RSI Oversold, หรือส่งสัญญาณเตือน
+                ใช้กราฟกำหนดสิ่งที่จะติดตามควบคู่กับสัดส่วนและเหตุผลที่ถือ
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex items-center bg-slate-950/80 p-1.5 rounded-2xl border border-white/[0.08] text-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center bg-slate-950/80 p-1.5 rounded-2xl border border-white/[0.08] text-sm">
                 <button
                   onClick={() => setTriggerTab('ALERTS_ONLY')}
                   className={`px-4 py-2 rounded-xl font-bold transition-all ${
@@ -810,19 +1170,12 @@ export default function DailyPlanPage() {
                           <td className="py-4 pl-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-2">
                               <button
-                                onClick={() => handleAddAction(item.ticker, item.supportS1 ?? item.currentPrice, item.actionTag)}
+                                onClick={() => handleAddAction(item.ticker, item.actionTag)}
                                 className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all flex items-center gap-1.5 shadow-xs whitespace-nowrap"
                                 title="เพิ่มสินทรัพย์นี้ลงในแผนปฏิบัติการวันนี้"
                               >
                                 <Plus className="w-3.5 h-3.5" />
-                                <span>ใส่ในแผน</span>
-                              </button>
-                              <button
-                                onClick={() => handleOpenQuickAddForTrigger(item)}
-                                className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-blue-600/25 border border-transparent hover:border-blue-500/40 transition-all"
-                                title="เปิดบันทึกธุรกรรมโดยใส่ข้อมูลสินทรัพย์นี้ทันที"
-                              >
-                                <Zap className="w-4 h-4 text-blue-400" />
+                                <span>เพิ่มเฝ้าดู</span>
                               </button>
                             </div>
                           </td>
@@ -962,22 +1315,14 @@ export default function DailyPlanPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            handleAddAction(item.ticker, item.supportS1 ?? item.currentPrice, item.actionTag)
+                            handleAddAction(item.ticker, item.actionTag)
                           }
                           className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all flex items-center justify-center gap-1.5 shadow-xs"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>ใส่ในแผนวันนี้</span>
+                          <span>เพิ่มเข้ารายการเฝ้าดู</span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => handleOpenQuickAddForTrigger(item)}
-                          className="flex-1 py-2 px-3 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-all flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20"
-                        >
-                          <Zap className="w-3.5 h-3.5 text-blue-200" />
-                          <span>บันทึกธุรกรรม</span>
-                        </button>
 
                         <button
                           type="button"
@@ -1001,362 +1346,54 @@ export default function DailyPlanPage() {
             </>
           )}
         </div>
-
-        {/* SECTION 4: TODAY'S EXECUTION PLAN & INTERACTIVE CHECKLIST */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Column: Interactive Daily Checklist */}
-          <div className="lg:col-span-5 bg-slate-900/80 border-2 border-white/[0.08] rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                    <CalendarCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
-                      Daily Routine
-                    </span>
-                    <h3 className="text-xl font-black text-white tracking-tight">
-                      เช็กลิสต์ประจำวัน
-                    </h3>
-                  </div>
-                </div>
-                <span className="text-sm font-mono font-bold text-emerald-300 bg-emerald-500/20 px-3.5 py-1.5 rounded-xl border border-emerald-500/30">
-                  {completedCount}/{checklist.length} สำเร็จ ({progressPercent}%)
-                </span>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="w-full bg-slate-800 rounded-full h-2 mb-6 overflow-hidden">
-                <div
-                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500 shadow-md shadow-emerald-500/50"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-
-              {/* Checklist Items */}
-              <div className="space-y-3 mb-5">
-                {checklist.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => handleItemClick(item)}
-                    className={`group flex items-start justify-between gap-3.5 p-4 rounded-2xl border-2 transition-all cursor-pointer ${
-                      item.done
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-slate-400'
-                        : 'bg-slate-950/60 hover:bg-slate-950/90 border-white/[0.08] text-slate-100 hover:border-emerald-500/40 shadow-sm hover:shadow-md'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3.5 flex-1">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleItemClick(item)
-                        }}
-                        className="mt-0.5 text-emerald-400 hover:text-emerald-300 shrink-0"
-                        title={item.done ? "คลิกเพื่อยกเลิกการติ๊ก" : "คลิกเพื่อเปิดอ่านคำแนะนำและติ๊กบันทึก"}
-                      >
-                        {item.done ? (
-                          <CheckCircle2 className="w-5 h-5 fill-emerald-500/30 text-emerald-400" />
-                        ) : (
-                          <Circle className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition-colors" />
-                        )}
-                      </button>
-                      <div className="flex-1">
-                        <span className={`text-sm md:text-base leading-relaxed font-medium block ${item.done ? 'line-through text-slate-500' : 'text-slate-100'}`}>
-                          {item.text}
-                        </span>
-                        {!item.done && (
-                          <span className="text-[11px] text-slate-400 mt-1 flex items-center gap-1 group-hover:text-emerald-400 transition-colors">
-                            คลิกเพื่อเปิดอ่านคำแนะนำและบันทึกอัตโนมัติ ↗
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteChecklist(item.id)
-                      }}
-                      className="text-slate-500 hover:text-rose-400 p-1.5 transition-colors"
-                      title="ลบข้อนี้"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add Custom Task Form */}
-              <form onSubmit={handleAddChecklist} className="flex gap-2.5 mt-4">
-                <input
-                  type="text"
-                  placeholder="+ เพิ่มสิ่งที่ต้องทำวันนี้..."
-                  value={newChecklistText}
-                  onChange={(e) => setNewChecklistText(e.target.value)}
-                  className="flex-1 bg-slate-950/80 border-2 border-white/[0.1] focus:border-emerald-500/60 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-400 outline-none transition-all shadow-inner"
-                />
-                <button
-                  type="submit"
-                  disabled={!newChecklistText.trim()}
-                  className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-bold transition-all shadow-lg shadow-emerald-600/30"
-                >
-                  เพิ่ม
-                </button>
-              </form>
-            </div>
-
-            <div className="text-xs font-medium text-slate-400 mt-6 pt-4 border-t border-white/[0.08] flex items-center justify-between">
-              <span>* การติ๊กเลือกจะบันทึกอัตโนมัติลงฐานข้อมูลทันที</span>
-              {saveSuccess && (
-                <span className="text-emerald-400 font-bold flex items-center gap-1.5">
-                  <Check className="w-4 h-4" /> บันทึกแล้ว
-                </span>
-              )}
-            </div>
+            </details>
+            <details className="rounded-2xl border border-white/10 bg-slate-900/80">
+              <summary className="cursor-pointer px-4 py-4 font-semibold text-white">ภาวะตลาดและตัวเลขประกอบ</summary>
+              <div className="px-3 pb-4 sm:px-4">
+        {/* SECTION 1: MARKET REGIME & SENTIMENT COMPASS */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Regime Gauge Speedometer Card */}
+          <div className="lg:col-span-5 flex flex-col">
+            <MarketRegimeGauge
+              regime={data?.marketOverview?.regime}
+              benchmarks={data?.marketOverview?.benchmarks}
+              totalCash={data?.totalCash ?? 0}
+              totalPortfolioValue={data?.totalPortfolioValue ?? 0}
+              usdThbRate={data?.marketOverview?.usdThbRate}
+            />
           </div>
 
-          {/* Right Column: Strategy Notes & Target Orders Plan */}
-          <div className="lg:col-span-7 bg-slate-900/80 border-2 border-white/[0.08] rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-2xl flex flex-col justify-between">
-            <div className="space-y-6">
-              {/* Header & Market Bias selector */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-blue-400 uppercase tracking-wider block">
-                      Execution Strategy
-                    </span>
-                    <h3 className="text-xl font-black text-white tracking-tight">
-                      บันทึกกลยุทธ์ & แผนตั้งรับ
-                    </h3>
-                  </div>
-                </div>
-
-                {/* Bias Selector */}
-                <div className="flex items-center gap-1.5 bg-slate-950/80 p-1.5 rounded-2xl border border-white/[0.08] text-xs">
-                  {(['BULLISH', 'NEUTRAL', 'BEARISH', 'VOLATILE'] as const).map((b) => {
-                    const isSelected = marketBias === b
-                    const label =
-                      b === 'BULLISH'
-                        ? '🟢 Bullish'
-                        : b === 'NEUTRAL'
-                        ? '⚪ Neutral'
-                        : b === 'BEARISH'
-                        ? '🔴 Bearish'
-                        : '⚡ Volatile'
-                    return (
-                      <button
-                        key={b}
-                        onClick={() => {
-                          setMarketBias(b)
-                          handleSavePlan(b)
-                        }}
-                        className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
-                          isSelected
-                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Planned Target Orders Table */}
-              <div className="bg-slate-950/60 border border-white/[0.08] rounded-2xl p-4 md:p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-slate-200">
-                    🎯 สินทรัพย์เป้าหมายของวันนี้ (Target Orders)
-                  </span>
-                  <span className="text-xs font-bold text-slate-400 font-mono">
-                    {targetActions.length} รายการ
-                  </span>
-                </div>
-
-                {targetActions.length === 0 ? (
-                  <div className="p-5 bg-slate-900/60 border-2 border-dashed border-white/[0.06] rounded-xl text-center text-sm text-slate-400">
-                    ยังไม่มีรายการสั่งซื้อขายที่วางแผนไว้สำหรับวันนี้ (กด &quot;ใส่ในแผน&quot; จากตารางด้านบน หรือเพิ่มด้านล่าง)
-                  </div>
-                ) : (
-                  <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
-                    {targetActions.map((action) => (
-                      <div
-                        key={action.id}
-                        className="bg-slate-900/90 border border-white/[0.08] p-3.5 rounded-xl flex items-center justify-between gap-3 text-sm"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`px-2.5 py-1 rounded-lg font-black text-xs ${
-                              action.action === 'BUY'
-                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                : action.action === 'SELL'
-                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                                : 'bg-slate-800 text-slate-200'
-                            }`}
-                          >
-                            {action.action}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedStock({
-                                symbol: action.ticker,
-                                market: 'US',
-                              })
-                            }
-                            className="font-black text-white font-mono text-base hover:text-blue-400 hover:underline transition-colors"
-                            title="ดูข้อมูลทางเทคนิคและกราฟ"
-                          >
-                            {action.ticker}
-                          </button>
-                          {action.targetPrice && (
-                            <span className="text-slate-200 font-mono font-bold text-sm">
-                              @ ${action.targetPrice.toFixed(2)}
-                            </span>
-                          )}
-                          {action.note && (
-                            <span className="text-slate-300 text-xs hidden sm:inline break-words">
-                              ({action.note})
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenQuickAddForAction(action)}
-                            className="px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-bold transition-all flex items-center gap-1"
-                            title="เปิดบันทึกธุรกรรมสำหรับเป้าหมายนี้"
-                          >
-                            <Zap className="w-3.5 h-3.5 text-blue-400" />
-                            <span className="hidden sm:inline">บันทึกธุรกรรม</span>
-                          </button>
-
-                          <select
-                            value={action.status}
-                            onChange={(e) =>
-                              handleToggleActionStatus(
-                                action.id,
-                                e.target.value as 'PENDING' | 'EXECUTED' | 'CANCELLED'
-                              )
-                            }
-                            className={`text-xs font-bold px-3 py-1.5 rounded-xl border bg-slate-900 outline-none ${
-                              action.status === 'EXECUTED'
-                                ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/20'
-                                : action.status === 'CANCELLED'
-                                ? 'text-rose-400 border-rose-500/40 bg-rose-950/20'
-                                : 'text-amber-400 border-amber-500/40 bg-amber-950/20'
-                            }`}
-                          >
-                            <option value="PENDING">รอดำเนินการ</option>
-                            <option value="EXECUTED">ทำตามแผนแล้ว</option>
-                            <option value="CANCELLED">ยกเลิก</option>
-                          </select>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteAction(action.id)}
-                            className="text-slate-500 hover:text-rose-400 p-1.5"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Inline add action form */}
-                <form onSubmit={handleAddCustomAction} className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-2">
-                  <input
-                    type="text"
-                    placeholder="Ticker (เช่น NVDA)"
-                    value={newTicker}
-                    onChange={(e) => setNewTicker(e.target.value)}
-                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3.5 py-2 text-sm text-white placeholder-slate-400 uppercase outline-none font-bold"
-                  />
-                  <select
-                    value={newActionType}
-                    onChange={(e) => setNewActionType(e.target.value as any)}
-                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white outline-none font-semibold"
-                  >
-                    <option value="BUY">BUY (ซื้อ)</option>
-                    <option value="SELL">SELL (ขาย)</option>
-                    <option value="HOLD">HOLD (ถือ)</option>
-                    <option value="WATCH">WATCH (เฝ้าดู)</option>
-                  </select>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="ราคาเป้าหมาย ($)"
-                    value={newTargetPrice}
-                    onChange={(e) => setNewTargetPrice(e.target.value)}
-                    className="bg-slate-950/90 border border-white/[0.1] rounded-xl px-3.5 py-2 text-sm text-white placeholder-slate-400 outline-none font-mono"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!newTicker.trim()}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-bold transition-all flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/30"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>เพิ่มออร์เดอร์</span>
-                  </button>
-                </form>
-              </div>
-
-              {/* Free-form Strategy Notes */}
-              <div>
-                <label className="text-sm font-bold text-slate-200 block mb-2">
-                  📝 บันทึกกลยุทธ์ & Trading Journal ส่วนตัว
-                </label>
-                <textarea
-                  rows={5}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="เขียนแผนการตัดสินใจวันนี้ เช่น 'วันนี้ตั้งรับ NVDA ที่ $118 แบ่งซื้อ 1 ไม้ ไม่ไล่ราคาถ้ารีบาวด์แรง...'"
-                  className="w-full bg-slate-950/80 border-2 border-white/[0.1] focus:border-blue-500/60 rounded-2xl p-4 text-sm md:text-base text-slate-100 placeholder-slate-400 outline-none transition-all resize-none leading-relaxed shadow-inner"
+          {/* Benchmark Ticker Tiles & Market Radar (Balanced Layout) */}
+          <div className="lg:col-span-7 flex flex-col justify-between gap-3.5">
+            {/* Top: 6 Balanced Benchmark Cards (3 cols on sm+, 2 cols on mobile) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {(data?.marketOverview?.benchmarks || []).map((bm) => (
+                <BenchmarkCard
+                  key={bm.symbol}
+                  benchmark={bm}
+                  onClick={() => {
+                    const cleanSymbol = bm.symbol.replace('^', '').replace('=X', '')
+                    setSelectedStock({
+                      symbol: cleanSymbol,
+                      name: bm.name,
+                      market: bm.currency === 'THB' ? 'TH' : 'US',
+                    })
+                  }}
                 />
-              </div>
+              ))}
             </div>
 
-            {/* Save Button Bar */}
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/[0.08]">
-              <span className="text-xs text-slate-400 font-medium">
-                {data?.plan?.updatedAt ? `บันทึกล่าสุด: ${new Date(data.plan.updatedAt).toLocaleTimeString('th-TH')}` : ''}
-              </span>
-
-              <button
-                onClick={() => handleSavePlan()}
-                disabled={savingPlan}
-                className="px-6 py-3 rounded-2xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-600/30 transition-all flex items-center gap-2 disabled:opacity-50"
-              >
-                {savingPlan ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>กำลังบันทึก...</span>
-                  </>
-                ) : saveSuccess ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>บันทึกสำเร็จ!</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>บันทึกแผนงานวันนี้</span>
-                  </>
-                )}
-              </button>
-            </div>
+            {/* Bottom: Global Market Trading Sessions & Macro Pulse Radar */}
+            <MarketRadarPanel
+              macro={data?.marketOverview?.macro}
+              usdThbRate={data?.marketOverview?.usdThbRate}
+            />
           </div>
         </div>
+              </div>
+            </details>
+          </>}
+        </>}
 
         {/* Quick Add Modal */}
         {quickAddOpen && (

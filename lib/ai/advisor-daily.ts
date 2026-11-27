@@ -136,10 +136,10 @@ export async function generateAdvisorBrief(userId: string, date: string, force: 
           'กฎเหล็ก: อ้างอิงเฉพาะตัวเลข เวลา และสัญญาณที่มีในหลักฐาน snapshot ด้านล่างเท่านั้น ห้ามแต่งราคา จุดซื้อขาย หรือวงเงินที่ไม่ได้แนบ ถ้าไม่มีให้ระบุสิ่งที่ต้องตรวจต่อ',
           unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'daily_brief', compact: true }) : '',
           buildUnifiedDecisionRules('daily_brief'),
-          'จัดโครงสร้าง 3 หัวข้อให้ชัด:',
+          'ขึ้นบรรทัดใหม่ทุกหัวข้อและทุกรายการ ตรวจความเสี่ยงพอร์ตก่อนตีความสัญญาณซื้อ ใช้ Max Drawdown ระดับพอร์ตเมื่อมีหลักฐาน และระบุวงเงินหรือจำนวนหน่วยเฉพาะที่มีในแผนคำนวณ',
           '1. **ภาพรวมตลาด** — ทิศทางดัชนีหลักและความเชื่อมโยงกับสภาวะตลาดใน Tactical Advisor ล่าสุด',
           '2. **ภาพรวมพอร์ต** — สรุปสถานะเงินสด สินทรัพย์ที่ส่งสัญญาณเด่น (ระบุ TICKER ราคา RSI S1 ที่มีจริง) และความเสี่ยงกระจุกตัวตาม AI Memory',
-          '3. **สิ่งที่ต้องตรวจ** — เช็กลิสต์ 1-2-3 ที่ควรทำต่อวันนี้ พร้อมชี้หน้าในแอปที่ควรเปิดเช็กต่อ (/tactical-advisor, /radar, /ai-advisor)',
+          '3. **สิ่งที่ต้องตรวจ** — เช็กลิสต์สูงสุด 3 ข้อ เรียงตามความสำคัญ แต่ละข้อระบุเหตุผล เงื่อนไขทบทวน และหน้าที่ควรเปิดต่อ (/tactical-advisor, /radar, /ai-advisor)',
           `หลักฐาน Snapshot:\n${JSON.stringify(snapshot)}`,
         ].filter(Boolean).join('\n\n')
         const result = await callGemini({

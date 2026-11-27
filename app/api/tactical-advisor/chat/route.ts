@@ -1,3 +1,5 @@
+import { GeminiQuotaError } from '@/lib/ai/gemini-errors'
+import { copilotQuotaSummary } from '@/lib/ai/copilot-quota-summary'
 import { advisorFlags } from '@/lib/ai/advisor-rollout'
 import { AdvisorPlanError, getAdvisorPolicy, getLatestAdvisorRun, runAdvisorPlan } from '@/lib/ai/advisor-planning-service'
 import { describeCopilotPlan, identifyCopilotPlanIntent } from '@/lib/ai/advisor-copilot'
@@ -532,7 +534,7 @@ export async function POST(req: NextRequest) {
 
     const technicalSignals: Record<string, TechnicalSignal> = {}
     const missingCharts: string[] = []
-    const detailedHoldingsText = targets.map((target, index) => {
+    const holdingEvidence = targets.map((target, index) => {
       const signal = signals[index]
       const ticker = target.ticker.toUpperCase().replace(/\.BK$/, '')
       const observedAt = getObservationTime(signal.observationTimestamp, now)
@@ -560,7 +562,8 @@ export async function POST(req: NextRequest) {
       return `- ${ticker} (${target.market}) | ${position}
   * ราคาจาก Yahoo Finance (${signal.marketSymbol}, ${observedAt}): ${signal.currencySymbol || ''}${signal.currentPrice}
   * ตัวชี้วัดจากกราฟ: ${metrics || 'ไม่มีข้อมูล'}`
-    }).join('\n')
+    })
+    const detailedHoldingsText = holdingEvidence.join('\n')
 
     const macroSummary = macroReadings.join('\n')
 
@@ -661,6 +664,15 @@ ${previousHistoryText}
       thinkingBudget: 1024,
       enableGoogleSearch: true,
       skipLog: true,
+    }).catch((error: unknown) => {
+      if (!(error instanceof GeminiQuotaError)) throw error
+      const requestedEvidence = holdingEvidence.filter((_, index) => researchTargets.some(target =>
+        target.market === targets[index].market && target.ticker === targets[index].ticker))
+      return {
+        modelUsed: 'portfolio-evidence',
+        text: copilotQuotaSummary({ requestedEvidence, unresolvedSymbols, cash: totalCash, baseCurrency, holdingsCount: holdingsResult.holdings.length }),
+        groundingSources: [],
+      }
     })
 
     const evidenceNotes = [
@@ -671,7 +683,7 @@ ${previousHistoryText}
     const answer = aiResult.text
       .replace(/\*\*\s*\*\*/g, ' ')
       .replace(/\*{3,}/g, '**')
-    const cleanedAnswer = evidenceNotes.length
+    const cleanedAnswer = aiResult.modelUsed !== 'portfolio-evidence' && evidenceNotes.length
       ? `${answer}\n\n**ขอบเขตข้อมูลที่ระบบตรวจได้**\n${evidenceNotes.map((note) => `- ${note}`).join('\n')}`
       : answer
 
