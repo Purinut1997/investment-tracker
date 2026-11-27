@@ -88,6 +88,7 @@ interface PortfolioTriggerItem {
   currentPrice: number
   unrealizedPnLPercent: number
   allocationPercent: number
+  positionWeight: number
   currentValueBase: number
   rsi14: number | null
   supportS1: number | null
@@ -112,6 +113,8 @@ interface DailyPlanApiResponse {
   totalPortfolioValue: number
   investedValue: number
   positionCap: number
+  positionCapBasis?: 'totalPortfolio' | 'investedAssets'
+  valuationIssues?: string[]
   totalCash: number
   marketOverview: {
     regime: {
@@ -141,7 +144,7 @@ interface DailyPlanApiResponse {
       }
     }
     benchmarks: MarketBenchmark[]
-    usdThbRate: number
+    usdThbRate: number | null
     macro?: {
       dxy?: { price: number; changePercent: number }
       tnx?: { price: number; changePercent: number }
@@ -475,9 +478,9 @@ export default function DailyPlanPage() {
   const currentData = data?.planDate === selectedDate ? data : undefined
   const nextTask = checklist.find(item => !item.done && item.category !== 'routine') ?? checklist.find(item => !item.done)
   const currentSignals = currentData?.isToday ? currentData.portfolioTriggers : []
-  const overweight = currentSignals
-    .filter(item => item.allocationPercent > (currentData?.positionCap ?? 100))
-    .sort((a, b) => b.allocationPercent - a.allocationPercent)[0]
+  const overweight = (currentData?.valuationIssues?.length ? [] : currentSignals)
+    .filter(item => (item.positionWeight ?? item.allocationPercent) > (currentData?.positionCap ?? 100))
+    .sort((a, b) => (b.positionWeight ?? b.allocationPercent) - (a.positionWeight ?? a.allocationPercent))[0]
   const watch = currentSignals.find(item => item.actionPriority === 'HIGH' && item.ticker !== overweight?.ticker && item.observedAt)
 
 
@@ -543,12 +546,15 @@ export default function DailyPlanPage() {
         {currentData && <>
           <section className="rounded-2xl border border-indigo-300/25 bg-slate-900 p-4 sm:p-6" aria-labelledby="daily-next-heading">
             <h2 id="daily-next-heading" className="text-xl font-semibold text-white">{currentData.isToday ? 'วันนี้ให้ดูเรื่องนี้ก่อน' : 'งานและแผนของวันที่เลือก'}</h2>
+            {currentData.isToday && !!currentData.valuationIssues?.length && <p className="mt-1 text-sm text-amber-200">
+              รอยืนยันมูลค่าพอร์ตก่อนตรวจเพดานสัดส่วน · <Link href="/dashboard" className="underline">ดูรายละเอียดที่หน้าพอร์ต</Link>
+            </p>}
             <p className="mt-1 text-sm text-slate-300">{checklist.length - completedCount} งานค้าง · เสร็จแล้ว {completedCount} งาน · {targetActions.filter(action => action.status === 'PENDING').length} รายการในแผนที่ยังเปิดอยู่</p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {overweight && <article className="rounded-xl border border-amber-300/25 bg-slate-950/60 p-4">
                 <p className="text-xs font-semibold text-amber-200">ตรวจความเสี่ยง</p>
                 <h3 className="mt-1 font-semibold text-white">ทบทวนสัดส่วน {overweight.ticker}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-300">ถือ {overweight.allocationPercent.toFixed(1)}% ของมูลค่าสินทรัพย์ลงทุน เทียบกับเพดานในโปรไฟล์ {currentData.positionCap}% ตรวจทั้งน้ำหนักและเหตุผลที่ถือก่อนปรับพอร์ต</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-300">ถือ {(overweight.positionWeight ?? overweight.allocationPercent).toFixed(1)}% {currentData.positionCapBasis === 'totalPortfolio' ? 'ของพอร์ตรวมเงินสด เทียบเพดานจากแผนเติมเงิน' : 'ของมูลค่าสินทรัพย์ลงทุน เทียบเพดานในโปรไฟล์'} {currentData.positionCap}% ตรวจทั้งน้ำหนักและเหตุผลที่ถือก่อนปรับพอร์ต</p>
                 <Link className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-indigo-200"
                   href={buildCopilotDeepLink('ช่วยตรวจสัดส่วน ' + overweight.ticker + ' (' + overweight.market + ') เทียบเพดานในโปรไฟล์ ระบุฐานคำนวณและสิ่งที่ต้องตรวจต่อ')}>ตรวจสัดส่วนใน Copilot <ArrowRight className="ml-2 size-4" /></Link>
               </article>}

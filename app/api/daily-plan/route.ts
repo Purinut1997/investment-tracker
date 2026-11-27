@@ -1,3 +1,5 @@
+import { advisorFlags } from '@/lib/ai/advisor-rollout'
+import { getAdvisorPolicy } from '@/lib/ai/advisor-planning-service'
 import { parseUserInvestmentMemory } from '@/lib/ai/outcome-evaluator'
 import { readAdvisorBrief } from '@/lib/ai/advisor-daily'
 import { NextRequest, NextResponse } from 'next/server'
@@ -7,7 +9,7 @@ import { calculateUserHoldings } from '@/lib/analytics/holdings'
 import { fetchSingleTickerTechnicalSignal, TechnicalSignal } from '@/lib/market-data/technical-signals'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { coinGeckoProvider } from '@/lib/market-data/coingecko'
-import { getExchangeRate, sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { describeValuationRate, getExchangeRateObservation, valueCashAccounts } from '@/lib/market-data/frankfurter'
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
 import { getObservationTime } from '@/lib/ai/advisor-evidence'
 
@@ -75,7 +77,9 @@ export async function GET(req: NextRequest) {
   try {
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
-    const positionCap = parseUserInvestmentMemory(userSettings?.defaultRiskProfile).maxSinglePositionPercent
+    const policy = advisorFlags(userId).planning ? await getAdvisorPolicy(userId) : null
+    const positionCap = policy?.config.maxPositionPercent ?? parseUserInvestmentMemory(userSettings?.defaultRiskProfile).maxSinglePositionPercent
+    const positionCapBasis = policy ? 'totalPortfolio' : 'investedAssets'
 
     // 1. Fetch user's holdings & cash
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency, forceRefresh)
@@ -84,7 +88,7 @@ export async function GET(req: NextRequest) {
       select: { cashBalance: true, currency: true },
     })
 
-    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
+    const { totalCash, valuationIssues: cashIssues } = await valueCashAccounts(accounts, baseCurrency)
 
     // 2. Fetch key market benchmarks and real human sentiment in parallel
     const [
@@ -105,7 +109,7 @@ export async function GET(req: NextRequest) {
       coinGeckoProvider.getQuote('BTC'),
       yahooFinanceProvider.getQuote('XAU', 'GLOBAL'),
       yahooFinanceProvider.getQuote('VIX'),
-      getExchangeRate('USD', 'THB'),
+      getExchangeRateObservation('USD', 'THB'),
       fetchRealHumanSentiment(),
       yahooFinanceProvider.getQuote('DXY'),
       yahooFinanceProvider.getQuote('US10Y'),
@@ -480,6 +484,9 @@ export async function GET(req: NextRequest) {
         observedAt,
         unrealizedPnLPercent: holding.unrealizedPnLPercent,
         allocationPercent: holding.allocationPercent,
+        positionWeight: positionCapBasis === 'totalPortfolio' && holdingsResult.totalValueBase + totalCash > 0
+          ? holding.currentValueBase / (holdingsResult.totalValueBase + totalCash) * 100
+          : holding.allocationPercent,
         currentValueBase: holding.currentValueBase,
         rsi14,
         supportS1: s1,
@@ -559,9 +566,9 @@ export async function GET(req: NextRequest) {
         },
         benchmarks,
         usdThbRate:
-          usdThbRate.status === 'fulfilled' && typeof usdThbRate.value === 'number'
-            ? usdThbRate.value
-            : 35.5,
+          usdThbRate.status === 'fulfilled' && usdThbRate.value && !describeValuationRate('USD', 'THB', usdThbRate.value)
+            ? usdThbRate.value.rate
+            : null,
         macro: {
           dxy: {
             price: dxyRes.status === 'fulfilled' && dxyRes.value ? dxyRes.value.price : 104.18,
@@ -575,6 +582,8 @@ export async function GET(req: NextRequest) {
       },
       portfolioTriggers: actionItems,
       positionCap,
+      positionCapBasis,
+      valuationIssues: [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashIssues])],
       plan: {
         id: existingPlan?.id || null,
         marketBias: existingPlan?.marketBias || regimeType,

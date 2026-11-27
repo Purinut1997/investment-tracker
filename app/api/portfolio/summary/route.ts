@@ -21,7 +21,7 @@ import {
   getSplitMultiplier,
   mergeTxnsAndSplits,
 } from '@/lib/analytics/stock-splits'
-import { getExchangeRate, sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { getExchangeRate, valueCashAccounts } from '@/lib/market-data/frankfurter'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
         latestDigest,
         unackAlert,
       ] = await Promise.all([
-        getExchangeRate('USD', baseCurrency).catch(() => 35.5),
+        getExchangeRate('USD', baseCurrency),
         calculateUserHoldings(userId, baseCurrency, forceRefresh),
         prisma.investmentAccount.findMany({
           where: { userId },
@@ -127,7 +127,8 @@ export async function GET(req: NextRequest) {
           t.asset?.currency === 'USD' ||
           t.asset?.market === 'US' ||
           t.asset?.market === 'CRYPTO'
-        const fx = isUSD ? usdThbRate : 1.0
+        const currency = isUSD ? 'USD' : (t.asset?.currency || 'THB').toUpperCase()
+        const fx = holdingsResult.fxRates?.[currency]?.rate ?? (currency === baseCurrency ? 1 : 0)
         const txnDate = new Date(t.txnDate)
 
         if (t.txnType === 'BUY' && qty > 0) {
@@ -177,7 +178,8 @@ export async function GET(req: NextRequest) {
           t.asset?.currency === 'USD' ||
           t.asset?.market === 'US' ||
           t.asset?.market === 'CRYPTO'
-        const fx = isUSD ? usdThbRate : 1.0
+        const currency = isUSD ? 'USD' : (t.asset?.currency || 'THB').toUpperCase()
+        const fx = holdingsResult.fxRates?.[currency]?.rate ?? (currency === baseCurrency ? 1 : 0)
         return sum + Number(t.totalAmount || 0) * fx
       }, 0)
 
@@ -190,7 +192,7 @@ export async function GET(req: NextRequest) {
       }, 0)
 
       // 6. Calculate total cash & net worth across user accounts
-      const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency, usdThbRate)
+      const { totalCash, valuationIssues: cashIssues, rates: cashRates } = await valueCashAccounts(accounts, baseCurrency)
 
       // 7. Calculate Today's P&L and synchronize individual live prices
       let todayPnLBase = 0
@@ -213,7 +215,7 @@ export async function GET(req: NextRequest) {
           if (quote && quote.price > 0) {
             if (Math.abs(quote.price - h.currentPrice) > 0.0001) {
               reconciled = reconcileHoldingPrice(h, quote.price, usdThbRate)
-              syncAssetLivePrice(h.assetId, quote.price, quote.provider || 'yahoo').catch(() => {})
+              syncAssetLivePrice(h.assetId, quote.price, quote.provider || 'yahoo', quote.observationTimestamp).catch(() => {})
             }
           }
 
@@ -242,11 +244,10 @@ export async function GET(req: NextRequest) {
           h.allocationPercent = (h.currentValueBase / reconciledTotalValueBase) * 100
         }
       }
-      holdingsResult.totalValueBase = reconciledTotalValueBase
-      holdingsResult.unrealizedPnLBase = reconciledTotalValueBase - holdingsResult.totalCostBase
-      holdingsResult.unrealizedPnLPercent =
+      const unrealizedPnL = reconciledTotalValueBase - holdingsResult.totalCostBase
+      const unrealizedPnLPercent =
         holdingsResult.totalCostBase > 0
-          ? (holdingsResult.unrealizedPnLBase / holdingsResult.totalCostBase) * 100
+          ? (unrealizedPnL / holdingsResult.totalCostBase) * 100
           : 0
       const reconciledNetWorth = reconciledTotalValueBase + totalCash
 
@@ -389,14 +390,16 @@ export async function GET(req: NextRequest) {
       const summaryPayload = {
         baseCurrency,
         usdThbRate,
-        totalValue: holdingsResult.totalValueBase,
+        totalValue: reconciledTotalValueBase,
         totalCost: holdingsResult.totalCostBase,
         netWorth: reconciledNetWorth,
         totalCash,
+        valuationIssues: [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashIssues])],
+        valuationRates: { ...holdingsResult.fxRates, ...cashRates },
         todayPnL: todayPnLBase,
         todayPnLPercent,
-        unrealizedPnL: holdingsResult.unrealizedPnLBase,
-        unrealizedPnLPercent: holdingsResult.unrealizedPnLPercent,
+        unrealizedPnL,
+        unrealizedPnLPercent,
         totalRealizedGain: totalRealizedGainBase,
         totalRealizedGainUSD: totalRealizedGainUSD,
         totalDividends: totalDividendsBase,

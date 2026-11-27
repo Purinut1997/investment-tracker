@@ -20,7 +20,7 @@ import {
   type AdvisorTarget,
 } from '@/lib/ai/advisor-evidence'
 import { callGemini, GroundingSource } from '@/lib/ai/gemini-client'
-import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { valueCashAccounts } from '@/lib/market-data/frankfurter'
 import {
   gatherPortfolioDeepIntelligence,
   computeAdviceOutcomeMetrics,
@@ -395,7 +395,7 @@ export async function POST(req: NextRequest) {
       loadSavedCopilotThread(userId),
     ])
 
-    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
+    const { totalCash, valuationIssues: cashValuationIssues } = await valueCashAccounts(accounts, baseCurrency)
 
     const totalPortfolioValue = holdingsResult.totalValueBase
     const totalWealth = totalPortfolioValue + totalCash
@@ -507,6 +507,7 @@ export async function POST(req: NextRequest) {
         baseCurrency,
         holdingsResult,
         totalCash,
+        cashValuationIssues,
       }).catch(() => null),
     ])
 
@@ -619,7 +620,7 @@ ${deepIntel?.catalystsPrompt || 'ไม่มีกำหนดการงบ/�
 === 5. ข้อมูลพอร์ต, ภาษี FIFO และความจำกฎส่วนตัวของผู้ใช้ (INTERNAL PORTFOLIO, TAX & MEMORY) ===
 - สกุลเงินหลัก: ${baseCurrency}
 - มูลค่าสินทรัพย์รวมในพอร์ตตามระบบ: ${totalPortfolioValue.toLocaleString()} ${baseCurrency} (ใช้เป็นค่าประมาณ)
-- เงินสดสำรองรวม (Dry Powder): ${totalCash.toLocaleString()} ${baseCurrency} (${cashPercent.toFixed(1)}% ของความมั่งคั่งรวม)
+- เงินสดสำรองรวม (Dry Powder)${cashValuationIssues.length ? ' (ประมาณการหรือข้อมูลบางส่วน)' : ''}: ${totalCash.toLocaleString()} ${baseCurrency} (${cashPercent.toFixed(1)}% ของความมั่งคั่งรวม)
 - การกระจุกตัวเฉพาะกลุ่ม US Tech & AI ที่ระบบจำแนกได้: ${
       techAiAllocationPercent > 50
         ? `🚨 พอร์ตมีความเสี่ยงกระจุกตัวสูงมากในกลุ่ม US Tech & AI (${techAiAllocationPercent.toFixed(1)}% ของพอร์ต)`
@@ -670,7 +671,7 @@ ${previousHistoryText}
         target.market === targets[index].market && target.ticker === targets[index].ticker))
       return {
         modelUsed: 'portfolio-evidence',
-        text: copilotQuotaSummary({ requestedEvidence, unresolvedSymbols, cash: totalCash, baseCurrency, holdingsCount: holdingsResult.holdings.length }),
+        text: copilotQuotaSummary({ requestedEvidence, unresolvedSymbols, cash: cashValuationIssues.length ? Number.NaN : totalCash, baseCurrency, holdingsCount: holdingsResult.holdings.length }),
         groundingSources: [],
       }
     })

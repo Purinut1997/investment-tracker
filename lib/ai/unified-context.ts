@@ -9,7 +9,7 @@
 import { prisma } from '../prisma'
 import { calculateUserHoldings, type PortfolioHoldingsResult } from '../analytics/holdings'
 import { analyzePortfolioRisks } from '../analytics/risk-sentinel'
-import { sumAccountCashInBaseCurrency } from '../market-data/frankfurter'
+import { valueCashAccounts } from '../market-data/frankfurter'
 import { parseUserInvestmentMemory, type UserInvestmentMemory } from './outcome-evaluator'
 
 export type AiSurface =
@@ -52,6 +52,7 @@ export interface UnifiedAiContext {
   userId: string
   baseCurrency: string
   assembledAt: string
+  valuationIssues?: string[]
   memory: UserInvestmentMemory
   activePreset: {
     presetName: string
@@ -304,6 +305,7 @@ export async function getUnifiedPortfolioContext(
     baseCurrency?: string
     holdingsResult?: PortfolioHoldingsResult
     totalCash?: number
+    cashValuationIssues?: string[]
     forceRefresh?: boolean
   }
 ): Promise<UnifiedAiContext> {
@@ -394,24 +396,24 @@ export async function getUnifiedPortfolioContext(
     }
   }
 
-  const [holdingsResult, resolvedCash] = await Promise.all([
+  const [holdingsResult, cashValuation] = await Promise.all([
     options?.holdingsResult
       ? Promise.resolve(options.holdingsResult)
       : calculateUserHoldings(userId, baseCurrency, false),
     options?.totalCash !== undefined
-      ? Promise.resolve(options.totalCash)
+      ? Promise.resolve({ totalCash: options.totalCash, valuationIssues: options.cashValuationIssues ?? ['ยังไม่ยืนยันแหล่งและเวลาอัตราแลกเปลี่ยนของเงินสด'] })
       : prisma.investmentAccount
           .findMany({
             where: { userId },
             select: { cashBalance: true, currency: true },
           })
-          .then((accounts) => sumAccountCashInBaseCurrency(accounts, baseCurrency)),
+          .then((accounts) => valueCashAccounts(accounts, baseCurrency)),
   ])
 
   const memory = parseUserInvestmentMemory(userSettings?.defaultRiskProfile)
   const { portfolio, riskSnapshot } = buildPortfolioSummary(
     holdingsResult,
-    resolvedCash,
+    cashValuation.totalCash,
     baseCurrency
   )
 
@@ -474,6 +476,7 @@ export async function getUnifiedPortfolioContext(
     userId,
     baseCurrency,
     assembledAt: new Date().toISOString(),
+    valuationIssues: [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashValuation.valuationIssues])],
     memory,
     activePreset: defaultPreset
       ? {
@@ -538,11 +541,13 @@ export function formatUnifiedContextPrompt(
 
   const lines: string[] = [
     '=== ศูนย์กลางบริบทพอร์ตและความต่อเนื่องข้ามหน้า (UNIFIED PORTFOLIO & AI CONTINUITY) ===',
-    `- ภาพรวมพอร์ตจริง: ลงทุน ${money(ctx.portfolio.investedValue)} + เงินสด ${money(ctx.portfolio.totalCash)} (${ctx.portfolio.cashPercent}% Dry Powder) | P&L รวม ${ctx.portfolio.unrealizedPnLPercent >= 0 ? '+' : ''}${ctx.portfolio.unrealizedPnLPercent.toFixed(1)}% | สัดส่วนตลาด: ${mixParts.join(' · ') || 'ไม่ระบุ'}`,
+    `- ภาพรวมพอร์ต${ctx.valuationIssues?.length ? ' (ประมาณการหรือข้อมูลบางส่วน)' : ''}: ลงทุน ${money(ctx.portfolio.investedValue)} + เงินสด ${money(ctx.portfolio.totalCash)} (${ctx.portfolio.cashPercent}% Dry Powder) | P&L รวม ${ctx.portfolio.unrealizedPnLPercent >= 0 ? '+' : ''}${ctx.portfolio.unrealizedPnLPercent.toFixed(1)}% | สัดส่วนตลาด: ${mixParts.join(' · ') || 'ไม่ระบุ'}`,
     `- ตัวหลักในพอร์ต (${ctx.portfolio.holdingsCount} ตัว): ${topHoldingsLine}`,
     `- Risk Sentinel (คำนวณจริง): ระดับ ${ctx.riskSnapshot.overallRiskLevel} (${ctx.riskSnapshot.overallRiskScore}/100)${ctx.riskSnapshot.overweightSectors.length ? ` | Overweight: ${ctx.riskSnapshot.overweightSectors.join(', ')}` : ''}${ctx.riskSnapshot.topWarnings.length ? ` | เตือน: ${ctx.riskSnapshot.topWarnings.join(' ; ')}` : ''}`,
     `- กฎส่วนตัว (AI Memory): รับความเสี่ยง ${ctx.memory.riskTolerance} | กรอบ ${ctx.memory.horizonYears} ปี | เพดานหุ้นเดียวไม่เกิน ${ctx.memory.maxSinglePositionPercent}% | MaxDD ${ctx.memory.maxDrawdownTolerancePercent}% | สไตล์: ${ctx.memory.preferredStyle}${ctx.memory.personalRules ? ` | กฎเหล็ก: ${ctx.memory.personalRules}` : ''}`,
   ]
+
+  if (ctx.valuationIssues?.length) lines.push('- ข้อจำกัดของยอดพอร์ต: ' + ctx.valuationIssues.slice(0, 5).join(' · ') + ' ให้ใช้ตรวจเบื้องต้นและรอยืนยันก่อนระบุวงเงินหรือจำนวนซื้อ')
 
   if (ctx.activePreset) {
     lines.push(

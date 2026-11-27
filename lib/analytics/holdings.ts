@@ -5,7 +5,7 @@
 
 import { prisma } from '../prisma'
 import { getBatchCachedOrFetchPrices } from '../market-data/cache-layer'
-import { getExchangeRate } from '../market-data/frankfurter'
+import { describeValuationRate, getValuationRates } from '../market-data/frankfurter'
 import { syncAssetSplitsFromYahoo } from '../market-data/split-sync'
 import {
   AppliedSplitBadge,
@@ -34,6 +34,10 @@ export interface HoldingItem {
   unrealizedPnLPercent: number
   allocationPercent: number
   isStale: boolean
+  fxToBase?: number
+  priceSource?: string
+  priceObservedAt?: string | null
+  priceRecordedAt?: string | null
   appliedSplits?: AppliedSplitBadge[]
 }
 
@@ -44,6 +48,8 @@ export interface PortfolioHoldingsResult {
   unrealizedPnLBase: number
   unrealizedPnLPercent: number
   baseCurrency: string
+  valuationIssues?: string[]
+  fxRates?: Awaited<ReturnType<typeof getValuationRates>>
   txns?: any[]
   splitsByAssetRecord?: Record<string, StockSplitEvent[]>
 }
@@ -134,7 +140,7 @@ export function reconcileHoldingPrice(
   const unrealizedPnLPercent = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0
 
   const isUsd = holding.currency === 'USD' || holding.market === 'US' || holding.market === 'CRYPTO'
-  const fx = isUsd ? usdThbRate : 1.0
+  const fx = holding.fxToBase ?? (isUsd ? usdThbRate : 1.0)
   const currentValueBase = currentValue * fx
   const costBase = totalCost * fx
   const unrealizedPnLBase = currentValueBase - costBase
@@ -371,9 +377,6 @@ export async function calculateUserHoldings(
     })
   }
 
-  // 3. Fetch FX exchange rate if asset currency differs from baseCurrency
-  const usdThbRate = (await getExchangeRate('USD', baseCurrency)) ?? 35.5
-
   // 4. Filter active holdings with remaining quantity > 0 (micro-precision for gold/crypto)
   const activeEntries = Array.from(assetMap.entries()).filter(([_, data]) => {
     const remainingQty = data.lots.reduce((acc, lot) => acc + lot.quantity, 0)
@@ -382,7 +385,13 @@ export async function calculateUserHoldings(
 
   // Batch price lookup: 1 DB query instead of N individual queries (<5ms)
   const activeAssetIds = activeEntries.map(([assetId]) => assetId)
-  const priceMap = await getBatchCachedOrFetchPrices(activeAssetIds, forceRefresh)
+  const assetCurrency = (asset: { currency?: string | null; market: string }) =>
+    asset.market === 'US' || asset.market === 'CRYPTO' ? 'USD' : (asset.currency || 'THB').toUpperCase()
+  const [priceMap, fxRates] = await Promise.all([
+    getBatchCachedOrFetchPrices(activeAssetIds, forceRefresh),
+    getValuationRates([...assetMap.values()].map(data => assetCurrency(data.asset)), baseCurrency),
+  ])
+  const valuationIssues = new Set<string>()
 
   const activeHoldings: HoldingItem[] = []
   let totalValueBase = 0
@@ -399,12 +408,13 @@ export async function calculateUserHoldings(
     const unrealizedPnL = currentValue - totalCost
     const unrealizedPnLPercent = totalCost > 0 ? (unrealizedPnL / totalCost) * 100 : 0
 
-    // Convert to base currency
-    const isUsd =
-      data.asset.currency === 'USD' ||
-      data.asset.market === 'US' ||
-      data.asset.market === 'CRYPTO'
-    const fx = isUsd ? usdThbRate : 1.0
+    const currency = assetCurrency(data.asset)
+    const fxObservation = fxRates[currency] ?? null
+    const fx = fxObservation?.rate ?? 0
+    const fxIssue = describeValuationRate(currency, baseCurrency, fxObservation)
+    if (fxIssue) valuationIssues.add(fxIssue)
+    if (!priceData) valuationIssues.add(`${data.asset.ticker} ใช้ต้นทุนแทนราคาตลาด`)
+    else if (priceData.isStale || !priceData.observedAt || now - Date.parse(priceData.observedAt) > 4 * 86400_000) valuationIssues.add(`${data.asset.ticker} ใช้ราคาที่เก่าหรือไม่ทราบเวลาสังเกต`)
     const currentValueBase = currentValue * fx
     const costBase = totalCost * fx
     const unrealizedPnLBase = currentValueBase - costBase
@@ -418,7 +428,11 @@ export async function calculateUserHoldings(
       assetName: data.asset.assetName,
       market: data.asset.market,
       assetType: data.asset.assetType,
-      currency: isUsd ? 'USD' : (data.asset.currency || 'THB'),
+      currency,
+      fxToBase: fx,
+      priceSource: priceData?.sourceProvider ?? 'ต้นทุนเฉลี่ย',
+      priceObservedAt: priceData?.observedAt,
+      priceRecordedAt: priceData?.recordedAt,
       quantity: remainingQty,
       avgCost,
       totalCost,
@@ -429,7 +443,7 @@ export async function calculateUserHoldings(
       unrealizedPnLBase,
       unrealizedPnLPercent,
       allocationPercent: 0, // calculated below
-      isStale: priceData?.isStale ?? false,
+      isStale: priceData?.isStale ?? true,
       ...(data.appliedSplits.length > 0 ? { appliedSplits: data.appliedSplits } : {}),
     })
   })
@@ -460,6 +474,8 @@ export async function calculateUserHoldings(
     unrealizedPnLPercent,
     baseCurrency,
     txns,
+    fxRates,
+    valuationIssues: [...valuationIssues],
     splitsByAssetRecord,
   }
 

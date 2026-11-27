@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
-import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { valueCashAccounts } from '@/lib/market-data/frankfurter'
 import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { getAdvisorPolicy, getLatestAdvisorRun } from './advisor-planning-service'
@@ -56,8 +56,8 @@ async function loadDailySnapshot(userId: string, forceRefresh: boolean) {
       select: { symbol: true, headline: true, sourceName: true, sourceUrl: true, publishedAt: true },
     }),
   ])
-  const [cash, signals] = await Promise.all([
-    sumAccountCashInBaseCurrency(accounts, baseCurrency),
+  const [cashValuation, signals] = await Promise.all([
+    valueCashAccounts(accounts, baseCurrency),
     Promise.all([...portfolio.holdings].sort((a, b) => b.currentValueBase - a.currentValueBase)
       .filter((holding) => holding.quantity > 0).slice(0, 8).map(async (holding) => ({
         holding, signal: await fetchSingleTickerTechnicalSignal(holding.ticker, holding.market, false, true).catch(() => null),
@@ -69,9 +69,10 @@ async function loadDailySnapshot(userId: string, forceRefresh: boolean) {
     Boolean(symbol && tickers.has(symbol.toUpperCase().replace(/\.BK$/, '')) && /^https?:\/\//i.test(sourceUrl))
   ).map((item) => [item.headline.trim().toLowerCase(), item])).values()].slice(0, 8)
   return {
-    settings, asOf, baseCurrency, cash, invested: portfolio.totalValueBase,
+    settings, asOf, baseCurrency, cash: cashValuation.totalCash, cashValuationIssues: cashValuation.valuationIssues, invested: portfolio.totalValueBase,
     news: recentNews.map((item) => ({ ...item, publishedAt: item.publishedAt.toISOString() })),
-    estimatedTotals: portfolio.holdings.some((h) => h.isStale) || accounts.some((a) => a.currency !== baseCurrency),
+    estimatedTotals: Boolean(portfolio.valuationIssues?.length || cashValuation.valuationIssues.length),
+    valuationIssues: [...new Set([...(portfolio.valuationIssues ?? []), ...cashValuation.valuationIssues])],
     market: benchmarks.map(({ symbol, quote }) => formatMarketObservation(
       symbol, quote ? { ...quote, timestamp: quote.observationTimestamp ?? 0 } : null, +asOf,
     )),
@@ -130,6 +131,7 @@ export async function generateAdvisorBrief(userId: string, date: string, force: 
         const unifiedCtx = await getUnifiedPortfolioContext(userId, {
           baseCurrency: snapshot.baseCurrency,
           totalCash: snapshot.cash,
+          cashValuationIssues: snapshot.cashValuationIssues,
         }).catch(() => null)
         const prompt = [
           `สรุปภาพรวมตลาดและแผนปฏิบัติการประจำวันที่ ${date} เป็นภาษาไทยที่อ่านจบใน 1 นาที:`,

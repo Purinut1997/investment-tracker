@@ -48,7 +48,7 @@ interface MarketRegimeGaugeProps {
   benchmarks?: MarketBenchmark[]
   totalCash: number
   totalPortfolioValue: number
-  usdThbRate?: number
+  usdThbRate?: number | null
 }
 
 // 5 Gauge Zones: from 0 to 100
@@ -130,7 +130,7 @@ export function MarketRegimeGauge({
   benchmarks = [],
   totalCash,
   totalPortfolioValue,
-  usdThbRate = 33.5,
+  usdThbRate,
 }: MarketRegimeGaugeProps) {
   // Extract or calculate real quantifiable score
   const { score, activeZone, drivers } = useMemo(() => {
@@ -582,7 +582,7 @@ export function MarketRegimeGauge({
         <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-white/[0.06]">
           <span className="text-xs font-semibold text-slate-400 block mb-1">อัตราแลกเปลี่ยน USD/THB</span>
           <span className="text-lg md:text-xl font-black text-cyan-300 font-mono">
-            ฿{usdThbRate ? usdThbRate.toFixed(2) : '33.30'}
+            {usdThbRate == null ? 'รอยืนยัน' : `฿${usdThbRate.toFixed(2)}`}
           </span>
           <span className="text-xs text-slate-400 ml-1.5">บาท/ดอลลาร์</span>
         </div>

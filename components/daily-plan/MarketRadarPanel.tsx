@@ -10,7 +10,7 @@ export interface MacroData {
 
 interface MarketRadarPanelProps {
   macro?: MacroData
-  usdThbRate?: number
+  usdThbRate?: number | null
 }
 
 interface SessionState {
@@ -148,7 +148,6 @@ export function MarketRadarPanel({ macro, usdThbRate }: MarketRadarPanelProps) {
   const dxyChg = macro?.dxy?.changePercent ?? 0.12
   const tnx = macro?.tnx?.price ?? 4.24
   const tnxChg = macro?.tnx?.changePercent ?? -0.05
-  const fx = usdThbRate ?? 33.5
 
   return (
     <div className="bg-slate-900/85 border border-white/[0.08] rounded-2xl p-3.5 sm:p-4 backdrop-blur-xl shadow-md flex flex-col justify-between">
@@ -236,7 +235,7 @@ export function MarketRadarPanel({ macro, usdThbRate }: MarketRadarPanelProps) {
               💱 USD/THB
             </span>
             <span className="text-xs font-black text-cyan-300 font-mono block mt-0.5">
-              ฿{fx.toFixed(2)}
+              {usdThbRate == null ? 'รอยืนยัน' : `฿${usdThbRate.toFixed(2)}`}
             </span>
             <span className="text-[9px] text-slate-500 font-medium">บาท/ดอลลาร์</span>
           </div>

@@ -555,6 +555,30 @@ export default function DashboardPage() {
     <AppShell>
       <div className="flex flex-col gap-5 sm:gap-6 w-full max-w-[1600px] mx-auto animate-fade-in pb-12">
         <MorningBriefBanner />
+        {summary.valuationIssues && (holdings.length > 0 || Object.keys(summary.valuationRates ?? {}).length > 0) && (
+          <details className={`rounded-xl border px-4 py-2 text-sm ${summary.valuationIssues.length
+            ? 'border-amber-400/25 bg-amber-950/20 text-amber-100' : 'border-white/10 text-slate-200'}`}>
+            <summary className="min-h-9 cursor-pointer py-2 font-medium">{summary.valuationIssues.length
+              ? 'มูลค่าพอร์ตเป็นประมาณการหรือรวมข้อมูลได้บางส่วน' : 'แหล่งราคาและอัตราแลกเปลี่ยน'}</summary>
+            <ul className="space-y-1 pb-2 pl-4">
+              {summary.valuationIssues.map((issue: string) => <li key={issue} className="list-disc">{issue}</li>)}
+            </ul>
+            {Object.entries(summary.valuationRates ?? {}).map(([currency, raw]) => {
+              const rate = raw as { rate: number; asOf: string | null; source: string } | null
+              if (!rate || rate.source === 'identity') return null
+              const source = rate.source === 'cache' ? 'ข้อมูลที่บันทึกไว้' : rate.source === 'estimate' ? 'ค่าประมาณ' : rate.source
+              return <p key={currency} className="pb-1 text-xs">{currency}/{summary.baseCurrency} · {rate.rate.toLocaleString('th-TH', { maximumFractionDigits: 6 })} · {source}
+                {rate.asOf && ' · ' + new Date(rate.asOf).toLocaleDateString('th-TH', { timeZone: 'UTC' })}</p>
+            })}
+            {holdings.filter((holding: (typeof holdings)[number]) => holding.priceSource).slice(0, 8).map((holding: (typeof holdings)[number]) => (
+              <p key={holding.assetId} className="pb-1 text-xs">{holding.ticker} · {holding.priceSource}
+                {holding.priceObservedAt ? ' · เวลาสังเกต ' + new Date(holding.priceObservedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })
+                  : holding.priceRecordedAt ? ' · วันที่บันทึก ' + new Date(holding.priceRecordedAt).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' }) : ''}
+              </p>
+            ))}
+          </details>
+        )}
+
         {/* ── HEADER BAR WITH LIVE STATUS & QUICK ACTIONS ───────────── */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
           <div className="space-y-1">

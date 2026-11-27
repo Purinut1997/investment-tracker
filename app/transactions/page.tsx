@@ -1315,15 +1315,15 @@ function CsvImportModal({
   onSuccess: () => void
 }) {
   const usdAccounts = accounts.filter(
-    (a) => a.currency === 'USD' || a.accountName.toLowerCase().includes('usd') || a.accountName.toLowerCase().includes('fcd')
+    (a) => a.currency === 'USD'
   )
   const thbAccounts = accounts.filter(
-    (a) => a.currency === 'THB' || a.accountName.toLowerCase().includes('save')
+    (a) => a.currency === 'THB'
   )
 
   const [autoRoute, setAutoRoute] = useState(true)
   const [selectedUsdAccountId, setSelectedUsdAccountId] = useState(usdAccounts[0]?.id || '')
-  const [selectedThbAccountId, setSelectedThbAccountId] = useState(thbAccounts[0]?.id || accounts[0]?.id || '')
+  const [selectedThbAccountId, setSelectedThbAccountId] = useState(thbAccounts[0]?.id || '')
   const [singleAccountId, setSingleAccountId] = useState(accounts[0]?.id || '')
 
   const [rows, setRows] = useState<any[]>([])
@@ -1357,10 +1357,10 @@ function CsvImportModal({
           return
         }
         const parsedRows = (results.data as any[]).map((r) => ({
-          txnDate: r.txnDate || r.Date || r.date || new Date().toISOString(),
-          txnType: (r.txnType || r.Type || r.type || 'BUY').toUpperCase(),
+          txnDate: r.txnDate || r.Date || r.date || '',
+          txnType: (r.txnType || r.Type || r.type || '').toUpperCase(),
           ticker: (r.ticker || r.Ticker || r.Symbol || r.symbol || '').toUpperCase(),
-          market: r.market || r.Market || 'US',
+          market: r.market || r.Market || '',
           quantity: (r.quantity || r.Quantity || r.Shares || r.shares || '0').toString(),
           pricePerUnit: (r.pricePerUnit || r.Price || r.price || '0').toString(),
           fee: (r.fee || r.Fee || '0').toString(),
@@ -1403,24 +1403,26 @@ function CsvImportModal({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Import failed')
 
+      const rowErrors: string[] = Array.isArray(data.errors) ? data.errors : []
+      setError(rowErrors.join('\n'))
       setStatusModal({
         isOpen: true,
-        type: 'success',
-        title: 'นำเข้าข้อมูลสำเร็จเรียบร้อย!',
-        description: 'บันทึกรายการธุรกรรมและแยกกระเป๋าตามสกุลเงินเรียบร้อยแล้ว',
+        type: rowErrors.length ? 'warning' : 'success',
+        title: rowErrors.length ? 'มีรายการที่ต้องตรวจ' : 'นำเข้าข้อมูลเรียบร้อย',
+        description: rowErrors.length ? 'กลับไปดูแถวที่ต้องแก้ไขได้ รายการที่บันทึกแล้วจะแสดงในประวัติ' : 'บันทึกรายการตามสกุลเงินของบัญชี',
         details: [
           { label: 'นำเข้าสำเร็จ', value: `${data.imported} รายการ`, color: 'text-emerald-400' },
           { label: 'หุ้นสหรัฐฯ (USD)', value: `${data.usdCount ?? 0} รายการ`, color: 'text-indigo-400' },
           { label: 'หุ้นไทย (THB)', value: `${data.thbCount ?? 0} รายการ`, color: 'text-emerald-300' },
           { label: 'ข้ามรายการซ้ำ', value: `${data.skipped ?? 0} รายการ`, color: 'text-amber-400' },
         ],
-        autoCloseMs: 3500,
+        autoCloseMs: rowErrors.length ? undefined : 3500,
         primaryAction: {
-          label: 'ดูรายการทั้งหมด',
+          label: rowErrors.length ? 'ตรวจแถวที่ต้องแก้' : 'ดูรายการทั้งหมด',
           onClick: () => {
             setStatusModal(null)
             onSuccess()
-            onClose()
+            if (!rowErrors.length) onClose()
           },
         },
       })
@@ -1471,7 +1473,7 @@ function CsvImportModal({
         {/* Form Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
           {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 whitespace-pre-line" role="alert">
               {error}
             </div>
           )}

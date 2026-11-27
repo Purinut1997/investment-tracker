@@ -23,7 +23,12 @@ import { invalidateDividendCache } from '../dividends/dividend-analyzer'
 import { invalidateEarningsAnalyzerCache } from '../earnings/earnings-analyzer'
 import { MarketQuote } from './types'
 
-interface PriceCacheEntry {
+interface PriceEvidence {
+  observedAt?: string | null
+  recordedAt?: string | null
+}
+
+interface PriceCacheEntry extends PriceEvidence {
   price: number
   sourceProvider: string
   isStale: boolean
@@ -51,7 +56,8 @@ export function invalidatePriceCache(assetId?: string) {
 export async function syncAssetLivePrice(
   assetId: string,
   price: number,
-  sourceProvider = 'yahoo'
+  sourceProvider = 'yahoo',
+  observationTimestamp?: number,
 ) {
   if (!assetId || !price || price <= 0 || isNaN(price)) return
   const now = Date.now()
@@ -59,6 +65,7 @@ export async function syncAssetLivePrice(
     price,
     sourceProvider,
     isStale: false,
+    observedAt: Number.isFinite(observationTimestamp) ? new Date(observationTimestamp!).toISOString() : null,
     timestamp: now,
   })
 
@@ -168,13 +175,13 @@ async function refreshStaleAssetsInBackground(assetIds: string[]) {
 export async function getBatchCachedOrFetchPrices(
   assetIds: string[],
   forceRefresh = false
-): Promise<Map<string, { price: number; sourceProvider: string; isStale: boolean }>> {
+): Promise<Map<string, ({ price: number; sourceProvider: string; isStale: boolean } & PriceEvidence)>> {
   const now = Date.now()
   const todayKey = new Date()
   todayKey.setUTCHours(0, 0, 0, 0)
 
-  const resultMap = new Map<string, { price: number; sourceProvider: string; isStale: boolean }>()
-  const staleFallbackMap = new Map<string, { price: number; sourceProvider: string; isStale: boolean }>()
+  const resultMap = new Map<string, ({ price: number; sourceProvider: string; isStale: boolean } & PriceEvidence)>()
+  const staleFallbackMap = new Map<string, ({ price: number; sourceProvider: string; isStale: boolean } & PriceEvidence)>()
   const missingAssetIds: string[] = []
 
   // ── Tier 1: In-Memory Fast Cache (<0.1ms) ──────────────────────
@@ -186,6 +193,8 @@ export async function getBatchCachedOrFetchPrices(
           price: memoryCached.price,
           sourceProvider: memoryCached.sourceProvider,
           isStale: memoryCached.isStale,
+          observedAt: memoryCached.observedAt,
+          recordedAt: memoryCached.recordedAt,
         })
       } else {
         missingAssetIds.push(id)
@@ -220,6 +229,7 @@ export async function getBatchCachedOrFetchPrices(
         price: Number(row.closePrice),
         sourceProvider: isToday ? row.sourceProvider : `${row.sourceProvider} (cached)`,
         isStale: !isToday,
+        recordedAt: row.priceDate.toISOString(),
       }
 
       if (!forceRefresh) {
@@ -262,10 +272,11 @@ export async function getBatchCachedOrFetchPrices(
                 price: quote.price,
                 sourceProvider: quote.provider,
                 isStale: false,
+                observedAt: Number.isFinite(quote.observationTimestamp) ? new Date(quote.observationTimestamp!).toISOString() : null,
               }
               resultMap.set(assetId, entry)
               priceMemoryCache.set(assetId, { ...entry, timestamp: now })
-              await syncAssetLivePrice(assetId, quote.price, quote.provider)
+              await syncAssetLivePrice(assetId, quote.price, quote.provider, quote.observationTimestamp)
               return
             }
           } catch {
