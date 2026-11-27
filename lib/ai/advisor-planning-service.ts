@@ -1,3 +1,4 @@
+import { invalidateUnifiedContextCache } from './unified-context'
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -16,7 +17,7 @@ export async function getAdvisorPolicy(userId: string) {
 }
 
 export async function saveAdvisorPolicy(userId: string, config: AdvisorPolicyConfig, expectedVersion: number) {
-  return prisma.$transaction(async (tx) => {
+  const saved = await prisma.$transaction(async (tx) => {
     const [settings, account, preset, latest, assets] = await Promise.all([
       tx.userSettings.findUnique({ where: { userId }, select: { baseCurrency: true } }),
       tx.investmentAccount.findFirst({ where: { id: config.accountId, userId, accountType: 'brokerage' } }),
@@ -34,6 +35,8 @@ export async function saveAdvisorPolicy(userId: string, config: AdvisorPolicyCon
     })
     return { version, config }
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  invalidateUnifiedContextCache(userId)
+  return saved
 }
 
 export class AdvisorPlanError extends Error {

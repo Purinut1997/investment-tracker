@@ -1,4 +1,6 @@
 'use client'
+import { prepareTransactionSubmit } from '@/lib/analytics/retryable-transaction-submit'
+import { getTransactionNetAmount } from '@/lib/analytics/cash-ledger'
 
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
@@ -156,22 +158,8 @@ function calculateTxnTotal(
   fee: number = 0,
   taxWithheld: number = 0
 ): number {
-  const q = Number(quantity) || 0
-  const p = Number(pricePerUnit) || 0
-  const f = Number(fee) || 0
-  const t = Number(taxWithheld) || 0
-
-  if (txnType === 'SELL') {
-    return Number(Math.max(0, q * p - f - t).toFixed(2))
-  }
-  if (txnType === 'DIVIDEND') {
-    return Number(Math.max(0, q * p - f - t).toFixed(2))
-  }
-  if (txnType === 'FEE') {
-    return Number(f.toFixed(2))
-  }
-  // BUY, DEPOSIT, WITHDRAW, etc.
-  return Number(Math.max(0, q * p + f).toFixed(2))
+  return Number(getTransactionNetAmount(txnType, Number(quantity) || 0, Number(pricePerUnit) || 0,
+    Number(fee) || 0, Number(taxWithheld) || 0).toFixed(2))
 }
 
 function compressImage(
@@ -280,6 +268,9 @@ export function QuickAddModal({
   const [hasExtracted, setHasExtracted] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const batchAttempts = useRef(new Map<string, string>())
+  const manualAttempts = useRef(new Map<string, string>())
+  const submitInFlight = useRef(false)
 
   // Accounts list
   const { data: accountsData, isLoading: accountsLoading } = useSWR('/api/accounts')
@@ -338,9 +329,9 @@ export function QuickAddModal({
 
   // Live Gold Price & Weight/Spend Calculator State (for Dime! Gold 99.99% & Thai Gold 96.5%)
   const [goldLiveQuote, setGoldLiveQuote] = useState<{
-    xauUsdPerOz: number
-    usdThbRate: number
-    thai965ThbPerBaht: number
+    xauUsdPerOz: number | null
+    usdThbRate: number | null
+    thai965ThbPerBaht: number | null
   } | null>(null)
   const [fetchingGoldPrice, setFetchingGoldPrice] = useState(false)
   const [goldInputMode, setGoldInputMode] = useState<
@@ -355,25 +346,17 @@ export function QuickAddModal({
       if (!res.ok) return
       const json = await res.json()
       const quoteData = {
-        xauUsdPerOz: Number(json.xauUsdPerOz || 0),
-        usdThbRate: Number(json.usdThbRate || 35.5),
-        thai965ThbPerBaht: Number(json.thai965ThbPerBaht || 0),
+        xauUsdPerOz: typeof json.xauUsdPerOz === 'number' && json.xauUsdPerOz > 0 ? Number(json.xauUsdPerOz) : null,
+        usdThbRate: typeof json.usdThbRate === 'number' && json.usdThbRate > 0 ? Number(json.usdThbRate) : null,
+        thai965ThbPerBaht: typeof json.thai965ThbPerBaht === 'number' && json.thai965ThbPerBaht > 0 ? Number(json.thai965ThbPerBaht) : null,
       }
       setGoldLiveQuote(quoteData)
 
       if (applyToPriceField) {
         const sym = (targetTicker || formData.ticker).toUpperCase()
-        if (isThai965GoldTicker(sym) && quoteData.thai965ThbPerBaht > 0) {
-          setFormData((prev) => ({
-            ...prev,
-            pricePerUnit: String(quoteData.thai965ThbPerBaht),
-          }))
-        } else if (quoteData.xauUsdPerOz > 0) {
-          setFormData((prev) => ({
-            ...prev,
-            pricePerUnit: quoteData.xauUsdPerOz.toFixed(2),
-          }))
-        }
+        const price = isThai965GoldTicker(sym) ? quoteData.thai965ThbPerBaht : quoteData.xauUsdPerOz
+        if (price !== null) setFormData(prev => ({ ...prev, pricePerUnit: price.toFixed(2) }))
+
       }
     } catch {
       // ignore gold live price fetch error cleanly
@@ -471,8 +454,8 @@ export function QuickAddModal({
       if (isThai965) {
         computedQty = val / p
       } else {
-        const fx = goldLiveQuote?.usdThbRate || 35.5
-        computedQty = val / fx / p
+        const fx = goldLiveQuote?.usdThbRate
+        if (fx) computedQty = val / fx / p
       }
     }
 
@@ -744,6 +727,8 @@ export function QuickAddModal({
       return
     }
 
+    if (submitInFlight.current) return
+    submitInFlight.current = true
     setSubmitting(true)
     setError('')
     setStatusModal({
@@ -755,46 +740,44 @@ export function QuickAddModal({
     })
 
     try {
-      const res = await fetch('/api/transactions/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transactions: sanitizedTxns.map((t) => {
-            const rawDate = t.txnDate.length === 10 ? `${t.txnDate}T00:00:00+07:00` : t.txnDate
-            const isoDate = new Date(rawDate).toISOString()
-            return {
-              accountId: t.matchedAccountId,
-              accountName: t.accountName,
-              currency: t.currency,
-              ticker: t.ticker.trim().toUpperCase(),
-              assetName: t.assetName || t.ticker.trim().toUpperCase(),
-              market: t.market || (t.currency === 'THB' ? 'TH' : 'US'),
-              assetType: t.assetType || 'stock',
-              txnDate: isoDate,
-              txnType: t.txnType,
-              quantity: Number(t.quantity),
-              pricePerUnit: Number(t.pricePerUnit),
-              fee: Number(t.fee || 0),
-              taxWithheld: Number(t.taxWithheld || 0),
-              totalAmount: Number(t.totalAmount),
-              note: t.note || undefined,
-            }
-          }),
-          cashBalances: selectedCash.map((c) => ({
-            accountId: c.matchedAccountId || undefined,
-            accountName: c.accountName,
-            currency: c.currency,
-            accountType: c.accountType,
-            cashAmount: c.cashAmount,
-            accruedInterest: c.accruedInterest,
-            interestDays: c.interestDays,
-            balanceDate: c.balanceDate,
-          })),
-          updateCashBalances: true,
+      const pending = await prepareTransactionSubmit(batchAttempts.current, 'transaction-batch', {
+        transactions: sanitizedTxns.map((t) => {
+          const rawDate = t.txnDate.length === 10 ? `${t.txnDate}T00:00:00+07:00` : t.txnDate
+          const isoDate = new Date(rawDate).toISOString()
+          return {
+            accountId: t.matchedAccountId,
+            accountName: t.accountName,
+            currency: t.currency,
+            ticker: t.ticker.trim().toUpperCase(),
+            assetName: t.assetName || t.ticker.trim().toUpperCase(),
+            market: t.market || (t.currency === 'THB' ? 'TH' : 'US'),
+            assetType: t.assetType || 'stock',
+            txnDate: isoDate,
+            txnType: t.txnType,
+            quantity: Number(t.quantity),
+            pricePerUnit: Number(t.pricePerUnit),
+            fee: Number(t.fee || 0),
+            taxWithheld: Number(t.taxWithheld || 0),
+            totalAmount: Number(t.totalAmount),
+            note: t.note || undefined,
+          }
         }),
+        cashBalances: selectedCash.map((c) => ({
+          accountId: c.matchedAccountId || undefined,
+          accountName: c.accountName,
+          currency: c.currency,
+          accountType: c.accountType,
+          cashAmount: c.cashAmount,
+          accruedInterest: c.accruedInterest,
+          interestDays: c.interestDays,
+          balanceDate: c.balanceDate,
+        })),
+          updateCashBalances: true,
       })
+      const res = await fetch('/api/transactions/batch', pending.request)
 
       const json = await parseResponseJson(res, 'บันทึกรายการแบบกลุ่มล้มเหลว')
+      pending.confirmed()
 
       // Revalidate all caches including parameterized queries
       mutate((key) => typeof key === 'string' && key.startsWith('/api/transactions'))
@@ -855,6 +838,7 @@ export function QuickAddModal({
         },
       })
     } finally {
+      submitInFlight.current = false
       setSubmitting(false)
     }
   }
@@ -1021,6 +1005,14 @@ export function QuickAddModal({
       return
     }
 
+    if (isGoldMode && goldInputMode === 'amount_thb' && !isThai965GoldTicker(formData.ticker) &&
+        Number(goldCalcInput) > 0 && !goldLiveQuote?.usdThbRate) {
+      setError('ยังยืนยันค่าเงิน USD/THB ไม่ได้ กรุณาระบุน้ำหนักที่ซื้อจริง')
+      return
+    }
+
+    if (submitInFlight.current) return
+    submitInFlight.current = true
     setSubmitting(true)
     setError('')
 
@@ -1065,27 +1057,26 @@ export function QuickAddModal({
 
       const assetData = await assetRes.json()
 
-      const txnRes = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accountId,
-          assetId: assetData.id,
-          txnDate: new Date(formData.txnDate).toISOString(),
-          txnType: formData.txnType,
-          quantity: quantityNum,
-          pricePerUnit: priceNum,
-          fee: feeNum,
-          taxWithheld: taxNum,
-          note: formData.note || undefined,
-          source: tab === 'ai' ? 'quick_add' : 'manual',
-        }),
+      const pending = await prepareTransactionSubmit(manualAttempts.current, 'transaction', {
+        accountId,
+        assetId: assetData.id,
+        txnDate: new Date(formData.txnDate).toISOString(),
+        txnType: formData.txnType,
+        quantity: quantityNum,
+        pricePerUnit: priceNum,
+        fee: feeNum,
+        taxWithheld: taxNum,
+        note: formData.note || undefined,
+        source: tab === 'ai' ? 'quick_add' : 'manual',
       })
+      const txnRes = await fetch('/api/transactions', pending.request)
 
       if (!txnRes.ok) {
         const errJson = await txnRes.json()
         throw new Error(errJson.error || 'บันทึกธุรกรรมล้มเหลว')
       }
+      await parseResponseJson(txnRes, 'บันทึกธุรกรรมล้มเหลว')
+      pending.confirmed()
 
       mutate((key) => typeof key === 'string' && key.startsWith('/api/transactions'))
       mutate((key) => typeof key === 'string' && key.startsWith('/api/accounts'))
@@ -1138,6 +1129,7 @@ export function QuickAddModal({
         primaryAction: { label: 'ปิด', onClick: () => setStatusModal(null) },
       })
     } finally {
+      submitInFlight.current = false
       setSubmitting(false)
     }
   }
@@ -2000,11 +1992,11 @@ export function QuickAddModal({
                       <span className="font-bold text-amber-300 flex items-center gap-1.5">
                         🪙 ตัวช่วยคำนวณทองคำ ({isThai965GoldTicker(formData.ticker) ? 'ไทย 96.5%' : 'Dime! Gold 99.99%'})
                       </span>
-                      {goldLiveQuote && goldLiveQuote.xauUsdPerOz > 0 && (
+                      {goldLiveQuote && goldLiveQuote.xauUsdPerOz != null && (
                         <p className="text-[11px] text-amber-200/80 font-mono mt-0.5">
                           Spot โลก: ${goldLiveQuote.xauUsdPerOz.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/oz
-                          {' • '}USD/THB ฿{goldLiveQuote.usdThbRate.toFixed(2)}
-                          {' • '}96.5% ≈ ฿{goldLiveQuote.thai965ThbPerBaht.toLocaleString()}/บาททอง
+                          {' · '}USD/THB {goldLiveQuote.usdThbRate?.toFixed(2) ?? 'รอยืนยัน'}
+                          {goldLiveQuote.thai965ThbPerBaht != null && ' · ทอง 96.5% ประมาณ ฿' + goldLiveQuote.thai965ThbPerBaht.toLocaleString() + '/บาททอง'}
                         </p>
                       )}
                     </div>

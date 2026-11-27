@@ -1,3 +1,6 @@
+import { LedgerRequestError, withLedgerRequest } from '@/lib/analytics/ledger-request'
+import { Prisma } from '@prisma/client'
+import { applyLedgerCash, withLedgerTransaction } from '@/lib/analytics/transaction-ledger'
 /**
  * GET/POST /api/transactions
  * List user's transactions (paginated) or create new one.
@@ -8,7 +11,7 @@ import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
-import { getTransactionCashDelta, applyCashDeltaClamped } from '@/lib/analytics/cash-ledger'
+import { getTransactionCashDelta, getTransactionNetAmount } from '@/lib/analytics/cash-ledger'
 
 // ─── Zod Schemas ──────────────────────────────────────────
 const CreateTransactionSchema = z.object({
@@ -140,34 +143,27 @@ export async function POST(req: NextRequest) {
 
     const data = parsed.data
 
-    // Verify account belongs to user
-    const account = await prisma.investmentAccount.findFirst({
-      where: { id: data.accountId, userId: session.user.id },
-    })
-    if (!account) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
-    }
-
-    // Verify asset exists
-    const asset = await prisma.asset.findUnique({ where: { id: data.assetId } })
-    if (!asset) {
-      return NextResponse.json({ error: 'Asset not found' }, { status: 404 })
-    }
-
-    // Calculate totalAmount
-    let totalAmount = data.quantity * data.pricePerUnit + data.fee
-    if (data.txnType === 'SELL') {
-      totalAmount = Math.max(0, data.quantity * data.pricePerUnit - data.fee - (data.taxWithheld || 0))
-    } else if (data.txnType === 'DIVIDEND') {
-      totalAmount = Math.max(0, data.quantity * data.pricePerUnit - data.fee - (data.taxWithheld || 0))
-    } else if (data.txnType === 'FEE') {
-      totalAmount = data.fee
-    }
-
+    const totalAmount = getTransactionNetAmount(data.txnType, data.quantity, data.pricePerUnit, data.fee, data.taxWithheld)
     const shouldSync = data.syncCashBalance ?? data.source !== 'csv_import'
     const delta = shouldSync ? getTransactionCashDelta(data.txnType, totalAmount) : 0
 
-    const transaction = await prisma.$transaction(async (tx) => {
+    const transaction = await withLedgerRequest(session.user.id, 'transaction', req.headers.get('Idempotency-Key'), data, async tx => {
+      // Verify account belongs to user
+      const account = await tx.investmentAccount.findFirst({
+        where: { id: data.accountId, userId: session.user.id },
+      })
+      if (!account) {
+        throw new LedgerRequestError('ไม่พบบัญชีลงทุน', 404)
+      }
+
+      // Verify asset exists
+      const asset = await tx.asset.findUnique({ where: { id: data.assetId } })
+      if (!asset) {
+        throw new LedgerRequestError('ไม่พบสินทรัพย์', 404)
+      }
+
+      if (account.currency !== asset.currency) throw new LedgerRequestError('สกุลเงินบัญชีต้องตรงกับสกุลสินทรัพย์', 400)
+
       const created = await tx.transaction.create({
         data: {
           userId: session.user.id,
@@ -180,6 +176,8 @@ export async function POST(req: NextRequest) {
           fee: data.fee,
           taxWithheld: data.taxWithheld,
           totalAmount,
+          cashDeltaApplied: delta,
+          cashSyncEnabled: shouldSync,
           note: data.note,
           source: data.source,
         },
@@ -189,16 +187,7 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      if (shouldSync && delta !== 0) {
-        const currentCash = Number(account.cashBalance || 0)
-        if (delta > 0 || (delta < 0 && currentCash > 0)) {
-          await tx.investmentAccount.update({
-            where: { id: data.accountId },
-            data: { cashBalance: applyCashDeltaClamped(currentCash, delta) },
-          })
-        }
-      }
-
+      await applyLedgerCash(tx, data.accountId, delta)
       return created
     })
 
@@ -206,6 +195,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(transaction, { status: 201 })
   } catch (error) {
+    if (error instanceof LedgerRequestError) return NextResponse.json({ error: error.message }, { status: error.status })
     console.error('[transactions POST]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -226,102 +216,39 @@ export async function DELETE(req: NextRequest) {
       resetCashBalance?: boolean
     }
 
-    // 1. Batch delete specific transaction IDs with atomic cash ledger reversal
-    if (Array.isArray(ids) && ids.length > 0) {
-      const deletedCount = await prisma.$transaction(async (tx) => {
-        const toDelete = await tx.transaction.findMany({
-          where: {
-            id: { in: ids },
-            userId: session.user.id,
-          },
-          select: {
-            id: true,
-            accountId: true,
-            txnType: true,
-            totalAmount: true,
-          },
-        })
-
-        if (toDelete.length === 0) return 0
-
-        const result = await tx.transaction.deleteMany({
-          where: {
-            id: { in: toDelete.map((t) => t.id) },
-            userId: session.user.id,
-          },
-        })
-
-        const reverseDeltaByAccount = new Map<string, number>()
-        for (const t of toDelete) {
-          const reverseDelta = -getTransactionCashDelta(t.txnType, Number(t.totalAmount || 0))
-          if (reverseDelta !== 0) {
-            reverseDeltaByAccount.set(
-              t.accountId,
-              (reverseDeltaByAccount.get(t.accountId) || 0) + reverseDelta
-            )
-          }
-        }
-
-        if (reverseDeltaByAccount.size > 0) {
-          const accounts = await tx.investmentAccount.findMany({
-            where: {
-              id: { in: Array.from(reverseDeltaByAccount.keys()) },
-              userId: session.user.id,
-            },
-            select: { id: true, cashBalance: true },
-          })
-          for (const acc of accounts) {
-            const delta = reverseDeltaByAccount.get(acc.id) || 0
-            if (Math.abs(delta) > 0.0001) {
-              const currentCash = Number(acc.cashBalance || 0)
-              if (delta > 0 || (delta < 0 && currentCash > 0)) {
-                await tx.investmentAccount.update({
-                  where: { id: acc.id },
-                  data: { cashBalance: applyCashDeltaClamped(currentCash, delta) },
-                })
-              }
-            }
-          }
-        }
-
-        return result.count
-      })
-
-      invalidateUserHoldingsCache(session.user.id)
-      return NextResponse.json({ success: true, count: deletedCount })
+    const userId = session.user.id
+    if ((!Array.isArray(ids) || !ids.length) && !clearAll) {
+      return NextResponse.json({ error: 'Invalid delete request' }, { status: 400 })
     }
-
-    // 2. Clear all transactions (scoped or global for user)
-    if (clearAll) {
-      const whereClause: any = { userId: session.user.id }
-      if (accountId && accountId !== 'ALL') {
-        whereClause.accountId = accountId
+    const clearAccountHistory = Boolean(clearAll && (!Array.isArray(ids) || !ids.length))
+    const result = await withLedgerTransaction(async tx => {
+      const where = {
+        userId,
+        ...(clearAccountHistory && accountId && accountId !== 'ALL' ? { accountId } : {}),
+        ...(!clearAccountHistory && Array.isArray(ids) ? { id: { in: ids } } : {}),
       }
-
-      const result = await prisma.transaction.deleteMany({
-        where: whereClause,
+      const clearingCash = Boolean(clearAccountHistory && resetCashBalance)
+      const targets = clearAccountHistory ? [] : await tx.transaction.findMany({
+        where, select: { accountId: true, cashDeltaApplied: true },
       })
-
-      // Optionally reset cash balance for the cleared account(s)
-      if (resetCashBalance) {
-        if (accountId && accountId !== 'ALL') {
-          await prisma.investmentAccount.update({
-            where: { id: accountId, userId: session.user.id },
-            data: { cashBalance: 0 },
-          })
-        } else {
-          await prisma.investmentAccount.updateMany({
-            where: { userId: session.user.id },
-            data: { cashBalance: 0 },
-          })
+      const deleted = await tx.transaction.deleteMany({ where })
+      if (clearingCash) {
+        await tx.investmentAccount.updateMany({
+          where: { userId, ...(where.accountId ? { id: where.accountId } : {}) },
+          data: { cashBalance: 0 },
+        })
+      } else {
+        const corrections = new Map<string, Prisma.Decimal>()
+        for (const item of targets) {
+          if (!item.cashDeltaApplied) continue
+          corrections.set(item.accountId, (corrections.get(item.accountId) ?? new Prisma.Decimal(0)).minus(item.cashDeltaApplied))
         }
+        for (const [id, delta] of corrections) await applyLedgerCash(tx, id, delta)
       }
-
-      invalidateUserHoldingsCache(session.user.id)
-      return NextResponse.json({ success: true, count: result.count })
-    }
-
-    return NextResponse.json({ error: 'Invalid delete request' }, { status: 400 })
+      return { count: deleted.count, unverifiedCashCount: targets.filter(item => item.cashDeltaApplied === null).length }
+    })
+    invalidateUserHoldingsCache(userId)
+    return NextResponse.json({ success: true, ...result })
   } catch (error) {
     console.error('[transactions DELETE]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

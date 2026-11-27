@@ -21,8 +21,9 @@ export function getTransactionCashDelta(txnType: string, totalAmount: number): n
   }
 }
 
-export function applyCashDeltaClamped(currentCash: number, delta: number): number {
-  const cur = Number.isFinite(currentCash) ? currentCash : 0
-  const d = Number.isFinite(delta) ? delta : 0
-  return Number(Math.max(0, cur + d).toFixed(4))
+export function getTransactionNetAmount(type: string, quantity: number, price: number, fee: number, tax: number) {
+  const gross = quantity * price
+  if (type === 'FEE') return fee || gross
+  if (type === 'SELL' || type === 'DIVIDEND') return Math.max(0, gross - fee - tax)
+  return gross + fee
 }

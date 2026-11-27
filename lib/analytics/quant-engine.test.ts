@@ -1,3 +1,4 @@
+import { prepareTransactionSubmit, transactionSubmitRequest } from './retryable-transaction-submit'
 /**
  * lib/analytics/quant-engine.test.ts
  * Pure TypeScript unit tests for:
@@ -14,7 +15,7 @@ import { calculatePortfolioXIRR, calculatePortfolioRiskMetrics } from './quant-m
 import { runMonteCarloSimulation, runCrisisStressTest } from './monte-carlo'
 import { calculateBucketRebalancePlan, ComputedBucketItem } from './strategy-buckets'
 import { computeEstimatedShares } from './rebalancing'
-import { getTransactionCashDelta, applyCashDeltaClamped } from './cash-ledger'
+import { getTransactionCashDelta, getTransactionNetAmount } from './cash-ledger'
 import { detectSentiment } from '../news/sentiment'
 import {
   computeAdviceOutcomeMetrics,
@@ -199,8 +200,11 @@ console.log('🧪 Starting Quantitative & AI Intelligence Unit Tests...\n')
   assert.strictEqual(getTransactionCashDelta('WITHDRAW', 500), -500)
   assert.strictEqual(getTransactionCashDelta('SELL', 1200), 1200)
   assert.strictEqual(getTransactionCashDelta('DIVIDEND', 150), 150)
-  assert.strictEqual(applyCashDeltaClamped(500, -1000), 0, 'Cash balance must clamp at 0')
-  assert.strictEqual(applyCashDeltaClamped(500, 250), 750)
+  assert.strictEqual(getTransactionNetAmount('BUY', 3, 100, 5, 0), 305)
+  assert.strictEqual(getTransactionNetAmount('SELL', 3, 100, 5, 8), 287)
+  assert.strictEqual(getTransactionNetAmount('DIVIDEND', 3, 10, 5, 8), 17)
+  assert.strictEqual(getTransactionNetAmount('FEE', 1, 12, 0, 0), 12)
+  assert.strictEqual(getTransactionNetAmount('FEE', 1, 12, 7, 0), 7)
 
   console.log('✅ Test 5 Passed: Thai SET board lot rounding & cash ledger deltas')
 }
@@ -345,3 +349,33 @@ console.log('🧪 Starting Quantitative & AI Intelligence Unit Tests...\n')
 }
 
 console.log('\n🎉 ALL QUANTITATIVE & INTELLIGENCE UNIT TESTS PASSED!')
+
+
+{
+  const attempts = new Map<string, string>()
+  const first = transactionSubmitRequest(attempts, { amount: 100 }, () => 'first-key')
+  const changed = transactionSubmitRequest(attempts, { amount: 200 }, () => 'second-key')
+  assert.notEqual(first.headers['Idempotency-Key'], changed.headers['Idempotency-Key'])
+  assert.deepEqual(transactionSubmitRequest(attempts, { amount: 100 }, () => 'unexpected'), first)
+  assert.notEqual(transactionSubmitRequest(new Map(), { amount: 100 }, () => 'new-form').headers['Idempotency-Key'],
+    first.headers['Idempotency-Key'])
+}
+
+
+void (async () => {
+  const saved = new Map<string, string>()
+  const storage = { getItem: (name: string) => saved.get(name) ?? null,
+    setItem: (name: string, value: string) => { saved.set(name, value) },
+    removeItem: (name: string) => { saved.delete(name) } }
+  const data = { accountId: 'test-account', amount: 100 }
+  const submitted = await prepareTransactionSubmit(new Map(), 'cash-wallet', data, storage)
+  const reopened = await prepareTransactionSubmit(new Map(), 'cash-wallet', data, storage)
+  assert.deepEqual(reopened.request, submitted.request)
+  assert.ok([...saved.keys()].every(key => !key.includes('test-account')))
+  reopened.confirmed()
+  const intentional = await prepareTransactionSubmit(new Map(), 'cash-wallet', data, storage)
+  assert.notEqual(intentional.request.headers['Idempotency-Key'], submitted.request.headers['Idempotency-Key'])
+})().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})

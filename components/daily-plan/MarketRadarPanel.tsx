@@ -4,8 +4,8 @@ import React, { useEffect, useState } from 'react'
 import { Clock, Globe2, Gauge, DollarSign } from 'lucide-react'
 
 export interface MacroData {
-  dxy?: { price: number; changePercent: number }
-  tnx?: { price: number; changePercent: number }
+  dxy?: { price: number; changePercent: number; observedAt?: string; source?: string } | null
+  tnx?: { price: number; changePercent: number; observedAt?: string; source?: string } | null
 }
 
 interface MarketRadarPanelProps {
@@ -144,10 +144,6 @@ export function MarketRadarPanel({ macro, usdThbRate }: MarketRadarPanelProps) {
     return () => clearInterval(timer)
   }, [])
 
-  const dxy = macro?.dxy?.price ?? 104.18
-  const dxyChg = macro?.dxy?.changePercent ?? 0.12
-  const tnx = macro?.tnx?.price ?? 4.24
-  const tnxChg = macro?.tnx?.changePercent ?? -0.05
 
   return (
     <div className="bg-slate-900/85 border border-white/[0.08] rounded-2xl p-3.5 sm:p-4 backdrop-blur-xl shadow-md flex flex-col justify-between">
@@ -193,42 +189,15 @@ export function MarketRadarPanel({ macro, usdThbRate }: MarketRadarPanelProps) {
 
         {/* Right: Macro Indicators (5 columns) */}
         <div className="md:col-span-5 grid grid-cols-3 gap-2">
-          {/* DXY */}
-          <div className="bg-slate-950/60 rounded-xl p-2 border border-white/[0.05] text-center">
-            <span className="text-[10px] font-medium text-slate-400 block truncate">
-              💵 DXY Index
-            </span>
-            <span className="text-xs font-black text-white font-mono block mt-0.5">
-              {dxy.toFixed(2)}
-            </span>
-            <span
-              className={`text-[9px] font-bold font-mono ${
-                dxyChg >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}
-            >
-              {dxyChg >= 0 ? '+' : ''}
-              {dxyChg.toFixed(2)}%
-            </span>
-          </div>
-
-          {/* US 10Y Yield */}
-          <div className="bg-slate-950/60 rounded-xl p-2 border border-white/[0.05] text-center">
-            <span className="text-[10px] font-medium text-slate-400 block truncate">
-              📈 US 10Y Yield
-            </span>
-            <span className="text-xs font-black text-white font-mono block mt-0.5">
-              {tnx.toFixed(2)}%
-            </span>
-            <span
-              className={`text-[9px] font-bold font-mono ${
-                tnxChg >= 0 ? 'text-amber-400' : 'text-emerald-400'
-              }`}
-            >
-              {tnxChg >= 0 ? '+' : ''}
-              {tnxChg.toFixed(2)}%
-            </span>
-          </div>
-
+          {[{ label: 'DXY Index', quote: macro?.dxy, unit: '' }, { label: 'US 10Y Yield', quote: macro?.tnx, unit: '%' }].map(({ label, quote, unit }) => (
+            <div key={label} className="rounded-xl border border-white/[0.05] bg-slate-950/60 p-2 text-center">
+              <span className="block text-[10px] font-medium text-slate-400">{label}</span>
+              <span className="block text-xs font-semibold text-white">{quote ? quote.price.toFixed(2) + unit : 'รอยืนยัน'}</span>
+              {quote?.observedAt && <span className="block text-[10px] text-slate-400" title={quote.source}>
+                {new Date(quote.observedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'short', timeStyle: 'short' })}
+              </span>}
+            </div>
+          ))}
           {/* USD/THB */}
           <div className="bg-slate-950/60 rounded-xl p-2 border border-white/[0.05] text-center">
             <span className="text-[10px] font-medium text-slate-400 block truncate">

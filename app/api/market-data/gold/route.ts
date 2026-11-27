@@ -1,8 +1,9 @@
+import { getObservationTime } from '@/lib/ai/advisor-evidence'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { stooqProvider } from '@/lib/market-data/stooq'
-import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { describeValuationRate, getExchangeRateObservation } from '@/lib/market-data/frankfurter'
 import { GRAMS_PER_TROY_OZ, calculateThai965PricePerBaht } from '@/lib/market-data/gold'
 
 export async function GET(req: NextRequest) {
@@ -16,18 +17,20 @@ export async function GET(req: NextRequest) {
   try {
     const [xauYahoo, usdThbRaw] = await Promise.all([
       yahooFinanceProvider.getQuote('XAU', 'GLOBAL', forceRefresh).catch(() => null),
-      getExchangeRate('USD', 'THB').catch(() => 35.5),
+      getExchangeRateObservation('USD', 'THB'),
     ])
 
     let xauQuote = xauYahoo
-    if (!xauQuote || xauQuote.price <= 0) {
+    const now = Date.now()
+    if (!xauQuote || xauQuote.price <= 0 || !getObservationTime(xauQuote.observationTimestamp, now)) {
       xauQuote = await stooqProvider.getQuote('GC.F', 'COMMODITY', forceRefresh).catch(() => null)
     }
 
-    const xauUsdPerOz = xauQuote?.price ?? 0
-    const usdThbRate = usdThbRaw ?? 35.5
-    const thai965ThbPerBaht =
-      xauUsdPerOz > 0 ? calculateThai965PricePerBaht(xauUsdPerOz, usdThbRate) : 0
+    const observedAt = getObservationTime(xauQuote?.observationTimestamp, now)
+    const xauUsdPerOz = observedAt && xauQuote && xauQuote.price > 0 ? xauQuote.price : null
+    const usdThbRate = usdThbRaw && !describeValuationRate('USD', 'THB', usdThbRaw) ? usdThbRaw.rate : null
+    const thai965ThbPerBaht = xauUsdPerOz !== null && usdThbRate !== null
+      ? calculateThai965PricePerBaht(xauUsdPerOz, usdThbRate) : null
 
     return NextResponse.json({
       xauUsdPerOz,
@@ -35,8 +38,8 @@ export async function GET(req: NextRequest) {
       usdThbRate,
       thai965ThbPerBaht,
       gramsPerOz: GRAMS_PER_TROY_OZ,
-      provider: xauQuote?.provider || 'yahoo',
-      updatedAt: Date.now(),
+      provider: xauUsdPerOz === null ? null : xauQuote?.provider,
+      updatedAt: observedAt,
     })
   } catch (error: any) {
     console.error('[GET /api/market-data/gold error]', error)

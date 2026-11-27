@@ -532,7 +532,7 @@ export default function DashboardPage() {
     })
   }
 
-  const allPerformanceData: { month: string; value: number; benchmark: number }[] =
+  const allPerformanceData: { month: string; value: number; benchmark: number | null }[] =
     Array.isArray(summary?.performanceData) ? summary.performanceData : []
 
   const monthLimits: Record<string, number> = {

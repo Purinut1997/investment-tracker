@@ -115,14 +115,11 @@ const inFlightPerf = new Map<string, Promise<PortfolioPerformanceSummary>>()
 const PERF_CACHE_TTL_MS = 60 * 1000
 
 export function invalidateAssetPerformanceCache(userId?: string) {
-  if (userId) {
-    for (const key of perfCache.keys()) {
-      if (key.startsWith(`${userId}_`)) {
-        perfCache.delete(key)
-      }
+  for (const cache of [perfCache, inFlightPerf]) {
+    if (!userId) cache.clear()
+    else for (const key of cache.keys()) {
+      if (key.startsWith(`${userId}_`)) cache.delete(key)
     }
-  } else {
-    perfCache.clear()
   }
 }
 
@@ -153,7 +150,7 @@ export async function calculateAssetPerformance(
     return inFlightPerf.get(cacheKey)!
   }
 
-  const computePromise = (async () => {
+  const computePromise: Promise<PortfolioPerformanceSummary> = Promise.resolve().then(async () => {
     try {
       // 1. Fetch all user transactions chronologically
       const txns = await prisma.transaction.findMany({
@@ -494,12 +491,12 @@ export async function calculateAssetPerformance(
         baseCurrency,
       }
 
-      perfCache.set(cacheKey, { result: summaryResult, timestamp: Date.now() })
+      if (inFlightPerf.get(cacheKey) === computePromise) perfCache.set(cacheKey, { result: summaryResult, timestamp: Date.now() })
       return summaryResult
     } finally {
-      inFlightPerf.delete(cacheKey)
+      if (inFlightPerf.get(cacheKey) === computePromise) inFlightPerf.delete(cacheKey)
     }
-  })()
+  })
 
   inFlightPerf.set(cacheKey, computePromise)
   return computePromise

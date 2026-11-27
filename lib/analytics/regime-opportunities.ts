@@ -650,7 +650,7 @@ export function computeRegimeOpportunityScore(params: {
   const entryCaution = readiness.entryCaution
 
   // 4. Portfolio Fit vs Concentration & AI Memory Cap (0 - 20)
-  const cap = Math.max(5, maxSinglePositionPercent || 20)
+  const cap = Math.max(0.01, maxSinglePositionPercent || 20)
   const effectivePct = Math.max(alreadyHeldPct, effectiveCategoryHeldPct)
   let portfolioFit = 12
   if (effectivePct >= cap) {
@@ -747,6 +747,7 @@ export function rankRegimeOpportunities(params: {
   totalCashBase: number
   baseCurrency: string
   maxSinglePositionPercent: number
+  positionBasis?: 'totalPortfolio' | 'investedAssets'
 }): {
   candidates: RegimeOpportunityCandidate[]
   techExposurePercent: number
@@ -767,7 +768,8 @@ export function rankRegimeOpportunities(params: {
     const broad = classifySector(h.ticker, h.assetType, h.market).broad
     if (broad === 'Technology') techValue += val
     if (broad === 'Gold & Commodities' || h.assetType === 'gold') goldValue += val
-    const weight = grandTotal > 0 ? (val / grandTotal) * 100 : Number(h.allocationPercent || 0)
+    const positionTotal = params.positionBasis === 'investedAssets' ? investedTotal : grandTotal
+    const weight = positionTotal > 0 ? (val / positionTotal) * 100 : Number(h.allocationPercent || 0)
     const clean = h.ticker.toUpperCase().replace(/\.BK$/, '')
     heldPctByTicker.set(h.ticker.toUpperCase(), weight)
     if (!heldPctByTicker.has(clean)) heldPctByTicker.set(clean, weight)
@@ -825,8 +827,8 @@ export function rankRegimeOpportunities(params: {
 
     const suggestedWeightPct =
       role === 'DEFENSIVE_HEDGE'
-        ? Math.min(12, Math.max(5, Math.round(maxSinglePositionPercent * 0.5)))
-        : Math.min(10, Math.max(5, Math.round(maxSinglePositionPercent * 0.4)))
+        ? Math.min(maxSinglePositionPercent, 12, Math.max(5, Math.round(maxSinglePositionPercent * 0.5)))
+        : Math.min(maxSinglePositionPercent, 10, Math.max(5, Math.round(maxSinglePositionPercent * 0.4)))
 
     const hedgeImpact =
       techValue > 0 && grandTotal > 0 && betaToQqq < 0.85
@@ -1063,6 +1065,7 @@ export async function getLiveRegimeOpportunities(params: {
   totalCashBase: number
   baseCurrency: string
   maxSinglePositionPercent?: number
+  positionBasis?: 'totalPortfolio' | 'investedAssets'
   forceRefresh?: boolean
 }): Promise<RegimeOpportunitiesReport | null> {
   const {
@@ -1071,6 +1074,7 @@ export async function getLiveRegimeOpportunities(params: {
     totalCashBase,
     baseCurrency,
     maxSinglePositionPercent = 20,
+    positionBasis,
     forceRefresh = false,
   } = params
 
@@ -1157,6 +1161,7 @@ export async function getLiveRegimeOpportunities(params: {
     totalCashBase,
     baseCurrency,
     maxSinglePositionPercent,
+    positionBasis,
   })
 
   const top = ranked.candidates[0]

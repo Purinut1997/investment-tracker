@@ -6,7 +6,7 @@ import { getBatchTechnicalSignals, TechnicalSignal } from '@/lib/market-data/tec
 import { callGemini } from '@/lib/ai/gemini-client'
 import { getObservationTime } from '@/lib/ai/advisor-evidence'
 import { BucketStrategyType, STRATEGY_TYPE_META } from '@/lib/analytics/strategy-buckets'
-import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { valueCashAccounts } from '@/lib/market-data/frankfurter'
 import {
   parseUserInvestmentMemory,
   formatInvestmentMemoryForPrompt,
@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
       }),
     ])
 
-    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
+    const { totalCash, valuationIssues: cashValuationIssues } = await valueCashAccounts(accounts, baseCurrency)
 
     const bucketTickerSet = new Set(
       (bucket.tickers || []).map((t) => String(t).trim().toUpperCase()).filter(Boolean)
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
             return {} as Record<string, TechnicalSignal>
           })
         : Promise.resolve({} as Record<string, TechnicalSignal>),
-      getUnifiedPortfolioContext(userId, { baseCurrency, holdingsResult, totalCash }).catch(() => null),
+      getUnifiedPortfolioContext(userId, { baseCurrency, holdingsResult, totalCash, cashValuationIssues }).catch(() => null),
     ])
     signals = Object.fromEntries(Object.entries(fetchedSignals).filter(([, signal]) =>
       signal.currentPrice > 0 && getObservationTime(signal.observationTimestamp, Date.now())
@@ -301,7 +301,7 @@ ${roleSpecificInstruction}
    ### 📊 แผนจัดการรายตัว (จุดเข้า / จุดขาย / แนวรับ-แนวต้าน)
    (เจาะรายตัวในตะกร้านี้ ระบุชื่อ **TICKER** พร้อมตัวเลขราคาปัจจุบัน แนวรับ **S1**, แนวต้าน **R1**, ค่า **RSI** และกำไร/ขาดทุนจริงของผู้ใช้)
    ### 💵 แอ็กชันแนะนำตอนนี้
-   (สรุป 1-2-3 ที่ทำตามได้ทันที: ถ้างบ ฿${Number(dcaBudget).toLocaleString()} แบ่งซื้อกี่ไม้ตามแนวรับโดยไม่เกินเพดาน ${memory.maxSinglePositionPercent}%/ตัว, เงื่อนไข Stop-Loss/Invalidation, และหน้าที่ควรเช็กต่อ เช่น /tactical-advisor หรือ /tax-report)
+   (สรุป 1-2-3 ที่ทำตามได้ทันที: ถ้างบ ฿${Number(dcaBudget).toLocaleString()} ตรวจเงื่อนไขก่อนเพิ่มโดยยึดเพดานและฐานคำนวณจากบริบทพอร์ต ใช้จำนวนและวงเงินจากแผนที่ยืนยันเท่านั้น, เงื่อนไข Stop-Loss/Invalidation, และหน้าที่ควรเช็กต่อ เช่น /tactical-advisor หรือ /tax-report)
 3. เน้นตัวหนา (**...**) ที่ชื่อหุ้น (Ticker ภาษาอังกฤษพิมพ์ใหญ่), ราคา ($ หรือ ฿), และเปอร์เซ็นต์เสมอ
 `
 

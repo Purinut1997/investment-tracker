@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import {
   Sparkles,
@@ -24,6 +24,8 @@ import { buildCopilotDeepLink } from '@/lib/ai/quick-questions'
 
 interface RegimeOpportunityPanelProps {
   report: RegimeOpportunitiesReport | null
+  positionLimit?: { percent: number; basis: 'totalPortfolio' | 'investedAssets' }
+  valuationReady?: boolean
   initialAiState?: {
     report: RegimeAlphaAiReport
     modelUsed?: string
@@ -36,7 +38,7 @@ interface RegimeOpportunityPanelProps {
     price?: number
     market?: 'US' | 'TH' | 'CRYPTO'
   }) => void
-  onRefreshRadar?: () => void
+  onRefreshRadar?: () => void | Promise<unknown>
 }
 
 const ROLE_FILTERS: Array<{ id: 'ALL' | OpportunityRole; label: string }> = [
@@ -49,6 +51,8 @@ const ROLE_FILTERS: Array<{ id: 'ALL' | OpportunityRole; label: string }> = [
 
 export function RegimeOpportunityPanel({
   report,
+  positionLimit,
+  valuationReady = false,
   initialAiState,
   onSelectStock,
   onQuickBuy,
@@ -56,21 +60,11 @@ export function RegimeOpportunityPanel({
 }: RegimeOpportunityPanelProps) {
   const [roleFilter, setRoleFilter] = useState<'ALL' | OpportunityRole>('ALL')
   const [readyOnly, setReadyOnly] = useState(false)
-  const [aiReport, setAiReport] = useState<RegimeAlphaAiReport | null>(
-    initialAiState?.report ?? null
-  )
-  const [modelUsed, setModelUsed] = useState<string | null>(initialAiState?.modelUsed ?? null)
-  const [updatedAt, setUpdatedAt] = useState<string | null>(initialAiState?.updatedAt ?? null)
+  const aiReport = initialAiState?.report ?? null
+  const modelUsed = initialAiState?.modelUsed ?? null
+  const updatedAt = initialAiState?.updatedAt ?? null
   const [isScanningAi, setIsScanningAi] = useState(false)
   const [errorText, setErrorText] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (initialAiState?.report) {
-      setAiReport(initialAiState.report)
-      setModelUsed(initialAiState.modelUsed ?? null)
-      setUpdatedAt(initialAiState.updatedAt ?? null)
-    }
-  }, [initialAiState])
 
   if (!report || !report.candidates || report.candidates.length === 0) {
     return null
@@ -91,12 +85,7 @@ export function RegimeOpportunityPanel({
         setErrorText(json?.error || 'ไม่สามารถวิเคราะห์โอกาสทำกำไรด้วย AI ได้')
         return
       }
-      if (json.aiReport) {
-        setAiReport(json.aiReport)
-        setModelUsed(json.modelUsed ?? null)
-        setUpdatedAt(json.updatedAt ?? null)
-      }
-      onRefreshRadar?.()
+      await onRefreshRadar?.()
     } catch {
       setErrorText('เกิดข้อผิดพลาดในการเชื่อมต่อ AI Regime Alpha')
     } finally {
@@ -265,7 +254,7 @@ export function RegimeOpportunityPanel({
               : 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border-emerald-500/30'
           }`}
         >
-          🟢 เฉพาะตัวที่เข้าซื้อได้ตอนนี้ ({report.candidates.filter((c) => c.entryReadiness === 'READY_TO_ENTER').length})
+          เฉพาะตัวที่ผ่านเกณฑ์กราฟ ({report.candidates.filter((c) => c.entryReadiness === 'READY_TO_ENTER').length})
         </button>
       </div>
 
@@ -346,14 +335,10 @@ export function RegimeOpportunityPanel({
                     )}
                     {cand.alreadyHeldPct > 0 && (
                       <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-                        ถืออยู่ {cand.alreadyHeldPct}%
+                        ถืออยู่ {cand.alreadyHeldPct}%{positionLimit ? (positionLimit.basis === 'totalPortfolio' ? ' ของพอร์ตรวมเงินสด' : ' ของสินทรัพย์ลงทุน') : ''}
                       </span>
                     )}
-                    {aiPick && (
-                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                        AI แนะนำ ~{aiPick.suggestedAllocationPct}%
-                      </span>
-                    )}
+
                   </div>
 
                   <h4 className="text-sm font-bold text-white truncate">{cand.name}</h4>
@@ -498,13 +483,13 @@ export function RegimeOpportunityPanel({
                     <strong className="text-emerald-300">ทำไมเด่นตอนนี้:</strong> {aiPick.whyNowTh}
                   </p>
                   <p>
-                    <strong className="text-indigo-300">แผนเข้าซื้อ:</strong> {aiPick.entryPlanTh}
+                    <strong className="text-indigo-300">เงื่อนไขจากกราฟ:</strong> {cand.entryVerdictLabelTh} · {cand.entryZoneTh}
                   </p>
                   <p>
-                    <strong className="text-rose-300">จุดหนีไฟ:</strong> {aiPick.invalidationTh}
+                    <strong className="text-rose-300">จุดทบทวนจากกราฟ:</strong> {cand.stopLossRefTh}
                   </p>
                   <p>
-                    <strong className="text-amber-300">เงื่อนไขสลับกลับเข้า Tech:</strong>{' '}
+                    <strong className="text-amber-300">แนวคิดทบทวนจาก AI:</strong>{' '}
                     {aiPick.exitTriggerTh}
                   </p>
                 </div>
@@ -551,36 +536,16 @@ export function RegimeOpportunityPanel({
                   </Link>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    onQuickBuy({
-                      ticker: cand.ticker,
-                      action: 'BUY',
-                      price:
-                        cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE' && cand.supportS1
-                          ? cand.supportS1
-                          : cand.currentPrice,
-                      market: cand.market === 'TH' ? 'TH' : 'US',
-                    })
-                  }
-                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
-                    cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE'
-                      ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 border border-rose-500/35'
-                      : cand.entryReadiness === 'WAIT_PULLBACK'
-                      ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/35'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/25'
-                  }`}
-                >
-                  <span>
-                    {cand.entryReadiness === 'TOO_HIGH_DO_NOT_CHASE'
-                      ? 'ตั้งซื้อเมื่อย่อ (ห้ามไล่)'
-                      : cand.entryReadiness === 'WAIT_PULLBACK'
-                      ? 'บันทึกซื้อ (รอย่อ)'
-                      : 'ซื้อทันที'}
-                  </span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                {valuationReady && positionLimit && cand.alreadyHeldPct < positionLimit.percent && cand.entryReadiness === 'READY_TO_ENTER' ? (
+                  <button type="button"
+                    onClick={() => onQuickBuy({ ticker: cand.ticker, action: 'BUY', market: cand.market === 'TH' ? 'TH' : 'US' })}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 px-3 text-xs font-semibold text-slate-200">
+                    เปิดฟอร์มบันทึกซื้อ <ArrowRight className="size-3.5" />
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-400">{!valuationReady ? 'รอยืนยันข้อมูลพอร์ต' :
+                    positionLimit && cand.alreadyHeldPct >= positionLimit.percent ? 'ตรวจเพดานสัดส่วนก่อนเพิ่ม' : 'เฝ้าดูเงื่อนไขจากกราฟ'}</span>
+                )}
               </div>
             </div>
           )

@@ -161,6 +161,7 @@ export function StockDailyAdvisorTab({ symbol, market }: StockDailyAdvisorTabPro
     return zones.currentPrice
   }, [data, entryMode, customEntryPrice])
 
+  const positionLimit = data?.contextSnapshot.positionLimit
   const dcaSim = useMemo(() => {
     if (!data) return null
     const pos = data.contextSnapshot.position
@@ -170,10 +171,10 @@ export function StockDailyAdvisorTab({ symbol, market }: StockDailyAdvisorTabPro
       currentPrice: data.contextSnapshot.currentPrice,
       addedAmount: budgetAmount,
       entryPrice: effectiveEntryPrice,
-      totalPortfolioValueNative: pos?.totalPortfolioValueNative ?? null,
-      maxSinglePositionPct: pos?.maxSinglePositionPct ?? 20,
+      totalPortfolioValueNative: positionLimit?.totalPortfolioValueNative ?? pos?.totalPortfolioValueNative ?? null,
+      maxSinglePositionPct: positionLimit?.percent ?? pos?.maxSinglePositionPct ?? 20,
     })
-  }, [data, budgetAmount, effectiveEntryPrice])
+  }, [data, budgetAmount, effectiveEntryPrice, positionLimit])
 
   const defaultChecklist = useMemo(() => {
     if (!data) return []
@@ -798,7 +799,7 @@ export function StockDailyAdvisorTab({ symbol, market }: StockDailyAdvisorTabPro
               }`}
             >
               <span className="text-[10px] font-sans text-[#9AA4B2] block">
-                น้ำหนักใหม่ในพอร์ต
+                น้ำหนักใหม่ · {positionLimit?.basis === 'totalPortfolio' ? 'พอร์ตรวมเงินสด' : 'สินทรัพย์ลงทุน'}
               </span>
               <p
                 className={`text-sm font-bold mt-0.5 ${
@@ -811,8 +812,8 @@ export function StockDailyAdvisorTab({ symbol, market }: StockDailyAdvisorTabPro
               </p>
               <span className="text-[11px] font-sans text-[#9AA4B2]">
                 {dcaSim.exceedsRiskCap
-                  ? `เกินเพดาน ${snap.position?.maxSinglePositionPct ?? 20}%!`
-                  : `เพดาน ≤ ${snap.position?.maxSinglePositionPct ?? 20}%`}
+                  ? `เกินเพดาน ${positionLimit?.percent ?? snap.position?.maxSinglePositionPct ?? 20}%!`
+                  : `เพดาน ≤ ${positionLimit?.percent ?? snap.position?.maxSinglePositionPct ?? 20}%`}
               </span>
             </div>
           </div>

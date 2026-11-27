@@ -1,4 +1,5 @@
 'use client'
+import { PortfolioValuationNotice } from '@/components/PortfolioValuationNotice'
 
 import { AdvisorPlanPanel } from '@/components/advisor/AdvisorPlanPanel'
 
@@ -531,6 +532,7 @@ export default function PlansPage() {
   return (
     <AppShell>
       <div className="space-y-6 max-w-[1600px] mx-auto w-full animate-fade-in pb-16">
+        <PortfolioValuationNotice issues={data?.valuationIssues} />
         <AdvisorPlanPanel edit />
         {/* Top Header */}
         <PageHeader

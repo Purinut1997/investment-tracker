@@ -1,9 +1,11 @@
+import { adviceCacheKey } from '@/lib/ai/advice-cache-key'
+import { getPositionLimit, positionBasisLabel } from '@/lib/ai/portfolio-position-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings } from '@/lib/analytics/holdings'
-import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { valueCashAccounts } from '@/lib/market-data/frankfurter'
 import { parseUserInvestmentMemory } from '@/lib/ai/outcome-evaluator'
 import { callGemini } from '@/lib/ai/gemini-client'
 import { parseModelJson } from '@/lib/ai/model-contracts'
@@ -34,7 +36,6 @@ const regimeAlphaAiSchema = z.object({
         entryPlanTh: text,
         invalidationTh: text,
         exitTriggerTh: text,
-        suggestedAllocationPct: z.number().min(1).max(30),
       })
     )
     .min(1)
@@ -54,10 +55,10 @@ function getBangkokDateKey(): string {
 }
 
 function getTodayTag(dateKey = getBangkokDateKey()) {
-  return `[regime-alpha:v1:${dateKey}]`
+  return `[regime-alpha:v2:${dateKey}]`
 }
 
-async function loadTodayAlphaAiLog(userId: string, todayTag: string) {
+async function loadTodayAlphaAiLog(userId: string, todayTag: string, contextTag: string) {
   const log = await prisma.aiAdviceLog.findFirst({
     where: {
       userId,
@@ -65,6 +66,7 @@ async function loadTodayAlphaAiLog(userId: string, todayTag: string) {
       AND: [
         { prompt: { contains: '[AI Regime Alpha Opportunities]' } },
         { prompt: { contains: todayTag } },
+        { prompt: { contains: contextTag } },
       ],
     },
     orderBy: { createdAt: 'desc' },
@@ -103,20 +105,33 @@ async function assembleContext(userId: string, forceRefresh = false) {
     }),
   ])
 
-  const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
+  const { totalCash, valuationIssues: cashValuationIssues } = await valueCashAccounts(accounts, baseCurrency)
+  const limit = await getPositionLimit(userId, memory.maxSinglePositionPercent)
+  const valuationIssues = [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashValuationIssues])]
 
   const quantReport = await getLiveRegimeOpportunities({
     holdings: holdingsResult.holdings,
     watchlists,
     totalCashBase: totalCash,
     baseCurrency,
-    maxSinglePositionPercent: memory.maxSinglePositionPercent,
+    maxSinglePositionPercent: limit.percent,
+    positionBasis: limit.basis,
     forceRefresh,
   })
 
+  const contextTag = '[regime-context:' + adviceCacheKey({
+    limit, totalCash, valuationIssues, baseCurrency,
+    positions: holdingsResult.holdings.map(h => [h.assetId, h.quantity, h.currentValueBase, h.avgCost]),
+    market: quantReport?.regime,
+    candidates: quantReport?.candidates.map(c => [c.ticker, c.currentPrice, c.entryReadiness, c.supportS1, c.resistanceR1, c.totalScore]),
+  }) + ']'
+
   return {
     baseCurrency,
-    memory,
+    limit,
+    contextTag,
+    valuationIssues,
+    cashValuationIssues,
     holdingsResult,
     totalCash,
     quantReport,
@@ -134,13 +149,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const todayTag = getTodayTag()
-    const [ctx, cachedAi] = await Promise.all([
-      assembleContext(userId, forceRefresh),
-      loadTodayAlphaAiLog(userId, todayTag),
-    ])
+    const ctx = await assembleContext(userId, forceRefresh)
+    const cachedAi = await loadTodayAlphaAiLog(userId, todayTag, ctx.contextTag)
 
     return NextResponse.json({
       quantReport: ctx.quantReport,
+      valuationIssues: ctx.valuationIssues,
+      positionLimit: ctx.limit,
       aiReport: cachedAi?.aiReport ?? null,
       modelUsed: cachedAi?.modelUsed ?? null,
       updatedAt: cachedAi?.updatedAt ?? null,
@@ -168,23 +183,19 @@ export async function POST(req: NextRequest) {
     const forceRefresh = Boolean(body?.forceRefresh)
     const todayTag = getTodayTag()
 
-    if (!forceRefresh) {
-      const [ctx, cachedAi] = await Promise.all([
-        assembleContext(userId, false),
-        loadTodayAlphaAiLog(userId, todayTag),
-      ])
-      if (cachedAi && ctx.quantReport) {
-        return NextResponse.json({
-          quantReport: ctx.quantReport,
-          aiReport: cachedAi.aiReport,
-          modelUsed: cachedAi.modelUsed,
-          updatedAt: cachedAi.updatedAt,
-          cached: true,
-        })
-      }
-    }
-
     const ctx = await assembleContext(userId, forceRefresh)
+    const cachedAi = forceRefresh ? null : await loadTodayAlphaAiLog(userId, todayTag, ctx.contextTag)
+    if (cachedAi && ctx.quantReport) {
+      return NextResponse.json({
+        quantReport: ctx.quantReport,
+        valuationIssues: ctx.valuationIssues,
+        positionLimit: ctx.limit,
+        aiReport: cachedAi.aiReport,
+        modelUsed: cachedAi.modelUsed,
+        updatedAt: cachedAi.updatedAt,
+        cached: true,
+      })
+    }
     if (!ctx.quantReport || ctx.quantReport.candidates.length === 0) {
       return NextResponse.json(
         { error: 'ข้อมูลตลาดหลักจาก Yahoo Finance ยังไม่พร้อม กรุณาลองใหม่อีกครั้ง' },
@@ -196,6 +207,7 @@ export async function POST(req: NextRequest) {
       baseCurrency: ctx.baseCurrency,
       holdingsResult: ctx.holdingsResult,
       totalCash: ctx.totalCash,
+      cashValuationIssues: ctx.cashValuationIssues,
     }).catch(() => null)
 
     const report: RegimeOpportunitiesReport = ctx.quantReport
@@ -230,6 +242,7 @@ export async function POST(req: NextRequest) {
     const prompt = `
 [AI Regime Alpha Opportunities]
 ${todayTag}
+${ctx.contextTag}
 คุณคือ Chief Tactical Alpha & Hedging Strategist หน้าที่ของคุณคือคัดเลือกและอธิบายโอกาสทำกำไร + กันกระแทกพอร์ต (Long-only) จากผู้ชนะเชิงปริมาณที่ระบบคำนวณจากตลาดจริงด้านล่าง:
 
 ${unifiedCtx ? formatUnifiedContextPrompt(unifiedCtx, { excludeSurface: 'radar', compact: true }) : ''}
@@ -242,10 +255,11 @@ ${JSON.stringify(candidatesJson, null, 2)}
 [กฎเหล็กที่ต้องปฏิบัติตามอย่างเคร่งครัด]:
 1. เลือก "ticker" ได้เฉพาะจากรายการ Top Candidates ข้างต้นเท่านั้น ห้ามสร้าง ticker ใหม่เองโดยเด็ดขาด
 2. ห้ามแต่งราคา ผลตอบแทน ยิลด์ หรือวันประกาศเอง ใช้เฉพาะตัวเลขจริงที่แนบมา (ถ้าระบุราคาเข้า/จุดหนีไฟ ให้อิงจาก currentPrice, supportS1, sma50 ที่มีจริงเท่านั้น)
-3. ต้องสอดคล้องกับ Market Posture ใน Tactical Advisor และเพดานต่อหุ้น (${ctx.memory.maxSinglePositionPercent}%) ใน AI Memory:
+3. ต้องสอดคล้องกับ Market Posture ใน Tactical Advisor และเพดานต่อหุ้น (${ctx.limit.percent}% ของ${positionBasisLabel(ctx.limit)}):
    - หากตัวไหนมี entryReadiness === 'TOO_HIGH_DO_NOT_CHASE' ต้องระบุชัดใน entryPlanTh ว่า "ห้ามไล่ราคาตอนนี้ — รอย่อลงมาใกล้แนวรับ S1" พร้อมอ้างอิงเหตุผลจริง (RSI, ระยะห่าง SMA50, R:R หรือ Valuation P/E)
-   - หากตัวไหนมี entryReadiness === 'WAIT_PULLBACK' ให้แนะนำแบ่งไม้รอจังหวะย่อ ไม่แนะนำทุ่มซื้อทีเดียว
-4. ทุกตัวใน "picks" ต้องบอกชัด: ทำไมชนะในสภาวะตลาดนี้ -> แผนแบ่งไม้เข้าซื้อ -> จุดหนีไฟ (Invalidation) -> เงื่อนไขเลิกถือ/หมุนกลับเข้าหุ้นเติบโต
+   - หากตัวไหนมี entryReadiness === 'WAIT_PULLBACK' ให้บอกเงื่อนไขรอจังหวะย่อ
+4. ระบุเฉพาะเงื่อนไขติดตาม งดเสนอวงเงิน จำนวนหน่วย หรือเปอร์เซ็นต์ซื้อ
+5. ทุกตัวใน "picks" ต้องบอกชัด: ทำไมชนะในสภาวะตลาดนี้ -> เงื่อนไขติดตามก่อนเข้า -> จุดหนีไฟ (Invalidation) -> เงื่อนไขเลิกถือ/หมุนกลับเข้าหุ้นเติบโต
 
 ตอบกลับเป็น JSON Object ตาม Schema นี้เท่านั้น:
 {
@@ -256,10 +270,9 @@ ${JSON.stringify(candidatesJson, null, 2)}
       "ticker": "SYMBOL จากชุดข้อมูล",
       "roleLabelTh": "บทบาท เช่น กันกระแทกพอร์ต / หมุนกลุ่มทำกำไร / ปันผลรอจังหวะ",
       "whyNowTh": "เหตุผลเชิงสถิติจริงว่าทำไมเด่นกว่ากลุ่ม Tech ตอนนี้ (อ้าง RS 1M, Corr 60D, และผลลดแรงกระแทกถ้ามี)",
-      "entryPlanTh": "แผนแบ่งไม้เข้าซื้ออ้างอิงราคาและแนวรับ S1 จริง",
+      "entryPlanTh": "เงื่อนไขติดตามก่อนเข้าอ้างอิงราคาและแนวรับ S1 จริง",
       "invalidationTh": "จุดหนีไฟหรือเงื่อนไขหยุดถัวอ้างอิงแนวรับจริง",
-      "exitTriggerTh": "เงื่อนไขหมุนเงินกลับเข้าหุ้นเติบโตเมื่อตลาดเปลี่ยนโหมด",
-      "suggestedAllocationPct": ตัวเลขสัดส่วนแนะนำ 1 ถึง 30 (ไม่เกินเพดาน ${ctx.memory.maxSinglePositionPercent})
+      "exitTriggerTh": "เงื่อนไขหมุนเงินกลับเข้าหุ้นเติบโตเมื่อตลาดเปลี่ยนโหมด"
     }
   ],
   "watchoutTh": "ข้อควรระวังสำคัญที่สุด 1-2 ข้อของแผนรอบนี้"
@@ -290,10 +303,6 @@ ${JSON.stringify(candidatesJson, null, 2)}
         return {
           ...pick,
           ticker: matched.ticker,
-          suggestedAllocationPct: Math.min(
-            Math.max(1, pick.suggestedAllocationPct),
-            Math.max(5, ctx.memory.maxSinglePositionPercent || 20)
-          ),
         }
       })
       .filter((p): p is NonNullable<typeof p> => p !== null)
@@ -325,6 +334,8 @@ ${JSON.stringify(candidatesJson, null, 2)}
 
     return NextResponse.json({
       quantReport: report,
+      valuationIssues: ctx.valuationIssues,
+      positionLimit: ctx.limit,
       aiReport: finalAiReport,
       modelUsed: aiRes.modelUsed,
       updatedAt: saved.createdAt.toISOString(),

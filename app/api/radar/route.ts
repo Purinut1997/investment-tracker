@@ -1,3 +1,4 @@
+import { getPositionLimit } from '@/lib/ai/portfolio-position-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
@@ -9,7 +10,7 @@ import {
   OpportunityRadarReport,
 } from '@/lib/analytics/risk-sentinel'
 import { callGemini } from '@/lib/ai/gemini-client'
-import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { valueCashAccounts } from '@/lib/market-data/frankfurter'
 import { fetchSingleTickerTechnicalSignal } from '@/lib/market-data/technical-signals'
 import {
   getUnifiedPortfolioContext,
@@ -39,7 +40,9 @@ async function getPortfolioRadarData(userId: string) {
     select: { cashBalance: true, currency: true },
   })
 
-  const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
+  const { totalCash, valuationIssues: cashValuationIssues } = await valueCashAccounts(accounts, baseCurrency)
+  const valuationIssues = [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashValuationIssues])]
+  const limit = await getPositionLimit(userId, memory.maxSinglePositionPercent)
 
   // 3. Fetch default preset target allocation
   const defaultPreset = await prisma.investmentPreset.findFirst({
@@ -87,7 +90,8 @@ async function getPortfolioRadarData(userId: string) {
       watchlists,
       totalCashBase: totalCash,
       baseCurrency,
-      maxSinglePositionPercent: memory.maxSinglePositionPercent,
+      maxSinglePositionPercent: limit.percent,
+      positionBasis: limit.basis,
     }).catch(() => null),
   ])
 
@@ -100,7 +104,9 @@ async function getPortfolioRadarData(userId: string) {
   const riskReport: RiskSentinelReport = analyzePortfolioRisks(
     holdingsResult.holdings,
     totalCash,
-    baseCurrency
+    baseCurrency,
+    limit,
+    valuationIssues.length === 0,
   )
 
   const opportunityReport: OpportunityRadarReport = scanPortfolioOpportunities(
@@ -115,6 +121,8 @@ async function getPortfolioRadarData(userId: string) {
     baseCurrency,
     holdingsResult,
     totalCash,
+    cashValuationIssues,
+    valuationIssues,
     riskReport,
     opportunityReport,
     regimeOpportunities,
@@ -138,7 +146,7 @@ export async function GET(req: NextRequest) {
     }).format(new Date())
 
     const [
-      { baseCurrency, holdingsResult, totalCash, riskReport, opportunityReport, regimeOpportunities },
+      { baseCurrency, holdingsResult, totalCash, valuationIssues, riskReport, opportunityReport, regimeOpportunities },
       latestAiLog,
       latestRegimeAlphaLog,
     ] = await Promise.all([
@@ -158,7 +166,7 @@ export async function GET(req: NextRequest) {
           logType: 'advisor',
           AND: [
             { prompt: { contains: '[AI Regime Alpha Opportunities]' } },
-            { prompt: { contains: `[regime-alpha:v1:${todayKey}]` } },
+            { prompt: { contains: `[regime-alpha:v2:${todayKey}]` } },
           ],
         },
         orderBy: { createdAt: 'desc' },
@@ -181,6 +189,7 @@ export async function GET(req: NextRequest) {
       baseCurrency,
       totalPortfolioValue: holdingsResult.totalValueBase + totalCash,
       investedValue: holdingsResult.totalValueBase,
+      valuationIssues,
       totalCash,
       riskReport,
       opportunityReport,
@@ -210,7 +219,7 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id
 
   try {
-    const { baseCurrency, holdingsResult, totalCash, riskReport, opportunityReport, regimeOpportunities } =
+    const { baseCurrency, holdingsResult, totalCash, cashValuationIssues, valuationIssues, riskReport, opportunityReport, regimeOpportunities } =
       await getPortfolioRadarData(userId)
 
     if (holdingsResult.holdings.length === 0) {
@@ -225,6 +234,7 @@ export async function POST(req: NextRequest) {
       baseCurrency,
       holdingsResult,
       totalCash,
+      cashValuationIssues,
     }).catch(() => null)
 
     // Prepare institutional-grade prompt for Gemini AI
@@ -314,6 +324,7 @@ ${buildUnifiedDecisionRules('radar')}
       opportunityReport,
       totalPortfolioValue: holdingsResult.totalValueBase + totalCash,
       investedValue: holdingsResult.totalValueBase,
+      valuationIssues,
       totalCash,
       baseCurrency,
     })

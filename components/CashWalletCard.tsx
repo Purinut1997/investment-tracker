@@ -1,6 +1,8 @@
 'use client'
+import { prepareTransactionSubmit } from '@/lib/analytics/retryable-transaction-submit'
+import { PortfolioValuationNotice } from '@/components/PortfolioValuationNotice'
 
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import useSWR, { mutate } from 'swr'
 import {
   Wallet,
@@ -39,11 +41,11 @@ interface CashAccount {
   accountType: string
   currency: string
   cashBalance: number
-  balanceBase: number
+  balanceBase: number | null
   accruedInterest: number
-  accruedInterestBase: number
+  accruedInterestBase: number | null
   interestDays: number
-  exchangeRateToBase: number
+  exchangeRateToBase: number | null
   transactionCount: number
 }
 
@@ -51,9 +53,10 @@ interface CashWalletData {
   baseCurrency: string
   totalCashBase: number
   totalAccruedInterestBase: number
-  minInterestDays: number
+  minInterestDays: number | null
   accounts: CashAccount[]
-  rates: Record<string, number>
+  rates: Record<string, number | null>
+  valuationIssues?: string[]
   timestamp: number
 }
 
@@ -74,13 +77,15 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
   const [adjustInterest, setAdjustInterest] = useState('')
   const [adjustDays, setAdjustDays] = useState('')
   const [adjustAction, setAdjustAction] = useState<'adjust' | 'deposit' | 'withdraw'>('adjust')
+  const attempts = useRef(new Map<string, string>())
+  const requestInFlight = useRef(false)
   const [submitting, setSubmitting] = useState(false)
   const [modalError, setModalError] = useState('')
 
   const accounts = data?.accounts || []
   const totalCashBase = data?.totalCashBase || 0
   const totalAccruedInterest = data?.totalAccruedInterestBase || 0
-  const nextPayoutDays = data?.minInterestDays ?? 104
+  const nextPayoutDays = data?.minInterestDays ?? null
   const baseCurrency = data?.baseCurrency || 'THB'
 
   function openAdjust(account: CashAccount, action: 'adjust' | 'deposit' | 'withdraw' = 'adjust') {
@@ -95,7 +100,8 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
 
   async function handleAdjustSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!selectedAccount) return
+    if (!selectedAccount || requestInFlight.current) return
+    requestInFlight.current = true
 
     setSubmitting(true)
     setModalError('')
@@ -105,20 +111,18 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
       const numInterest = parseFloat(adjustInterest)
       const numDays = parseInt(adjustDays, 10)
 
-      const res = await fetch('/api/cash-wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accountId: selectedAccount.id,
-          action: adjustAction,
-          amount: isNaN(numAmount) ? undefined : numAmount,
-          accruedInterest: isNaN(numInterest) ? undefined : numInterest,
-          interestDays: isNaN(numDays) ? undefined : numDays,
-        }),
+      const pending = await prepareTransactionSubmit(attempts.current, 'cash-wallet', {
+        accountId: selectedAccount.id,
+        action: adjustAction,
+        amount: isNaN(numAmount) ? undefined : numAmount,
+        accruedInterest: isNaN(numInterest) ? undefined : numInterest,
+        interestDays: isNaN(numDays) ? undefined : numDays,
       })
-
+      const res = await fetch('/api/cash-wallet', pending.request)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'บันทึกยอดเงินสดไม่สำเร็จ')
+      pending.confirmed()
+      attempts.current.clear()
 
       mutate('/api/cash-wallet')
       mutate('/api/accounts')
@@ -127,6 +131,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
     } catch (err: any) {
       setModalError(err.message || 'เกิดข้อผิดพลาด')
     } finally {
+      requestInFlight.current = false
       setSubmitting(false)
     }
   }
@@ -137,6 +142,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
 
   return (
     <div className="space-y-4 w-full">
+      <PortfolioValuationNotice issues={data?.valuationIssues} />
       {/* Top Header / Cash Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-2.5">
@@ -147,7 +153,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
             <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
               <span>เงินสด (Cash Wallet)</span>
               <span className="text-xs font-mono font-normal text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                รวม ≈ ฿{formatMoney(totalCashBase)}
+                รวม {formatMoney(totalCashBase)} {baseCurrency}
               </span>
             </h2>
             <p className="text-[11px] text-zinc-400">
@@ -217,7 +223,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
               <div className="space-y-2.5">
                 {accounts.map((acc) => {
                   const flag = CURRENCY_FLAGS[acc.currency.toUpperCase()] || '🌐'
-                  const isTHB = acc.currency.toUpperCase() === 'THB'
+                  const isTHB = acc.currency.toUpperCase() === baseCurrency.toUpperCase()
                   const isUSD = acc.currency.toUpperCase() === 'USD'
 
                   // Distinct badge color for Dime Save, Dime USD, Dime FCD
@@ -264,7 +270,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
                           </p>
                           {!isTHB && (
                             <p className="text-[11px] text-zinc-400 font-mono tabular-nums mt-0.5">
-                              ≈ ฿{formatMoney(acc.balanceBase)}
+                              {acc.balanceBase == null ? 'รอยืนยันอัตราแลกเปลี่ยน' : '≈ ' + formatMoney(acc.balanceBase) + ' ' + baseCurrency}
                             </p>
                           )}
                         </div>
@@ -310,7 +316,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
                       <Info className="w-3 h-3 text-zinc-500" />
                     </div>
                     <p className="text-[11px] text-emerald-400/90 font-medium">
-                      จ่ายครั้งถัดไปในอีก {nextPayoutDays} วัน
+                      {nextPayoutDays === null ? 'ยังไม่มีข้อมูลกำหนดจ่าย' : 'จ่ายครั้งถัดไปในอีก ' + nextPayoutDays + ' วัน'}
                     </p>
                   </div>
                 </div>
@@ -329,7 +335,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
                   ยอดรวมดอกเบี้ยสะสมทั้งหมด
                 </span>
                 <p className="text-2xl font-black text-emerald-400 font-mono tracking-tight tabular-nums mt-1">
-                  ≈ ฿{formatMoney(totalAccruedInterest)}
+                  {formatMoney(totalAccruedInterest)} {baseCurrency}
                 </p>
               </div>
 
@@ -343,7 +349,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
                     .filter((a) => a.accruedInterest > 0)
                     .map((acc) => {
                       const flag = CURRENCY_FLAGS[acc.currency.toUpperCase()] || '🌐'
-                      const isTHB = acc.currency.toUpperCase() === 'THB'
+                      const isTHB = acc.currency.toUpperCase() === baseCurrency.toUpperCase()
                       return (
                         <div
                           key={acc.id}
@@ -362,7 +368,7 @@ export function CashWalletCard({ onOpenAiScan }: CashWalletCardProps) {
                             </span>
                             {!isTHB && (
                               <p className="text-[10px] text-zinc-400">
-                                ≈ ฿{formatMoney(acc.accruedInterestBase)}
+                                {acc.accruedInterestBase == null ? 'รอยืนยันอัตราแลกเปลี่ยน' : '≈ ' + formatMoney(acc.accruedInterestBase) + ' ' + baseCurrency}
                               </p>
                             )}
                           </div>

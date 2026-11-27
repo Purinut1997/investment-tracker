@@ -1,3 +1,5 @@
+import { adviceCacheKey } from '@/lib/ai/advice-cache-key'
+import { getPositionLimit, positionBasisLabel } from '@/lib/ai/portfolio-position-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
@@ -19,7 +21,7 @@ import {
 } from '@/lib/analytics/stock-daily-advisor'
 import { getEarningsIntelligence } from '@/lib/earnings/earnings-analyzer'
 import { fetchRealHumanSentiment } from '@/lib/market-data/fear-greed'
-import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { describeValuationRate, getValuationRates, valueCashAccounts } from '@/lib/market-data/frankfurter'
 import { parseHistoricalStats } from '@/lib/market-data/historical-stats'
 import { yahooFinanceProvider } from '@/lib/market-data/yahoo'
 import { getYahooQuoteSummary } from '@/lib/market-data/yahoo-crumb'
@@ -236,7 +238,7 @@ async function assembleDailyStockContext(
   const yfTicker = formatYahooTicker(cleanSymbol, cleanMarket)
   const reportDate = getBangkokDateKey()
   const symbolPrefix = `[daily-stock:v2:${cleanMarket}:${cleanSymbol}:`
-  const todayTag = `${symbolPrefix}${reportDate}]`
+  const dateTag = `${symbolPrefix}${reportDate}]`
 
   const finnhubKey = process.env.FINNHUB_API_KEY
   const shouldFetchFinnhub =
@@ -257,14 +259,12 @@ async function assembleDailyStockContext(
     userTxns,
     defaultPreset,
     holdingsResult,
-    usdThbRateRaw,
+    accounts,
     tickerNews,
     vixQuote,
     sp500Quote,
     fearGreed,
     earningsIntel,
-    todayAdviceLog,
-    latestAdviceLog,
   ] = await Promise.all([
     fetchDailyChartAndTechnicals(cleanSymbol, cleanMarket),
     fetch(
@@ -315,7 +315,7 @@ async function assembleDailyStockContext(
       : Promise.resolve(null),
     prisma.userSettings.findUnique({ where: { userId } }),
     prisma.transaction.findMany({
-      where: { userId, asset: { ticker: cleanSymbol } },
+      where: { userId, asset: { ticker: { in: cleanMarket === 'TH' ? [cleanSymbol.replace(/\.BK$/, ''), cleanSymbol.replace(/\.BK$/, '') + '.BK'] : [cleanSymbol] }, market: cleanMarket === 'TH' ? 'TH' : cleanMarket === 'CRYPTO' ? 'CRYPTO' : 'US' } },
       orderBy: { txnDate: 'asc' },
     }),
     prisma.investmentPreset.findFirst({
@@ -323,7 +323,7 @@ async function assembleDailyStockContext(
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     }),
     calculateUserHoldings(userId, 'THB', false).catch(() => null),
-    getExchangeRate('USD', 'THB').catch(() => 35.5),
+    prisma.investmentAccount.findMany({ where: { userId }, select: { currency: true, cashBalance: true } }),
     prisma.newsItem
       .findMany({
         where: { symbol: cleanSymbol },
@@ -342,21 +342,11 @@ async function assembleDailyStockContext(
     yahooFinanceProvider.getQuote('S&P 500', 'US').catch(() => null),
     fetchRealHumanSentiment().catch(() => null),
     getEarningsIntelligence(cleanSymbol, cleanMarket === 'TH' ? 'TH' : 'US').catch(() => null),
-    prisma.aiAdviceLog.findFirst({
-      where: { userId, prompt: { contains: todayTag } },
-      orderBy: { createdAt: 'desc' },
-      select: { response: true, modelUsed: true, createdAt: true },
-    }),
-    prisma.aiAdviceLog.findFirst({
-      where: { userId, prompt: { contains: symbolPrefix } },
-      orderBy: { createdAt: 'desc' },
-      select: { response: true, modelUsed: true, createdAt: true },
-    }),
   ])
 
-  const usdThbRate = usdThbRateRaw ?? 35.5
   const baseCurrency = userSettings?.baseCurrency ?? 'THB'
   const userMemory = parseUserInvestmentMemory(userSettings?.defaultRiskProfile)
+  const limit = await getPositionLimit(userId, userMemory.maxSinglePositionPercent)
 
   const currentPrice = dailyChart?.currentPrice ?? 0
   const currency = dailyChart?.currency || (cleanMarket === 'TH' ? 'THB' : 'USD')
@@ -376,20 +366,23 @@ async function assembleDailyStockContext(
     ? parseHistoricalStats(yahoo5yResult, currentPrice, userTxns, rawPos, payoutRatio)
     : null
 
-  // Total portfolio value converted to this stock's native currency
+  // Use the same cap and basis for holdings and watchlist simulations.
+  let totalPortfolioValueNative: number | null = null
+  if (holdingsResult && !holdingsResult.valuationIssues?.length) {
+    const native = currency.toUpperCase()
+    const [cash, rates] = await Promise.all([
+      limit.basis === 'totalPortfolio' ? valueCashAccounts(accounts, 'THB') : null,
+      getValuationRates([native], 'THB'),
+    ])
+    const fx = rates[native]
+    if (fx && !describeValuationRate(native, 'THB', fx) && !cash?.valuationIssues.length) {
+      const denominator = holdingsResult.totalValueBase + (cash?.totalCash ?? 0)
+      if (denominator > 0) totalPortfolioValueNative = Number((denominator / fx.rate).toFixed(2))
+    }
+  }
+
   let position: DailyStockAdvisorResponse['contextSnapshot']['position'] = null
   if (rawPos && rawPos.shares > 0) {
-    const isStockUsd = currency === 'USD'
-    let totalPortfolioValueNative: number | null = null
-    if (holdingsResult && holdingsResult.totalValueBase > 0) {
-      totalPortfolioValueNative = isStockUsd
-        ? holdingsResult.totalValueBase / usdThbRate
-        : holdingsResult.totalValueBase
-      totalPortfolioValueNative = Number(
-        Math.max(rawPos.currentValue, totalPortfolioValueNative).toFixed(2)
-      )
-    }
-
     const portfolioWeightPct =
       totalPortfolioValueNative && totalPortfolioValueNative > 0
         ? Number(((rawPos.currentValue / totalPortfolioValueNative) * 100).toFixed(2))
@@ -416,7 +409,7 @@ async function assembleDailyStockContext(
       bucketStrategyType: matchedBucket?.strategyType ?? null,
       takeProfitPct: matchedBucket?.takeProfitPercent ?? null,
       stopLossPct: matchedBucket?.stopLossPercent ?? null,
-      maxSinglePositionPct: userMemory.maxSinglePositionPercent,
+      maxSinglePositionPct: limit.percent,
     }
   }
 
@@ -535,9 +528,15 @@ async function assembleDailyStockContext(
     position,
   })
 
-  // Check cached AI report (today first, else latest)
-  const chosenLog = todayAdviceLog || latestAdviceLog
-  const isTodayReport = Boolean(todayAdviceLog)
+  const todayTag = dateTag + ' [stock-context:' + adviceCacheKey({
+    limit, currency, totalPortfolioValueNative, position, quant, userMemory,
+  }) + ']'
+  const chosenLog = await prisma.aiAdviceLog.findFirst({
+    where: { userId, prompt: { contains: todayTag } },
+    orderBy: { createdAt: 'desc' },
+    select: { response: true, modelUsed: true, createdAt: true },
+  })
+  const isTodayReport = Boolean(chosenLog)
   const parsedReport = chosenLog ? parseDailyStockAiReport(chosenLog.response) : null
 
   const response: DailyStockAdvisorResponse = {
@@ -547,6 +546,7 @@ async function assembleDailyStockContext(
     reportDate,
     quant,
     contextSnapshot: {
+      positionLimit: { ...limit, totalPortfolioValueNative },
       currentPrice,
       currency,
       todayChangePercent,
@@ -609,7 +609,7 @@ async function assembleDailyStockContext(
     cached: Boolean(parsedReport),
   }
 
-  const userMemorySummary = `สไตล์: ${userMemory.preferredStyle}, รับความเสี่ยง: ${userMemory.riskTolerance}, ระยะลงทุน: ${userMemory.horizonYears} ปี, สัดส่วนสูงสุดต่อหุ้น: ${userMemory.maxSinglePositionPercent}%, กฎส่วนตัว: ${userMemory.personalRules} (สกุลเงินหลัก ${baseCurrency})`
+  const userMemorySummary = `สไตล์: ${userMemory.preferredStyle}, รับความเสี่ยง: ${userMemory.riskTolerance}, ระยะลงทุน: ${userMemory.horizonYears} ปี, สัดส่วนสูงสุดต่อหุ้น ${limit.percent}% ของ${positionBasisLabel(limit)}, กฎส่วนตัว: ${userMemory.personalRules} (สกุลเงินหลัก ${baseCurrency})`
 
   return {
     response,
@@ -676,7 +676,7 @@ export async function POST(req: NextRequest) {
 
     const unifiedCtx = await getUnifiedPortfolioContext(session.user.id, {
       baseCurrency,
-      holdingsResult: holdingsResult ?? undefined,
+      holdingsResult: baseCurrency === 'THB' ? holdingsResult ?? undefined : undefined,
     }).catch(() => null)
 
     const snap = response.contextSnapshot

@@ -294,21 +294,21 @@ export function computeAdviceOutcomeMetrics(
 
 export function formatOutcomeMetricsForPrompt(metrics: AdviceOutcomeMetrics): string {
   if (!metrics || metrics.totalTrackedCalls === 0) {
-    return 'ยังไม่มีคำแนะนำเก่าที่มีอายุเกิน 12 ชั่วโมงเพียงพอสำหรับวัดผล Win Rate เชิงปริมาณ'
+    return 'ยังไม่มีคำแนะนำเก่าที่มีอายุเกิน 12 ชั่วโมงเพียงพอสำหรับเปรียบเทียบกับราคาล่าสุด'
   }
 
   const lines = [
-    `- สถิติความแม่นยำย้อนหลัง (${metrics.totalTrackedCalls} คำแนะนำที่วัดผลกับราคาตลาดจริง): ชนะ ${metrics.hits} | พลาด ${metrics.misses} | กลาง ${metrics.neutrals}${
-      metrics.winRatePercent !== null ? ` ➔ Win Rate จริง: ${metrics.winRatePercent}%` : ''
+    `- ติดตามสัญญาณย้อนหลัง (${metrics.totalTrackedCalls} คำแนะนำที่วัดผลกับราคาตลาดจริง): เข้าเกณฑ์ ${metrics.hits} | ผิดเกณฑ์ ${metrics.misses} | ยังไม่เข้าเกณฑ์ทั้งสองด้าน ${metrics.neutrals}${
+      metrics.winRatePercent !== null ? ` ➔ สัดส่วนที่เข้าเกณฑ์จากราคาล่าสุด: ${metrics.winRatePercent}% (เฉพาะรายการเข้าเกณฑ์หรือผิดเกณฑ์ ช่วงเวลาวัดต่างกัน)` : ''
     }`,
   ]
   if (metrics.avgAccumulateReturnPercent !== null) {
     const sign = metrics.avgAccumulateReturnPercent >= 0 ? '+' : ''
-    lines.push(`- ผลตอบแทนเฉลี่ยของคำแนะนำฝั่งซื้อ (ACCUMULATE): ${sign}${metrics.avgAccumulateReturnPercent}%`)
+    lines.push(`- การเปลี่ยนแปลงราคาเฉลี่ยตั้งแต่คำแนะนำฝั่งซื้อ (ACCUMULATE): ${sign}${metrics.avgAccumulateReturnPercent}%`)
   }
   if (metrics.avgTrimAvoidedDropPercent !== null) {
     lines.push(
-      `- ความเสี่ยงที่หลีกเลี่ยงได้เฉลี่ยฝั่งขายทำกำไร (TRIM_PROFIT): ${metrics.avgTrimAvoidedDropPercent >= 0 ? '+' : ''}${metrics.avgTrimAvoidedDropPercent}%`
+      `- การปรับลงเฉลี่ยหลังคำแนะนำฝั่งขายทำกำไร (TRIM_PROFIT): ${metrics.avgTrimAvoidedDropPercent >= 0 ? '+' : ''}${metrics.avgTrimAvoidedDropPercent}%`
     )
   }
 

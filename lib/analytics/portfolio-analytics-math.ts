@@ -193,6 +193,7 @@ export interface PnLBreakdownSummary {
 }
 
 export interface PortfolioAnalyticsPayload {
+  valuationIssues?: string[]
   hasData: boolean
   baseCurrency: string
   usdThbRate: number

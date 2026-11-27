@@ -9,13 +9,10 @@ export const portfolioAnalyticsCache = new Map<string, { result: any; timestamp:
 export const inFlightPortfolioAnalytics = new Map<string, Promise<any>>()
 
 export function invalidatePortfolioAnalyticsCache(userId?: string) {
-  if (userId) {
-    for (const key of portfolioAnalyticsCache.keys()) {
-      if (key.startsWith(`${userId}_`)) {
-        portfolioAnalyticsCache.delete(key)
-      }
+  for (const cache of [portfolioAnalyticsCache, inFlightPortfolioAnalytics]) {
+    if (!userId) cache.clear()
+    else for (const key of cache.keys()) {
+      if (key.startsWith(`${userId}_`)) cache.delete(key)
     }
-  } else {
-    portfolioAnalyticsCache.clear()
   }
 }

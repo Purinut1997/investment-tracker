@@ -252,3 +252,11 @@ assert.equal(legacySections.market, 'ตลาดผันผวน')
 assert.match(legacySections.portfolio, /AAA/)
 assert.equal(dailyBriefTasks(legacySections.tasks).length, 2)
 assert.equal(dailyPriority(legacyBrief).action, '[ทบทวน AAA]: ตรวจน้ำหนัก')
+
+const confirmedPolicy = { ...mockCtx, positionLimit: { percent: 20, basis: 'totalPortfolio' as const } }
+const xauWithPolicy = formatUnifiedContextPrompt(confirmedPolicy, { focusSymbol: 'XAU', compact: true })
+assert.match(xauWithPolicy, /น้ำหนัก 17\.6% ของพอร์ตรวมเงินสด/)
+assert.doesNotMatch(xauWithPolicy, /เกิน\/ชนเพดาน 20%/)
+const incomplete = formatUnifiedContextPrompt({ ...mockCtx, valuationIssues: ['ขาดอัตรา JPY/THB'] }, { focusSymbol: 'XAU' })
+assert.match(incomplete, /ข้อมูลบางส่วน/)
+assert.doesNotMatch(incomplete, /เกิน\/ชนเพดาน 20%/)

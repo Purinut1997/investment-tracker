@@ -1082,7 +1082,8 @@ export default function TacticalAdvisorPage() {
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06]">
-                      <span className="text-[11px] text-slate-400 block">Win Rate จริง</span>
+                      <span className="text-[11px] text-slate-400 block">สัดส่วนที่เข้าเกณฑ์จากราคาล่าสุด</span>
+                      <p className="text-[11px] text-slate-400">เฉพาะรายการที่ตัดสินผลได้ · ช่วงเวลาวัดต่างกัน</p>
                       <span className="text-lg font-bold font-mono text-emerald-400">
                         {payload.outcomeMetrics.winRatePercent !== null
                           ? `${payload.outcomeMetrics.winRatePercent}%`

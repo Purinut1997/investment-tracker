@@ -145,6 +145,7 @@ export interface DailyStockAdvisorResponse {
       publishedAt: string
       sourceUrl: string
     }>
+    positionLimit?: { percent: number; basis: 'totalPortfolio' | 'investedAssets'; totalPortfolioValueNative: number | null }
     position: {
       shares: number
       avgCost: number

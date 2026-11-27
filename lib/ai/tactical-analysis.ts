@@ -9,7 +9,7 @@ import { callGemini } from '@/lib/ai/gemini-client'
 import { formatMarketObservation, getObservationTime } from '@/lib/ai/advisor-evidence'
 import { parseModelJson } from '@/lib/ai/model-contracts'
 import { z } from 'zod'
-import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { valueCashAccounts } from '@/lib/market-data/frankfurter'
 import {
   gatherPortfolioDeepIntelligence,
   computeAdviceOutcomeMetrics,
@@ -802,7 +802,7 @@ export async function runTacticalAnalysis(
     select: { cashBalance: true, currency: true },
   })
 
-  const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
+  const { totalCash, valuationIssues: cashValuationIssues } = await valueCashAccounts(accounts, baseCurrency)
 
   const totalPortfolioValue = holdingsResult.totalValueBase + totalCash
   const currentCashPercent =
@@ -849,6 +849,7 @@ export async function runTacticalAnalysis(
       baseCurrency,
       holdingsResult,
       totalCash,
+      cashValuationIssues,
     }).catch(() => null),
   ])
 
@@ -1000,7 +1001,7 @@ ${buildUnifiedDecisionRules('tactical')}
 3. Value-Trap & Catalyst Guardrail: ห้ามแนะนำซื้อ (ACCUMULATE) หุ้นที่ติดธง VALUE_TRAP_RISK หรือมีวันประกาศงบ (Earnings) ภายใน ≤ 5 วัน โดยไม่ระบุคำเตือนความเสี่ยงด้านงบ/พื้นฐานอย่างชัดเจนใน rationale
 4. ตรวจสอบความเสี่ยงเชิงธีมซ้ำซ้อน (Thematic Correlation Risk): วิเคราะห์ว่าถือหุ้นคนละตัวแต่อยู่ในธีมเดียวกันมากเกินไปไหม (เช่น Tech/AI เกิน 50-60%) หากพบให้ระบุใน thematicRiskAlert
 5. คำนึงถึงภาษีเงินได้จากการขาย (Tax Sensitivity): หากแนะนำให้ขายทำกำไร (TRIM_PROFIT) ให้ระบุเตือนภาษีจริงตามตลาด (หุ้นไทย SET ยกเว้น / หุ้นนอก+คริปโตตาม ป.161/2566)
-6. สรุปผลการบ้านคำแนะนำรอบก่อนหน้า (Track Record Review): ประเมินจากสถิติ Win Rate จริงข้างบนอย่างซื่อตรงว่าอะไรได้ผลและอะไรต้องปรับปรุง
+6. สรุปผลการบ้านคำแนะนำรอบก่อนหน้า (Track Record Review): ประเมินจากสถิติ สัดส่วนที่เข้าเกณฑ์จากราคาล่าสุดข้างบนอย่างซื่อตรงว่าอะไรได้ผลและอะไรต้องปรับปรุง
 
 กรุณาสังเคราะห์และตอบกลับมาเป็น JSON ตามรูปแบบนี้เท่านั้น ห้ามใส่ข้อความอื่นนอกเหนือจาก JSON:
 {

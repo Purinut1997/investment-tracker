@@ -1,10 +1,11 @@
+import { applyLedgerCash } from '@/lib/analytics/transaction-ledger'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
-import { getTransactionCashDelta } from '@/lib/analytics/cash-ledger'
+import { getTransactionCashDelta, getTransactionNetAmount } from '@/lib/analytics/cash-ledger'
 
 const payload = z.object({
   accountId: z.string().optional(),
@@ -34,10 +35,8 @@ async function importRow(userId: string, settings: z.infer<typeof payload>, row:
     ? (currency === 'USD' ? settings.usdAccountId : settings.thbAccountId)
     : settings.accountId
   const { txnType, quantity, pricePerUnit, fee, taxWithheld } = row
-  const gross = quantity * pricePerUnit
-  const totalAmount = txnType === 'FEE' ? fee || gross
-    : txnType === 'SELL' || txnType === 'DIVIDEND' ? Math.max(0, gross - fee - taxWithheld)
-      : gross + fee
+  const totalAmount = getTransactionNetAmount(txnType, quantity, pricePerUnit, fee, taxWithheld)
+  const delta = getTransactionCashDelta(txnType, totalAmount)
   if (!Number.isFinite(totalAmount)) throw new Error('ยอดรายการไม่ถูกต้อง')
 
   // Serializable isolation keeps simultaneous retries from creating the same row twice.
@@ -73,12 +72,9 @@ async function importRow(userId: string, settings: z.infer<typeof payload>, row:
 
         await tx.transaction.create({
           data: { userId, accountId: account.id, assetId: asset.id, txnDate, txnType, quantity, pricePerUnit,
-            fee, taxWithheld, totalAmount, note: row.note, source: 'csv_import' },
+            fee, taxWithheld, totalAmount, cashDeltaApplied: delta, cashSyncEnabled: true, note: row.note, source: 'csv_import' },
         })
-        const delta = getTransactionCashDelta(txnType, totalAmount)
-        if (delta) await tx.investmentAccount.update({
-          where: { id: account.id }, data: { cashBalance: { increment: delta } },
-        })
+        await applyLedgerCash(tx, account.id, delta)
         return currency
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
     } catch (error) {

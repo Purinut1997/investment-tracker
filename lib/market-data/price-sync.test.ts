@@ -13,7 +13,7 @@ import {
 } from './technical-signals'
 import { resolveMarketQuote } from './resolver'
 import { invalidatePriceCache } from './cache-layer'
-import { reconcileHoldingPrice } from '../analytics/holdings'
+import { getInFlightSummary, getUserSummaryCache, invalidateUserPortfolioCache, reconcileHoldingPrice, setInFlightSummary } from '../analytics/holdings'
 import { getDividendIntelligence } from '../dividends/dividend-analyzer'
 
 async function runTests() {
@@ -312,6 +312,24 @@ async function runTests() {
     }
 
     console.log('\n🎉 ALL PRICE SYNC UNIT TESTS PASSED!')
+    {
+      const userId = 'cache-race-fixture'
+      let resolveOld!: (value: string) => void
+      let resolveNew!: (value: string) => void
+      const old = new Promise<string>(resolve => { resolveOld = resolve })
+      const current = new Promise<string>(resolve => { resolveNew = resolve })
+      setInFlightSummary(userId, 'THB', old)
+      invalidateUserPortfolioCache(userId)
+      setInFlightSummary(userId, 'THB', current)
+      resolveOld('old value')
+      await old
+      assert.equal(getUserSummaryCache(userId, 'THB'), null)
+      assert.equal(getInFlightSummary(userId, 'THB'), current)
+      resolveNew('new value')
+      await current
+      assert.equal(getUserSummaryCache(userId, 'THB'), 'new value')
+      invalidateUserPortfolioCache(userId)
+    }
   } finally {
     global.fetch = originalFetch
   }

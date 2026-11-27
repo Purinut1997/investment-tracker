@@ -31,6 +31,7 @@ model User {
   settings             UserSettings?
   accounts             InvestmentAccount[]
   transactions         Transaction[]
+  transactionRequests  TransactionRequestReceipt[]
   editHistories        TransactionEditHistory[]
   presets              InvestmentPreset[]
   aiAdviceLogs         AiAdviceLog[]
@@ -174,6 +175,8 @@ model Transaction {
   fee           Decimal         @default(0)
   taxWithheld   Decimal         @default(0)
   totalAmount   Decimal
+  cashDeltaApplied Decimal?
+  cashSyncEnabled Boolean @default(false)
   note          String?
   source        TxnSource       @default(manual)
   createdAt     DateTime        @default(now())
@@ -185,6 +188,16 @@ model Transaction {
 
   @@index([userId, txnDate])
   @@index([userId, assetId])
+}
+
+model TransactionRequestReceipt {
+  userId      String
+  key         String
+  fingerprint String
+  response    Json
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
 }
 
 enum TxnType {

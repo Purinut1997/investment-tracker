@@ -1,3 +1,4 @@
+import { getPositionLimit, positionBasisLabel, positionWeight, type PositionLimit } from './portfolio-position-limit'
 /**
  * lib/ai/unified-context.ts
  * Shared fast, cached cross-AI intelligence layer that keeps all AI surfaces aligned:
@@ -54,6 +55,7 @@ export interface UnifiedAiContext {
   assembledAt: string
   valuationIssues?: string[]
   memory: UserInvestmentMemory
+  positionLimit?: PositionLimit
   activePreset: {
     presetName: string
     targetAmount: number | null
@@ -97,11 +99,13 @@ export interface UnifiedAiContext {
   }
 }
 
+const unifiedContextLoads = new Map<string, symbol>()
 const UNIFIED_CONTEXT_TTL_MS = 120 * 1000
 const unifiedContextCache = new Map<string, { data: UnifiedAiContext; timestamp: number }>()
 
 export function invalidateUnifiedContextCache(userId?: string) {
   if (userId) {
+    unifiedContextLoads.delete(userId)
     for (const key of unifiedContextCache.keys()) {
       if (key.startsWith(`${userId}:`)) {
         unifiedContextCache.delete(key)
@@ -109,6 +113,7 @@ export function invalidateUnifiedContextCache(userId?: string) {
     }
   } else {
     unifiedContextCache.clear()
+    unifiedContextLoads.clear()
   }
 }
 
@@ -222,7 +227,9 @@ export function extractTacticalContinuity(
 function buildPortfolioSummary(
   holdingsResult: PortfolioHoldingsResult | null,
   totalCash: number,
-  baseCurrency: string
+  baseCurrency: string,
+  limit: PositionLimit,
+  valuationReady: boolean,
 ) {
   const holdings = holdingsResult?.holdings || []
   const investedValue = holdingsResult?.totalValueBase || 0
@@ -266,7 +273,7 @@ function buildPortfolioSummary(
   const pct = (v: number) =>
     investedValue > 0 ? Number(((v / investedValue) * 100).toFixed(1)) : 0
 
-  const riskReport = analyzePortfolioRisks(holdings, totalCash, baseCurrency)
+  const riskReport = analyzePortfolioRisks(holdings, totalCash, baseCurrency, limit, valuationReady)
 
   return {
     portfolio: {
@@ -308,6 +315,20 @@ export async function getUnifiedPortfolioContext(
     cashValuationIssues?: string[]
     forceRefresh?: boolean
   }
+): Promise<UnifiedAiContext> {
+  const request = Symbol()
+  unifiedContextLoads.set(userId, request)
+  try {
+    return await loadUnifiedPortfolioContext(userId, options, request)
+  } finally {
+    if (unifiedContextLoads.get(userId) === request) unifiedContextLoads.delete(userId)
+  }
+}
+
+async function loadUnifiedPortfolioContext(
+  userId: string,
+  options: Parameters<typeof getUnifiedPortfolioContext>[1],
+  request: symbol,
 ): Promise<UnifiedAiContext> {
   const requestedBase = options?.baseCurrency
   const canUseCache =
@@ -411,10 +432,14 @@ export async function getUnifiedPortfolioContext(
   ])
 
   const memory = parseUserInvestmentMemory(userSettings?.defaultRiskProfile)
+  const limit = await getPositionLimit(userId, memory.maxSinglePositionPercent)
+  const valuationIssues = [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashValuation.valuationIssues])]
   const { portfolio, riskSnapshot } = buildPortfolioSummary(
     holdingsResult,
     cashValuation.totalCash,
-    baseCurrency
+    baseCurrency,
+    limit,
+    valuationIssues.length === 0,
   )
 
   let tactical: TacticalContinuitySummary | null = null
@@ -476,7 +501,8 @@ export async function getUnifiedPortfolioContext(
     userId,
     baseCurrency,
     assembledAt: new Date().toISOString(),
-    valuationIssues: [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashValuation.valuationIssues])],
+    positionLimit: limit,
+    valuationIssues,
     memory,
     activePreset: defaultPreset
       ? {
@@ -500,7 +526,7 @@ export async function getUnifiedPortfolioContext(
     },
   }
 
-  unifiedContextCache.set(`${userId}:${baseCurrency}`, {
+  if (unifiedContextLoads.get(userId) === request) unifiedContextCache.set(`${userId}:${baseCurrency}`, {
     data: context,
     timestamp: Date.now(),
   })
@@ -539,12 +565,14 @@ export function formatUnifiedContextPrompt(
           .join(' | ')
       : 'ยังไม่มีสินทรัพย์ถือครอง'
 
+  const limit = ctx.positionLimit ?? { percent: ctx.memory.maxSinglePositionPercent, basis: 'investedAssets' }
+  const basis = positionBasisLabel(limit)
   const lines: string[] = [
     '=== ศูนย์กลางบริบทพอร์ตและความต่อเนื่องข้ามหน้า (UNIFIED PORTFOLIO & AI CONTINUITY) ===',
     `- ภาพรวมพอร์ต${ctx.valuationIssues?.length ? ' (ประมาณการหรือข้อมูลบางส่วน)' : ''}: ลงทุน ${money(ctx.portfolio.investedValue)} + เงินสด ${money(ctx.portfolio.totalCash)} (${ctx.portfolio.cashPercent}% Dry Powder) | P&L รวม ${ctx.portfolio.unrealizedPnLPercent >= 0 ? '+' : ''}${ctx.portfolio.unrealizedPnLPercent.toFixed(1)}% | สัดส่วนตลาด: ${mixParts.join(' · ') || 'ไม่ระบุ'}`,
     `- ตัวหลักในพอร์ต (${ctx.portfolio.holdingsCount} ตัว): ${topHoldingsLine}`,
     `- Risk Sentinel (คำนวณจริง): ระดับ ${ctx.riskSnapshot.overallRiskLevel} (${ctx.riskSnapshot.overallRiskScore}/100)${ctx.riskSnapshot.overweightSectors.length ? ` | Overweight: ${ctx.riskSnapshot.overweightSectors.join(', ')}` : ''}${ctx.riskSnapshot.topWarnings.length ? ` | เตือน: ${ctx.riskSnapshot.topWarnings.join(' ; ')}` : ''}`,
-    `- กฎส่วนตัว (AI Memory): รับความเสี่ยง ${ctx.memory.riskTolerance} | กรอบ ${ctx.memory.horizonYears} ปี | เพดานหุ้นเดียวไม่เกิน ${ctx.memory.maxSinglePositionPercent}% | MaxDD ${ctx.memory.maxDrawdownTolerancePercent}% | สไตล์: ${ctx.memory.preferredStyle}${ctx.memory.personalRules ? ` | กฎเหล็ก: ${ctx.memory.personalRules}` : ''}`,
+    `- กฎส่วนตัว (AI Memory): รับความเสี่ยง ${ctx.memory.riskTolerance} | กรอบ ${ctx.memory.horizonYears} ปี | เพดานหุ้นเดียวไม่เกิน ${limit.percent}% ของ${basis} | MaxDD ${ctx.memory.maxDrawdownTolerancePercent}% | สไตล์: ${ctx.memory.preferredStyle}${ctx.memory.personalRules ? ` | กฎเหล็ก: ${ctx.memory.personalRules}` : ''}`,
   ]
 
   if (ctx.valuationIssues?.length) lines.push('- ข้อจำกัดของยอดพอร์ต: ' + ctx.valuationIssues.slice(0, 5).join(' · ') + ' ให้ใช้ตรวจเบื้องต้นและรอยืนยันก่อนระบุวงเงินหรือจำนวนซื้อ')
@@ -561,16 +589,16 @@ export function formatUnifiedContextPrompt(
       ctx.portfolio.holdingsByTicker[cleanFocus] ||
       ctx.portfolio.holdingsByTicker[cleanFocus.replace(/\.BK$/, '')]
     if (matched) {
-      const capWarning =
-        matched.allocationPercent >= ctx.memory.maxSinglePositionPercent
-          ? ` ⚠️ เกิน/ชนเพดาน ${ctx.memory.maxSinglePositionPercent}% แล้ว!`
-          : ''
+      const weight = positionWeight(matched.allocationPercent / 100 * ctx.portfolio.investedValue,
+        ctx.portfolio.investedValue, ctx.portfolio.totalCash, limit)
+      const capWarning = !ctx.valuationIssues?.length && weight !== null && weight >= limit.percent
+        ? ` ⚠️ เกิน/ชนเพดาน ${limit.percent}% แล้ว!` : ''
       lines.push(
-        `- สถานะ ${cleanFocus} ในพอร์ตของคุณ: ถืออยู่ ${matched.quantity.toFixed(4)} หน่วย | ต้นทุนเฉลี่ย ${matched.avgCost.toFixed(2)} ${matched.currency} | น้ำหนัก ${matched.allocationPercent.toFixed(1)}% (เพดาน ${ctx.memory.maxSinglePositionPercent}%)${capWarning} | P&L ${matched.unrealizedPnLPercent >= 0 ? '+' : ''}${matched.unrealizedPnLPercent.toFixed(1)}%`
+        `- สถานะ ${cleanFocus} ในพอร์ตของคุณ: ถืออยู่ ${matched.quantity.toFixed(4)} หน่วย | ต้นทุนเฉลี่ย ${matched.avgCost.toFixed(2)} ${matched.currency} | น้ำหนัก ${weight?.toFixed(1) ?? 'รอยืนยัน'}% ของ${basis} (เพดาน ${limit.percent}%)${capWarning} | P&L ${matched.unrealizedPnLPercent >= 0 ? '+' : ''}${matched.unrealizedPnLPercent.toFixed(1)}%`
       )
     } else {
       lines.push(
-        `- สถานะ ${cleanFocus} ในพอร์ตของคุณ: ยังไม่ได้ถือครอง (ประเมินการเข้าซื้อเทียบเพดาน ${ctx.memory.maxSinglePositionPercent}%/ตัว และเงินสดสำรอง ${ctx.portfolio.cashPercent}%)`
+        `- สถานะ ${cleanFocus} ในพอร์ตของคุณ: ยังไม่ได้ถือครอง (ประเมินการเข้าซื้อเทียบเพดาน ${limit.percent}%/ตัว และเงินสดสำรอง ${ctx.portfolio.cashPercent}%)`
       )
     }
   }

@@ -7,7 +7,7 @@ import { calculateStockDcaBreakdown } from '@/lib/analytics/rebalancing'
 import { computeBucketsWithHoldings, extractStrategyBuckets } from '@/lib/analytics/strategy-buckets'
 import { planAdviceContextKey, planAdviceInput } from '@/lib/ai/model-contracts'
 import { callGemini } from '@/lib/ai/gemini-client'
-import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { valueCashAccounts } from '@/lib/market-data/frankfurter'
 import {
   parseUserInvestmentMemory,
   formatInvestmentMemoryForPrompt,
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       where: { userId },
       select: { cashBalance: true, accountName: true, currency: true },
     })
-    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
+    const { totalCash, valuationIssues: cashValuationIssues } = await valueCashAccounts(accounts, baseCurrency)
 
     if (holdingsResult.holdings.length === 0 && totalCash === 0) {
       return NextResponse.json({
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
       presetId ? prisma.investmentPreset.findFirst({
         where: { id: presetId, userId }, select: { targetAllocation: true },
       }) : Promise.resolve(null),
-      getUnifiedPortfolioContext(userId, { baseCurrency, holdingsResult, totalCash }).catch(() => null),
+      getUnifiedPortfolioContext(userId, { baseCurrency, holdingsResult, totalCash, cashValuationIssues }).catch(() => null),
     ])
     const { computedBuckets } = computeBucketsWithHoldings(
       extractStrategyBuckets(storedPreset?.targetAllocation as Record<string, unknown> | undefined || targetAllocation, holdingsResult.holdings),

@@ -78,10 +78,6 @@ export function getUserSummaryCache(userId: string, baseCurrency: string) {
   return null
 }
 
-export function setUserSummaryCache(userId: string, baseCurrency: string, result: any) {
-  userSummaryCache.set(`${userId}_${baseCurrency}`, { result, timestamp: Date.now() })
-}
-
 export function getInFlightSummary(userId: string, baseCurrency: string) {
   return inFlightSummary.get(`${userId}_${baseCurrency}`) || null
 }
@@ -89,7 +85,13 @@ export function getInFlightSummary(userId: string, baseCurrency: string) {
 export function setInFlightSummary(userId: string, baseCurrency: string, promise: Promise<any>) {
   const key = `${userId}_${baseCurrency}`
   inFlightSummary.set(key, promise)
-  promise.finally(() => inFlightSummary.delete(key))
+  void promise.then(result => {
+    if (inFlightSummary.get(key) !== promise) return
+    userSummaryCache.set(key, { result, timestamp: Date.now() })
+    inFlightSummary.delete(key)
+  }, () => {
+    if (inFlightSummary.get(key) === promise) inFlightSummary.delete(key)
+  })
 }
 
 import { invalidateAssetPerformanceCache } from './asset-performance'
@@ -100,20 +102,11 @@ export function invalidateUserPortfolioCache(userId?: string) {
   invalidateAssetPerformanceCache(userId)
   invalidatePortfolioAnalyticsCache(userId)
   invalidateUnifiedContextCache(userId)
-  if (userId) {
-    for (const key of userHoldingsCache.keys()) {
-      if (key.startsWith(`${userId}_`)) {
-        userHoldingsCache.delete(key)
-      }
+  for (const cache of [userHoldingsCache, userSummaryCache, inFlightHoldings, inFlightSummary]) {
+    if (!userId) cache.clear()
+    else for (const key of cache.keys()) {
+      if (key.startsWith(`${userId}_`)) cache.delete(key)
     }
-    for (const key of userSummaryCache.keys()) {
-      if (key.startsWith(`${userId}_`)) {
-        userSummaryCache.delete(key)
-      }
-    }
-  } else {
-    userHoldingsCache.clear()
-    userSummaryCache.clear()
   }
 }
 
@@ -251,7 +244,7 @@ export async function calculateUserHoldings(
     return inFlightHoldings.get(cacheKey)!
   }
 
-  const computePromise = (async () => {
+  const computePromise: Promise<PortfolioHoldingsResult> = Promise.resolve().then(async () => {
     try {
       // 1. Fetch all user transactions ordered chronologically (or reuse preloaded)
       const txns = preloadedTxns ?? (await prisma.transaction.findMany({
@@ -479,15 +472,14 @@ export async function calculateUserHoldings(
     splitsByAssetRecord,
   }
 
-    // Cache computed result
-    userHoldingsCache.set(cacheKey, { result, timestamp: now })
-
+    if (inFlightHoldings.get(cacheKey) === computePromise) userHoldingsCache.set(cacheKey, { result, timestamp: now })
     return result
   } finally {
-    inFlightHoldings.delete(cacheKey)
+    // Completion of invalidated work must not delete a newer request.
+    if (inFlightHoldings.get(cacheKey) === computePromise) inFlightHoldings.delete(cacheKey)
   }
-})()
+})
 
-inFlightHoldings.set(cacheKey, computePromise)
+if (!preloadedTxns) inFlightHoldings.set(cacheKey, computePromise)
 return computePromise
 }

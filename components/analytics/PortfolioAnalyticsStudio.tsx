@@ -1,4 +1,5 @@
 'use client'
+import { PortfolioValuationNotice } from '@/components/PortfolioValuationNotice'
 
 import React, { useState, useMemo, useEffect } from 'react'
 import useSWR from 'swr'
@@ -321,6 +322,7 @@ export function PortfolioAnalyticsStudio() {
 
   return (
     <div className="w-full max-w-[1440px] mx-auto space-y-5 animate-fade-in pb-10">
+        <PortfolioValuationNotice issues={data?.valuationIssues} />
       {/* ── MAIN ANALYTICS COCKPIT CARD ────────────────────────────────── */}
       <div className="rounded-2xl bg-[#12151C] border border-white/[0.08] p-4 sm:p-6 space-y-5">
         {/* TOP HEADER GRID: Hero Portfolio Left + Tabs & Twin Counterfactuals Right */}

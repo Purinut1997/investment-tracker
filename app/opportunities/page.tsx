@@ -1,4 +1,5 @@
 'use client'
+import { PortfolioValuationNotice } from '@/components/PortfolioValuationNotice'
 
 import React, { useState } from 'react'
 import Link from 'next/link'
@@ -31,6 +32,8 @@ const fetcher = (url: string) =>
 
 interface RegimeAlphaApiResponse {
   quantReport: RegimeOpportunitiesReport | null
+  valuationIssues?: string[]
+  positionLimit?: { percent: number; basis: 'totalPortfolio' | 'investedAssets' }
   aiReport: RegimeAlphaAiReport | null
   modelUsed: string | null
   updatedAt: string | null
@@ -80,6 +83,7 @@ export default function OpportunitiesPage() {
   return (
     <AppShell>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        <PortfolioValuationNotice issues={data?.valuationIssues} />
         <PageHeader
           eyebrow="LONG-ONLY ALPHA & DOWNSIDE HEDGE"
           title="โอกาสทำกำไร & กันกระแทกตามสภาวะตลาด"
@@ -209,7 +213,7 @@ export default function OpportunitiesPage() {
                       {topCandidate.roleLabelTh} · {topCandidate.entryVerdictLabelTh}
                     </p>
                     <p className="text-[10px] font-mono text-slate-400">
-                      พร้อมเข้า {quantReport.candidates.filter((c) => c.entryReadiness === 'READY_TO_ENTER').length} ตัว · รอย่อ/สูงเกิน{' '}
+                      ผ่านเกณฑ์กราฟ {quantReport.candidates.filter((c) => c.entryReadiness === 'READY_TO_ENTER').length} ตัว · รอย่อ/สูงเกิน{' '}
                       {quantReport.candidates.filter((c) => c.entryReadiness !== 'READY_TO_ENTER').length} ตัว
                     </p>
                   </>
@@ -222,6 +226,8 @@ export default function OpportunitiesPage() {
             {/* Full-Width Regime Opportunity Scanner & AI Playbook */}
             <RegimeOpportunityPanel
               report={quantReport}
+              positionLimit={data?.positionLimit}
+              valuationReady={data?.valuationIssues?.length === 0}
               initialAiState={
                 data?.aiReport
                   ? {

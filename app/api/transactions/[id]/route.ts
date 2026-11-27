@@ -1,3 +1,4 @@
+import { applyLedgerCash, withLedgerTransaction } from '@/lib/analytics/transaction-ledger'
 /**
  * GET/PUT/DELETE /api/transactions/[id]
  * Get, update (with history snapshot), or delete a transaction.
@@ -8,7 +9,7 @@ import { z } from 'zod'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { invalidateUserHoldingsCache } from '@/lib/analytics/holdings'
-import { getTransactionCashDelta, applyCashDeltaClamped } from '@/lib/analytics/cash-ledger'
+import { getTransactionCashDelta, getTransactionNetAmount } from '@/lib/analytics/cash-ledger'
 
 const UpdateSchema = z.object({
   txnDate: z.string().datetime({ offset: true }).optional(),
@@ -56,37 +57,31 @@ export async function PUT(
   }
 
   try {
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
     const parsed = UpdateSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
     }
 
     const { id } = await params
-    const existing = await getTransaction(id, session.user.id)
-    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
+    const userId = session.user.id
     const updates = parsed.data
-    const newTxnType = updates.txnType ?? existing.txnType
-    const newQuantity = updates.quantity ?? Number(existing.quantity)
-    const newPrice = updates.pricePerUnit ?? Number(existing.pricePerUnit)
-    const newFee = updates.fee ?? Number(existing.fee)
-    const newTax = updates.taxWithheld ?? Number(existing.taxWithheld || 0)
-
-    let newTotal = newQuantity * newPrice + newFee
-    if (newTxnType === 'SELL') {
-      newTotal = Math.max(0, newQuantity * newPrice - newFee - newTax)
-    } else if (newTxnType === 'DIVIDEND') {
-      newTotal = Math.max(0, newQuantity * newPrice - newFee - newTax)
-    } else if (newTxnType === 'FEE') {
-      newTotal = newFee
-    }
-
-    const netDelta =
-      getTransactionCashDelta(newTxnType, newTotal) -
-      getTransactionCashDelta(existing.txnType, Number(existing.totalAmount || 0))
-
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await withLedgerTransaction(async tx => {
+      const existing = await tx.transaction.findFirst({ where: { id, userId } })
+      if (!existing) return null
+      const amountChanged = (updates.txnType ?? existing.txnType) !== existing.txnType ||
+        (updates.quantity ?? Number(existing.quantity)) !== Number(existing.quantity) ||
+        (updates.pricePerUnit ?? Number(existing.pricePerUnit)) !== Number(existing.pricePerUnit) ||
+        (updates.fee ?? Number(existing.fee)) !== Number(existing.fee) ||
+        (updates.taxWithheld ?? Number(existing.taxWithheld)) !== Number(existing.taxWithheld)
+      const type = updates.txnType ?? existing.txnType
+      const newTotal = amountChanged ? getTransactionNetAmount(type, updates.quantity ?? Number(existing.quantity),
+        updates.pricePerUnit ?? Number(existing.pricePerUnit), updates.fee ?? Number(existing.fee),
+        updates.taxWithheld ?? Number(existing.taxWithheld)) : Number(existing.totalAmount)
+      const oldDelta = existing.cashDeltaApplied
+      const nextDelta = !amountChanged || oldDelta === null ? oldDelta
+        : existing.cashSyncEnabled ? getTransactionCashDelta(type, newTotal) : 0
+      if (oldDelta !== null && nextDelta !== null) await applyLedgerCash(tx, existing.accountId, oldDelta.negated().plus(nextDelta))
       // Snapshot before edit
       await tx.transactionEditHistory.create({
         data: {
@@ -116,27 +111,13 @@ export async function PUT(
           ...(updates.taxWithheld !== undefined && { taxWithheld: updates.taxWithheld }),
           ...(updates.note !== undefined && { note: updates.note }),
           totalAmount: newTotal,
+          cashDeltaApplied: nextDelta,
         },
       })
 
-      if (Math.abs(netDelta) > 0.0001) {
-        const acc = await tx.investmentAccount.findFirst({
-          where: { id: existing.accountId, userId: session.user.id },
-          select: { id: true, cashBalance: true },
-        })
-        if (acc) {
-          const currentCash = Number(acc.cashBalance || 0)
-          if (netDelta > 0 || (netDelta < 0 && currentCash > 0)) {
-            await tx.investmentAccount.update({
-              where: { id: acc.id },
-              data: { cashBalance: applyCashDeltaClamped(currentCash, netDelta) },
-            })
-          }
-        }
-      }
-
-      return row
+      return { ...row, unverifiedCashCount: amountChanged && oldDelta === null ? 1 : 0 }
     })
+    if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     invalidateUserHoldingsCache(session.user.id)
 
@@ -157,34 +138,20 @@ export async function DELETE(
   }
 
   const { id } = await params
-  const existing = await getTransaction(id, session.user.id)
-  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const reverseDelta = -getTransactionCashDelta(
-    existing.txnType,
-    Number(existing.totalAmount || 0)
-  )
-
-  await prisma.$transaction(async (tx) => {
-    await tx.transaction.delete({ where: { id } })
-    if (Math.abs(reverseDelta) > 0.0001) {
-      const acc = await tx.investmentAccount.findFirst({
-        where: { id: existing.accountId, userId: session.user.id },
-        select: { id: true, cashBalance: true },
-      })
-      if (acc) {
-        const currentCash = Number(acc.cashBalance || 0)
-        if (reverseDelta > 0 || (reverseDelta < 0 && currentCash > 0)) {
-          await tx.investmentAccount.update({
-            where: { id: acc.id },
-            data: { cashBalance: applyCashDeltaClamped(currentCash, reverseDelta) },
-          })
-        }
-      }
-    }
-  })
-
-  invalidateUserHoldingsCache(session.user.id)
-
-  return NextResponse.json({ success: true })
+  const userId = session.user.id
+  try {
+    const deleted = await withLedgerTransaction(async tx => {
+      const existing = await tx.transaction.findFirst({ where: { id, userId } })
+      if (!existing) return null
+      await tx.transaction.delete({ where: { id } })
+      if (existing.cashDeltaApplied) await applyLedgerCash(tx, existing.accountId, existing.cashDeltaApplied.negated())
+      return { success: true, unverifiedCashCount: existing.cashDeltaApplied === null ? 1 : 0 }
+    })
+    if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    invalidateUserHoldingsCache(userId)
+    return NextResponse.json(deleted)
+  } catch (error) {
+    console.error('[transactions DELETE]', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

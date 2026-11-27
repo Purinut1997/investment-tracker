@@ -180,7 +180,9 @@ export default function TransactionsPage() {
     setDeletingId(id)
     try {
       const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Failed to delete')
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'ลบรายการไม่สำเร็จ')
+      if (result.unverifiedCashCount) alert('ลบรายการแล้ว กรุณาตรวจยอดเงินสดกับบัญชีจริง เพราะระบบไม่มีข้อมูลยอดที่เคยปรับจากรายการเดิม')
       setSelectedTxnIds((prev) => prev.filter((item) => item !== id))
       mutate((key) => typeof key === 'string' && key.startsWith('/api/transactions'))
       mutate('/api/portfolio/summary')
@@ -214,10 +216,12 @@ export default function TransactionsPage() {
 
       setStatusModal({
         isOpen: true,
-        type: 'success',
-        title: 'ลบรายการที่เลือกเรียบร้อยแล้ว!',
-        description: `นำรายการธุรกรรมออกจากระบบจำนวน ${count} รายการแล้ว`,
-        autoCloseMs: 2500,
+        type: data.unverifiedCashCount ? 'warning' : 'success',
+        title: 'ลบรายการที่เลือกแล้ว',
+        description: data.unverifiedCashCount
+          ? `ลบ ${count} รายการแล้ว ตรวจยอดเงินสดของ ${data.unverifiedCashCount} รายการเดิมที่ไม่มียอดปรับให้ย้อนกลับ`
+          : `ลบ ${count} รายการและปรับยอดเงินสดแล้ว`,
+        autoCloseMs: data.unverifiedCashCount ? undefined : 2500,
         primaryAction: {
           label: 'ตกลง',
           onClick: () => setStatusModal(null),
@@ -900,19 +904,22 @@ function EditTransactionModal({ txn, onClose, onSuccess }: { txn: any; onClose: 
           note: form.note || undefined,
         }),
       })
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to update')
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'บันทึกไม่สำเร็จ')
 
       setStatusModal({
         isOpen: true,
-        type: 'success',
-        title: 'บันทึกเรียบร้อยแล้ว!',
-        description: 'อัปเดตข้อมูลรายการธุรกรรมและคำนวณต้นทุนใหม่แล้ว',
+        type: result.unverifiedCashCount ? 'warning' : 'success',
+        title: 'บันทึกการแก้ไขแล้ว',
+        description: result.unverifiedCashCount
+          ? 'กรุณาตรวจยอดเงินสดกับบัญชีจริง เพราะรายการเดิมไม่มีข้อมูลยอดที่เคยปรับ'
+          : 'อัปเดตข้อมูลธุรกรรมและคำนวณต้นทุนใหม่แล้ว',
         details: [
           { label: 'Ticker', value: txn.asset?.ticker || '-', color: 'text-indigo-400' },
           { label: 'ประเภท', value: form.txnType, color: 'text-emerald-400' },
           { label: 'จำนวน', value: form.quantity, color: 'text-white' },
         ],
-        autoCloseMs: 2500,
+        autoCloseMs: result.unverifiedCashCount ? undefined : 2500,
         primaryAction: {
           label: 'ตกลง',
           onClick: () => {

@@ -6,7 +6,6 @@ import {
   reconcileHoldingPrice,
   invalidateUserPortfolioCache,
   getUserSummaryCache,
-  setUserSummaryCache,
   getInFlightSummary,
   setInFlightSummary,
 } from '@/lib/analytics/holdings'
@@ -420,7 +419,6 @@ export async function GET(req: NextRequest) {
         timestamp: Date.now(),
       }
 
-      setUserSummaryCache(userId, baseCurrency, summaryPayload)
       return summaryPayload
     })()
 

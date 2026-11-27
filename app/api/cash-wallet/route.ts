@@ -1,7 +1,9 @@
+import { LedgerRequestError, withLedgerRequest } from '@/lib/analytics/ledger-request'
+import { reconcileLedgerCash } from '@/lib/analytics/transaction-ledger'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { getExchangeRate } from '@/lib/market-data/frankfurter'
+import { describeValuationRate, getValuationRates } from '@/lib/market-data/frankfurter'
 import { invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
 import { z } from 'zod'
 
@@ -27,17 +29,10 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    // Fetch exchange rates for all distinct currencies
-    const uniqueCurrencies = Array.from(new Set(accounts.map((a) => a.currency.toUpperCase())))
-    const rateMap = new Map<string, number>()
-    rateMap.set(baseCurrency.toUpperCase(), 1.0)
-
-    for (const curr of uniqueCurrencies) {
-      if (!rateMap.has(curr)) {
-        const rate = await getExchangeRate(curr, baseCurrency)
-        rateMap.set(curr, rate || 1.0)
-      }
-    }
+    const rateMap = await getValuationRates(accounts.map(account => account.currency.toUpperCase()), baseCurrency)
+    const usedCurrencies = new Set(accounts.filter(account => Number(account.cashBalance) || Number(account.accruedInterest))
+      .map(account => account.currency.toUpperCase()))
+    const valuationIssues = [...usedCurrencies].flatMap(currency => describeValuationRate(currency, baseCurrency, rateMap[currency]) ?? [])
 
     let totalCashBase = 0
     let totalAccruedInterestBase = 0
@@ -47,13 +42,13 @@ export async function GET(req: NextRequest) {
       const balance = Number(acc.cashBalance || 0)
       const interest = Number(acc.accruedInterest || 0)
       const days = acc.interestDays
-      const rate = rateMap.get(acc.currency.toUpperCase()) || 1.0
+      const rate = rateMap[acc.currency.toUpperCase()]?.rate ?? null
 
-      const balanceBase = balance * rate
-      const interestBase = interest * rate
+      const balanceBase = rate === null ? null : balance * rate
+      const interestBase = rate === null ? null : interest * rate
 
-      totalCashBase += balanceBase
-      totalAccruedInterestBase += interestBase
+      totalCashBase += balanceBase ?? 0
+      totalAccruedInterestBase += interestBase ?? 0
 
       if (days && days > 0) {
         if (minInterestDays === null || days < minInterestDays) {
@@ -81,9 +76,10 @@ export async function GET(req: NextRequest) {
       baseCurrency,
       totalCashBase,
       totalAccruedInterestBase,
-      minInterestDays: minInterestDays ?? 104,
+      minInterestDays,
+      valuationIssues,
       accounts: enrichedAccounts,
-      rates: Object.fromEntries(rateMap.entries()),
+      rates: Object.fromEntries(Object.entries(rateMap).map(([currency, quote]) => [currency, quote?.rate ?? null])),
       timestamp: Date.now(),
     })
   } catch (error: any) {
@@ -121,73 +117,74 @@ export async function POST(req: NextRequest) {
 
     const { accountId, action, amount, accruedInterest, interestDays, note } = parsed.data
 
-    const account = await prisma.investmentAccount.findFirst({
-      where: { id: accountId, userId },
-    })
+    const updatedBalance = await withLedgerRequest(userId, 'cash-wallet', req.headers.get('Idempotency-Key'), parsed.data, async tx => {
+      const account = await tx.investmentAccount.findFirst({ where: { id: accountId, userId } })
 
-    if (!account) {
-      return NextResponse.json({ error: 'ไม่พบบัญชีที่ระบุ' }, { status: 404 })
-    }
+      if (!account) throw new LedgerRequestError('ไม่พบบัญชีที่ระบุ', 404)
 
-    let newBalance = Number(account.cashBalance || 0)
+      let newBalance = Number(account.cashBalance || 0)
 
-    if (action === 'adjust' && amount !== undefined) {
-      newBalance = amount
-    } else if (action === 'deposit' && amount !== undefined) {
-      newBalance += amount
-    } else if (action === 'withdraw' && amount !== undefined) {
-      newBalance -= amount
-    }
+      if (action === 'adjust' && amount !== undefined) {
+        newBalance = amount
+      } else if (action === 'deposit' && amount !== undefined) {
+        newBalance += amount
+      } else if (action === 'withdraw' && amount !== undefined) {
+        newBalance -= amount
+      }
 
-    const updatedData: any = {
-      cashBalance: newBalance,
-    }
+      const updatedData: any = {
+        cashBalance: newBalance,
+      }
 
-    if (accruedInterest !== undefined) {
-      updatedData.accruedInterest = accruedInterest
-    }
+      if (accruedInterest !== undefined) {
+        updatedData.accruedInterest = accruedInterest
+      }
 
-    if (interestDays !== undefined) {
-      updatedData.interestDays = interestDays ?? 0
-    }
+      if (interestDays !== undefined) {
+        updatedData.interestDays = interestDays ?? 0
+      }
 
-    const updated = await prisma.investmentAccount.update({
-      where: { id: accountId },
-      data: updatedData,
-    })
+      const updated = await tx.investmentAccount.update({
+        where: { id: accountId },
+        data: updatedData,
+      })
 
-    // Record snapshot
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
+      // Record snapshot
+      const today = new Date()
+      today.setUTCHours(0, 0, 0, 0)
 
-    await prisma.cashBalance.upsert({
-      where: {
-        accountId_balanceDate: {
+      if (action === 'adjust' && amount !== undefined) await reconcileLedgerCash(tx, accountId)
+      await tx.cashBalance.upsert({
+        where: {
+          accountId_balanceDate: {
+            accountId,
+            balanceDate: today,
+          },
+        },
+        update: {
+          cashAmount: newBalance,
+          accruedInterest: accruedInterest ?? Number(account.accruedInterest || 0),
+          note: note || `ปรับยอดเงินสด (${action})`,
+        },
+        create: {
           accountId,
           balanceDate: today,
+          cashAmount: newBalance,
+          accruedInterest: accruedInterest ?? Number(account.accruedInterest || 0),
+          note: note || `ปรับยอดเงินสด (${action})`,
         },
-      },
-      update: {
-        cashAmount: newBalance,
-        accruedInterest: accruedInterest ?? Number(account.accruedInterest || 0),
-        note: note || `ปรับยอดเงินสด (${action})`,
-      },
-      create: {
-        accountId,
-        balanceDate: today,
-        cashAmount: newBalance,
-        accruedInterest: accruedInterest ?? Number(account.accruedInterest || 0),
-        note: note || `ปรับยอดเงินสด (${action})`,
-      },
+      })
+      return updated
     })
 
     invalidateUserPortfolioCache(userId)
 
     return NextResponse.json({
       success: true,
-      account: updated,
+      account: updatedBalance,
     })
   } catch (error: any) {
+    if (error instanceof LedgerRequestError) return NextResponse.json({ error: error.message }, { status: error.status })
     console.error('[cash-wallet POST]', error)
     return NextResponse.json(
       { error: error.message || 'บันทึกการปรับยอดเงินสดล้มเหลว' },

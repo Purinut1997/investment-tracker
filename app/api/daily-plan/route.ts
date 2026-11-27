@@ -1,5 +1,4 @@
-import { advisorFlags } from '@/lib/ai/advisor-rollout'
-import { getAdvisorPolicy } from '@/lib/ai/advisor-planning-service'
+import { getPositionLimit, positionWeight } from '@/lib/ai/portfolio-position-limit'
 import { parseUserInvestmentMemory } from '@/lib/ai/outcome-evaluator'
 import { readAdvisorBrief } from '@/lib/ai/advisor-daily'
 import { NextRequest, NextResponse } from 'next/server'
@@ -77,9 +76,8 @@ export async function GET(req: NextRequest) {
   try {
     const userSettings = await prisma.userSettings.findUnique({ where: { userId } })
     const baseCurrency = userSettings?.baseCurrency ?? 'THB'
-    const policy = advisorFlags(userId).planning ? await getAdvisorPolicy(userId) : null
-    const positionCap = policy?.config.maxPositionPercent ?? parseUserInvestmentMemory(userSettings?.defaultRiskProfile).maxSinglePositionPercent
-    const positionCapBasis = policy ? 'totalPortfolio' : 'investedAssets'
+    const limit = await getPositionLimit(userId, parseUserInvestmentMemory(userSettings?.defaultRiskProfile).maxSinglePositionPercent)
+    const { percent: positionCap, basis: positionCapBasis } = limit
 
     // 1. Fetch user's holdings & cash
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency, forceRefresh)
@@ -484,9 +482,7 @@ export async function GET(req: NextRequest) {
         observedAt,
         unrealizedPnLPercent: holding.unrealizedPnLPercent,
         allocationPercent: holding.allocationPercent,
-        positionWeight: positionCapBasis === 'totalPortfolio' && holdingsResult.totalValueBase + totalCash > 0
-          ? holding.currentValueBase / (holdingsResult.totalValueBase + totalCash) * 100
-          : holding.allocationPercent,
+        positionWeight: positionWeight(holding.currentValueBase, holdingsResult.totalValueBase, totalCash, limit),
         currentValueBase: holding.currentValueBase,
         rsi14,
         supportS1: s1,
@@ -532,6 +528,13 @@ export async function GET(req: NextRequest) {
 
     const dailyBrief = await readAdvisorBrief(userId, queryDate)
 
+    const macroObservation = (result: typeof dxyRes) => {
+      const quote = result.status === 'fulfilled' ? result.value : null
+      const observedAt = getObservationTime(quote?.observationTimestamp, Date.now())
+      return quote && observedAt && Number.isFinite(quote.price) && quote.price > 0
+        ? { price: quote.price, changePercent: quote.changePercent, observedAt, source: quote.provider } : null
+    }
+
     return NextResponse.json({
       planDate: queryDate,
       isToday: queryDate === getTodayBangkokDateString(),
@@ -570,14 +573,8 @@ export async function GET(req: NextRequest) {
             ? usdThbRate.value.rate
             : null,
         macro: {
-          dxy: {
-            price: dxyRes.status === 'fulfilled' && dxyRes.value ? dxyRes.value.price : 104.18,
-            changePercent: dxyRes.status === 'fulfilled' && dxyRes.value ? dxyRes.value.changePercent : 0.12,
-          },
-          tnx: {
-            price: tnxRes.status === 'fulfilled' && tnxRes.value ? tnxRes.value.price : 4.24,
-            changePercent: tnxRes.status === 'fulfilled' && tnxRes.value ? tnxRes.value.changePercent : -0.05,
-          },
+          dxy: macroObservation(dxyRes),
+          tnx: macroObservation(tnxRes),
         },
       },
       portfolioTriggers: actionItems,

@@ -1,3 +1,6 @@
+import { LedgerRequestError, withLedgerRequest } from '@/lib/analytics/ledger-request'
+import { applyLedgerCash, reconcileLedgerCash } from '@/lib/analytics/transaction-ledger'
+import { getTransactionCashDelta, getTransactionNetAmount } from '@/lib/analytics/cash-ledger'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
@@ -25,8 +28,7 @@ const BatchTransactionItemSchema = z.object({
   note: z.string().optional(),
 }).refine((item) => {
   if (item.txnType === 'DEPOSIT' || item.txnType === 'WITHDRAW' || item.txnType === 'FEE') return item.totalAmount > 0
-  const gross = item.quantity * item.pricePerUnit
-  const expected = item.txnType === 'BUY' ? gross + item.fee : Math.max(0, gross - item.fee - item.taxWithheld)
+  const expected = getTransactionNetAmount(item.txnType, item.quantity, item.pricePerUnit, item.fee, item.taxWithheld)
   return Math.abs(expected - item.totalAmount) <= 0.02
 }, { message: 'ยอดสุทธิไม่ตรงกับจำนวน ราคา และค่าธรรมเนียม' })
 
@@ -68,21 +70,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ไม่มีรายการธุรกรรมหรือยอดเงินสดให้บันทึก' }, { status: 400 })
     }
 
-    // Cache user accounts for quick lookup
-    const existingAccounts = await prisma.investmentAccount.findMany({
-      where: { userId },
-    })
-
-    if ([...transactions, ...cashBalances].some((item) =>
-      !existingAccounts.some((account) => account.id === item.accountId && account.currency === item.currency)
-    )) {
-      return NextResponse.json({ error: 'ตรวจสอบว่าบัญชีและสกุลเงินของทุกรายการตรงกัน' }, { status: 400 })
-    }
     if (new Set(cashBalances.map((item) => item.accountId)).size !== cashBalances.length) {
       return NextResponse.json({ error: 'เลือกยอดเงินสดเพียงหนึ่งรายการต่อบัญชี' }, { status: 400 })
     }
 
-    const { createdTransactions, updatedCashAccounts } = await prisma.$transaction(async (db) => {
+    const { createdTransactions, updatedCashAccounts } = await withLedgerRequest(userId, 'transaction-batch', req.headers.get('Idempotency-Key'), parsed.data, async db => {
+      // Cache user accounts for quick lookup
+      const existingAccounts = await db.investmentAccount.findMany({
+        where: { userId },
+      })
+
+      if ([...transactions, ...cashBalances].some((item) =>
+        !existingAccounts.some((account) => account.id === item.accountId && account.currency === item.currency)
+      )) {
+        throw new LedgerRequestError('ตรวจสอบว่าบัญชีและสกุลเงินของทุกรายการตรงกัน', 400)
+      }
+
       // Helper to get or create asset
       const assetMap = new Map<string, string>() // "TICKER_MARKET" -> ID
       async function resolveAssetId(ticker: string, market: any, assetName?: string, assetType: any = 'stock', currency = 'USD'): Promise<string> {
@@ -106,6 +109,7 @@ export async function POST(req: NextRequest) {
           })
         }
 
+        if (asset.currency !== currency) throw new Error('สกุลเงินสินทรัพย์ไม่ตรงกับรายการ')
         assetMap.set(key, asset.id)
         return asset.id
       }
@@ -125,8 +129,12 @@ export async function POST(req: NextRequest) {
           item.currency
         )
 
-        const computedTotal = item.totalAmount
+        const computedTotal = ['BUY', 'SELL', 'DIVIDEND'].includes(item.txnType)
+          ? getTransactionNetAmount(item.txnType, item.quantity, item.pricePerUnit, item.fee, item.taxWithheld)
+          : item.totalAmount
         const txnDate = new Date(item.txnDate)
+        const sync = updateCashBalances && !cashBalances.some(balance => balance.accountId === resolvedAccountId)
+        const delta = sync ? getTransactionCashDelta(item.txnType, computedTotal) : 0
 
         const createdTxn = await db.transaction.create({
           data: {
@@ -140,6 +148,8 @@ export async function POST(req: NextRequest) {
             fee: item.fee,
             taxWithheld: item.taxWithheld,
             totalAmount: computedTotal,
+            cashDeltaApplied: delta,
+            cashSyncEnabled: sync,
             note: item.note || undefined,
             source: 'quick_add',
           },
@@ -151,24 +161,7 @@ export async function POST(req: NextRequest) {
 
         createdTransactions.push(createdTxn)
 
-        // Automatically adjust cash balance of the account if enabled
-        if (updateCashBalances) {
-          let delta = 0
-          if (item.txnType === 'BUY' || item.txnType === 'WITHDRAW' || item.txnType === 'FEE') {
-            delta = -Number(computedTotal)
-          } else if (item.txnType === 'SELL' || item.txnType === 'DEPOSIT' || item.txnType === 'DIVIDEND') {
-            delta = Number(computedTotal)
-          }
-
-          if (delta !== 0) {
-            await db.investmentAccount.update({
-              where: { id: resolvedAccountId },
-              data: {
-                cashBalance: { increment: delta },
-              },
-            })
-          }
-        }
+        await applyLedgerCash(db, resolvedAccountId, delta)
       }
 
       // 2. Process and save explicit Cash Balances (from cash screenshots)
@@ -183,6 +176,12 @@ export async function POST(req: NextRequest) {
           where: { accountId: resolvedAccountId, balanceDate: { gt: dayStart } }, select: { id: true },
         })
         if (newerSnapshot) throw new StaleCashSnapshot('บัญชีนี้มียอดเงินสดที่ใหม่กว่า กรุณาใช้ข้อมูลล่าสุด')
+        const nextBangkokDay = new Date(Date.parse(balanceDay + 'T00:00:00+07:00') + 86_400_000)
+        const laterTrade = await db.transaction.findFirst({
+          where: { accountId: resolvedAccountId, txnDate: { gte: nextBangkokDay } },
+          select: { id: true },
+        })
+        if (laterTrade) throw new StaleCashSnapshot('พบธุรกรรมหลังวันที่ของยอดเงินสด กรุณาใช้ยอดล่าสุด')
 
         const updated = await db.investmentAccount.update({
           where: { id: resolvedAccountId },
@@ -216,10 +215,11 @@ export async function POST(req: NextRequest) {
           },
         })
 
+        await reconcileLedgerCash(db, resolvedAccountId)
         updatedCashAccounts.push(updated)
       }
       return { createdTransactions, updatedCashAccounts }
-    }, { timeout: 15_000 })
+    })
 
     invalidateUserHoldingsCache(userId)
 
@@ -232,6 +232,7 @@ export async function POST(req: NextRequest) {
       message: `บันทึกรายการสำเร็จ ${createdTransactions.length} รายการ และปรับปรุงยอดเงินสด ${updatedCashAccounts.length} บัญชี`,
     })
   } catch (error: any) {
+    if (error instanceof LedgerRequestError) return NextResponse.json({ error: error.message }, { status: error.status })
     if (error instanceof StaleCashSnapshot) return NextResponse.json({ error: error.message }, { status: 409 })
     console.error('[transactions/batch POST]', error)
     return NextResponse.json(

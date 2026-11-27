@@ -1,4 +1,5 @@
 'use client'
+import { PortfolioValuationNotice } from '@/components/PortfolioValuationNotice'
 
 import React, { useState } from 'react'
 import useSWR from 'swr'
@@ -317,6 +318,7 @@ export default function RadarPage() {
     <AppShell>
       <div className="flex flex-col gap-6 sm:gap-8 w-full max-w-[1600px] mx-auto animate-fade-in pb-16">
         {/* Top Header matching Dashboard */}
+        <PortfolioValuationNotice issues={data?.valuationIssues} />
         <PageHeader
           eyebrow="RISK SENTINEL & ALPHA DISCOVERY"
           title="เรดาร์ความเสี่ยง & โอกาสลงทุน"

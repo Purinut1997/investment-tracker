@@ -271,8 +271,7 @@ export async function calculatePortfolioPerformance(
   })
 
   // Initialize S&P 500 PME benchmark tracking
-  const sortedSpxKeys = Array.from(spxCloses.keys()).sort()
-  let lastKnownSpx = sortedSpxKeys.length > 0 ? spxCloses.get(sortedSpxKeys[0])! : 100
+  let benchmarkHasAllCashFlows = true
   let benchmarkUnits = 0
   const result: PerformancePoint[] = []
 
@@ -316,12 +315,13 @@ export async function calculatePortfolioPerformance(
     }
 
     // Update S&P 500 PME index & units
-    const realSpx = spxCloses.get(key)
-    const currentSpx = realSpx && realSpx > 0 ? realSpx : lastKnownSpx * (spxCloses.size === 0 ? 1.0075 : 1.0)
-    lastKnownSpx = currentSpx
-
-    if (currentSpx > 0 && monthNetFlowBase !== 0) {
-      benchmarkUnits = Math.max(0, benchmarkUnits + monthNetFlowBase / currentSpx)
+    const currentSpx = spxCloses.get(key)
+    if (monthNetFlowBase !== 0) {
+      if (currentSpx && currentSpx > 0) {
+        benchmarkUnits = Math.max(0, benchmarkUnits + monthNetFlowBase / currentSpx)
+      } else {
+        benchmarkHasAllCashFlows = false
+      }
     }
 
     const isLatest = index === allMonthKeys.length - 1
@@ -329,7 +329,7 @@ export async function calculatePortfolioPerformance(
       isLatest && currentPortfolioValue > 0
         ? Math.round(currentPortfolioValue)
         : Math.round(monthVal)
-    const benchmarkVal = Math.round(benchmarkUnits * currentSpx)
+    const benchmarkVal = benchmarkHasAllCashFlows && currentSpx && currentSpx > 0 ? Math.round(benchmarkUnits * currentSpx) : null
 
     const [year, month] = key.split('-').map(Number)
     const label = monthFormatter.format(new Date(year, month - 1, 15))

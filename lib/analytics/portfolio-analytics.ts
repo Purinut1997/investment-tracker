@@ -33,7 +33,7 @@ import {
   normalizeSplitDate,
 } from './stock-splits'
 import { fetchLiveAssetQuote } from '../market-data/cache-layer'
-import { getExchangeRate, sumAccountCashInBaseCurrency } from '../market-data/frankfurter'
+import { getExchangeRate, valueCashAccounts } from '../market-data/frankfurter'
 import {
   calculateThai965PricePerBaht,
   isGoldTicker,
@@ -495,7 +495,7 @@ export async function calculatePortfolioAnalytics(
     }
   }
 
-  const computePromise = (async (): Promise<PortfolioAnalyticsPayload> => {
+  const computePromise: Promise<PortfolioAnalyticsPayload> = Promise.resolve().then(async () => {
     const [holdingsResult, accounts, usdThbRateRaw] = await Promise.all([
       calculateUserHoldings(userId, baseCurrency, forceRefresh),
       prisma.investmentAccount.findMany({
@@ -507,13 +507,15 @@ export async function calculatePortfolioAnalytics(
 
     const usdThbRate = usdThbRateRaw ?? 35.5
     const txns = holdingsResult.txns || []
-    const totalCashReserve = await sumAccountCashInBaseCurrency(accounts, baseCurrency, usdThbRate)
+    const { totalCash: totalCashReserve, valuationIssues: cashIssues } = await valueCashAccounts(accounts, baseCurrency)
+    const valuationIssues = [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashIssues])]
 
     if (!txns || txns.length === 0) {
       const emptyPayload: PortfolioAnalyticsPayload = {
         hasData: false,
         baseCurrency,
         usdThbRate,
+        valuationIssues,
         benchmark: benchMeta,
         lastUpdated: new Date().toISOString(),
         dataSource: 'Yahoo Finance & FIFO Ledger',
@@ -538,7 +540,7 @@ export async function calculatePortfolioAnalytics(
           topDetractors: [],
         },
       }
-      portfolioAnalyticsCache.set(cacheKey, { result: emptyPayload, timestamp: Date.now() })
+      if (inFlightPortfolioAnalytics.get(cacheKey) === computePromise) portfolioAnalyticsCache.set(cacheKey, { result: emptyPayload, timestamp: Date.now() })
       return emptyPayload
     }
 
@@ -718,6 +720,7 @@ export async function calculatePortfolioAnalytics(
       hasData: series.length > 0,
       baseCurrency,
       usdThbRate: Number(usdThbRate.toFixed(4)),
+      valuationIssues,
       benchmark: benchMeta,
       lastUpdated: new Date().toISOString(),
       dataSource: 'Yahoo Finance Daily + FIFO Ledger',
@@ -731,14 +734,14 @@ export async function calculatePortfolioAnalytics(
       pnlBreakdown,
     }
 
-    portfolioAnalyticsCache.set(cacheKey, { result: payload, timestamp: Date.now() })
+    if (inFlightPortfolioAnalytics.get(cacheKey) === computePromise) portfolioAnalyticsCache.set(cacheKey, { result: payload, timestamp: Date.now() })
     return payload
-  })()
+  })
 
   inFlightPortfolioAnalytics.set(cacheKey, computePromise)
   try {
     return await computePromise
   } finally {
-    inFlightPortfolioAnalytics.delete(cacheKey)
+    if (inFlightPortfolioAnalytics.get(cacheKey) === computePromise) inFlightPortfolioAnalytics.delete(cacheKey)
   }
 }

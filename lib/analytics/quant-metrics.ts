@@ -8,7 +8,7 @@
 export interface PerformancePoint {
   month: string
   value: number
-  benchmark: number
+  benchmark: number | null
 }
 
 export interface PortfolioQuantMetrics {
@@ -185,7 +185,7 @@ export function calculatePortfolioRiskMetrics(
   // 3. S&P 500 Public Market Equivalent (PME) Excess Alpha %
   const lastPoint = points[points.length - 1]
   const pmeExcessPercent =
-    lastPoint && lastPoint.benchmark > 0
+    lastPoint && lastPoint.benchmark != null && lastPoint.benchmark > 0
       ? Number((((lastPoint.value - lastPoint.benchmark) / lastPoint.benchmark) * 100).toFixed(2))
       : 0
 

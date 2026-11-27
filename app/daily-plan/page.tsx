@@ -88,7 +88,7 @@ interface PortfolioTriggerItem {
   currentPrice: number
   unrealizedPnLPercent: number
   allocationPercent: number
-  positionWeight: number
+  positionWeight: number | null
   currentValueBase: number
   rsi14: number | null
   supportS1: number | null
@@ -146,8 +146,8 @@ interface DailyPlanApiResponse {
     benchmarks: MarketBenchmark[]
     usdThbRate: number | null
     macro?: {
-      dxy?: { price: number; changePercent: number }
-      tnx?: { price: number; changePercent: number }
+      dxy?: { price: number; changePercent: number; observedAt?: string; source?: string } | null
+      tnx?: { price: number; changePercent: number; observedAt?: string; source?: string } | null
     }
   }
   portfolioTriggers: PortfolioTriggerItem[]

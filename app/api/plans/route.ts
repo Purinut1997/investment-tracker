@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { calculateUserHoldings, invalidateUserPortfolioCache } from '@/lib/analytics/holdings'
-import { sumAccountCashInBaseCurrency } from '@/lib/market-data/frankfurter'
+import { valueCashAccounts } from '@/lib/market-data/frankfurter'
 import { z } from 'zod'
 
 const PresetSchema = z.object({
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       where: { userId },
       select: { cashBalance: true, currency: true },
     })
-    const totalCash = await sumAccountCashInBaseCurrency(accounts, baseCurrency)
+    const { totalCash, valuationIssues: cashIssues } = await valueCashAccounts(accounts, baseCurrency)
 
     // Calculate actual holdings to provide rebalancing feedback (scaled to totalPortfolioValue including cash)
     const holdingsResult = await calculateUserHoldings(userId, baseCurrency)
@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
       actualByTicker,
       holdings: holdingsResult.holdings,
       totalCash,
+      valuationIssues: [...new Set([...(holdingsResult.valuationIssues ?? []), ...cashIssues])],
       investedValue: holdingsResult.totalValueBase,
       totalPortfolioValue,
       baseCurrency,

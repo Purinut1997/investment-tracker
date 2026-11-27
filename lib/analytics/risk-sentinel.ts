@@ -1,3 +1,4 @@
+import { positionBasisLabel, positionWeight, type PositionLimit } from '../ai/portfolio-position-limit'
 /**
  * lib/analytics/risk-sentinel.ts
  * Quantitative calculation engine for Risk Sentinel & Opportunity Radar.
@@ -251,7 +252,9 @@ export function classifySector(ticker: string, assetType?: string, market?: stri
 export function analyzePortfolioRisks(
   holdings: HoldingItem[],
   cashTotalBase: number,
-  baseCurrency: string
+  baseCurrency: string,
+  positionLimit?: PositionLimit,
+  valuationReady = true,
 ): RiskSentinelReport {
   const investedTotal = holdings.reduce((sum, h) => sum + h.currentValueBase, 0)
   const grandTotal = investedTotal + cashTotalBase
@@ -260,18 +263,23 @@ export function analyzePortfolioRisks(
   // ── A. Concentration Risk & Stress Testing ─────────────────
   const concentrationRisks: ConcentrationRiskItem[] = []
   for (const h of holdings) {
-    if (h.allocationPercent >= 20) {
+    const weight = positionLimit ? positionWeight(h.currentValueBase, investedTotal, cashTotalBase, positionLimit) ?? 0 : h.allocationPercent
+    if (valuationReady && (positionLimit ? weight > positionLimit.percent : weight >= 20)) {
       let riskLevel: 'MODERATE' | 'HIGH' | 'CRITICAL' = 'MODERATE'
-      let recommendation = `สัดส่วน ${h.allocationPercent.toFixed(1)}% สูงปานกลาง ควรจำกัดไม่ให้เกิน 25%`
+      let recommendation = `สัดส่วน ${weight.toFixed(1)}% สูงปานกลาง ควรจำกัดไม่ให้เกิน 25%`
 
-      if (h.allocationPercent >= 40) {
+      if (weight >= 40) {
         riskLevel = 'CRITICAL'
-        recommendation = `สัดส่วนสูงถึง ${h.allocationPercent.toFixed(1)}% (เข้าข่ายเสี่ยงวิกฤต) แนะนำล็อกกำไรและกระจายความเสี่ยงด่วน`
-        keyWarnings.push(`⚠️ ${h.ticker} ครองสัดส่วนสูงเกิน ${h.allocationPercent.toFixed(1)}% ของพอร์ต เสี่ยงได้รับผลกระทบหนักหากปรับฐาน`)
-      } else if (h.allocationPercent >= 28) {
+        recommendation = `สัดส่วนสูงถึง ${weight.toFixed(1)}% (เข้าข่ายเสี่ยงวิกฤต) แนะนำล็อกกำไรและกระจายความเสี่ยงด่วน`
+        keyWarnings.push(`⚠️ ${h.ticker} ครองสัดส่วนสูงเกิน ${weight.toFixed(1)}% ของพอร์ต เสี่ยงได้รับผลกระทบหนักหากปรับฐาน`)
+      } else if (weight >= 28) {
         riskLevel = 'HIGH'
-        recommendation = `สัดส่วน ${h.allocationPercent.toFixed(1)}% ค่อนข้างสูง ควรชะลอการซื้อเพิ่มและเติมสินทรัพย์กลุ่มอื่น`
-        keyWarnings.push(`ระวัง ${h.ticker} ครองสัดส่วน ${h.allocationPercent.toFixed(1)}% ของพอร์ตโฟลิโอ`)
+        recommendation = `สัดส่วน ${weight.toFixed(1)}% ค่อนข้างสูง ควรชะลอการซื้อเพิ่มและเติมสินทรัพย์กลุ่มอื่น`
+        keyWarnings.push(`ระวัง ${h.ticker} ครองสัดส่วน ${weight.toFixed(1)}% ของพอร์ตโฟลิโอ`)
+      }
+
+      if (positionLimit) {
+        recommendation = `สัดส่วน ${weight.toFixed(1)}% ของ${positionBasisLabel(positionLimit)} เกินเพดาน ${positionLimit.percent}% · ทบทวนก่อนเพิ่ม`
       }
 
       // Stress tests: Drop -10%, -20%, -30%
@@ -289,7 +297,7 @@ export function analyzePortfolioRisks(
         ticker: h.ticker,
         assetName: h.assetName,
         market: h.market,
-        allocationPercent: Number(h.allocationPercent.toFixed(1)),
+        allocationPercent: Number(weight.toFixed(1)),
         currentValueBase: Math.round(h.currentValueBase),
         riskLevel,
         stressTests,
@@ -410,7 +418,9 @@ export function analyzePortfolioRisks(
 
   // ── F. Overall Risk Score Calculation (0-100) ───────────────
   let riskScore = 20 // baseline
-  const maxAlloc = holdings.length > 0 ? Math.max(...holdings.map((h) => h.allocationPercent)) : 0
+  const maxAlloc = valuationReady && holdings.length > 0
+    ? Math.max(...holdings.map(h => positionLimit ? positionWeight(h.currentValueBase, investedTotal, cashTotalBase, positionLimit) ?? 0 : h.allocationPercent))
+    : 0
   if (maxAlloc > 50) riskScore += 35
   else if (maxAlloc > 35) riskScore += 25
   else if (maxAlloc > 25) riskScore += 15
